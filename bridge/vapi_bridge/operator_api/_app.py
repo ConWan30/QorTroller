@@ -1333,6 +1333,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             # population/tournament claim needs breadth + real adversaries + the study, none on this path).
             "cert_scope": _cert_scope,
             "population_certified": bool(getattr(proof, "population_certified", False)),
+            # cycle-59 D-CERT-7: explicit independence rail. None=advisory (N/A), False=self-certified
+            # (verifier == subject; do NOT launder into third-party trust), True=independent verifier
+            # (unreachable today). Consumers read this directly instead of inferring from the above.
+            "verifier_independence": getattr(proof, "verifier_independence", None),
             "advisory": not _dev_self,        # advisory unless inside the developer_self cert scope
             "certified": False,               # never population/tournament-certified on this endpoint
             # cycle-58 D-CERT-8: the calibration evidence base makes the proof self-describing.
