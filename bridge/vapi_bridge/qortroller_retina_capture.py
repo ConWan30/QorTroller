@@ -632,15 +632,17 @@ class RetinaGameCapture:
         self._last_raw_l2 = 0            # latest L2 from the raw path (rider-1 cross-check vs pydualsense)
         self._ads_l2_agree = 0
         self._ads_l2_disagree = 0
+        self._ads_tripwire = None        # D-CERT-5 tripwire (set when ads enabled) — sustained raw-high/pyds-low
         # session-scoped per-tick crosscheck sink: each raw-vs-pydualsense disagreement is logged with its
         # ts + both L2 values so the range session confirms every disagreement hugs an L2 transition
         # (edge-skew) rather than a persistent wrong-offset — verification built before it's needed.
         self._ads_crosscheck_log = self._ads_log_path.rsplit(".jsonl", 1)[0] + "_crosscheck.jsonl"
         if self._ads_enabled:
             try:
-                from l9_presence.ads_coupling import AdsCouplingMonitor, DeviceClockL2Source
+                from l9_presence.ads_coupling import AdsCouplingMonitor, DeviceClockL2Source, StuckTripwire
                 self._ads_monitor = AdsCouplingMonitor()   # threshold=None -> abstain until calibrated
                 self._device_clock_l2 = DeviceClockL2Source()
+                self._ads_tripwire = StuckTripwire()       # D-CERT-5: crosscheck feeds it; runner halts on trip
             except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
                 self._ads_monitor = None
                 self._device_clock_l2 = None
@@ -846,6 +848,8 @@ class RetinaGameCapture:
         if self._device_clock_l2 is None:
             return
         thr = self._ads_monitor.l2_threshold if self._ads_monitor is not None else 40
+        if self._ads_tripwire is not None:          # D-CERT-5 tripwire: watch for the sustained stuck pattern
+            self._ads_tripwire.observe(self._last_raw_l2, pyds_l2, thr)
         if (int(pyds_l2) >= thr) == (int(self._last_raw_l2) >= thr):
             self._ads_l2_agree += 1
         else:
@@ -858,6 +862,10 @@ class RetinaGameCapture:
                     "n_agree": self._ads_l2_agree, "n_disagree": self._ads_l2_disagree})
             except Exception:  # noqa: BLE001 — integrity log; never break the loop
                 pass
+
+    def ads_tripwire_status(self) -> dict:
+        """D-CERT-5 tripwire state for the calibration runner (halts a segment on trip). Empty when ads off."""
+        return self._ads_tripwire.status() if self._ads_tripwire is not None else {}
 
     def feed_ads(self, now_ms: float) -> None:
         """l2_ads consumption-side tick — RETROACTIVE MERGED REPLAY on the DEVICE clock. The consumption loop
