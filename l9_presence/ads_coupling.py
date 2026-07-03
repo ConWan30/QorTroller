@@ -54,6 +54,52 @@ DEFAULT_EXIT_WINDOW_MS = 500.0            # post-release window to observe the s
 DEFAULT_MAX_HOLD_MS = 8000.0             # cap event latency/size for long scoped holds (emit + truncate)
 DEFAULT_MAX_SEQ = 400                     # cap stored raw samples per phase (bounds JSONL row size)
 
+# D-CERT-5 tripwire (Increment B). Route 1 established offset 5 as the RP-reliable L2 under CLEAN read
+# conditions, but the prior 113/113 stuck-high cause is UNRESOLVED (leading candidate: consumption-load /
+# GIL contention with ads-coupling ON, which RECURS during calibration). So the crosscheck (raw-L2 vs
+# pyds-L2) runs as a LIVE tripwire through calibration: a SUSTAINED one-directional raw-high/pyds-low
+# disagreement (the stuck pattern) trips it, and the runner halts the segment + marks its records suspect —
+# catching a recurrence at capture time instead of discovering a poisoned corpus at analysis. Pure, latching.
+_TRIPWIRE_DEFAULT_N = 3          # consecutive stuck observations to trip (crosscheck ticks ~1.2s apart)
+
+
+@dataclass
+class StuckTripwire:
+    """Detects the SUSTAINED one-directional raw>=thr / pyds<thr disagreement (the 113/113 stuck-high
+    pattern) and distinguishes it from expected edge-skew (brief, at a transition, either direction).
+    Trips (LATCHING) when `n_trip` CONSECUTIVE observations are raw-high/pyds-low; ANY agreement or
+    opposite-direction (raw-low/pyds-high) disagreement resets the run — an edge-skew blip is 1-2
+    observations, well under n_trip. A legitimate long hold is raw-high/pyds-HIGH -> agreement -> never trips."""
+    n_trip: int = _TRIPWIRE_DEFAULT_N
+    _run: int = field(default=0, init=False)
+    _tripped: bool = field(default=False, init=False)
+    _max_run: int = field(default=0, init=False)       # diagnostic: longest stuck run seen
+    _stuck_obs: int = field(default=0, init=False)      # diagnostic: total raw-high/pyds-low observations
+
+    def observe(self, raw_l2: int, pyds_l2: int, thr: int) -> bool:
+        """Feed one crosscheck observation (threshold-crossing sense). Returns the (latching) tripped state."""
+        raw_high = int(raw_l2 or 0) >= int(thr)
+        pyds_high = int(pyds_l2 or 0) >= int(thr)
+        if raw_high and not pyds_high:                 # the stuck direction (raw high, pyds low)
+            self._run += 1
+            self._stuck_obs += 1
+            if self._run > self._max_run:
+                self._max_run = self._run
+            if self._run >= self.n_trip:
+                self._tripped = True
+        else:                                          # agreement OR opposite disagreement -> reset the run
+            self._run = 0
+        return self._tripped
+
+    @property
+    def tripped(self) -> bool:
+        return self._tripped
+
+    def status(self) -> dict:
+        return {"tripped": self._tripped, "n_trip": self.n_trip, "current_run": self._run,
+                "max_run": self._max_run, "stuck_observations": self._stuck_obs}
+
+
 # Device clock (DualSense sensor timestamp @ raw report offset 28): uint32 LE @ ~3 MHz (0.333 us/tick),
 # empirically confirmed 2026-07-01 (12000-report capture: monotonic 11999/11999, span/wall 3000.1 units/ms).
 DEVICE_TICKS_PER_MS = 3000.0

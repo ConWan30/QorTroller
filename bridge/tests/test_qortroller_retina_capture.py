@@ -370,3 +370,23 @@ def test_ads_crosscheck_logs_each_disagreement_with_both_values(tmp_path):
     assert len(cc) == 1                                       # only the disagreement logged
     assert cc[0]["pyds_l2"] == 200 and cc[0]["raw_l2"] == 5 and cc[0]["ts_ms"] == 1000.0
     assert rgc._ads_l2_agree == 1 and rgc._ads_l2_disagree == 1
+
+
+def test_ads_tripwire_trips_on_sustained_stuck(tmp_path):
+    """D-CERT-5 tripwire wired into the crosscheck: sustained raw-high / pyds-low (the 113/113 stuck pattern)
+    trips it; the runner reads this per segment and halts + marks records suspect."""
+    rgc = _mk_ads(tmp_path)
+    for _ in range(4):                                       # 4 consecutive stuck observations (n_trip=3)
+        rgc._last_raw_l2 = 255                                # raw stuck high (as push_l2_raw would set)
+        rgc.crosscheck_l2(0, 1000.0)                          # pyds low
+    assert rgc.ads_tripwire_status().get("tripped") is True
+
+
+def test_ads_tripwire_clean_read_does_not_trip(tmp_path):
+    """A clean session (raw follows pyds) with brief release edge-skew blips must NOT trip the tripwire."""
+    seq = [(255, 255), (255, 255), (255, 0), (0, 0), (255, 255), (255, 0), (0, 0)]   # (raw, pyds): 1-obs skews
+    rgc = _mk_ads(tmp_path)
+    for raw, pyds in seq:
+        rgc._last_raw_l2 = raw
+        rgc.crosscheck_l2(pyds, 1000.0)
+    assert rgc.ads_tripwire_status().get("tripped") is False
