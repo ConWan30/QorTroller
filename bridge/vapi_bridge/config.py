@@ -2139,9 +2139,17 @@ class Config:
     retina_killfeed_inline_enabled: bool = field(
         default_factory=lambda: _env_bool("RETINA_KILLFEED_INLINE_ENABLED", False)
     )
+    # FEED-derived anchor (feed_v1) is the default: the roster-derived own_handle_anchor.png scores the
+    # persistent squad-roster Qortrola30 at 0.87-0.91 so multiscale global-best locks onto ROSTER and masks
+    # the feed kill row (live 0/19 root cause, 2026-07-02); the feed anchor scores the feed killer-slot row
+    # higher and is FP-re-validated (0 killer-slot false positives over the 1200-crop archive @ floor 0.66).
+    # docs/l2ads-holdc... sibling: the roster anchor is retained as an asset for reference/cross-check.
     retina_killfeed_anchor_path: str = field(
         default_factory=lambda: os.environ.get("RETINA_KILLFEED_ANCHOR_PATH",
-                                               "l9_presence/assets/own_handle_anchor.png")
+                                               "l9_presence/assets/own_handle_anchor_feed.png")
+    )
+    retina_killfeed_anchor_id: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_ANCHOR_ID", "feed_v1")
     )
     retina_killfeed_near_log: str = field(
         default_factory=lambda: os.environ.get("RETINA_KILLFEED_NEAR_LOG", "retina_kf_near_boundary.jsonl")

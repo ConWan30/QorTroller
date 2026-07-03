@@ -212,6 +212,22 @@ def test_composite_below_floor_single_sample_but_window_max_authors():
     assert m.status_dict()["inline_composite_authored"] == 1
 
 
+def test_anchor_provenance_stamped_on_records():
+    # Rider 3 (2026-07-02 anchor swap): score semantics are anchor-specific, so every composite AND
+    # near-boundary record carries which anchor produced it -> a corpus spanning the roster->feed swap
+    # stays interpretable (same lesson as ts_source). Default roster_v1; the live caller passes feed_v1.
+    assert ki.InlineAuthorshipMonitor().anchor_id == "roster_v1"
+    m = _mk_composite_monitor(anchor_id="feed_v1", refresh_k=1, near_epsilon=0.02)
+    # composite record carries the anchor id
+    m.mark_onset(1000.0)
+    m.observe_window(0.702, 0.18, 0.35, 1300.0)
+    rec = m.mark_onset(3000.0)
+    assert rec is not None and rec["anchor"] == "feed_v1"
+    # near-boundary record carries it too
+    ev = m.record_result("UNVERIFIABLE", 0.665, "feed", "killer", 3100.0)
+    assert ev is not None and ev["anchor"] == "feed_v1"
+
+
 def test_composite_works_on_below_floor_evidence_without_region_slot():
     # classify_panel omits region/slot from evidence when score<floor -- observe_window must still work
     # from x_frac/y_frac alone (the one thing always present), which is exactly what it's designed for.
