@@ -42,6 +42,11 @@ log = logging.getLogger(__name__)
 _ADS_UNLABELED = "unlabeled"
 _ADS_SEGMENT_KEYS = ("optic", "fire_state", "segment")
 _ADS_SEGMENT_DEFAULT_PATH = os.path.expanduser("~/.vapi/ads_segment.json")
+# Per-session anchor wiring: a kill-feed row is visible ~5s (so is_background = longer than this since the
+# last fresh-row appearance -> the FP gate treats a killer-slot hit there as a false fire). The fresh-diff
+# is the mean-abs gray delta in the killer-feed region that signals a NEW transient row (vs a static patch).
+_SESSION_ANCHOR_ROW_PERSIST_MS = 5000.0
+_SESSION_ANCHOR_FRESH_DIFF = 6.0
 
 
 def _read_ads_segment_file(path: str) -> dict:
@@ -539,6 +544,7 @@ class RetinaGameCapture:
                  capture_enabled: bool = False, capture_dir: str = "retina_kf_crops",
                  capture_max: int = 600, panel_roi: str = "",
                  inline_enabled: bool = False, anchor_path: str = "", anchor_id: str = "feed_v1",
+                 session_anchor_enabled: bool = False, session_anchor_archive_dir: str = "retina_kf_anchors",
                  near_log_path: str = "", composite_log_path: str = "",
                  r2_threshold: int = 40,
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
@@ -590,6 +596,26 @@ class RetinaGameCapture:
             except Exception:  # noqa: BLE001 — inline is advisory; never block capture on its setup
                 self._inline_monitor = None
                 self._anchor = None
+        # Per-session feed-cut anchor generator (killer-slot/AUTHORED path only; DEFAULT-OFF). Fixes the
+        # per-match kill-highlight rendering variance a STATIC anchor cannot (roster->teal->yellow treadmill,
+        # 2026-07-03). The generator drives on the killer-slot signal; the composite folds the KILLER signal
+        # ONLY when PROMOTED (bootstrap/candidate kills are a coverage gap, R1). Victim-slot/OWN_DEATH stays
+        # on static feed_v1. Fail-open: any setup error -> generator None -> unchanged feed_v1 behaviour.
+        self._session_anchor = None
+        self._session_anchor_dir = str(session_anchor_archive_dir or "retina_kf_anchors")
+        self._prev_killer_gray = None                  # frame-diff (R2 fresh-row) prior killer-feed region
+        self._last_killer_fresh_ms = -1e18             # last fresh-row appearance ts (FP is_background window)
+        if session_anchor_enabled and self._inline_monitor is not None and self._anchor is not None:
+            try:
+                from l9_presence.killfeed_session_anchor import SessionAnchorGenerator
+                import time as _t
+                self._session_anchor = SessionAnchorGenerator(
+                    bootstrap_id=str(anchor_id or "feed_v1"),
+                    session_id=_t.strftime("%Y%m%d_%H%M%S"),
+                    killer_max_frac=self._inline_monitor.killer_max_frac,
+                    feed_region_max_yfrac=self._inline_monitor.feed_region_max_yfrac)
+            except Exception:  # noqa: BLE001 — advisory; fall back to static feed_v1
+                self._session_anchor = None
         # LOOP 2 — Death-Window Reactive Presence (oracle-in-training; corpus-only). Consumes loop 1's
         # COMPOSITE OWN_DEATH resolution (window-max victim, not raw per-crop) -> measures post-death stick
         # activity. PURE monitor; a lock guards the mark_death (fired from _log_composite on the consumption
@@ -806,7 +832,10 @@ class RetinaGameCapture:
         # regardless of whether THIS single sample's own verdict cleared the floor (x_frac/y_frac are
         # always present in evidence, even below-floor). The composite resolves on the NEXT mark_onset
         # (new window) or flush_stale_inline_window (window goes cold) — not here.
-        self._inline_monitor.observe_window(res.score, ev.get("x_frac"), ev.get("y_frac"), now_ms)
+        if self._session_anchor is None:
+            self._inline_monitor.observe_window(res.score, ev.get("x_frac"), ev.get("y_frac"), now_ms)
+        else:
+            self._session_anchor_fold(bgr, res, ev, now_ms)
         # LOOP 2 — RETIRED the raw per-crop victim-slot mark_death that used to fire here. It only fired when a
         # SINGLE crop cleared the floor at victim position (the same single-sample-miss bug loop 1 had) AND,
         # kept alongside the composite trigger, would DOUBLE-FIRE mark_death for one death -> phantom restart-
@@ -814,6 +843,95 @@ class RetinaGameCapture:
         # max over the whole R2 window). feed_death_stick still accumulates the post-death sticks unchanged.
         # Persist the classified crop via the existing saver (grows the SAME corpus; bounded ring).
         save_crop_bounded(self._capture_dir, "panel", bgr, max_files=self._capture_max)
+
+    def _session_anchor_fold(self, bgr, res, ev, now_ms: float) -> None:
+        """Session-anchor composite fold (killer-slot/AUTHORED path). Drives the generator on the killer
+        signal (region-restricted, session anchor); folds the KILLER signal into the composite ONLY when
+        PROMOTED (bootstrap/candidate kills are an R1 coverage gap). Folds feed_v1's VICTIM signal unchanged
+        (OWN_DEATH scope stays static feed_v1). Fail-open: any error leaves the composite untouched."""
+        try:
+            import l9_presence.killfeed_session_anchor as sa
+            from l9_presence.killfeed_cv import killer_slot_best
+            gen, mon = self._session_anchor, self._inline_monitor
+            # (a) victim/death: fold feed_v1 global-best ONLY at victim position (killer owned by session anchor;
+            #     roster yf>=gate and killer xf<gate are both skipped so feed_v1's weak killer never authors).
+            vx, vy = ev.get("x_frac"), ev.get("y_frac")
+            if (vx is not None and vy is not None and vy < mon.feed_region_max_yfrac
+                    and vx >= mon.killer_max_frac):
+                mon.observe_window(res.score, vx, vy, now_ms)
+            # (b) killer/authored: region-restricted score with the ACTIVE anchor (bootstrap feed_v1 -> session).
+            #     Explicit None check — active_anchor() returns a numpy template in CANDIDATE/PROMOTED and
+            #     `array or fallback` is an ambiguous-truth ValueError (caught by the replay gate 2026-07-03).
+            active = gen.active_anchor()
+            if active is None:
+                active = self._anchor
+            kscore, kxf, kyf = killer_slot_best(bgr, active)
+            fresh = self._killer_fresh_row(bgr, now_ms)                      # R2 + is_background source
+            is_bg = (now_ms - self._last_killer_fresh_ms) > _SESSION_ANCHOR_ROW_PERSIST_MS
+            ev2 = None
+            if gen.regime == sa.BOOTSTRAP:
+                ev2 = gen.observe_bootstrap(score=kscore, x_frac=kxf, y_frac=kyf, fresh_row=fresh,
+                                            cut_fn=lambda: self._cut_session_anchor(bgr, kxf, kyf), now_ms=now_ms)
+            elif gen.regime == sa.CANDIDATE:
+                ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
+                                            now_ms=now_ms)
+            if ev2 is not None and ev2.get("event") in ("candidate_cut", "promoted", "candidate_demoted_fp"):
+                log.info("session-anchor: %s regime=%s sha=%s", ev2["event"], gen.regime,
+                         ev2.get("sha") or ev2.get("candidate_sha"))
+            # AUTHORED fold ONLY when PROMOTED, tagged with the regime AT THIS classification (carry-forward 1).
+            if gen.is_promoted() and kxf is not None and kyf is not None:
+                mon.observe_window(kscore, kxf, kyf, now_ms, anchor_tag=gen.active_anchor_tag())
+        except Exception:  # noqa: BLE001 — advisory; never break capture on the session-anchor path
+            pass
+
+    def _killer_fresh_row(self, bgr, now_ms: float) -> bool:
+        """R2 fresh-row test: did the killer-feed region CHANGE vs the prior panel? A real kill row is a
+        transient appearance; a static high-scoring patch is not. Updates the prior region + last-fresh ts."""
+        try:
+            import cv2
+            import numpy as np
+            mon = self._inline_monitor
+            h, w = bgr.shape[:2]
+            reg = bgr[0:max(1, int(h * mon.feed_region_max_yfrac)), 0:max(1, int(w * mon.killer_max_frac))]
+            g = cv2.cvtColor(reg, cv2.COLOR_BGR2GRAY) if reg.ndim == 3 else reg
+            fresh = False
+            if self._prev_killer_gray is not None and self._prev_killer_gray.shape == g.shape:
+                diff = float(np.mean(np.abs(g.astype(np.int16) - self._prev_killer_gray.astype(np.int16))))
+                fresh = diff > _SESSION_ANCHOR_FRESH_DIFF
+            self._prev_killer_gray = g
+            if fresh:
+                self._last_killer_fresh_ms = now_ms
+            return fresh
+        except Exception:
+            return False
+
+    def _cut_session_anchor(self, bgr, kxf, kyf):
+        """R4: cut the session anchor from the caught killer-slot row, binarize, archive the raw crop PNG +
+        return (binarized_anchor, sha16). Returns None on failure (generator stays bootstrap)."""
+        try:
+            import hashlib
+            import cv2
+            from l9_presence.killfeed_cv import binarize_glyphs
+            if kxf is None or kyf is None:
+                return None
+            h, w = bgr.shape[:2]
+            cx, cy = int(kxf * w), int(kyf * h)
+            x0, x1 = max(0, cx - 72), min(w, cx + 72)
+            y0, y1 = max(0, cy - 14), min(h, cy + 14)
+            crop = bgr[y0:y1, x0:x1]
+            anchor = binarize_glyphs(crop)
+            if anchor is None or anchor.shape[0] < 6 or anchor.shape[1] < 20:
+                return None
+            sha = hashlib.sha256(anchor.tobytes()).hexdigest()[:16]
+            try:
+                os.makedirs(self._session_anchor_dir, exist_ok=True)
+                cv2.imwrite(os.path.join(self._session_anchor_dir,
+                            f"session_anchor_{self._session_anchor.session_id}_{sha}.png"), crop)
+            except Exception:  # noqa: BLE001 — archival is best-effort; the in-memory anchor is what matters
+                pass
+            return (anchor, sha)
+        except Exception:
+            return None
 
     def feed_death_stick(self, now_ms: float, rx: float, ry: float) -> None:
         """LOOP 2: feed one rx/ry sample from the consumption loop into the death window (if open). Cheap +

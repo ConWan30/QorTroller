@@ -175,6 +175,10 @@ class InlineAuthorshipMonitor:
     _last_verdict: Optional[str] = field(default=None, init=False)
     # --- Phase 1 max-over-window composite state ---
     _win_best_killer: float = field(default=-1.0, init=False)
+    # Carry-forward 1 (session-anchor wiring): the anchor-regime tag captured AT THE FOLD that set the
+    # current killer-max — NOT a session-level variable that could lag an R3 demotion. The resolved AUTHORED
+    # record carries THIS, so a promoted-regime tag can never land on a record scored while demoted.
+    _win_killer_tag: Optional[str] = field(default=None, init=False)
     _win_best_victim: float = field(default=-1.0, init=False)
     _win_victim_first_ms: float = field(default=-1.0, init=False)   # ts the victim row FIRST appeared this window
     _win_members: int = field(default=0, init=False)
@@ -252,17 +256,21 @@ class InlineAuthorshipMonitor:
         return "feed", ("killer" if x_frac < self.killer_max_frac else "victim")
 
     def observe_window(self, score: float, x_frac: Optional[float], y_frac: Optional[float],
-                       now_ms: float) -> Optional[dict]:
+                       now_ms: float, anchor_tag: Optional[str] = None) -> Optional[dict]:
         """Fold ONE classify's raw score + position into the CURRENT window's running max — regardless of
         whether this single sample's own verdict cleared the floor. Call once per classify, after
-        record_result. Returns a resolved composite record only if THIS call's timestamp is already past
-        the window end (the window quietly expired without a following onset — see flush_if_expired for the
-        no-further-classify case); normally returns None (composite resolves on the NEXT mark_onset)."""
+        record_result. `anchor_tag` (session-anchor wiring) is the regime tag AT THIS classification; it is
+        captured with the killer-max so the resolved AUTHORED record carries the tag of the fold that won,
+        not a lagging variable (carry-forward 1). Returns a resolved composite record only if THIS call's
+        timestamp is already past the window end (the window quietly expired without a following onset — see
+        flush_if_expired); normally returns None (composite resolves on the NEXT mark_onset)."""
         region, slot = self._classify_position(x_frac, y_frac)
         self._win_members += 1
         self._win_resolved = False
         if region == "feed" and slot == "killer":
-            self._win_best_killer = max(self._win_best_killer, float(score))
+            if float(score) > self._win_best_killer:
+                self._win_best_killer = float(score)
+                self._win_killer_tag = anchor_tag          # tag of the fold that set the max (fold-time truth)
         elif region == "feed" and slot == "victim":
             self._win_best_victim = max(self._win_best_victim, float(score))
             if self._win_victim_first_ms < 0.0:            # anchor the death-row APPEARANCE (first victim obs)
@@ -294,15 +302,20 @@ class InlineAuthorshipMonitor:
         if self._win_members == 0:
             return None
         self._composite_windows += 1
+        # AUTHORED carries the tag of the WINNING killer fold (carry-forward 1) — falls back to the static
+        # anchor_id only when no per-fold tag was supplied (non-session-anchor path). OWN_DEATH/UNVERIFIABLE
+        # carry the static anchor_id (victim path is static feed_v1 by scope; never the session tag).
+        rec_anchor = self.anchor_id
         if self._win_best_killer >= self.match_floor:
             verdict, score = "AUTHORED_PRESENT", self._win_best_killer
             self._composite_authored += 1
+            rec_anchor = self._win_killer_tag or self.anchor_id
         elif self._win_best_victim >= self.match_floor:
             verdict, score = "OWN_DEATH", self._win_best_victim
         else:
             verdict, score = "UNVERIFIABLE", max(self._win_best_killer, self._win_best_victim, 0.0)
         return {"ts_ms": round(now_ms, 1), "verdict": verdict, "composite_score": round(float(score), 4),
-                "window_members": self._win_members, "anchor": self.anchor_id,
+                "window_members": self._win_members, "anchor": rec_anchor,
                 "window_gate_ms": round(self._window_gate_ms, 1),
                 "window_end_ms": round(self._window_end_ms, 1),
                 # death-row appearance anchor (None if no victim obs) — lets loop 2 record the confirmation
@@ -312,6 +325,7 @@ class InlineAuthorshipMonitor:
 
     def _reset_window(self) -> None:
         self._win_best_killer = -1.0
+        self._win_killer_tag = None
         self._win_best_victim = -1.0
         self._win_victim_first_ms = -1.0
         self._win_members = 0

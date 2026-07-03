@@ -2151,6 +2151,17 @@ class Config:
     retina_killfeed_anchor_id: str = field(
         default_factory=lambda: os.environ.get("RETINA_KILLFEED_ANCHOR_ID", "feed_v1")
     )
+    # Per-session feed-cut anchor auto-generation (killer-slot/AUTHORED path only). DEFAULT-OFF. When on, the
+    # inline worker runs the SessionAnchorGenerator: bootstrap-catch the first real feed kill row (feed_v1 @
+    # lowered floor + R2 fresh-row gate) -> auto-cut this session's anchor -> K/FP self-consistency gate ->
+    # promote at 0.66. Fixes the per-match kill-highlight rendering variance (static anchor is a treadmill;
+    # see project memory 2026-07-03). Victim-slot/OWN_DEATH stays on static feed_v1 regardless (scope).
+    retina_session_anchor_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_SESSION_ANCHOR_ENABLED", False)
+    )
+    retina_session_anchor_archive_dir: str = field(   # R4: session anchor PNG+SHA archived here (gitignored)
+        default_factory=lambda: os.environ.get("RETINA_SESSION_ANCHOR_ARCHIVE_DIR", "retina_kf_anchors")
+    )
     retina_killfeed_near_log: str = field(
         default_factory=lambda: os.environ.get("RETINA_KILLFEED_NEAR_LOG", "retina_kf_near_boundary.jsonl")
     )

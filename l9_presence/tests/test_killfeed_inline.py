@@ -228,6 +228,25 @@ def test_anchor_provenance_stamped_on_records():
     assert ev is not None and ev["anchor"] == "feed_v1"
 
 
+def test_composite_authored_carries_fold_time_anchor_tag():
+    # Carry-forward 1 (session-anchor wiring): the AUTHORED record's anchor = the tag of the WINNING killer
+    # fold, captured at fold time — NOT the last fold's tag and NOT a lagging session variable. A later,
+    # LOWER-score fold with a different regime tag must NOT override the max's tag (unfakeable by ordering).
+    m = _mk_composite_monitor(anchor_id="feed_v1")
+    m.mark_onset(1000.0)
+    m.observe_window(0.70, 0.18, 0.35, 1100.0, anchor_tag="session_s2@0.66")          # WINS (highest)
+    m.observe_window(0.68, 0.18, 0.35, 1200.0, anchor_tag="bootstrap_feed_v1@0.55")   # later + lower
+    rec = m.mark_onset(3000.0)
+    assert rec["verdict"] == "AUTHORED_PRESENT" and abs(rec["composite_score"] - 0.70) < 1e-6
+    assert rec["anchor"] == "session_s2@0.66"          # the winning fold's tag, not the last fold's
+    # OWN_DEATH never carries a session tag (victim path is static feed_v1 by scope)
+    m2 = _mk_composite_monitor(anchor_id="feed_v1")
+    m2.mark_onset(1000.0)
+    m2.observe_window(0.73, 0.40, 0.35, 1100.0)        # victim position, no tag
+    rec2 = m2.mark_onset(3000.0)
+    assert rec2["verdict"] == "OWN_DEATH" and rec2["anchor"] == "feed_v1"
+
+
 def test_composite_works_on_below_floor_evidence_without_region_slot():
     # classify_panel omits region/slot from evidence when score<floor -- observe_window must still work
     # from x_frac/y_frac alone (the one thing always present), which is exactly what it's designed for.
