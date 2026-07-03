@@ -166,3 +166,36 @@ def test_ground_truth_n2_abstains_until_calibrated():
         feed = im[330:900, 0:int(W * 0.30)]
         r = kc.classify_feed(feed, anchor)           # default floor (0.62) — uncalibrated
         assert r.verdict != AuthorshipVerdict.AUTHORED_PRESENT   # never a false/uncalibrated AUTHORED
+
+
+# --- scale-aware killer-name cut + quality gate (G3 matches 2+3 fix) --------------------------------
+
+def _panel_with_row(row_y=200, name_x0=60, name_w=100, icon_x0=200, victim_x0=260, rh=14):
+    """Synthetic panel: killer-name glyph block + separated icon + victim block on one feed row."""
+    img = np.zeros((700, 600, 3), np.uint8)
+    for x0, wd in ((name_x0, name_w), (icon_x0, 30), (victim_x0, 90)):
+        img[row_y:row_y + rh, x0:x0 + wd] = 255
+    return img
+
+
+def test_cut_killer_name_anchor_isolates_the_name_cluster():
+    img = _panel_with_row()
+    # locate centre on the killer name (x=110/600, y=207/700)
+    a = kc.cut_killer_name_anchor(img, 110 / 600, 207 / 700)
+    assert a is not None
+    # width ~ name block only (100px + pads), NOT the icon/victim columns (which would be ~290px)
+    assert 60 <= a.shape[1] <= 130 and a.shape[0] >= 6
+
+
+def test_cut_killer_name_anchor_gate_rejects_unisolated_row():
+    # glyphs filling the whole box height (no vertical isolation) -> gate reject -> None
+    img = np.zeros((700, 600, 3), np.uint8)
+    img[160:260, 40:180] = 255                       # 100px tall blob >> box height 40 -> fills the box
+    assert kc.cut_killer_name_anchor(img, 110 / 600, 210 / 700) is None
+
+
+def test_cut_killer_name_anchor_gate_rejects_fragment_and_blank():
+    img = _panel_with_row(name_w=30)                 # 30px fragment < 60px name floor -> reject
+    assert kc.cut_killer_name_anchor(img, 75 / 600, 207 / 700) is None
+    assert kc.cut_killer_name_anchor(np.zeros((700, 600, 3), np.uint8), 0.2, 0.3) is None
+    assert kc.cut_killer_name_anchor(_panel_with_row(), None, 0.3) is None

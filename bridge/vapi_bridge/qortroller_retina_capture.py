@@ -953,22 +953,25 @@ class RetinaGameCapture:
             return False
 
     def _cut_session_anchor(self, bgr, kxf, kyf):
-        """R4: cut the session anchor from the caught killer-slot row, binarize, archive the raw crop PNG +
-        return (binarized_anchor, sha16). Returns None on failure (generator stays bootstrap)."""
+        """R4: cut the session anchor from the caught killer-slot row via the scale-aware killer-name cut +
+        quality gate (killfeed_cv.cut_killer_name_anchor — G3 matches 2+3 fix: the old fixed box was sized
+        for MP's larger rows and produced weak BR anchors). Archive the raw crop PNG + return
+        (binarized_anchor, sha16). None on failure OR gate-reject (generator stays bootstrap and waits for
+        the next kill row — a rejected cut is cheaper than a weak candidate burning stall_limit kills)."""
         try:
             import hashlib
             import cv2
-            from l9_presence.killfeed_cv import binarize_glyphs
+            from l9_presence.killfeed_cv import cut_killer_name_anchor
             if kxf is None or kyf is None:
                 return None
             h, w = bgr.shape[:2]
             cx, cy = int(kxf * w), int(kyf * h)
-            x0, x1 = max(0, cx - 72), min(w, cx + 72)
-            y0, y1 = max(0, cy - 14), min(h, cy + 14)
-            crop = bgr[y0:y1, x0:x1]
-            anchor = binarize_glyphs(crop)
-            if anchor is None or anchor.shape[0] < 6 or anchor.shape[1] < 20:
+            anchor = cut_killer_name_anchor(bgr, kxf, kyf)
+            if anchor is None:
                 return None
+            x0, x1 = max(0, cx - 90), min(w, cx + 90)      # archive the generous raw crop for re-derivation
+            y0, y1 = max(0, cy - 20), min(h, cy + 20)
+            crop = bgr[y0:y1, x0:x1]
             sha = hashlib.sha256(anchor.tobytes()).hexdigest()[:16]
             try:
                 os.makedirs(self._session_anchor_dir, exist_ok=True)

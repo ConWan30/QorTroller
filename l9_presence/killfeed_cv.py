@@ -265,3 +265,63 @@ def classify_panel(panel_bgr, anchor_bw, *, handle: Optional[str] = None,
     ev["slot"] = "victim"
     return CvAuthorshipResult(AuthorshipVerdict.OWN_KILL_UNBOUND, score, x_frac, False, h,
                               "own handle in feed VICTIM (right) slot — your death, neutral", ev)
+
+
+def cut_killer_name_anchor(panel_bgr, kxf, kyf, *, pad_y: int = 20, pad_x: int = 90, col_gap: int = 6):
+    """Scale-aware KILLER-NAME anchor cut with a live quality gate (G3 matches 2+3 fix). Returns a binarized
+    anchor or None (None -> caller stays BOOTSTRAP and waits for the next kill row).
+
+    WHY (validated on the 19-kill BR archive 2026-07-03): the old fixed +/-72x14px box was implicitly sized
+    for MP's larger rows; on BR's smaller rows it swept in the weapon icon / victim columns and produced
+    weak anchors (0-2/18 recall). Structure of the fix:
+      1. generous box around the located killer signal;
+      2. COLUMN-CLUSTER: keep only the glyph cluster containing the match centre (the killer name),
+         splitting on >=col_gap empty columns — drops icon/victim bleed;
+      3. row-tighten to the glyph band;
+      4. QUALITY GATE (the live-checkable signature of every K=3-capable cut in the archive sweep —
+         accepted 5/19, 5/5 promoted-capable; every dud rejected):
+           - vertical isolation: tightened height < 0.85 * box height (hitting the box bounds means the row
+             was not isolated — multi-row / noisy binarization);
+           - name-plausible width 60..200px (rejects fragments and multi-slot bleeds; spans BR ~95px and
+             MP ~145px renderings).
+    Pure (cv2+numpy); fail-open None."""
+    try:
+        import numpy as np
+        h, w = panel_bgr.shape[:2]
+        if kxf is None or kyf is None:
+            return None
+        cx, cy = int(kxf * w), int(kyf * h)
+        x0g = max(0, cx - pad_x)
+        crop = panel_bgr[max(0, cy - pad_y):min(h, cy + pad_y), x0g:min(w, cx + pad_x)]
+        a = binarize_glyphs(crop)
+        if a is None:
+            return None
+        col = a.sum(axis=0) > 0
+        if int(col.sum()) < 20:
+            return None
+        idx = np.where(col)[0]
+        splits = np.where(np.diff(idx) > col_gap)[0]
+        clusters = np.split(idx, splits + 1)
+        centre = cx - x0g
+        keep = None
+        for c in clusters:
+            if c[0] - col_gap <= centre <= c[-1] + col_gap:
+                keep = c
+                break
+        if keep is None:
+            keep = max(clusters, key=len)
+        x0, x1 = max(0, int(keep[0]) - 2), min(a.shape[1], int(keep[-1]) + 3)
+        sub = a[:, x0:x1]
+        ys = np.nonzero(sub.sum(axis=1))[0]
+        if len(ys) == 0:
+            return None
+        t = sub[max(0, int(ys.min()) - 2):int(ys.max()) + 3, :]
+        if t.shape[0] > 0.85 * a.shape[0]:      # row not vertically isolated -> reject
+            return None
+        if not (60 <= t.shape[1] <= 200):        # fragment / multi-slot bleed -> reject
+            return None
+        if t.shape[0] < 6:
+            return None
+        return t
+    except Exception:
+        return None
