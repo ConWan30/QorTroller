@@ -88,6 +88,26 @@ def test_monitor_sustained_fire_extends_window():
     assert m.should_classify(2300.0) is True                       # still open thanks to the re-fire
 
 
+def test_composite_resolves_exactly_once_flush_then_onset():
+    # DEDUP: a window resolved by flush_if_expired (consumption tick) must NOT resolve again on the next
+    # mark_onset — the double path wrote every composite twice and double-counted composite_windows/
+    # composite_authored (live: "26 authored" = 13 real). Exactly-once, whichever path fires first.
+    m = ki.InlineAuthorshipMonitor(window_ms=(50.0, 900.0), min_gap_ms=10.0, match_floor=0.66)
+    m.mark_onset(1000.0)                                           # window [1050, 1900]
+    m.observe_window(0.80, 0.15, 0.30, 1100.0, anchor_tag="t")     # killer fold -> AUTHORED pending
+    rec1 = m.flush_if_expired(2000.0)                              # past end -> resolves ONCE
+    assert rec1 is not None and rec1["verdict"] == "AUTHORED_PRESENT"
+    rec2 = m.mark_onset(3000.0)                                    # new window -> must NOT re-resolve
+    assert rec2 is None
+    assert m.status_dict()["inline_composite_windows"] == 1        # counted once, not twice
+    # and the mirror order: onset-resolved window doesn't double via a later flush
+    m.observe_window(0.80, 0.15, 0.30, 3100.0, anchor_tag="t")
+    rec3 = m.mark_onset(9000.0)                                    # onset resolves the prior window
+    assert rec3 is not None
+    assert m.flush_if_expired(9500.0) is None                      # nothing left to flush
+    assert m.status_dict()["inline_composite_windows"] == 2
+
+
 def test_r2_b2_invariant_dense_gap_never_defeats_the_window_gate():
     # STANDING RAIL (R2 ^ B2): classification fires ONLY inside a live R2 window. A B2 hitmarker is screen
     # content a replay contains; it must NEVER open or trigger a classify on its own. W.2 dense-tail lowers

@@ -198,7 +198,11 @@ class InlineAuthorshipMonitor:
         lo, hi = self.window_ms
         resolved = None
         if now_ms > self._window_end_ms:          # not currently active -> reset the gate (NEW window)
-            resolved = self._resolve_window(now_ms)
+            # DEDUP: flush_if_expired may already have resolved this expired window on a consumption tick
+            # (_win_resolved=True). Re-resolving here double-logged the jsonl record AND double-counted
+            # composite_windows/composite_authored (live: "26 authored" = 13 real). Resolve only once.
+            if not self._win_resolved:
+                resolved = self._resolve_window(now_ms)
             self._window_gate_ms = now_ms + lo
             self._reset_window()
         self._window_end_ms = now_ms + hi         # extend the end on every onset
