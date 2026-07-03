@@ -58,7 +58,8 @@ class SessionAnchorGenerator:
     _regime: str = field(default=BOOTSTRAP, init=False)
     _candidate_anchor: Any = field(default=None, init=False)   # opaque template the caller scores with
     _candidate_sha: Optional[str] = field(default=None, init=False)
-    _consistent: int = field(default=0, init=False)
+    _bootstrap_source: Optional[str] = field(default=None, init=False)   # how the anchor was born (provenance):
+    _consistent: int = field(default=0, init=False)            # ocr_row_v1 | static_feed_v1 | human_oracle
     # accounting
     _fp_fires: int = field(default=0, init=False)
     _demotions: int = field(default=0, init=False)
@@ -97,16 +98,24 @@ class SessionAnchorGenerator:
     # --- BOOTSTRAP: catch the first real feed kill row, then auto-cut (R2 gates) ---------------------
     def observe_bootstrap(self, *, score: float, x_frac: Optional[float], y_frac: Optional[float],
                           fresh_row: bool, cut_fn: Callable[[], Optional[tuple]],
-                          now_ms: float = 0.0) -> Optional[dict]:
-        """In BOOTSTRAP, `score` is the BOOTSTRAP anchor's killer-slot score. If it clears the lowered floor
-        AND passes the geometry gate AND the caught location saw a FRESH ROW APPEARANCE (R2), invoke cut_fn
-        to auto-cut the candidate anchor. cut_fn returns (anchor_obj, sha) or None (cut failed -> stay
-        BOOTSTRAP). Returns a transition event dict or None."""
+                          now_ms: float = 0.0, ocr_verified: bool = False,
+                          source: str = "static_feed_v1") -> Optional[dict]:
+        """In BOOTSTRAP, catch the first real feed kill row and auto-cut. Two catch sources:
+          - `ocr_verified=True` (source=ocr_row_v1): the caller READ the literal handle glyphs in the killer
+            slot — a strict full-canon read is STRONGER evidence than any template score, so the marginal
+            `score >= bootstrap_floor` gate is BYPASSED (feed_v1 maxed 0.566 this session — that gate is the
+            defect). This is the rendering-independent cold-start fix.
+          - `ocr_verified=False` (source=static_feed_v1): legacy template catch — the lowered floor gate applies.
+        BOTH still require the geometry gate AND a FRESH ROW APPEARANCE (R2 — a static patch is not a kill row;
+        this preserves the anti-splice discipline regardless of source). cut_fn returns (anchor_obj, sha) or
+        None (cut failed -> stay BOOTSTRAP). Returns a transition event or None."""
         if self._regime != BOOTSTRAP:
             return None
-        if score < self.bootstrap_floor or not self._in_killer_feed(x_frac, y_frac):
+        if not self._in_killer_feed(x_frac, y_frac):
             return None
-        if not fresh_row:                                   # R2: a static patch scoring 0.55 is NOT a kill row
+        if not ocr_verified and score < self.bootstrap_floor:   # template path: marginal-score gate applies
+            return None
+        if not fresh_row:                                   # R2: a static patch is NOT a kill row (both sources)
             return None
         cut = cut_fn()
         self._bootstrap_catches += 1
@@ -114,10 +123,26 @@ class SessionAnchorGenerator:
             self._failures.append({"kind": "cut_failed", "ts_ms": now_ms, "score": round(score, 4)})
             return {"event": "bootstrap_cut_failed", "ts_ms": now_ms, "score": round(score, 4)}
         self._candidate_anchor, self._candidate_sha = cut
+        self._bootstrap_source = source
         self._regime = CANDIDATE
         self._consistent = 0
         return {"event": "candidate_cut", "ts_ms": now_ms, "bootstrap_score": round(score, 4),
-                "candidate_sha": self._candidate_sha, "session_id": self.session_id}
+                "candidate_sha": self._candidate_sha, "session_id": self.session_id,
+                "bootstrap_source": source}
+
+    def human_oracle_cut(self, anchor_obj: Any, sha: str, now_ms: float = 0.0) -> dict:
+        """STUB (operator-fired, NOT auto-live): inject a manually-identified anchor when both OCR and the
+        template miss every early kill. Its input is the audit lane's UNRESOLVED contact sheet
+        (killfeed_audit_lane) — the operator eyeballs a crop, cuts it, and hands (anchor, sha) here. Sets the
+        candidate directly (source=human_oracle); the SAME K/FP promotion gates then apply. Never called from
+        the live worker in this increment — the third fallback in the ocr->template->human ordering."""
+        self._candidate_anchor, self._candidate_sha = anchor_obj, sha
+        self._bootstrap_source = "human_oracle"
+        self._regime = CANDIDATE
+        self._consistent = 0
+        self._bootstrap_catches += 1
+        return {"event": "candidate_cut", "ts_ms": now_ms, "candidate_sha": sha,
+                "session_id": self.session_id, "bootstrap_source": "human_oracle"}
 
     # --- CANDIDATE: self-consistency (K) + zero-FP gate before promotion (R3) ------------------------
     def observe_candidate(self, *, score: float, x_frac: Optional[float], y_frac: Optional[float],
@@ -154,8 +179,9 @@ class SessionAnchorGenerator:
     def coverage_note(self) -> str:
         """R1 session-summary honesty: state the bootstrap dead-zone / no-promote explicitly."""
         if self._regime == PROMOTED:
-            return (f"session anchor promoted (sha {self._candidate_sha}); kills BEFORE promotion ran at "
-                    f"bootstrap floor {self.bootstrap_floor:.2f} and may be missed/low-confidence (coverage gap)")
+            return (f"session anchor promoted (sha {self._candidate_sha}, source {self._bootstrap_source}); "
+                    f"kills BEFORE promotion ran at bootstrap floor {self.bootstrap_floor:.2f} and may be "
+                    f"missed/low-confidence (coverage gap)")
         if self._regime == CANDIDATE:
             return ("candidate cut but NOT promoted (K/ FP gate unmet); ran bootstrap-floor all session — "
                     "kill recall is a known coverage gap")
@@ -173,5 +199,6 @@ class SessionAnchorGenerator:
             "demotions": self._demotions,
             "promotions": self._promotions,
             "candidate_sha": self._candidate_sha,
+            "bootstrap_source": self._bootstrap_source,
             "failures": list(self._failures),
         }
