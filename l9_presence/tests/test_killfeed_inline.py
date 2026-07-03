@@ -88,6 +88,22 @@ def test_monitor_sustained_fire_extends_window():
     assert m.should_classify(2300.0) is True                       # still open thanks to the re-fire
 
 
+def test_r2_b2_invariant_dense_gap_never_defeats_the_window_gate():
+    # STANDING RAIL (R2 ^ B2): classification fires ONLY inside a live R2 window. A B2 hitmarker is screen
+    # content a replay contains; it must NEVER open or trigger a classify on its own. W.2 dense-tail lowers
+    # the min-gap for DENSITY — it must NOT weaken the window gate. A synthetic B2 spike OUTSIDE any R2 window
+    # (modelled as a should_classify attempt with no active window / past window end) must return False even
+    # at a tiny dense min-gap. This test is not contingent on B2 being wired as a trigger — it is the rail for
+    # whenever it is.
+    m = ki.InlineAuthorshipMonitor(window_ms=(50.0, 5000.0), min_gap_ms=10.0)   # dense cadence
+    assert m.should_classify(1000.0) is False                      # "B2 spike" with NO R2 onset -> no classify
+    m.mark_onset(2000.0)                                           # a real R2 window [2050, 7000]
+    assert m.should_classify(2050.0) is True                       # inside the window, dense gap -> classify
+    m.begin(2050.0); m.end()
+    assert m.should_classify(2061.0) is True                       # dense min-gap (11 >= 10) -> fires fast
+    assert m.should_classify(8000.0) is False                      # "B2 spike" AFTER window end -> no classify
+
+
 # --- monitor result folding: AUTHORED vs neutral field vs near-boundary ---
 def test_monitor_record_result_folding():
     m = ki.InlineAuthorshipMonitor(match_floor=0.66, near_epsilon=0.02, refresh_k=1)

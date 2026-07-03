@@ -2162,6 +2162,12 @@ class Config:
     retina_ocr_bootstrap_enabled: bool = field(       # OCR-verified bootstrap catch (rendering-independent);
         default_factory=lambda: _env_bool("RETINA_OCR_BOOTSTRAP_ENABLED", False)   # within session-anchor
     )                                                 # envelope; bypasses the marginal feed_v1 score gate
+    retina_dense_classify_enabled: bool = field(      # W.2 dense-tail: tighter in-window classify cadence
+        default_factory=lambda: _env_bool("RETINA_DENSE_CLASSIFY_ENABLED", False)  # (still R2-gated; premise-free)
+    )
+    retina_dense_classify_min_gap_ms: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_DENSE_CLASSIFY_MIN_GAP_MS", "50"))
+    )
     retina_session_anchor_archive_dir: str = field(   # R4: session anchor PNG+SHA archived here (gitignored)
         default_factory=lambda: os.environ.get("RETINA_SESSION_ANCHOR_ARCHIVE_DIR", "retina_kf_anchors")
     )
