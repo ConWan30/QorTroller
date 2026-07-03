@@ -72,6 +72,32 @@ from .store import Store
 
 log = logging.getLogger(__name__)
 
+# F-RP-DIAG-1 (2026-07-02): RP dual-L2 diagnostic flush. The ~1kHz raw reader must NOT do per-frame
+# disk I/O — a hot-path fopen would measure its own jitter and could manufacture false 'stream
+# starved' evidence, the exact hypothesis the RP session forks on. Both diag streams buffer IN MEMORY
+# (drop-oldest deques) and flush ONCE when this trigger file appears (fired at HOLD B) or at stop.
+_RPDIAG_FLUSH_TRIGGER = "retina_rp_diag_flush"
+
+
+def _write_rpdiag(path: str, stream: str, buf, seen: int) -> None:
+    """Flush an RP dual-L2 diagnostic ring buffer to jsonl ONCE (off the hot path). Drop-oldest deque
+    -> the MOST RECENT window is retained (the stuck-high recurs on every release); the `_meta` header
+    marks `capped` / `total_seen` so a post-cap event is either present, or the record says it can't."""
+    try:
+        rows = list(buf or ())
+        with open(path, "w", encoding="utf-8") as _fh:
+            _fh.write('{"_meta": {"stream": "%s", "kept": %d, "total_seen": %d, "capped": %s}}\n' % (
+                stream, len(rows), seen, "true" if seen > len(rows) else "false"))
+            if stream == "raw":
+                for _wall_ms, _hex in rows:
+                    _fh.write('{"wall_ms": %.3f, "hex": "%s"}\n' % (_wall_ms, _hex))
+            else:
+                for _wall_ms, _l2max, _l2last in rows:
+                    _fh.write('{"wall_ms": %.3f, "pyds_l2_max": %d, "pyds_l2_last": %d}\n' % (
+                        _wall_ms, _l2max, _l2last))
+    except Exception:
+        pass
+
 # ---------------------------------------------------------------------------
 # Gaming inference codes (extension of base VAPI protocol)
 # ---------------------------------------------------------------------------
@@ -720,6 +746,13 @@ class DualShockTransport:
             # Self-healing loop: re-enumerates the device on each attempt so
             # that USB re-enumeration events (e.g. PS5 BT host arbitration)
             # don't permanently kill the counter thread.
+            # F-RP-DIAG-1: RP dual-L2 diag buffer lives OUTSIDE the re-enum loop so a mid-session
+            # re-enumeration does not reset it. Drop-oldest deque -> most recent ~90s @ 1kHz retained.
+            _rpdiag = os.environ.get("RETINA_ADS_RP_DIAG", "") == "true"
+            _rpdiag_buf = deque(maxlen=90000) if _rpdiag else None
+            _rpdiag_seen = 0
+            _rpdiag_flushed = False
+            _rpdiag_check = 0
             while self._hid_counter_running:
                 # Re-enumerate each attempt — path may change after re-enum.
                 _tgt = None
@@ -751,9 +784,6 @@ class DualShockTransport:
                     # feed_ads gets device-precise L2 edge timing. Gated on ads-enabled + capture present.
                     _push_l2 = (getattr(self._cfg, "retina_ads_coupling_enabled", False)
                                 and self._retina_game_capture is not None)
-                    _rpdiag = os.environ.get("RETINA_ADS_RP_DIAG", "") == "true"
-                    _rpdiag_n = 0
-                    _rpdiag_max = 30000       # ~30s @ ~1kHz — long enough for several RP ADS holds
                     while self._hid_counter_running:
                         data = handle.read(128, timeout_ms=200)
                         if data:
@@ -763,19 +793,24 @@ class DualShockTransport:
                                 _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
                                 self._retina_game_capture.push_l2_raw(
                                     time.time() * 1000.0, _ts32, data[5])
-                            # RP-config diagnostic (RETINA_ADS_RP_DIAG): dump the RAW report bytes DURING
-                            # Remote Play so an offline scan finds which offset tracks the true L2 under RP
-                            # (offset 5 sticks high on release under RP — 2026-07-02 finding) and whether
-                            # reports are stale (device ts @28 repeats) or merely lagged. Paired with the
-                            # pydualsense-L2 dump in the consumption loop for direct raw-vs-parsed correlation.
-                            if _rpdiag and _rpdiag_n < _rpdiag_max:
-                                try:
-                                    with open("retina_rp_rawdump.jsonl", "a", encoding="utf-8") as _fh:
-                                        _fh.write('{"wall_ms": %.3f, "hex": "%s"}\n' % (
-                                            time.time() * 1000.0, bytes(data).hex()))
-                                    _rpdiag_n += 1
-                                except Exception:
-                                    pass
+                            # RP-config diagnostic (RETINA_ADS_RP_DIAG): buffer the RAW report bytes IN
+                            # MEMORY during Remote Play; scripts/analyze_rp_l2_diag.py finds offline which
+                            # offset tracks true L2 under RP (offset 5 sticks high on release — 2026-07-02)
+                            # and whether device-ts @28 is stale (starved) vs merely lagged. NO per-frame
+                            # disk write on this ~1kHz thread; flush once on the trigger file / at stop.
+                            if _rpdiag:
+                                _rpdiag_buf.append((time.time() * 1000.0, bytes(data).hex()))
+                                _rpdiag_seen += 1
+                                _rpdiag_check += 1
+                                if _rpdiag_check >= 1024:          # ~1s: poll the flush trigger off-hot-path
+                                    _rpdiag_check = 0
+                                    if os.path.exists(_RPDIAG_FLUSH_TRIGGER):
+                                        if not _rpdiag_flushed:
+                                            _write_rpdiag("retina_rp_rawdump.jsonl", "raw",
+                                                          _rpdiag_buf, _rpdiag_seen)
+                                            _rpdiag_flushed = True
+                                    else:
+                                        _rpdiag_flushed = False
                 except Exception as exc:
                     log.warning("Phase 235-PCC-RATE-FIX: rate counter reconnecting "
                                 "(%s)", exc)
@@ -786,6 +821,8 @@ class DualShockTransport:
                             handle.close()
                         except Exception:
                             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+                    if _rpdiag_buf is not None:   # F-RP-DIAG-1 safety flush at stop / re-enum
+                        _write_rpdiag("retina_rp_rawdump.jsonl", "raw", _rpdiag_buf, _rpdiag_seen)
                 if self._hid_counter_running:
                     time.sleep(1.0)
 
@@ -1720,19 +1757,30 @@ class DualShockTransport:
                         self._retina_game_capture.crosscheck_l2(
                             max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
                             _now_ms)
-                        # RP-config diagnostic: pydualsense-L2 side of the dual dump (paired with the raw dump
-                        # in the hidapi thread). Per consumption tick — enough to mark release edges (pyds
-                        # drops to 0) at tick resolution so the offline scan can find which RAW offset tracks
-                        # pyds under Remote Play. wall_ms is the same time.time() clock as the raw dump.
-                        if os.environ.get("RETINA_ADS_RP_DIAG", "") == "true":
-                            try:
-                                with open("retina_rp_pyds.jsonl", "a", encoding="utf-8") as _pf:
-                                    _pf.write('{"wall_ms": %.3f, "pyds_l2_max": %d, "pyds_l2_last": %d}\n' % (
-                                        _now_ms,
-                                        max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
-                                        int(getattr(frames[-1], "l2_trigger", 0) or 0)))
-                            except Exception:  # noqa: BLE001
-                                pass
+                    # RP-config diagnostic: pydualsense-L2 side of the dual dump (paired with the raw dump in
+                    # the hidapi thread). F-RP-DIAG-2 (2026-07-02): env-gated ONLY — NOT nested under _ads_on.
+                    # The pyds L2 is GROUND TRUTH for the offset scan (marks release edges where pyds drops to
+                    # 0). Logging it emits NO l2_ads verdict, so the "no enabled=True" rail (about the detector)
+                    # does not apply — moving it here is the correct constraint reading, not a bend. Buffered in
+                    # memory + flushed on the trigger; same time.time() clock as the raw dump.
+                    if os.environ.get("RETINA_ADS_RP_DIAG", "") == "true":
+                        _pbuf = getattr(self, "_rpdiag_pyds_buf", None)
+                        if _pbuf is None:
+                            _pbuf = self._rpdiag_pyds_buf = deque(maxlen=40000)
+                            self._rpdiag_pyds_seen = 0
+                            self._rpdiag_pyds_flushed = False
+                        _pbuf.append((
+                            _now_ms,
+                            max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
+                            int(getattr(frames[-1], "l2_trigger", 0) or 0)))
+                        self._rpdiag_pyds_seen += 1
+                        if os.path.exists(_RPDIAG_FLUSH_TRIGGER):
+                            if not self._rpdiag_pyds_flushed:
+                                _write_rpdiag("retina_rp_pyds.jsonl", "pyds", _pbuf,
+                                              self._rpdiag_pyds_seen)
+                                self._rpdiag_pyds_flushed = True
+                        else:
+                            self._rpdiag_pyds_flushed = False
                     # Combat-triggered burst: R2 crossing the fire threshold auto-fires a presence burst so the
                     # trigger->HUD window is captured hands-free. Default-off; cooldown + single-flight prevent
                     # stacking. Honest cost: capturing briefly lags the gunfight (WGC observer effect).

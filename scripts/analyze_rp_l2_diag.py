@@ -31,7 +31,23 @@ def _load(p):
     if not f.exists():
         print("MISSING:", p, "— capture a Remote-Play session with RETINA_ADS_RP_DIAG=true first")
         return None
-    return [json.loads(ln) for ln in f.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    rows = [json.loads(ln) for ln in f.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    # F-RP-DIAG-1: the first line is a `_meta` header (kept/total_seen/capped) — report it, then
+    # return only the data rows. `capped: true` means the DROP-OLDEST buffer dropped older frames
+    # (session > buffer window); the retained window is the MOST RECENT, so release edges are present.
+    data = []
+    for r in rows:
+        m = r.get("_meta")
+        if m is not None:
+            cap = ""
+            if m.get("capped"):
+                cap = (" — CAPPED: older frames dropped (kept %s of %s seen); retained window is the "
+                       "MOST RECENT, so the stuck-high releases are present" % (m.get("kept"), m.get("total_seen")))
+            print("  [%s] kept=%s total_seen=%s%s" % (
+                m.get("stream", "?"), m.get("kept"), m.get("total_seen"), cap))
+        else:
+            data.append(r)
+    return data
 
 
 def main() -> int:
