@@ -78,3 +78,29 @@ the match-2 stuck-all-match shape is gone. Composite AUTHORED remained 0 this ma
 fixed +/-72x14 px cut box was implicitly sized for MP's larger rows; BR's smaller feed rows likely mis-frame
 it. Next refinement = scale-aware / best-row cut sizing, validated offline against the BR crop archive before
 the next match.
+
+## Match 4 — Warzone BR gated-cut validation (daemon `g3br_gatedcut`, 15:55-16:04): ✅ ARC CLOSED
+
+```
+15:55:23 candidate_cut sha=b46bd348   (first catch PASSED the quality gate)
+15:55:42 PROMOTED                     (19s cut-to-promote; 0 stalls, 0 FP, 0 demotions)
+15:55-16:04  13 composite AUTHORED_PRESENT @0.756-0.957 (session anchor; 1-10 members/window)
+```
+
+**Gated cut VALIDATED live — first composite AUTHORED in BR.** The decisive counter: `inline_authored: 0` —
+static feed_v1 NEVER cleared 0.66 raw in this match's rendering. All 13 AUTHORED came from the auto-generated
+session anchor: the exact scenario the producer exists for (a rendering where the static anchor yields zero).
+Cut-to-promote latency collapsed from stuck-all-match (match 2) / stall-churn (match 3) to 19 seconds.
+
+## Arc summary (4 live matches, one afternoon)
+
+| match | rendering | result |
+|-------|-----------|--------|
+| 1 MP  | large feed | first-ever live AUTHORED (5 @0.80-0.93) after y-gate rendering profile |
+| 2 BR  | small feed | stuck CANDIDATE -> stall-recut built |
+| 3 BR  | small feed | stall-recut fired live (demote@3 -> recut 71s) -> cut-box finding |
+| 4 BR  | small feed | gated cut: promote in 19s, **13 AUTHORED @0.76-0.96, feed_v1 raw = 0** |
+
+Producer status: bootstrap (OCR + template + gate) -> cut -> promote -> composite AUTHORED works live across
+BOTH rendering families with zero false positives across all 4 matches. Remaining queue: composite jsonl
+double-write dedup (cosmetic) + the B2 instrumented-capture session (conjunction leg, own session).
