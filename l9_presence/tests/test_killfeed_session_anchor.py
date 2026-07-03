@@ -164,3 +164,35 @@ def test_human_oracle_cut_is_third_fallback_source():
     ev = g.human_oracle_cut("MANUAL_ANCHOR", "sha_human")
     assert ev["event"] == "candidate_cut" and ev["bootstrap_source"] == "human_oracle"
     assert g.regime == sa.CANDIDATE and g.status()["candidate_sha"] == "sha_human"
+
+
+# --- G3 match-2 stall-recut: a weak cut must not sit CANDIDATE while real kills pass by --------------
+
+def test_stall_recut_demotes_weak_candidate_after_limit():
+    # 3 crops with an independent raw killer-authored signal that the candidate scores sub-floor -> the cut
+    # is evidently weak -> demote-and-recut, LOGGED (never silent). The BR match sat stuck exactly here.
+    g = _mk()
+    _to_candidate(g)
+    for i in range(2):
+        ev = g.observe_candidate(score=0.40, x_frac=0.18, y_frac=0.30, is_background=False,
+                                 raw_killer_authored=True)
+        assert ev == {"event": "candidate_stall", "ts_ms": 0.0, "stalls": i + 1, "limit": 3}
+    ev = g.observe_candidate(score=0.40, x_frac=0.18, y_frac=0.30, is_background=False,
+                             raw_killer_authored=True)
+    assert ev["event"] == "candidate_demoted_stall" and g.regime == sa.BOOTSTRAP
+    assert any(f["kind"] == "candidate_stall" for f in g.status()["failures"])   # on record
+    # the NEXT catch is a fresh cut
+    g.observe_bootstrap(score=0.58, x_frac=0.18, y_frac=0.30, fresh_row=True, cut_fn=lambda: ("A2", "sha2"))
+    assert g.regime == sa.CANDIDATE and g.status()["candidate_sha"] == "sha2"
+
+
+def test_stall_only_counts_raw_authored_misses():
+    # No raw signal -> no stall (quiet crops don't indict the cut). Candidate ALSO clearing -> no stall
+    # (that's consistency progress, not a miss).
+    g = _mk()
+    _to_candidate(g)
+    for _ in range(5):
+        assert g.observe_candidate(score=0.40, x_frac=0.18, y_frac=0.30, is_background=False) is None
+    ev = g.observe_candidate(score=0.80, x_frac=0.18, y_frac=0.30, is_background=False,
+                             raw_killer_authored=True)                # both see it -> progress, not stall
+    assert ev["event"] == "candidate_progress" and g.regime == sa.CANDIDATE

@@ -41,6 +41,8 @@ PROMOTED = "PROMOTED"
 DEFAULT_BOOTSTRAP_FLOOR = 0.55   # lowered floor to CATCH the first feed kill row (gated by R2, never ships a verdict)
 DEFAULT_PROMOTE_FLOOR = 0.66     # the frozen killfeed_cv match floor — unchanged; the session anchor runs here
 DEFAULT_K_CONSISTENCY = 3        # subsequent killer-slot matches required before promotion (reachable early)
+DEFAULT_STALL_LIMIT = 3          # G3 match-2 fix: raw-killer-authored crops the CANDIDATE scores sub-floor
+                                 # before the cut is declared WEAK -> demote-and-recut (logged, R3-style)
 
 
 @dataclass
@@ -58,8 +60,10 @@ class SessionAnchorGenerator:
     _regime: str = field(default=BOOTSTRAP, init=False)
     _candidate_anchor: Any = field(default=None, init=False)   # opaque template the caller scores with
     _candidate_sha: Optional[str] = field(default=None, init=False)
+    stall_limit: int = DEFAULT_STALL_LIMIT
     _bootstrap_source: Optional[str] = field(default=None, init=False)   # how the anchor was born (provenance):
     _consistent: int = field(default=0, init=False)            # ocr_row_v1 | static_feed_v1 | human_oracle
+    _stalls: int = field(default=0, init=False)                # raw-authored crops this candidate missed
     # accounting
     _fp_fires: int = field(default=0, init=False)
     _demotions: int = field(default=0, init=False)
@@ -146,11 +150,18 @@ class SessionAnchorGenerator:
 
     # --- CANDIDATE: self-consistency (K) + zero-FP gate before promotion (R3) ------------------------
     def observe_candidate(self, *, score: float, x_frac: Optional[float], y_frac: Optional[float],
-                          is_background: bool, now_ms: float = 0.0) -> Optional[dict]:
+                          is_background: bool, now_ms: float = 0.0,
+                          raw_killer_authored: bool = False) -> Optional[dict]:
         """In CANDIDATE, `score` is the CANDIDATE anchor's killer-slot score for THIS crop. A killer-slot
         match >=promote_floor on a BACKGROUND/roster crop is an FP fire -> DEMOTE + log (R3). K consistent
-        killer-slot matches >=promote_floor on real feed crops -> PROMOTE. Returns a transition event or
-        None."""
+        killer-slot matches >=promote_floor on real feed crops -> PROMOTE.
+
+        `raw_killer_authored` (G3 match-2 stall-recut): the caller saw an INDEPENDENT killer-slot authored
+        signal on this crop (feed_v1 raw >=0.66 / OCR read) that the candidate itself scored sub-floor. Each
+        such miss is a STALL — evidence the cut row was weak (first-readable-row cuts can be; G2' stride-8 +
+        G3 BR both showed it). At stall_limit: demote-and-recut, logged (never silent), so the NEXT catch
+        replaces the weak cut instead of the candidate sitting stuck all match while real kills pass by.
+        Returns a transition event or None."""
         if self._regime != CANDIDATE:
             return None
         clears = score >= self.promote_floor and self._in_killer_feed(x_frac, y_frac)
@@ -163,8 +174,22 @@ class SessionAnchorGenerator:
                 self._failures.append(fail)
                 self._regime = BOOTSTRAP                    # revert; the NEXT catch is a fresh cut (logged)
                 self._candidate_anchor, self._candidate_sha, self._consistent = None, None, 0
+                self._stalls = 0
                 return {"event": "candidate_demoted_fp", **fail}
             return None                                     # clean background -> no effect
+        if raw_killer_authored and not clears:              # a real kill the candidate missed -> stall
+            self._stalls += 1
+            if self._stalls >= self.stall_limit:
+                self._demotions += 1
+                fail = {"kind": "candidate_stall", "ts_ms": now_ms, "stalls": self._stalls,
+                        "sha": self._candidate_sha}
+                self._failures.append(fail)
+                self._regime = BOOTSTRAP                    # weak cut -> recut from the next catch (logged)
+                self._candidate_anchor, self._candidate_sha, self._consistent = None, None, 0
+                self._stalls = 0
+                return {"event": "candidate_demoted_stall", **fail}
+            return {"event": "candidate_stall", "ts_ms": now_ms, "stalls": self._stalls,
+                    "limit": self.stall_limit}
         if clears:
             self._consistent += 1
             if self._consistent >= self.k_consistency:
