@@ -545,6 +545,7 @@ class RetinaGameCapture:
                  capture_max: int = 600, panel_roi: str = "",
                  inline_enabled: bool = False, anchor_path: str = "", anchor_id: str = "feed_v1",
                  session_anchor_enabled: bool = False, session_anchor_archive_dir: str = "retina_kf_anchors",
+                 ocr_bootstrap_enabled: bool = False,
                  near_log_path: str = "", composite_log_path: str = "",
                  r2_threshold: int = 40,
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
@@ -605,6 +606,11 @@ class RetinaGameCapture:
         self._session_anchor_dir = str(session_anchor_archive_dir or "retina_kf_anchors")
         self._prev_killer_gray = None                  # frame-diff (R2 fresh-row) prior killer-feed region
         self._last_killer_fresh_ms = -1e18             # last fresh-row appearance ts (FP is_background window)
+        # OCR bootstrap sub-flag (DEFAULT-OFF, within the session-anchor envelope): when on, the BOOTSTRAP
+        # branch READS the handle glyphs (killfeed_ocr_bootstrap, rendering-independent) as the PRIMARY catch
+        # source, bypassing the marginal feed_v1 score gate that failed live (max 0.566). Off -> legacy
+        # feed_v1-template catch, byte-identical. OCR runs off-thread AND only while regime==BOOTSTRAP.
+        self._ocr_bootstrap_enabled = bool(ocr_bootstrap_enabled)
         if session_anchor_enabled and self._inline_monitor is not None and self._anchor is not None:
             try:
                 from l9_presence.killfeed_session_anchor import SessionAnchorGenerator
@@ -870,8 +876,21 @@ class RetinaGameCapture:
             is_bg = (now_ms - self._last_killer_fresh_ms) > _SESSION_ANCHOR_ROW_PERSIST_MS
             ev2 = None
             if gen.regime == sa.BOOTSTRAP:
-                ev2 = gen.observe_bootstrap(score=kscore, x_frac=kxf, y_frac=kyf, fresh_row=fresh,
-                                            cut_fn=lambda: self._cut_session_anchor(bgr, kxf, kyf), now_ms=now_ms)
+                # Source ordering ocr_row_v1 -> static_feed_v1 (human_oracle is the operator-fired 3rd fallback,
+                # not auto-live). OCR runs only here (BOOTSTRAP) so it's a bootstrap-moment cost, not per-frame.
+                ocr = self._ocr_bootstrap_read(bgr) if getattr(self, "_ocr_bootstrap_enabled", False) else None
+                if (ocr is not None and ocr.matched and ocr.slot == "killer"
+                        and ocr.x_frac is not None and ocr.y_frac is not None):
+                    ox, oy = ocr.x_frac, ocr.y_frac        # OCR-verified cold start: bypass the marginal score,
+                    ev2 = gen.observe_bootstrap(          # keep the R2 fresh-row + geometry gates (anti-splice)
+                        score=kscore, x_frac=ox, y_frac=oy, fresh_row=fresh,
+                        cut_fn=lambda: self._cut_session_anchor(bgr, ox, oy),
+                        now_ms=now_ms, ocr_verified=True, source="ocr_row_v1")
+                else:                                      # legacy feed_v1 template catch (marginal-score gated)
+                    ev2 = gen.observe_bootstrap(
+                        score=kscore, x_frac=kxf, y_frac=kyf, fresh_row=fresh,
+                        cut_fn=lambda: self._cut_session_anchor(bgr, kxf, kyf),
+                        now_ms=now_ms, ocr_verified=False, source="static_feed_v1")
             elif gen.regime == sa.CANDIDATE:
                 ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
                                             now_ms=now_ms)
@@ -883,6 +902,17 @@ class RetinaGameCapture:
                 mon.observe_window(kscore, kxf, kyf, now_ms, anchor_tag=gen.active_anchor_tag())
         except Exception:  # noqa: BLE001 — advisory; never break capture on the session-anchor path
             pass
+
+    def _ocr_bootstrap_read(self, bgr):
+        """Rendering-independent bootstrap catch source: OCR the panel for a killer-slot own-handle read.
+        Called only from the BOOTSTRAP branch of _session_anchor_fold (itself off the event loop via
+        to_thread), so the ~1-2s OCR is a once-per-cold-start cost, not per-frame — and it stops entirely
+        once the generator promotes. Fail-open -> None (never breaks the fold)."""
+        try:
+            from l9_presence import killfeed_ocr_bootstrap as ob
+            return ob.tight_row_ocr(bgr, anchor=self._anchor)
+        except Exception:  # noqa: BLE001
+            return None
 
     def _killer_fresh_row(self, bgr, now_ms: float) -> bool:
         """R2 fresh-row test: did the killer-feed region CHANGE vs the prior panel? A real kill row is a

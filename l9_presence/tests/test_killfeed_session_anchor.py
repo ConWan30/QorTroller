@@ -129,3 +129,38 @@ def test_coverage_note_zero_kill_session_is_bootstrap_only():
     assert "NOT promoted" in g.coverage_note()
     g._regime = sa.PROMOTED
     assert "coverage gap" in g.coverage_note()
+
+
+# --- W.1: OCR-verified bootstrap catch (rendering-independent cold start) + provenance ---------------
+
+def test_ocr_verified_bypasses_marginal_score_gate():
+    # The defect: feed_v1 maxed 0.566 this session and the catch gate is marginal. An OCR-verified read (the
+    # literal handle glyphs) is stronger evidence -> the score gate is BYPASSED, so a sub-floor score catches.
+    g = _mk()
+    ev = g.observe_bootstrap(score=0.30, x_frac=0.16, y_frac=0.30, fresh_row=True, cut_fn=_cut_ok,
+                             ocr_verified=True, source="ocr_row_v1")
+    assert ev["event"] == "candidate_cut" and ev["bootstrap_source"] == "ocr_row_v1"
+    assert g.regime == sa.CANDIDATE and g.status()["bootstrap_source"] == "ocr_row_v1"
+
+
+def test_ocr_verified_still_requires_fresh_row_and_killer_slot():
+    # The R2 fresh-row (anti-splice) + geometry gates hold REGARDLESS of source — OCR does not weaken them.
+    g = _mk()
+    assert g.observe_bootstrap(score=0.30, x_frac=0.16, y_frac=0.30, fresh_row=False, cut_fn=_cut_ok,
+                               ocr_verified=True, source="ocr_row_v1") is None       # not fresh -> no cut
+    assert g.observe_bootstrap(score=0.90, x_frac=0.40, y_frac=0.30, fresh_row=True, cut_fn=_cut_ok,
+                               ocr_verified=True, source="ocr_row_v1") is None        # victim slot -> no cut
+    assert g.regime == sa.BOOTSTRAP and g.status()["bootstrap_catches"] == 0
+
+
+def test_template_catch_records_static_feed_v1_source():
+    g = _mk()
+    ev = g.observe_bootstrap(score=0.58, x_frac=0.18, y_frac=0.30, fresh_row=True, cut_fn=_cut_ok)
+    assert ev["bootstrap_source"] == "static_feed_v1" and g.status()["bootstrap_source"] == "static_feed_v1"
+
+
+def test_human_oracle_cut_is_third_fallback_source():
+    g = _mk()
+    ev = g.human_oracle_cut("MANUAL_ANCHOR", "sha_human")
+    assert ev["event"] == "candidate_cut" and ev["bootstrap_source"] == "human_oracle"
+    assert g.regime == sa.CANDIDATE and g.status()["candidate_sha"] == "sha_human"

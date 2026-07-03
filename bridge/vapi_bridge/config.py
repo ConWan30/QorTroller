@@ -2159,6 +2159,9 @@ class Config:
     retina_session_anchor_enabled: bool = field(
         default_factory=lambda: _env_bool("RETINA_SESSION_ANCHOR_ENABLED", False)
     )
+    retina_ocr_bootstrap_enabled: bool = field(       # OCR-verified bootstrap catch (rendering-independent);
+        default_factory=lambda: _env_bool("RETINA_OCR_BOOTSTRAP_ENABLED", False)   # within session-anchor
+    )                                                 # envelope; bypasses the marginal feed_v1 score gate
     retina_session_anchor_archive_dir: str = field(   # R4: session anchor PNG+SHA archived here (gitignored)
         default_factory=lambda: os.environ.get("RETINA_SESSION_ANCHOR_ARCHIVE_DIR", "retina_kf_anchors")
     )

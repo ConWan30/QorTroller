@@ -34,6 +34,7 @@ def _bare_rgc(tmp_path, k=3):
     rgc._prev_killer_gray = None
     rgc._last_killer_fresh_ms = -1e18
     rgc._session_anchor_dir = str(tmp_path)
+    rgc._ocr_bootstrap_enabled = False                    # mirror __init__ default (OFF -> legacy feed_v1 catch)
     return rgc
 
 
@@ -127,3 +128,38 @@ def test_wired_fold_victim_path_stays_static_feed_v1(tmp_path, monkeypatch):
     rgc._session_anchor_fold(bgr, res, res.evidence, 1100.0)
     rec = mon.mark_onset(9000.0)
     assert rec is not None and rec["verdict"] == "OWN_DEATH" and rec["anchor"] == "feed_v1"
+
+
+def test_wired_ocr_bootstrap_catches_where_feed_v1_is_subfloor(tmp_path, monkeypatch):
+    # W.1: with OCR bootstrap ON, an OCR-verified killer-slot READ catches+cuts even though the feed_v1 killer
+    # score (0.50) is SUB-floor — the cold-start fix. bootstrap_source is recorded as ocr_row_v1.
+    from l9_presence.killfeed_ocr_bootstrap import OcrRead
+    rgc = _bare_rgc(tmp_path)
+    rgc._ocr_bootstrap_enabled = True
+    bgr = np.zeros((100, 100, 3), np.uint8)
+    monkeypatch.setattr(kc, "killer_slot_best", lambda *a, **k: (0.50, 0.16, 0.30))    # SUB-floor feed_v1
+    monkeypatch.setattr(rgc, "_ocr_bootstrap_read",
+                        lambda b: OcrRead(True, "Qortrola30", 100.0, 0.16, 0.30, "killer"))
+    monkeypatch.setattr(rgc, "_killer_fresh_row", _fresh_mock(rgc, True))
+    monkeypatch.setattr(rgc, "_cut_session_anchor", lambda b, x, y: (np.ones((8, 40), np.uint8), "sha_ocr"))
+    rgc._inline_monitor.mark_onset(1000.0)
+    rgc._session_anchor_fold(bgr, _Res(0.5, 0.22, 0.97), _Res(0.5, 0.22, 0.97).evidence, 1100.0)
+    assert rgc._session_anchor.regime == "CANDIDATE"
+    assert rgc._session_anchor.status()["bootstrap_source"] == "ocr_row_v1"
+
+
+def test_wired_ocr_bootstrap_still_r2_gated(tmp_path, monkeypatch):
+    # W.1 anti-splice: OCR ON + a matched read but NO fresh row (R2) -> NO catch. The fresh-row gate holds
+    # regardless of source, so a static/spliced screen cannot bootstrap-cut.
+    from l9_presence.killfeed_ocr_bootstrap import OcrRead
+    rgc = _bare_rgc(tmp_path)
+    rgc._ocr_bootstrap_enabled = True
+    bgr = np.zeros((100, 100, 3), np.uint8)
+    monkeypatch.setattr(kc, "killer_slot_best", lambda *a, **k: (0.50, 0.16, 0.30))
+    monkeypatch.setattr(rgc, "_ocr_bootstrap_read",
+                        lambda b: OcrRead(True, "Qortrola30", 100.0, 0.16, 0.30, "killer"))
+    monkeypatch.setattr(rgc, "_killer_fresh_row", _fresh_mock(rgc, False))            # NOT a fresh row
+    monkeypatch.setattr(rgc, "_cut_session_anchor", lambda b, x, y: (np.ones((8, 40), np.uint8), "sha_ocr"))
+    rgc._inline_monitor.mark_onset(1000.0)
+    rgc._session_anchor_fold(bgr, _Res(0.5, 0.22, 0.97), _Res(0.5, 0.22, 0.97).evidence, 1100.0)
+    assert rgc._session_anchor.regime == "BOOTSTRAP"      # R2 gate blocked the OCR catch
