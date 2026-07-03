@@ -258,7 +258,7 @@ def _mk_ads(tmp_path, bg_every=30):
     from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", ads_enabled=True,
                             ads_log_path=str(tmp_path / "ads.jsonl"),
-                            ads_label_file=str(tmp_path / "label.txt"),
+                            ads_segment_file=str(tmp_path / "ads_segment.json"),
                             ads_bg_sample_every=bg_every)
     rgc._source._downscale = 4
     # stub the B1 ROI history the merged-replay reads (list of (ts, lum), oldest-first, ts > cursor)
@@ -284,7 +284,9 @@ def _read_jsonl(path):
 
 def test_ads_merged_replay_event_abstains_and_carries_context(tmp_path):
     rgc = _mk_ads(tmp_path)
-    (tmp_path / "label.txt").write_text("high_8x", encoding="utf-8")
+    import json as _json
+    (tmp_path / "ads_segment.json").write_text(
+        _json.dumps({"optic": "high_8x", "fire_state": "no_fire", "segment": "8x"}), encoding="utf-8")
     # tick 0 primes cursors (no replay of stale history)
     _tick(rgc, [(900.0, 5.0)], [(900.0, 0)], 1000.0)
     # tick 1: a full press replayed at true WGC timing — baseline low, transition high, held, release, exit
@@ -299,7 +301,8 @@ def test_ads_merged_replay_event_abstains_and_carries_context(tmp_path):
     assert r["baseline"] == 6.0                              # ROI at the 1050 edge instant (1025 sample) —
     assert r["baseline"] < 40.0                              # PRE-press, NOT the post-transition 80 (retro-fill)
     assert r["downscale"] == 4                               # governor state carried
-    assert r["label"] == "high_8x"
+    assert r["optic"] == "high_8x" and r["fire_state"] == "no_fire" and r["segment"] == "8x"  # structured
+    assert r["label"] == "high_8x/no_fire/8x"                  # composite (readability)
     assert len(r["held_seq"]) >= 1 and "exit_seq" in r        # raw-first corpus intact
 
 
