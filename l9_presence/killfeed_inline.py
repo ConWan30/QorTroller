@@ -163,8 +163,11 @@ class InlineAuthorshipMonitor:
     #   Score semantics are anchor-specific (roster p95~0.66 vs feed re-validated 0 killer-slot FP over the
     #   1200-crop archive 2026-07-02) — stamped on every record so a corpus spanning an anchor swap stays
     #   interpretable, same lesson as ts_source. Default roster_v1; the live caller passes feed_v1.
-    _window_gate_ms: float = field(default=0.0, init=False)   # earliest classify time (onset + lag_min)
-    _window_end_ms: float = field(default=0.0, init=False)    # latest classify time (onset + lag_max)
+    # Window bounds init to -inf sentinels: a NEVER-onset monitor must never classify. The old 0.0 defaults
+    # admitted should_classify(0.0) (gate<=0<=end) — no live impact (now_ms is epoch ms, never 0) but a real
+    # init edge, caught by the G4 A4 structural probe 2026-07-03.
+    _window_gate_ms: float = field(default=-1e18, init=False)  # earliest classify time (onset + lag_min)
+    _window_end_ms: float = field(default=-1e18, init=False)   # latest classify time (onset + lag_max)
     _inflight: bool = field(default=False, init=False)
     _last_classify_ms: float = field(default=-1e18, init=False)
     _classifications: int = field(default=0, init=False)

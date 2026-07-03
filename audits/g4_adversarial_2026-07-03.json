@@ -1,0 +1,104 @@
+{
+  "A3_spoof": {
+    "scenario": "A3_spoof",
+    "own_canon": "q0rtr01a30",
+    "must_reject": {
+      "total": 5,
+      "rejected": 5,
+      "leaks": []
+    },
+    "documented_collision_boundary": [
+      "Q0rTrola30",
+      "QorTro1a30",
+      "QORTROLA30",
+      "QorTrolA30",
+      "Q0rTr01a30",
+      "QorTro1a300"
+    ],
+    "pass": true,
+    "finding": "canon collides (a) visually-confusable names (o/0, i/l/1, case) and (b) handle-EXTENDING names via substring matching. Certificate-level consequence: a hostile lobby name inside this boundary could credit the attacker's kills to the handle \u2014 requires the handle to be a canon-substring of the attacker's name, visible in the same lobby. Recorded for HOLD adjudication; disambiguation beyond glyph shape is out of the CV layer's scope."
+  },
+  "A4_nowindow": {
+    "scenario": "A4_nowindow",
+    "classify_attempts_granted": 0,
+    "kas_verdict": "INSUFFICIENT_KILLS",
+    "pass": true
+  },
+  "A2_splice": {
+    "session_label": "A2_splice:retina_kf_adv_splice",
+    "handle": "QorTrola30",
+    "verdict": "INSUFFICIENT_KILLS",
+    "authored_kills": 0,
+    "authored_scores": [],
+    "anchor_tags": [],
+    "windows_total": 1,
+    "composites_total": 1,
+    "own_deaths": 1,
+    "event_trail": [
+      {
+        "generator": {
+          "regime": "BOOTSTRAP",
+          "anchor_tag": "bootstrap_feed_v1@0.55",
+          "effective_floor": 0.55,
+          "consistent": 0,
+          "k_needed": 3,
+          "bootstrap_catches": 0,
+          "fp_fires": 0,
+          "demotions": 0,
+          "promotions": 0,
+          "candidate_sha": null,
+          "bootstrap_source": null,
+          "failures": []
+        }
+      }
+    ],
+    "coupling_corroboration": null,
+    "hygiene": {
+      "frame_errs": 0,
+      "frame_stall_s": 0.0,
+      "ts_source": "timespan"
+    },
+    "span_ms": [
+      1000000000000.0,
+      1000000000000.0
+    ],
+    "min_kills": 2,
+    "notes": [
+      "authored 0 < min_kills 2"
+    ],
+    "kas_domain_tag": "QORTROLLER-KAS-v0",
+    "commitment": "146ba73d621b3cad8320dbd93e129ca73c00d852e9d826f3128987c2db72464c"
+  },
+  "A1_session:a1spectate": {
+    "session_label": "A1_session:a1spectate",
+    "handle": "QorTrola30",
+    "verdict": "INSUFFICIENT_KILLS",
+    "authored_kills": 0,
+    "authored_scores": [],
+    "anchor_tags": [],
+    "windows_total": 11,
+    "composites_total": 11,
+    "own_deaths": 0,
+    "event_trail": [],
+    "coupling_corroboration": {
+      "th2_coupled_true_ticks": 39,
+      "inline_classifications": 32,
+      "inline_composite_windows": 11
+    },
+    "hygiene": {
+      "frame_errs": 0,
+      "frame_stall_s": 0.0,
+      "ts_source": "timespan"
+    },
+    "span_ms": [
+      1783119077830.5,
+      1783119754266.0
+    ],
+    "min_kills": 2,
+    "notes": [
+      "authored 0 < min_kills 2"
+    ],
+    "kas_domain_tag": "QORTROLLER-KAS-v0",
+    "commitment": "9a75a5ec9d56a0ee3a2d7d0c3f6bf5731e107014d21b58e6b57089fd8ac175fa"
+  }
+}
