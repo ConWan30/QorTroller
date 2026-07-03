@@ -917,7 +917,13 @@ class RetinaGameCapture:
         once the generator promotes. Fail-open -> None (never breaks the fold)."""
         try:
             from l9_presence import killfeed_ocr_bootstrap as ob
-            return ob.tight_row_ocr(bgr, anchor=self._anchor)
+            # Geometry flows from the monitor (single source, incl. env overrides like the MP-rendering
+            # KILLFEED_CV_FEED_MAX_YFRAC) — G3 finding: MP renders the feed larger/lower than Warzone's
+            # calibrated 0.42, so the engine's own default silently rejected every MP kill row.
+            mon = self._inline_monitor
+            return ob.tight_row_ocr(bgr, anchor=self._anchor,
+                                    killer_max_frac=mon.killer_max_frac,
+                                    feed_region_max_yfrac=mon.feed_region_max_yfrac)
         except Exception:  # noqa: BLE001
             return None
 
