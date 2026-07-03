@@ -121,3 +121,40 @@ Remote-Play-reliable L2 value source (candidates: a different offset/interface u
 timestamp from interface 3 paired with a reliable L2 value; or a pydualsense-L2 + device-timestamp anchor).
 Preparatory (non-gaming) work can build the RP-config raw-byte + dual-L2 diagnostic so that session is
 one-shot.
+
+## RESOLVED — 2026-07-02 Remote-Play session
+
+The one-shot RP session ran. **Offset 5 IS the RP-reliable L2 under Remote Play.** Against pydualsense
+ground truth (156 ticks, 90k raw reports): offset 5 reads mean **202.4 held / 0.6 released** (separation
++201.8) — it tracks L2 cleanly and drops to ~0 on release. device-ts @28 advances (0% repeats), 64-byte
+reports, no layout change; iface-3 is fully live. `push_l2_raw` already reads `data[5]`, so the production
+reader is already on the right byte — **Route 1: RP-reliable source established.**
+
+**Two diagnostic fixes made the clean read possible (F-RP-DIAG-1 / F-RP-DIAG-2):**
+- **F-RP-DIAG-1** — the RP dual-L2 diagnostic did per-frame `open(...,"a")` on the ~1 kHz raw thread. That
+  hot-path fopen would measure its own jitter and could manufacture false "stream starved" evidence. Rebuilt
+  as count-capped **drop-oldest** ring buffers flushed once on a trigger file / at stop, with a
+  `capped`/`total_seen` marker so a post-cap event is either present or the record says it can't.
+- **F-RP-DIAG-2** — the pyds ground-truth side of the diag was nested under `if _ads_on:` (ads-coupling),
+  which is off per the "no l2_ads enabled" rail — so ground truth never captured on the first pass. Moved to
+  its own env gate: logging ground truth emits no verdict, so the rail (about the *detector*) doesn't apply.
+
+**Cause of the prior 113/113 stuck-high: UNRESOLVED (honest correction).** The tempting story — that the old
+diagnostic's hot-path fopen stalled the reader — was checked against the git timeline and REFUTED: the
+per-frame diag (`retina_rp_rawdump`, `d5acb73c` 05:33) was built *for the next session*, AFTER the 113/113
+finding; during the 113/113 session (`75a9654f` 04:48) the raw reader thread had **zero** per-frame disk I/O
+(`push_l2_raw` is in-memory; `crosscheck_l2` runs on the consumption thread). So the prior stuck-high was NOT
+self-inflicted instrumentation. Candidates remain: transient RP contention (didn't recur), or
+**consumption-load / GIL contention with ads-coupling ON** (the 113/113 session had it on; tonight it was
+off) — the last candidate **recurs in Phase 2**, where l2_ads feeding turns ads-coupling back on.
+
+**MIGRATION GATE — source resolved, intermittency monitored.** The RP-reliable-source finding is resolved
+(offset 5), so the *source* gate on l2_ads calibration + loop-1/2 migration is cleared in principle. But one
+clean session against a prior 113/113 counterexample is **"works tonight, intermittency unresolved"** — so
+the honest posture is: source established, **live tripwire required** through Phase 2/4. The tripwire =
+`crosscheck_l2` (which already runs when ads-coupling is on, i.e. through Phase 2/4) extended to detect the
+one-directional PERSISTENT stuck pattern (raw≥thr / pyds<thr sustained, away from a transition, vs expected
+edge-skew) → a tripped state the Phase-2 calibration runner reads per segment → halt segment + mark records
+suspect. Loop-1/2 migration stays gated until the intermittency is explained or shown absent across enough
+sessions. Evidence pair archived (gitignored): `retina_kf_archive/rp_l2diag/`
+(`rp_2026-07-02_s1_cleanoffset5_rawonly` + `rp_2026-07-02_s2_dual_{raw,pyds}` with ground truth).
