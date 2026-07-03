@@ -1,0 +1,51 @@
+{
+  "session_label": "g3br_recut",
+  "handle": "QorTrola30",
+  "verdict": "INSUFFICIENT_KILLS",
+  "authored_kills": 0,
+  "authored_scores": [],
+  "anchor_tags": [],
+  "windows_total": 23,
+  "composites_total": 23,
+  "own_deaths": 0,
+  "event_trail": [
+    {
+      "ts": "2026-07-03 14:21:40",
+      "event": "candidate_cut",
+      "regime": "CANDIDATE",
+      "sha": "8e65da13b760735e"
+    },
+    {
+      "ts": "2026-07-03 14:27:19",
+      "event": "candidate_demoted_stall",
+      "regime": "BOOTSTRAP",
+      "sha": "8e65da13b760735e"
+    },
+    {
+      "ts": "2026-07-03 14:28:30",
+      "event": "candidate_cut",
+      "regime": "CANDIDATE",
+      "sha": "5ec2595697e0aa6b"
+    }
+  ],
+  "coupling_corroboration": {
+    "th2_coupled_true_ticks": 75,
+    "inline_classifications": 86,
+    "inline_composite_windows": 42
+  },
+  "hygiene": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "timespan"
+  },
+  "span_ms": [
+    1783106153451.8,
+    1783106902522.5
+  ],
+  "min_kills": 2,
+  "notes": [
+    "authored 0 < min_kills 2"
+  ],
+  "kas_domain_tag": "QORTROLLER-KAS-v0",
+  "commitment": "a83e496f161764d864b94141f6f5947ec6a955de6558fa51e524583678260b9b"
+}
