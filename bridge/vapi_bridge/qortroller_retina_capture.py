@@ -538,8 +538,8 @@ class RetinaGameCapture:
                  killfeed_enabled: bool = False, killfeed_roi: str = "", killfeed_every: int = 20,
                  capture_enabled: bool = False, capture_dir: str = "retina_kf_crops",
                  capture_max: int = 600, panel_roi: str = "",
-                 inline_enabled: bool = False, anchor_path: str = "", near_log_path: str = "",
-                 composite_log_path: str = "",
+                 inline_enabled: bool = False, anchor_path: str = "", anchor_id: str = "feed_v1",
+                 near_log_path: str = "", composite_log_path: str = "",
                  r2_threshold: int = 40,
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
                  death_noise_floor: float = 2.5, death_log_path: str = "",
@@ -581,11 +581,12 @@ class RetinaGameCapture:
                     load_anchor,
                 )
                 from l9_presence.killfeed_inline import InlineAuthorshipMonitor
-                self._anchor = load_anchor(anchor_path or "l9_presence/assets/own_handle_anchor.png")
-                # Phase 1 composite reads (never redefines) the SAME frozen killfeed_cv constants.
+                self._anchor = load_anchor(anchor_path or "l9_presence/assets/own_handle_anchor_feed.png")
+                # Phase 1 composite reads (never redefines) the SAME frozen killfeed_cv constants; anchor_id
+                # is stamped on every composite/near-boundary record for cross-swap corpus provenance.
                 self._inline_monitor = InlineAuthorshipMonitor(
                     match_floor=DEFAULT_MATCH_FLOOR, killer_max_frac=KILLER_MAX_FRAC_PANEL,
-                    feed_region_max_yfrac=FEED_REGION_MAX_YFRAC)
+                    feed_region_max_yfrac=FEED_REGION_MAX_YFRAC, anchor_id=str(anchor_id or "feed_v1"))
             except Exception:  # noqa: BLE001 — inline is advisory; never block capture on its setup
                 self._inline_monitor = None
                 self._anchor = None

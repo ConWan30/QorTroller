@@ -454,6 +454,7 @@ class DualShockTransport:
                     panel_roi=str(getattr(cfg, "retina_capture_panel_roi", "")),
                     inline_enabled=bool(getattr(cfg, "retina_killfeed_inline_enabled", False)),
                     anchor_path=str(getattr(cfg, "retina_killfeed_anchor_path", "")),
+                    anchor_id=str(getattr(cfg, "retina_killfeed_anchor_id", "feed_v1")),
                     near_log_path=str(getattr(cfg, "retina_killfeed_near_log", "")),
                     composite_log_path=str(getattr(cfg, "retina_killfeed_composite_log", "")),
                     r2_threshold=int(getattr(cfg, "retina_combat_r2_threshold", 40)),

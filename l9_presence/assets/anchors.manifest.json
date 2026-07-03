@@ -1,0 +1,16 @@
+{
+  "_note": "Binds killfeed_cv anchor_id (stamped on every composite/near-boundary record as 'anchor') to the asset bytes, so 'feed_v1' is a checkable reference not a silently-regenerable filename. All AUTHORED recall claims rest on these.",
+  "anchors": {
+    "roster_v1": {
+      "path": "l9_presence/assets/own_handle_anchor.png",
+      "sha256": "ea09a178e6447ec3e70ea45a8b39e9fbed9fb3849eb566b5e4dd3562317fa1a3",
+      "source": "squad-roster rendering of Qortrola30; masks feed kill rows via global-best (live 0/19 root cause 2026-07-02); retained for reference/cross-check"
+    },
+    "feed_v1": {
+      "path": "l9_presence/assets/own_handle_anchor_feed.png",
+      "sha256": "8d7bfc0928c2b35da39f205e5dde62a2a9c0cb0cb0d26d5aeee47e33c49ca991",
+      "source": "teal killer-slot feed rendering, cut from panel_1783050755224447300; FP-re-validated 0 killer-slot FP over 1200-crop archive @ floor 0.66; DEFAULT",
+      "fp_validation": "2026-07-02: 10/10 AUTHORED candidates genuine, 0 FP, color-robust teal+green"
+    }
+  }
+}

@@ -120,3 +120,14 @@ splice exposure are the same 4100ms.
 operator, *one* game, confounded on the kill side by the rig's observer-effect. This is a first pairing
 that establishes the finding — not a certification. Thresholds were not touched
 (`match_floor` / killer-boundary / y-gate frozen throughout).
+
+## Window-width note — 2026-07-02 (anchor-swap session): considered, already covered, unchanged
+
+The live 0/19 authorship match prompted a fix for the R2-window: the diagnosis suggested the kill row
+rendered *after* the captured frame, implying the window should extend past the fire. On the evidence it did
+NOT: the deployed window is already `(50, 5000)ms` and 5000ms already spans the ~1.5s kill-cam lag — the row
+is inside the window. The real cause was every classification inside the window locking onto the persistent
+squad-roster rendering that the *roster* anchor matched (0.87–0.91), masking the transient feed kill row.
+**Fix = anchor swap (roster→feed), NOT window widening.** The window stays 5000ms → **splice exposure
+unchanged; no new ρ**. Extending would have paid the exact ρ-widening this doc guards for zero recall gain.
+The window-duration security parameter is untouched by this session.

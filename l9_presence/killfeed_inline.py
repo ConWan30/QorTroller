@@ -159,6 +159,10 @@ class InlineAuthorshipMonitor:
     feed_region_max_yfrac: float = 0.42  # mirror of killfeed_cv.FEED_REGION_MAX_YFRAC (read-only mirror)
     near_epsilon: float = DEFAULT_NEAR_EPSILON
     refresh_k: int = DEFAULT_BG_REFRESH_K
+    anchor_id: str = "roster_v1"         # PROVENANCE: which anchor produced these scores (roster_v1|feed_v1).
+    #   Score semantics are anchor-specific (roster p95~0.66 vs feed re-validated 0 killer-slot FP over the
+    #   1200-crop archive 2026-07-02) — stamped on every record so a corpus spanning an anchor swap stays
+    #   interpretable, same lesson as ts_source. Default roster_v1; the live caller passes feed_v1.
     _window_gate_ms: float = field(default=0.0, init=False)   # earliest classify time (onset + lag_min)
     _window_end_ms: float = field(default=0.0, init=False)    # latest classify time (onset + lag_max)
     _inflight: bool = field(default=False, init=False)
@@ -232,7 +236,7 @@ class InlineAuthorshipMonitor:
         if near_boundary(score, self.match_floor, self.near_epsilon):
             self._near_boundary += 1
             return {"ts_ms": round(now_ms, 1), "score": round(float(score), 4), "verdict": verdict,
-                    "region": region, "slot": slot, "floor": self.match_floor}
+                    "region": region, "slot": slot, "floor": self.match_floor, "anchor": self.anchor_id}
         return None
 
     # --- Phase 1: max-over-window composite ---------------------------------------------------------
@@ -298,7 +302,7 @@ class InlineAuthorshipMonitor:
         else:
             verdict, score = "UNVERIFIABLE", max(self._win_best_killer, self._win_best_victim, 0.0)
         return {"ts_ms": round(now_ms, 1), "verdict": verdict, "composite_score": round(float(score), 4),
-                "window_members": self._win_members,
+                "window_members": self._win_members, "anchor": self.anchor_id,
                 "window_gate_ms": round(self._window_gate_ms, 1),
                 "window_end_ms": round(self._window_end_ms, 1),
                 # death-row appearance anchor (None if no victim obs) — lets loop 2 record the confirmation
