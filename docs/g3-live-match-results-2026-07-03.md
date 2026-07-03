@@ -60,3 +60,21 @@ G3 **green on the producer thesis**: the full chain works live (match 1), the ca
 (OCR/geometry finding fixed), density is fixed (75 classifies vs the starved ~37), and the failure mode that
 remains (match 2) is the narrow, pre-registered cut-quality gap with a clear mechanical fix — not an unknown.
 The B2 instrumented capture stays a clean follow-on (dense-tail alone reached AUTHORED in match 1).
+
+## Match 3 — Warzone BR stall-recut validation (daemon `g3br_recut`, 14:21-14:30)
+
+```
+14:21:40 candidate_cut sha=8e65da13
+14:22-14:27 5 raw feed_v1 AUTHORED (0.71-0.79) the candidate scored sub-floor
+14:27:19 candidate_demoted_stall (3rd witnessed miss -> demote, logged)   <- THE FIX FIRING LIVE
+14:28:25 next kill -> 14:28:30 candidate_cut sha=5ec25956 (recut, 71s after demotion)
+```
+
+**Stall-recut VALIDATED**: the weak cut absorbed exactly stall_limit=3 witnessed kills and was replaced —
+the match-2 stuck-all-match shape is gone. Composite AUTHORED remained 0 this match only because it ended
+~2 min after the recut (second candidate never saw K=3 kills) — a match-length artifact, not a stall.
+
+**New finding (drives queue #1)**: both BR cuts have been weak while the MP cut promoted instantly. The
+fixed +/-72x14 px cut box was implicitly sized for MP's larger rows; BR's smaller feed rows likely mis-frame
+it. Next refinement = scale-aware / best-row cut sizing, validated offline against the BR crop archive before
+the next match.
