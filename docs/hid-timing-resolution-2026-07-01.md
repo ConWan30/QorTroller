@@ -158,3 +158,38 @@ edge-skew) → a tripped state the Phase-2 calibration runner reads per segment 
 suspect. Loop-1/2 migration stays gated until the intermittency is explained or shown absent across enough
 sessions. Evidence pair archived (gitignored): `retina_kf_archive/rp_l2diag/`
 (`rp_2026-07-02_s1_cleanoffset5_rawonly` + `rp_2026-07-02_s2_dual_{raw,pyds}` with ground truth).
+
+## FORWARD-NOTE — 2026-07-02 Phase-2 live ads-coupling session (supersedes part of the RESOLVED scope)
+
+The first live l2_ads capture session ran with **ads-coupling ON** (`RETINA_ADS_COUPLING_ENABLED=true`,
+abstain-only). The RESOLVED section above was measured **raw-only** (ads-coupling OFF): under that condition
+offset 5 is RP-reliable (+201.8 held/released separation). That finding **holds for its measured condition**
+and is not withdrawn. But the "source resolved" scope is now refined by the Phase-2 evidence:
+
+**"Offset-5 RP-reliable" held against the raw-only / stuck-high failure mode only. Under ads-coupling-ON
+(Phase-2 conditions) the dominant raw failure is blind-LOW, not stuck-high: 56 of 57 crosscheck
+disagreements are offset-5 reading 0 during live presses (pyds ground truth 100–255); only 1 was
+raw-high-stuck, and it did not sustain to n_trip. This is exactly the "consumption-load / GIL contention with
+ads-coupling ON" recurrence the RESOLVED section predicted for Phase 2 — now observed. The ADS corpus is
+unaffected for held-state characterization: the monitor feeds on offset-5 via `push_l2_raw` (device clock),
+NOT on pyds L2 (pyds is crosscheck-only); held/exit ROI sequences ride the WGC ROI clock and are sound. Raw
+offset-5 is a known-intermittent crosscheck under RP+ads-on.**
+
+**Onset-clock scope for HOLD-C (the load-bearing correction).** The feared failure — onset latencies
+quantized to the ~1.2 s drain tick — does NOT occur. Onset in `AdsCouplingMonitor.feed` is strictly
+L2-rising-edge-driven (no ROI-onset fallback), and 16 onsets fired tonight, so offset-5 is **intermittent,
+not blind**: valid in brief bursts (enough rising edges in the buffered `device_clock_l2` stream to fire
+onsets) while reading 0 at most crosscheck sample instants. Those edges are timestamped by
+`device_clock_l2.push_raw` (device-ts-corrected wall clock, 3 MHz sensor ts); `ts_source: device` on 120/120
+records confirms it. So **the HOLD-C onset-latency column is device-precise, not tick-quantized** — but it
+carries an **offset-5-undersampling caveat under RP+ads-on**: a real press whose first report read 0 fires
+its onset on a later valid report (latency bias), and some presses are missed entirely. Onset latencies are
+measurable but must be read as device-clock-precise-with-RP-intermittency, not as ground truth.
+
+**Tripwire coverage note.** The `StuckTripwire` guards the raw-high-stuck (113/113) direction; tonight's
+recurrence was blind-LOW, which the tripwire correctly does not halt on (the corpus stays sound — held/exit
+ride the ROI clock, fired onsets are device-precise). So blind-low intermittency is a **monitored-but-not-
+halted** condition; HOLD-C should track the per-segment crosscheck blind-low rate as an onset-reliability
+weight, distinct from the halt conditions. Same discipline as the softness-hypothesis supersession: the
+earlier finding is scoped honestly to its measured condition, not overturned, and the new condition's
+evidence is recorded while fresh.
