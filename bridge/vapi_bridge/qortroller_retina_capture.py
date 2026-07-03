@@ -333,6 +333,16 @@ def _panel_roi_crop(buf, roi, lum_scale):
     return _u8_from_scale(buf[y0:y1, x0:x1], lum_scale)
 
 
+def _append_b2_batch(path: str, batch) -> None:
+    """Daemon-thread flush for the B2 instrumented trace — one line per frame sample. Best-effort."""
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            for ts, red in batch:
+                fh.write('{"ts_ms": %.1f, "b2_red": %.5f}\n' % (float(ts), float(red)))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class WgcFrameSource:
     """Windows Graphics Capture source: captures a window in the background, runs cv_motion on each
     frame pair, and feeds on-screen pan into the core. Import-guarded; failure is non-fatal (the lobe
@@ -370,6 +380,9 @@ class WgcFrameSource:
         self._kf_ts = None
         self._kf_frame_n = 0
         self._panel_roi = _parse_roi(panel_roi)         # left HUD panel (feed+roster) for dense corpus capture
+        # B2 instrumented trace (G0 close): list buffer when RETINA_B2_TRACE_ENABLED, else None (zero cost).
+        self._b2_trace = [] if os.environ.get("RETINA_B2_TRACE_ENABLED", "").lower() in ("1", "true") else None
+        self._b2_trace_path = os.environ.get("RETINA_B2_TRACE_PATH", "retina_b2_trace.jsonl")
         self._panel_bgr = None                          # latest panel ROI (contiguous BGR) for the crop saver
 
     def start(self) -> bool:
@@ -427,8 +440,19 @@ class WgcFrameSource:
                     try:
                         from l9_presence.trigger_hud_coupling import center_roi_luminance, center_roi_redness
                         self._core.feed_roi(screen_ts, center_roi_luminance(gray))     # B1: flash (full gray)
-                        self._core.feed_roi_red(                                       # B2: red (pre-cropped ROI)
-                            screen_ts, center_roi_redness(b2_bgr, frac=1.0, v_center=0.5, h_center=0.5))
+                        _b2 = center_roi_redness(b2_bgr, frac=1.0, v_center=0.5, h_center=0.5)
+                        self._core.feed_roi_red(screen_ts, _b2)                        # B2: red (pre-cropped ROI)
+                        # B2 INSTRUMENTED TRACE (G0 needs-capture close; RETINA_B2_TRACE_ENABLED, default-OFF):
+                        # per-frame (ts, red) buffered in-memory; a batch of 512 flushes on a daemon thread —
+                        # never file I/O on this frame callback. Offline analysis aligns the trace to the
+                        # composite-AUTHORED kill timestamps to measure per-kill B2 reliability (R2^B2 leg 1).
+                        if self._b2_trace is not None:
+                            self._b2_trace.append((screen_ts, _b2))
+                            if len(self._b2_trace) >= 512:
+                                batch, self._b2_trace = self._b2_trace, []
+                                import threading
+                                threading.Thread(target=_append_b2_batch,
+                                                 args=(self._b2_trace_path, batch), daemon=True).start()
                     except Exception:  # noqa: BLE001
                         pass
                     # Kill-feed authorship ROI: stash a contiguous BGR crop of the feed region every N frames
