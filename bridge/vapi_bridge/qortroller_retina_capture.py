@@ -899,9 +899,13 @@ class RetinaGameCapture:
                         cut_fn=lambda: self._cut_session_anchor(bgr, kxf, kyf),
                         now_ms=now_ms, ocr_verified=False, source="static_feed_v1")
             elif gen.regime == sa.CANDIDATE:
+                # Stall-recut signal (G3 match-2): feed_v1's raw per-sample verdict on THIS crop said
+                # killer-slot AUTHORED (>=0.66) — an independent kill signal the candidate must also see.
+                raw_auth = (getattr(getattr(res, "verdict", None), "value", None) == "AUTHORED_PRESENT")
                 ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
-                                            now_ms=now_ms)
-            if ev2 is not None and ev2.get("event") in ("candidate_cut", "promoted", "candidate_demoted_fp"):
+                                            now_ms=now_ms, raw_killer_authored=raw_auth)
+            if ev2 is not None and ev2.get("event") in ("candidate_cut", "promoted", "candidate_demoted_fp",
+                                                        "candidate_demoted_stall"):
                 log.info("session-anchor: %s regime=%s sha=%s", ev2["event"], gen.regime,
                          ev2.get("sha") or ev2.get("candidate_sha"))
             # AUTHORED fold ONLY when PROMOTED, tagged with the regime AT THIS classification (carry-forward 1).
