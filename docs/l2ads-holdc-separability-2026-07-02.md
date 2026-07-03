@@ -56,10 +56,12 @@ transition. All five computed in one pass; every result reported including failu
 
 **Verdict: featurization does not produce a confirmed separating feature at this N.** The only
 pre-registered *motivated* feature with median separation in its predicted direction is **F2
-exit-abruptness** — and it is **provisional**: tails overlap both ways, it rides the release edge (same
-offset-5 RP-intermittency caveat as onset, below), and a single n=8 negative outlier controls the negative
-p90. F4's strong raw separation is opposite its pre-registered direction, so it is a post-hoc hypothesis,
-not evidence.
+exit-abruptness** — and it is **provisional**: tails overlap both ways, and a single n=8 negative outlier
+controls the negative p90 (now identified — see confirmation gate). F4's strong raw separation is opposite
+its pre-registered direction, so it is a post-hoc hypothesis, not evidence — but its mechanism is real (the
+scoped world moves, a static menu does not), so it earns a *corrected* physics story and is re-registered as
+a fresh, equal-footing prediction for the next out-of-sample pass (below); it carries none of tonight's data
+as evidence.
 
 ## Coverage boundaries (structural — on record)
 
@@ -74,13 +76,18 @@ not evidence.
 
 ## Caveats (stated up front)
 
-- **Onset/exit-timing scope.** Onset (and exit) edges ride the device clock (device-ts-corrected wall
-  clock, 3 MHz sensor ts — NOT the ~1.2 s drain tick; `ts_source: device` on 120/120 records). But under
-  Remote Play with ads-coupling ON, offset-5 is *undersampled* (56/57 crosscheck disagreements blind-low —
-  the "consumption-load / GIL contention with ads-coupling ON" recurrence predicted in
-  `docs/hid-timing-resolution-2026-07-01.md`). Any onset/exit-latency feature (incl. F2) carries
-  RP-intermittency: a real press whose first report read 0 fires its edge on a later valid report. Timing
-  features are device-precise-but-RP-undersampled, not ground truth.
+- **Onset-timing scope.** Onset edges ride the device clock (device-ts-corrected wall clock, 3 MHz sensor
+  ts — NOT the ~1.2 s drain tick; `ts_source: device` on 120/120 records). But under Remote Play with
+  ads-coupling ON, offset-5 is *undersampled* (56/57 crosscheck disagreements blind-low — the
+  "consumption-load / GIL contention with ads-coupling ON" recurrence predicted in
+  `docs/hid-timing-resolution-2026-07-01.md`): a real press whose first report read 0 fires its edge on a
+  later valid report. Onset-latency features are device-precise-but-RP-undersampled, not ground truth.
+- **F2's caveat is lighter than the shared framing — stated precisely.** F2 is `max |Δroi|` across
+  `exit_seq`; the ROI *samples* ride the precise WGC clock, so the *measurement* is not RP-timing-limited.
+  Only the exit *window boundary* (when `exit_seq` starts) rides the pyds L2 release edge — so the RP caveat
+  is about *which samples land in the window*, not about the feature's clock. The hybrid device-ts wiring is
+  therefore likely **not** needed for F2. This is a narrower, more accurate scope than "F2 rides the release
+  edge."
 - **Thin negative leg.** n=8 L2-non-ADS negatives. A p90 on eight samples moves a lot with one sample —
   F2's overlap is driven by a single outlier. This is the binding limit on tonight's result.
 
@@ -95,10 +102,27 @@ not evidence.
 
 ## Confirmation gate (frozen)
 
-Nothing here resolves D-ADS-1. Any feature carried forward (F2) is provisional pending **out-of-sample
-confirmation against the frozen feature definitions above**: the next range session's first job is **~15
-fresh L2-non-ADS negatives** (to test whether F2's negative outlier was a fluke or the real distribution),
-plus more positives to firm the optic tails. Same posture as every threshold this project has shipped:
+Nothing here resolves D-ADS-1. The candidates carried forward are provisional pending **out-of-sample
+confirmation against frozen feature definitions**.
+
+**The n=8 negative outlier is identified, not excluded.** The menu record with exit_abrupt 14.3: its
+`exit_seq` sits flat (~27.5, matching its held baseline) for ~280 ms after release, then spikes to 43.0 at
+t+344 ms — a real delayed UI/scene transition landing inside the 500 ms exit window, not noise. So F2's
+negative tail is heavy **by mechanism, not fluke**: UI-transitions-during-the-exit-window are real-world
+events F2 must survive. This rewrites the negatives protocol below — the confirmation session must
+*deliberately include* release-during-UI-transition cases (menu-close-on-release, weapon-swap-on-release),
+not hope to avoid them.
+
+**Two frozen shape candidates on equal footing** (neither carries tonight's data as evidence):
+- **F2 `exit_abrupt`** = max \|Δroi\| across `exit_seq`. Prediction: optic-ADS > L2-non-ADS.
+- **F4 `held_range`** = max−min of `held_seq` roi, **re-registered with corrected physics**: the scoped
+  world moves (varying held ROI) while a static menu does not, so optic-ADS > L2-non-ADS (the *opposite* of
+  tonight's failed prediction that the overlay's stability would make optic *lower*). Testing two frozen
+  candidates costs the same session as one.
+
+**Next range session, confirmation capture** (short, rangebound): **~15 fresh L2-non-ADS negatives,
+deliberately including release-during-UI-transition cases**, plus more positives to firm the optic tails,
+scored against frozen F2 + re-registered F4. Same posture as every threshold this project has shipped:
 separates-on-this-corpus-pre-registered is a hypothesis; separates-out-of-sample is evidence.
 
 ## Net
