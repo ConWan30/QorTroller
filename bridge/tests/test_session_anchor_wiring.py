@@ -93,6 +93,28 @@ def test_wired_fold_no_authored_before_promotion(tmp_path, monkeypatch):
     assert rec is None or rec["verdict"] != "AUTHORED_PRESENT"
 
 
+def test_constructor_builds_generator_only_when_flag_set(monkeypatch):
+    # TURNKEY: the flag -> generator seam through the REAL __init__ (mock WgcFrameSource so no display is
+    # needed). If this broke, `--session-anchor` would silently run the match with the generator OFF.
+    import vapi_bridge.qortroller_retina_capture as rc
+
+    class _FakeSource:
+        def __init__(self, *a, **k):
+            self._panel_bgr = None
+            self._kf_roi = None
+    monkeypatch.setattr(rc, "WgcFrameSource", _FakeSource)
+    on = rc.RetinaGameCapture(window_substr="x", inline_enabled=True,
+                              anchor_path="l9_presence/assets/own_handle_anchor_feed.png", anchor_id="feed_v1",
+                              session_anchor_enabled=True)
+    assert isinstance(on._session_anchor, SessionAnchorGenerator)
+    assert on._session_anchor.regime == "BOOTSTRAP"
+    assert on._session_anchor.active_anchor_tag() == "bootstrap_feed_v1@0.55"
+    off = rc.RetinaGameCapture(window_substr="x", inline_enabled=True,
+                               anchor_path="l9_presence/assets/own_handle_anchor_feed.png",
+                               session_anchor_enabled=False)
+    assert off._session_anchor is None            # default-nothing-changed
+
+
 def test_wired_fold_victim_path_stays_static_feed_v1(tmp_path, monkeypatch):
     # Scope: a feed_v1 VICTIM match folds OWN_DEATH tagged static feed_v1, independent of the killer generator.
     rgc = _bare_rgc(tmp_path)
