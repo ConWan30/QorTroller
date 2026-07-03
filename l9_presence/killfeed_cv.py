@@ -145,6 +145,42 @@ def multiscale_match(anchor_bw, target_bw, scales=_SCALES):
         return 0.0, None, None, None
 
 
+def killer_slot_best(panel_bgr, anchor_bw, *, killer_max_frac: float = KILLER_MAX_FRAC_PANEL,
+                     feed_region_max_yfrac: float = FEED_REGION_MAX_YFRAC):
+    """Region-RESTRICTED best match: max normalized-template score whose match-box centre lands in the
+    KILLER slot (x_frac < killer_max_frac) AND the feed region (y_frac < feed_region_max_yfrac). Unlike
+    multiscale_match's GLOBAL best (which the persistent roster entry can win, masking a feed kill), this
+    isolates the killer-slot signal the per-session anchor generator gates on. Returns (score, x_frac,
+    y_frac) or (0.0, None, None). Pure (cv2+numpy)."""
+    try:
+        import cv2
+        import numpy as np
+        target = binarize_glyphs(panel_bgr)
+        if target is None or anchor_bw is None:
+            return 0.0, None, None
+        th, tw = target.shape[:2]
+        best = (0.0, None, None)
+        for s in _SCALES:
+            a = cv2.resize(anchor_bw, None, fx=s, fy=s, interpolation=cv2.INTER_NEAREST)
+            ah, aw = a.shape[:2]
+            if ah >= th or aw >= tw or ah < 4 or aw < 4:
+                continue
+            res = cv2.matchTemplate(target, a, cv2.TM_CCOEFF_NORMED)
+            ys, xs = np.mgrid[0:res.shape[0], 0:res.shape[1]]
+            cxf = (xs + aw / 2.0) / tw
+            cyf = (ys + ah / 2.0) / th
+            mask = (cyf < feed_region_max_yfrac) & (cxf < killer_max_frac)
+            if mask.any():
+                idx = int(np.argmax(np.where(mask, res, -1.0)))
+                r, c = np.unravel_index(idx, res.shape)
+                sc = float(res[r, c])
+                if sc > best[0]:
+                    best = (sc, float((c + aw / 2.0) / tw), float((r + ah / 2.0) / th))
+        return best
+    except Exception:
+        return 0.0, None, None
+
+
 def classify_feed(feed_bgr, anchor_bw, *, handle: Optional[str] = None,
                   match_floor: float = DEFAULT_MATCH_FLOOR,
                   killer_max_frac: float = KILLER_MAX_FRAC) -> CvAuthorshipResult:
