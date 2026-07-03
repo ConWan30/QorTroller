@@ -18,7 +18,9 @@ No FROZEN-v1 / 228B PoAC / chain / IOTX. cert_scope stays developer_self; this o
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 from collections import deque
 from typing import Optional
@@ -32,6 +34,35 @@ from .screen_retina_fusion import (
 )
 
 log = logging.getLogger(__name__)
+
+# l2_ads calibration segment labels (Increment A / F-RP-DIAG-2). Operator-set via the calibration runner's
+# ATOMIC control-file write; stamped onto every emitted record at the _log_ads point (the AdsCouplingMonitor
+# stays context-free). FAIL-CLOSED: any absent / partial / corrupt read -> all three fields _ADS_UNLABELED,
+# never a stale previous segment (which would silently poison a per-optic distribution).
+_ADS_UNLABELED = "unlabeled"
+_ADS_SEGMENT_KEYS = ("optic", "fire_state", "segment")
+_ADS_SEGMENT_DEFAULT_PATH = os.path.expanduser("~/.vapi/ads_segment.json")
+
+
+def _read_ads_segment_file(path: str) -> dict:
+    """Pure: read the operator-set segment {optic, fire_state, segment} from `path`. FAIL-CLOSED to all
+    'unlabeled' on absent / unreadable / non-JSON / not-a-dict / ANY missing-or-empty field (fail closed as
+    a UNIT — a partial label is untrustworthy, so one missing field unlabels the whole record). Never a stale
+    value, never an empty field. The runner writes `path` atomically (temp + os.replace), so a torn read is
+    structurally impossible — only an ABSENT file reaches the unlabeled path. Never raises."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            d = json.load(fh)
+        if isinstance(d, dict):
+            vals = {}
+            for k in _ADS_SEGMENT_KEYS:
+                v = d.get(k)
+                vals[k] = v.strip() if isinstance(v, str) and v.strip() else None
+            if all(vals[k] is not None for k in _ADS_SEGMENT_KEYS):
+                return vals
+    except Exception:  # noqa: BLE001
+        pass
+    return {k: _ADS_UNLABELED for k in _ADS_SEGMENT_KEYS}
 
 # "no coherence info" — v0 is coupling-only (no HUD OCR). Pick the insufficient/unknown member
 # defensively so a COUPLED_CLEAN continuous axis fuses to LIVE_COUPLED (presence; outcomes thin),
@@ -513,7 +544,7 @@ class RetinaGameCapture:
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
                  death_noise_floor: float = 2.5, death_log_path: str = "",
                  ads_enabled: bool = False, ads_log_path: str = "",
-                 ads_label_file: str = "", ads_bg_sample_every: int = 30) -> None:
+                 ads_segment_file: str = "", ads_bg_sample_every: int = 30) -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._capture_enabled = bool(capture_enabled)
         self._inline_enabled = bool(inline_enabled)
@@ -583,7 +614,7 @@ class RetinaGameCapture:
         self._ads_enabled = bool(ads_enabled)
         self._ads_monitor = None
         self._ads_log_path = str(ads_log_path or "retina_ads_coupling.jsonl")
-        self._ads_label_file = str(ads_label_file or "retina_ads_label.txt")
+        self._ads_segment_file = str(ads_segment_file or _ADS_SEGMENT_DEFAULT_PATH)
         self._ads_bg_every = max(1, int(ads_bg_sample_every))
         self._ads_bg_tick = 0
         self._ads_logged = False
@@ -907,19 +938,21 @@ class RetinaGameCapture:
         rec = dict(rec)
         rec["trigger_context"] = trigger_context
         rec["downscale"] = int(getattr(self._source, "_downscale", 0) or 0)
-        rec["label"] = self._read_ads_label()
+        seg = self._read_ads_segment()          # Increment A: structured segment labels (fail-closed unlabeled)
+        rec["optic"] = seg["optic"]
+        rec["fire_state"] = seg["fire_state"]
+        rec["segment"] = seg["segment"]
+        rec["label"] = "%s/%s/%s" % (seg["optic"], seg["fire_state"], seg["segment"])   # composite (readability)
         # rider 4: label the clock during the 3-clock migration window — l2_ads L2 timing is now the DEVICE
         # sensor clock (raw path), distinct from loops 1/2's drain clock and the WGC ROI clock.
         rec["ts_source"] = "device"
         append_near_boundary_jsonl(self._ads_log_path, rec)
 
-    def _read_ads_label(self) -> str:
-        """Operator-set segment label (read per-emit — rare, not per-tick). 'unknown' if absent; never raises."""
-        try:
-            with open(self._ads_label_file, "r", encoding="utf-8") as fh:
-                return fh.read().strip() or "unknown"
-        except Exception:  # noqa: BLE001
-            return "unknown"
+    def _read_ads_segment(self) -> dict:
+        """Instance wrapper: read the operator-set segment {optic, fire_state, segment} from
+        self._ads_segment_file (per-emit — rare, not per-tick). Fail-closed to all 'unlabeled'; never raises.
+        The stamp happens HERE at the _log_ads emission point only — AdsCouplingMonitor stays context-free."""
+        return _read_ads_segment_file(self._ads_segment_file)
 
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()

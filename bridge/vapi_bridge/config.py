@@ -2178,11 +2178,13 @@ class Config:
     retina_ads_coupling_log: str = field(
         default_factory=lambda: os.environ.get("RETINA_ADS_COUPLING_LOG", "retina_ads_coupling.jsonl")
     )
-    # Operator-set segment label, read per-record-emit (rare, not per-tick). The operator announces each
-    # firing-range segment live and the label file is updated (e.g. high_8x / mid_3x / iron_1x /
-    # negative_l2 / negative_transition); "unknown" outside a labeled segment.
-    retina_ads_label_file: str = field(
-        default_factory=lambda: os.environ.get("RETINA_ADS_LABEL_FILE", "retina_ads_label.txt")
+    # Operator-set segment, read per-record-emit (rare, not per-tick). Increment A: a JSON control file
+    # {optic, fire_state, segment} the calibration runner writes ATOMICALLY (temp + os.replace) as the
+    # operator announces each firing-range segment live. FAIL-CLOSED: absent / partial / corrupt read ->
+    # all three fields "unlabeled" (never a stale previous segment, never an empty field).
+    retina_ads_segment_file: str = field(
+        default_factory=lambda: os.environ.get(
+            "RETINA_ADS_SEGMENT_FILE", os.path.expanduser("~/.vapi/ads_segment.json"))
     )
     # Background negative sampling cadence (consumption ticks between passive center-ROI samples OUTSIDE L2
     # windows) — captures the screen-transitions-without-L2 negative distribution. Piggybacks the consumption

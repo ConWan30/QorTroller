@@ -463,7 +463,7 @@ class DualShockTransport:
                     death_log_path=str(getattr(cfg, "retina_death_window_log", "")),
                     ads_enabled=bool(getattr(cfg, "retina_ads_coupling_enabled", False)),
                     ads_log_path=str(getattr(cfg, "retina_ads_coupling_log", "")),
-                    ads_label_file=str(getattr(cfg, "retina_ads_label_file", "")),
+                    ads_segment_file=str(getattr(cfg, "retina_ads_segment_file", "")),
                     ads_bg_sample_every=int(getattr(cfg, "retina_ads_bg_sample_every", 30)),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
