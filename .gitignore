@@ -259,6 +259,8 @@ retina_kf_crops/
 
 # Archived gameplay crop corpora (per-session; gameplay-derived)
 retina_kf_archive/
+# Per-session auto-cut authorship anchors (PNG+SHA; gameplay-derived; R4 archival, NOT the committed static assets)
+retina_kf_anchors/
 retina_kf_near_boundary.jsonl
 retina_death_window.jsonl
 retina_kf_composite.jsonl

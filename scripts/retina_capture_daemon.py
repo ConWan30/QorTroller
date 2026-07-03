@@ -90,6 +90,8 @@ def cmd_start(a) -> int:
             env["RETINA_KILLFEED_CAPTURE_DIR"] = a.capture_dir
     if getattr(a, "killfeed_inline", False):             # R2-gated INLINE authorship classification (live)
         env["RETINA_KILLFEED_INLINE_ENABLED"] = "true"
+    if getattr(a, "session_anchor", False):              # per-session feed-cut anchor auto-generation (killer-slot)
+        env["RETINA_SESSION_ANCHOR_ENABLED"] = "true"
     if getattr(a, "death_window", False):                # LOOP 2: post-death stick-activity corpus (no verdict)
         env["RETINA_DEATH_WINDOW_ENABLED"] = "true"
     lf = open(log_path, "w", encoding="utf-8")
@@ -208,6 +210,8 @@ def main() -> int:
     s.add_argument("--capture-dir", default="", help="dir for dense panel crops (default retina_kf_crops)")
     s.add_argument("--killfeed-inline", action="store_true",
                    help="R2-gated INLINE authorship classification (live classify_panel + near-margin log)")
+    s.add_argument("--session-anchor", action="store_true",
+                   help="per-session feed-cut anchor auto-gen (killer-slot; bootstrap->cut->promote@0.66)")
     s.add_argument("--death-window", action="store_true",
                    help="LOOP 2: post-death stick-activity corpus (consumes loop-1 victim-slot; no verdict)")
     s.add_argument("--port", type=int, default=8080); s.add_argument("--health-timeout", type=int, default=180)
