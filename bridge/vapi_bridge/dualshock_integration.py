@@ -457,6 +457,8 @@ class DualShockTransport:
                     anchor_id=str(getattr(cfg, "retina_killfeed_anchor_id", "feed_v1")),
                     session_anchor_enabled=bool(getattr(cfg, "retina_session_anchor_enabled", False)),
                     ocr_bootstrap_enabled=bool(getattr(cfg, "retina_ocr_bootstrap_enabled", False)),
+                    dense_classify_enabled=bool(getattr(cfg, "retina_dense_classify_enabled", False)),
+                    dense_classify_min_gap_ms=float(getattr(cfg, "retina_dense_classify_min_gap_ms", 50.0)),
                     session_anchor_archive_dir=str(getattr(cfg, "retina_session_anchor_archive_dir",
                                                            "retina_kf_anchors")),
                     near_log_path=str(getattr(cfg, "retina_killfeed_near_log", "")),

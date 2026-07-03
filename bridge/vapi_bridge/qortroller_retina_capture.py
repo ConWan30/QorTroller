@@ -546,6 +546,7 @@ class RetinaGameCapture:
                  inline_enabled: bool = False, anchor_path: str = "", anchor_id: str = "feed_v1",
                  session_anchor_enabled: bool = False, session_anchor_archive_dir: str = "retina_kf_anchors",
                  ocr_bootstrap_enabled: bool = False,
+                 dense_classify_enabled: bool = False, dense_classify_min_gap_ms: float = 50.0,
                  near_log_path: str = "", composite_log_path: str = "",
                  r2_threshold: int = 40,
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
@@ -591,9 +592,15 @@ class RetinaGameCapture:
                 self._anchor = load_anchor(anchor_path or "l9_presence/assets/own_handle_anchor_feed.png")
                 # Phase 1 composite reads (never redefines) the SAME frozen killfeed_cv constants; anchor_id
                 # is stamped on every composite/near-boundary record for cross-swap corpus provenance.
-                self._inline_monitor = InlineAuthorshipMonitor(
-                    match_floor=DEFAULT_MATCH_FLOOR, killer_max_frac=KILLER_MAX_FRAC_PANEL,
-                    feed_region_max_yfrac=FEED_REGION_MAX_YFRAC, anchor_id=str(anchor_id or "feed_v1"))
+                # W.2 dense-tail-now (default-OFF): a tighter in-window min-gap densifies the R2-gated classify
+                # so the sparse sampling stops missing feed_v1's fragile ~2/150 catchable crops (the G2'-
+                # diagnosed 0/23 root cause). Single-flight still bounds the actual rate; the window gate is
+                # unchanged (classification stays R2-gated — B2 is NOT a trigger here, premise-free).
+                _mk = dict(match_floor=DEFAULT_MATCH_FLOOR, killer_max_frac=KILLER_MAX_FRAC_PANEL,
+                           feed_region_max_yfrac=FEED_REGION_MAX_YFRAC, anchor_id=str(anchor_id or "feed_v1"))
+                if dense_classify_enabled:
+                    _mk["min_gap_ms"] = float(dense_classify_min_gap_ms)
+                self._inline_monitor = InlineAuthorshipMonitor(**_mk)
             except Exception:  # noqa: BLE001 — inline is advisory; never block capture on its setup
                 self._inline_monitor = None
                 self._anchor = None
