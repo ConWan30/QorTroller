@@ -124,9 +124,9 @@ min score 0.857 — cutoff well below, recall-preserving). Raw: audits/rbo_{tess
 | B2 recall seg3 (Jul-1 rendering) | 6 / 267 located | **8 / 267** (no regression) |
 | B5 latency median / p95 | 2540 / 4075 ms | **122 / 232 ms** (≤250 budget) |
 | B1 false reads a1spectate | 0 | 0 (the 1 paddle read is a GENUINE own-kill row, eyeballed) |
-| B1 false reads splice | 0 (0/200 measured, 0/40 prior) | 0 (the 80 reads are GENUINE recaptured own-kills) |
+| B1 false reads splice | 0 (0/579 FINAL — completely blind; 0/40 prior) | 0 (the 80 reads are GENUINE recaptured own-kills) |
 | B7 per-char confidence | n/a | **ABSENT** — keys rec_text/rec_score only |
-| B8 splice-read count | 0 (blind — degraded glyphs) | **80 / 600** |
+| B8 splice-read count | 0 / 579 (blind — degraded glyphs) | **80 / 600** |
 
 - **B1 (hard gate) HELD for BOTH.** Neither engine hallucinates the handle where absent. Every extra Paddle
   read is a CORRECT read of a genuinely-present own-handle killer-slot row (adjudicated by eye:
