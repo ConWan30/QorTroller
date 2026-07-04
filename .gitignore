@@ -278,3 +278,6 @@ retina_rp_rawdump.jsonl
 retina_rp_pyds.jsonl
 # B2 instrumented trace (per-frame redness; gameplay-derived; local-only)
 retina_b2_trace*.jsonl
+
+# Recognition bake-off raw per-crop OCR (derived from gitignored crops; other-player gamertags; bulky)
+audits/rbo_*.jsonl
