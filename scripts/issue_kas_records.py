@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import time
+from typing import Optional
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for p in (os.path.join(_REPO, "bridge"), _REPO):
@@ -63,6 +64,36 @@ def parse_log(path: str):
                     "inline_composite_windows": diag.get("inline_composite_windows")}
     span = (_epoch_ms(first), _epoch_ms(last)) if first and last else None
     return span, events, hygiene, coupling
+
+
+def issue_record_for_label(label: str, date_tag: str = "") -> Optional[dict]:
+    """Issue ONE KAS record for a daemon session by label (newest log). Reusable by the daemon's
+    session-close path (`retina_capture_daemon.py stop --kas`) and by ad-hoc retro-issuance. Returns the
+    record dict (written to audits/) or None if the log/span is unusable."""
+    logs = sorted(glob.glob(os.path.join(_REPO, f"retina_daemon_{label}_*.log")))
+    if not logs:
+        return None
+    span, events, hygiene, coupling = parse_log(logs[-1])
+    if span is None:
+        return None
+    a, b = span[0] - 10_000, span[1] + 120_000
+    comps = []
+    comp_path = os.path.join(_REPO, "retina_kf_composite.jsonl")
+    if os.path.exists(comp_path):
+        for l in open(comp_path, encoding="utf-8"):
+            c = json.loads(l)
+            if isinstance(c.get("ts_ms"), (int, float)) and a <= c["ts_ms"] <= b:
+                comps.append(c)
+    rec = build_session_record(session_label=label, handle=os.environ.get("QORTROLLER_HANDLE", "QorTrola30"),
+                               composites=comps, event_trail=events, hygiene=hygiene, coupling=coupling)
+    d = rec.to_dict()
+    date_tag = date_tag or time.strftime("%Y-%m-%d")
+    out = os.path.join(_REPO, "audits", f"kas_record_{label}_{date_tag}.json")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(d, fh, indent=2)
+    d["_path"] = out
+    return d
 
 
 def main():

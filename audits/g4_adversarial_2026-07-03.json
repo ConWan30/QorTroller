@@ -100,5 +100,50 @@
     ],
     "kas_domain_tag": "QORTROLLER-KAS-v0",
     "commitment": "9a75a5ec9d56a0ee3a2d7d0c3f6bf5731e107014d21b58e6b57089fd8ac175fa"
+  },
+  "A2_splice_ocr": {
+    "session_label": "A2_splice_ocr:retina_kf_adv_splice",
+    "handle": "QorTrola30",
+    "verdict": "INSUFFICIENT_KILLS",
+    "authored_kills": 0,
+    "authored_scores": [],
+    "anchor_tags": [],
+    "windows_total": 1,
+    "composites_total": 1,
+    "own_deaths": 1,
+    "event_trail": [
+      {
+        "generator": {
+          "regime": "BOOTSTRAP",
+          "anchor_tag": "bootstrap_feed_v1@0.55",
+          "effective_floor": 0.55,
+          "consistent": 0,
+          "k_needed": 3,
+          "bootstrap_catches": 0,
+          "fp_fires": 0,
+          "demotions": 0,
+          "promotions": 0,
+          "candidate_sha": null,
+          "bootstrap_source": null,
+          "failures": []
+        }
+      }
+    ],
+    "coupling_corroboration": null,
+    "hygiene": {
+      "frame_errs": 0,
+      "frame_stall_s": 0.0,
+      "ts_source": "timespan"
+    },
+    "span_ms": [
+      1000000000000.0,
+      1000000000000.0
+    ],
+    "min_kills": 2,
+    "notes": [
+      "authored 0 < min_kills 2"
+    ],
+    "kas_domain_tag": "QORTROLLER-KAS-v0",
+    "commitment": "3cf261bdd1e58148b332122ec64a4405d11b2b9f0f432f028b32d93a75c026ae"
   }
 }
