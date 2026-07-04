@@ -384,6 +384,7 @@ class WgcFrameSource:
         self._b2_trace = [] if os.environ.get("RETINA_B2_TRACE_ENABLED", "").lower() in ("1", "true") else None
         self._b2_trace_path = os.environ.get("RETINA_B2_TRACE_PATH", "retina_b2_trace.jsonl")
         self._panel_bgr = None                          # latest panel ROI (contiguous BGR) for the crop saver
+        self._panel_ts = None                           # D-TRIO-1: frame-capture ts of _panel_bgr (WGC wall ms)
 
     def start(self) -> bool:
         try:
@@ -470,6 +471,7 @@ class WgcFrameSource:
                                 # ~76px under GPU-pressure downscale = unreadable for the handle detector).
                                 if self._panel_roi is not None:
                                     self._panel_bgr = _panel_roi_crop(buf, self._panel_roi, self._lum_scale)
+                                    self._panel_ts = screen_ts   # D-TRIO-1: frame-capture ts of THIS panel
                             except Exception:  # noqa: BLE001
                                 pass
                     # Shape guard: the governor changes downscale live, which changes the gray image size.
@@ -870,7 +872,8 @@ class RetinaGameCapture:
         # always present in evidence, even below-floor). The composite resolves on the NEXT mark_onset
         # (new window) or flush_stale_inline_window (window goes cold) — not here.
         if self._session_anchor is None:
-            self._inline_monitor.observe_window(res.score, ev.get("x_frac"), ev.get("y_frac"), now_ms)
+            self._inline_monitor.observe_window(res.score, ev.get("x_frac"), ev.get("y_frac"), now_ms,
+                                                frame_ts_ms=getattr(getattr(self, "_source", None), "_panel_ts", None))
         else:
             self._session_anchor_fold(bgr, res, ev, now_ms)
         # LOOP 2 — RETIRED the raw per-crop victim-slot mark_death that used to fire here. It only fired when a
@@ -895,7 +898,8 @@ class RetinaGameCapture:
             vx, vy = ev.get("x_frac"), ev.get("y_frac")
             if (vx is not None and vy is not None and vy < mon.feed_region_max_yfrac
                     and vx >= mon.killer_max_frac):
-                mon.observe_window(res.score, vx, vy, now_ms)
+                mon.observe_window(res.score, vx, vy, now_ms,
+                                   frame_ts_ms=getattr(getattr(self, "_source", None), "_panel_ts", None))
             # (b) killer/authored: region-restricted score with the ACTIVE anchor (bootstrap feed_v1 -> session).
             #     Explicit None check — active_anchor() returns a numpy template in CANDIDATE/PROMOTED and
             #     `array or fallback` is an ambiguous-truth ValueError (caught by the replay gate 2026-07-03).
@@ -935,7 +939,8 @@ class RetinaGameCapture:
                          ev2.get("sha") or ev2.get("candidate_sha"))
             # AUTHORED fold ONLY when PROMOTED, tagged with the regime AT THIS classification (carry-forward 1).
             if gen.is_promoted() and kxf is not None and kyf is not None:
-                mon.observe_window(kscore, kxf, kyf, now_ms, anchor_tag=gen.active_anchor_tag())
+                mon.observe_window(kscore, kxf, kyf, now_ms, anchor_tag=gen.active_anchor_tag(),
+                                   frame_ts_ms=getattr(getattr(self, "_source", None), "_panel_ts", None))
         except Exception:  # noqa: BLE001 — advisory; never break capture on the session-anchor path
             pass
 

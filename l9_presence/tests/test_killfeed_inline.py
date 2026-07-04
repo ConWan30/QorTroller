@@ -108,6 +108,31 @@ def test_composite_resolves_exactly_once_flush_then_onset():
     assert m.status_dict()["inline_composite_windows"] == 2
 
 
+def test_dtrio1_killer_first_ms_is_frame_capture_not_resolution():
+    # D-TRIO-1: the composite's alignment ts is the kill-row FRAME-CAPTURE ts (killer_first_ms), NOT the
+    # window-resolution ts (seconds late) nor the classify/read time. read_latency rides SEPARATELY.
+    m = ki.InlineAuthorshipMonitor(window_ms=(50.0, 5000.0), min_gap_ms=10.0, match_floor=0.66)
+    m.mark_onset(1000.0)
+    m.observe_window(0.80, 0.15, 0.30, 1200.0, anchor_tag="t", frame_ts_ms=1100.0)  # frame@1100, classify@1200
+    rec = m.flush_if_expired(9000.0)                                                 # window resolves @9000
+    assert rec["verdict"] == "AUTHORED_PRESENT"
+    assert rec["killer_first_ms"] == 1100.0    # FRAME-CAPTURE — not 1200 (classify), not 9000 (resolution)
+    assert rec["read_latency_ms"] == 100.0     # 1200 - 1100, separate field
+    assert rec["ts_ms"] == 9000.0              # resolution ts preserved for audit
+
+
+def test_dtrio1_engine_swap_cannot_skew_alignment():
+    # The load-bearing invariant: a slow engine (tesseract 2540ms) vs fast (v6 21ms) changes read_latency ONLY;
+    # the alignment ts (killer_first_ms = frame capture) is IDENTICAL. So an engine swap can't move cross-lobe
+    # latency.
+    for read_now in (1110.0, 3600.0):
+        m = ki.InlineAuthorshipMonitor(window_ms=(50.0, 5000.0), min_gap_ms=10.0, match_floor=0.66)
+        m.mark_onset(1000.0)
+        m.observe_window(0.80, 0.15, 0.30, read_now, anchor_tag="t", frame_ts_ms=1100.0)
+        rec = m.flush_if_expired(9000.0)
+        assert rec["killer_first_ms"] == 1100.0    # SAME regardless of read speed
+
+
 def test_r2_b2_invariant_dense_gap_never_defeats_the_window_gate():
     # STANDING RAIL (R2 ^ B2): classification fires ONLY inside a live R2 window. A B2 hitmarker is screen
     # content a replay contains; it must NEVER open or trigger a classify on its own. W.2 dense-tail lowers
