@@ -87,6 +87,14 @@ class KillAuthorshipSessionRecord:
     # underlying events; recomputing it into the commitment would be redundant and would move existing
     # commitments). UNCALIBRATED; never gates the verdict.
     cross_lobe: Optional[dict] = None
+    # U1 (2026-07-04, design doc §2.6): the shared session identifier — SHA-256 of the canonical
+    # "{label}_{stamp}" string (l9_presence/session_identity.py, THE one preimage). Rides to_dict ONLY,
+    # deliberately NOT body_dict/commitment (same discipline as cross_lobe): it is a JOIN KEY correlating
+    # this record with the session's fusion-proof meta + tier-1 archive manifest, not new evidence — and
+    # keeping it out of the preimage keeps every pre-U1 commitment byte-stable. D-CERT-9 posture: the
+    # stamp pins the ISSUING INSTANCE under label reuse (post-hoc detection, no refusal surface).
+    session_id: Optional[str] = None
+    session_display: Optional[str] = None
 
     def body_dict(self) -> dict:
         d = {k: getattr(self, k) for k in (
@@ -107,6 +115,8 @@ class KillAuthorshipSessionRecord:
         d["kas_domain_tag"] = KAS_DOMAIN_TAG.decode()
         d["commitment"] = self.commitment()
         d["cross_lobe_coherence"] = self.cross_lobe   # advisory readout — NOT in the commitment (see field note)
+        d["session_id"] = self.session_id             # U1 join key — metadata, NOT in the commitment
+        d["session_display"] = self.session_display
         return d
 
 
@@ -129,7 +139,9 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
                          min_kills: int = DEFAULT_MIN_KILLS, events_root: Optional[str] = None,
                          events_root_scheme: Optional[str] = None,
                          events_root_lobes: Optional[list] = None,
-                         cross_lobe: Optional[dict] = None) -> KillAuthorshipSessionRecord:
+                         cross_lobe: Optional[dict] = None,
+                         session_id: Optional[str] = None,
+                         session_display: Optional[str] = None) -> KillAuthorshipSessionRecord:
     """Fold one session's evidence into a KillAuthorshipSessionRecord. FAIL-CLOSED: malformed inputs ->
     UNVERIFIABLE; dirty capture -> HYGIENE_FAIL (no authorship claim over a dirty capture, regardless of
     kill count); too few authored -> INSUFFICIENT_KILLS. Coupling NEVER gates the verdict (advisory).
@@ -149,7 +161,7 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
             hygiene=dict(hygiene or {}), span_ms=None, min_kills=int(min_kills),
             notes=notes + ["unverifiable: missing composites or hygiene inputs"],
             events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes,
-            cross_lobe=cross_lobe)
+            cross_lobe=cross_lobe, session_id=session_id, session_display=session_display)
 
     authored = [c for c in comps if c.get("verdict") == "AUTHORED_PRESENT"]
     deaths = sum(1 for c in comps if c.get("verdict") == "OWN_DEATH")
@@ -174,4 +186,4 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
         event_trail=list(event_trail or []), coupling_corroboration=coupling,
         hygiene=dict(hygiene), span_ms=span, min_kills=int(min_kills), notes=notes,
         events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes,
-        cross_lobe=cross_lobe)
+        cross_lobe=cross_lobe, session_id=session_id, session_display=session_display)

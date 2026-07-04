@@ -80,6 +80,16 @@ def cmd_start(a) -> int:
         "CHAIN_SUBMISSION_PAUSED": "true",               # kill-switch ON
         "HTTP_PORT": str(a.port),
     })
+    # U1 (design doc §2.6): mint the shared session identifier ONCE here — the same {label}_{stamp} string
+    # that names the log/corpus/archive — and thread it to the bridge child so PITL co-capture meta carries
+    # the join key the KAS record + archive manifest also carry. Internal wiring only; no default change.
+    try:
+        from l9_presence.session_identity import (ENV_SESSION_DISPLAY, ENV_SESSION_ID,
+                                                  derive_session_id, session_display)
+        env[ENV_SESSION_ID] = derive_session_id(a.label, stamp)
+        env[ENV_SESSION_DISPLAY] = session_display(a.label, stamp)
+    except Exception:  # noqa: BLE001 — the join key is additive; its absence never blocks capture
+        pass
     if getattr(a, "killfeed", False):                    # kill-feed authorship (anti-spectate differentiator)
         env["RETINA_KILLFEED_ENABLED"] = "true"
         if a.killfeed_roi:
@@ -172,12 +182,39 @@ def _archive_ring(label, started_at):
     dst = _REPO / "retina_kf_archive" / f"{label}_{started_at}"
     dst.mkdir(parents=True, exist_ok=True)
     n = 0
+    copied = []
     for c in crops:
         try:
             shutil.copy2(c, dst / c.name)
+            copied.append(c.name)
             n += 1
         except Exception:  # noqa: BLE001 — per-file best-effort; never break stop
             pass
+    # U1 tier-1 standing manifest (design doc §2.6 sink iii; generalizes the 2026-07-04 one-off archive
+    # script into the daemon's standing stop behavior). Carries the SAME session_id the KAS record and the
+    # PITL co-capture meta carry — the three-artifact join. Per-file SHA-256 so evidence survives
+    # rolling-buffer eviction verifiably. Fail-open: a manifest failure never breaks the stop path.
+    try:
+        import hashlib
+        import time as _time
+        from l9_presence.session_identity import derive_session_id, session_display
+
+        def _sha(p):
+            h = hashlib.sha256()
+            with open(p, "rb") as fh:
+                for chunk in iter(lambda: fh.read(1 << 20), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        manifest = {"schema": "qortroller-session-archive-v1",
+                    "session_id": derive_session_id(label, started_at),
+                    "session_display": session_display(label, started_at),
+                    "label": label, "started_at": int(started_at),
+                    "archived_at": _time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "count": n,
+                    "files": [{"file": name, "sha256": _sha(dst / name)} for name in copied]}
+        (dst / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
     return dst, n
 
 

@@ -2409,6 +2409,16 @@ class DualShockTransport:
                         except Exception as _posca_exc:
                             log.debug("posca slice skipped (fail-open): %s", _posca_exc)
 
+                        # U1 (design doc §2.6): the shared session identifier, minted once by the daemon
+                        # (session_identity.py preimage) and threaded here via env — so every fusion proof
+                        # built from this session's meta is correlatable with the session's KAS record and
+                        # tier-1 archive manifest by ONE field. Null-safe: absent env (non-daemon runs)
+                        # leaves the meta unchanged.
+                        _sid = os.environ.get("QORTROLLER_SESSION_ID")
+                        if _sid:
+                            self._pending_pitl_meta.setdefault("session_id", _sid)
+                            self._pending_pitl_meta.setdefault(
+                                "session_display", os.environ.get("QORTROLLER_SESSION_DISPLAY"))
                         self._pending_pitl_meta.update(
                             cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
                         )
