@@ -156,6 +156,29 @@ def cmd_status(a) -> int:
     return 0
 
 
+def _archive_ring(label, started_at):
+    """R3 fix (2026-07-03, 2nd archive-loss): copy the dense ring into a per-session archive at STOP so the
+    NEXT session's captures can't overwrite this session's rendering. The rolling 600-crop ring silently cost
+    the g3mp/g3wz2/recut/gatedcut renderings (why the recognition bake-off's B2 was capped at 2-3 families).
+    COPY not move (ring stays intact until naturally overwritten); dst is gitignored (retina_kf_archive/).
+    Fail-open -> None. Returns (dst, n_copied)."""
+    import shutil
+    ring = _REPO / os.environ.get("RETINA_KILLFEED_CAPTURE_DIR", "retina_kf_crops")
+    crops = sorted(ring.glob("panel_*.png")) if ring.exists() else []
+    if not crops:
+        return None
+    dst = _REPO / "retina_kf_archive" / f"{label}_{started_at}"
+    dst.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for c in crops:
+        try:
+            shutil.copy2(c, dst / c.name)
+            n += 1
+        except Exception:  # noqa: BLE001 — per-file best-effort; never break stop
+            pass
+    return dst, n
+
+
 def cmd_stop(a) -> int:
     st = _read_state()
     if st is None:
@@ -188,6 +211,18 @@ def cmd_stop(a) -> int:
     if len(sessions) < 10:
         print(f"[daemon] NOTE: {len(sessions)} usable sessions (<10/class floor) — play longer next time "
               "or lower --diag-every.")
+    # R3 ring-archival (DEFAULT-ON; --no-archive-ring to skip): preserve this session's rendering before the
+    # next session overwrites the rolling ring. Fail-open — archival never breaks the stop path.
+    if not getattr(a, "no_archive_ring", False):
+        try:
+            res = _archive_ring(label, st["started_at"])
+            if res is None:
+                print("[daemon] ring-archive: ring empty — nothing to archive")
+            else:
+                dst, n = res
+                print(f"[daemon] ring-archive: copied {n} crops -> {dst.relative_to(_REPO)}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[daemon] ring-archive failed (non-fatal): {e!r}")
     # Increment 2 step 5 (G4 green 2026-07-03): session-close KAS certificate issuance — EXPLICIT opt-in
     # (--kas), default-OFF. Issues the Kill-Authorship Session Record over THIS session's log + composites
     # (fail-closed enum; a bad session honestly reads INSUFFICIENT_KILLS / HYGIENE_FAIL, never a false cert).
@@ -241,6 +276,8 @@ def main() -> int:
     sp = sub.add_parser("stop"); sp.set_defaults(fn=cmd_stop); sp.add_argument("--label", default=None)
     sp.add_argument("--kas", action="store_true",
                     help="issue the Kill-Authorship Session Record at close (G4-green; default-OFF)")
+    sp.add_argument("--no-archive-ring", action="store_true",
+                    help="skip R3 ring-archival (default archives the dense ring to retina_kf_archive/ at stop)")
     c = sub.add_parser("calibrate"); c.set_defaults(fn=cmd_calibrate)
     c.add_argument("--genuine", required=True); c.add_argument("--forged", required=True)
     a = ap.parse_args()
