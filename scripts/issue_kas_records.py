@@ -92,10 +92,23 @@ def issue_record_for_label(label: str, date_tag: str = "") -> Optional[dict]:
             c = json.loads(l)
             if isinstance(c.get("ts_ms"), (int, float)) and a <= c["ts_ms"] <= b:
                 comps.append(c)
+    # HID lobe (dual-lobe fusion): the session's device-clock R2-onset events (retina_hid_events.jsonl). onset
+    # t_ms is the device-clock wall-corrected ms — the SAME wall family as the log span, so the same window
+    # selects it. Screen composites = outcome lobe; HID onsets = input lobe.
+    hid_raw = []
+    hid_path = os.path.join(_REPO, "retina_hid_events.jsonl")
+    if os.path.exists(hid_path):
+        for l in open(hid_path, encoding="utf-8"):
+            try:
+                r = json.loads(l)
+            except Exception:  # noqa: BLE001 — a torn line never blocks issuance
+                continue
+            if isinstance(r.get("t_ms"), (int, float)) and a <= r["t_ms"] <= b:
+                hid_raw.append(r)
     # B2: derive the session's screen-outcome events + unify into ONE events_root (screen lobe here; the HID
     # lobe joins when both are captured together — the root is dual-lobe-ready). Binds outcomes to the
     # commitment; fail-open (a root failure never blocks issuance).
-    events_root = ev_scheme = ev_lobes = None
+    events_root = ev_scheme = ev_lobes = cross_lobe = None
     # C3: the session's bootstrap provenance (actual live model id + exact|fuzzy + raw read) parsed from the
     # candidate_cut log line — threaded as the screen-events provenance DEFAULT so every screen-lobe event (and
     # thus the events_root) carries the real recognizer identity, not None. Newest cut wins (stall-recut).
@@ -105,16 +118,20 @@ def issue_record_for_label(label: str, date_tag: str = "") -> Optional[dict]:
             prov = {"engine": ev["engine"], "match_kind": ev.get("match_kind"),
                     "raw_read": ev.get("raw_read"), "anchor_sha": ev.get("sha")}
     try:
+        from l9_presence.killfeed_hid_event import session_hid_events
         from l9_presence.killfeed_screen_event import session_screen_events
-        from vapi_bridge.retina_session_root import unify_session_events_root
+        from vapi_bridge.retina_session_root import cross_lobe_coherence, unify_session_events_root
         scr = session_screen_events(comps, provenance=prov or None)
-        u = unify_session_events_root(screen_events=scr)
+        hid = session_hid_events(hid_raw)                 # HID lobe joins when co-captured (--hid-events); else []
+        u = unify_session_events_root(screen_events=scr, hid_events=hid)   # lobes = ['screen'] or ['screen','hid']
         events_root, ev_scheme, ev_lobes = u["events_root"], u["scheme"], u["lobes"]
+        cross_lobe = cross_lobe_coherence(scr, hid)       # advisory input->outcome latency readout (UNCALIBRATED)
     except Exception:  # noqa: BLE001
         pass
     rec = build_session_record(session_label=label, handle=os.environ.get("QORTROLLER_HANDLE", "QorTrola30"),
                                composites=comps, event_trail=events, hygiene=hygiene, coupling=coupling,
-                               events_root=events_root, events_root_scheme=ev_scheme, events_root_lobes=ev_lobes)
+                               events_root=events_root, events_root_scheme=ev_scheme, events_root_lobes=ev_lobes,
+                               cross_lobe=cross_lobe)
     d = rec.to_dict()
     date_tag = date_tag or time.strftime("%Y-%m-%d")
     out = os.path.join(_REPO, "audits", f"kas_record_{label}_{date_tag}.json")

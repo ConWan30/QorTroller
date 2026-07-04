@@ -81,6 +81,12 @@ class KillAuthorshipSessionRecord:
     events_root: Optional[str] = None
     events_root_scheme: Optional[str] = None
     events_root_lobes: Optional[list] = None
+    # Cross-lobe coherence readout (input->outcome causal match + per-outcome latency). ADVISORY: it is a
+    # DERIVED view over the events already bound by events_root (retina_session_root.cross_lobe_coherence), so
+    # it rides in to_dict ONLY — deliberately NOT in body_dict/commitment (the root already commits the
+    # underlying events; recomputing it into the commitment would be redundant and would move existing
+    # commitments). UNCALIBRATED; never gates the verdict.
+    cross_lobe: Optional[dict] = None
 
     def body_dict(self) -> dict:
         d = {k: getattr(self, k) for k in (
@@ -100,6 +106,7 @@ class KillAuthorshipSessionRecord:
         d = self.body_dict()
         d["kas_domain_tag"] = KAS_DOMAIN_TAG.decode()
         d["commitment"] = self.commitment()
+        d["cross_lobe_coherence"] = self.cross_lobe   # advisory readout — NOT in the commitment (see field note)
         return d
 
 
@@ -121,7 +128,8 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
                          hygiene: Optional[dict] = None, coupling: Optional[dict] = None,
                          min_kills: int = DEFAULT_MIN_KILLS, events_root: Optional[str] = None,
                          events_root_scheme: Optional[str] = None,
-                         events_root_lobes: Optional[list] = None) -> KillAuthorshipSessionRecord:
+                         events_root_lobes: Optional[list] = None,
+                         cross_lobe: Optional[dict] = None) -> KillAuthorshipSessionRecord:
     """Fold one session's evidence into a KillAuthorshipSessionRecord. FAIL-CLOSED: malformed inputs ->
     UNVERIFIABLE; dirty capture -> HYGIENE_FAIL (no authorship claim over a dirty capture, regardless of
     kill count); too few authored -> INSUFFICIENT_KILLS. Coupling NEVER gates the verdict (advisory).
@@ -140,7 +148,8 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
             own_deaths=0, event_trail=list(event_trail or []), coupling_corroboration=coupling,
             hygiene=dict(hygiene or {}), span_ms=None, min_kills=int(min_kills),
             notes=notes + ["unverifiable: missing composites or hygiene inputs"],
-            events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes)
+            events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes,
+            cross_lobe=cross_lobe)
 
     authored = [c for c in comps if c.get("verdict") == "AUTHORED_PRESENT"]
     deaths = sum(1 for c in comps if c.get("verdict") == "OWN_DEATH")
@@ -164,4 +173,5 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
         windows_total=len(comps), composites_total=len(comps), own_deaths=deaths,
         event_trail=list(event_trail or []), coupling_corroboration=coupling,
         hygiene=dict(hygiene), span_ms=span, min_kills=int(min_kills), notes=notes,
-        events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes)
+        events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes,
+        cross_lobe=cross_lobe)

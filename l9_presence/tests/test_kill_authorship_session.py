@@ -89,6 +89,21 @@ def test_b2_events_root_rides_into_the_commitment():
                                     events_root_lobes=["screen", "hid"]).commitment() == bound.commitment()
 
 
+def test_cross_lobe_coherence_is_advisory_not_in_the_commitment():
+    # the cross-lobe readout is DERIVED from the events already bound by events_root, so it rides in to_dict
+    # ONLY — it must NOT move the commitment (unlike events_root, which IS bound). Two records identical except
+    # for cross_lobe share a commitment; to_dict surfaces the readout; the verdict is unaffected.
+    kw = dict(session_label="m", handle="h", composites=[_c(ts=1000, gate=900), _c(ts=2000, gate=1900)],
+              hygiene=_H_OK, events_root="cd" * 32, events_root_scheme="sha256_v1",
+              events_root_lobes=["screen", "hid"])
+    base = kas.build_session_record(**kw)
+    withx = kas.build_session_record(**kw, cross_lobe={"verdict": "COHERENT", "latencies_s": [0.12]})
+    assert withx.commitment() == base.commitment()             # advisory -> NOT in the commitment
+    assert withx.to_dict()["cross_lobe_coherence"] == {"verdict": "COHERENT", "latencies_s": [0.12]}
+    assert base.to_dict()["cross_lobe_coherence"] is None
+    assert withx.verdict == kas.AUTHORED_SESSION and base.verdict == kas.AUTHORED_SESSION
+
+
 def test_commitment_deterministic_and_tamper_evident():
     kw = dict(session_label="m", handle="h", composites=[_c(ts=1000, gate=900), _c(ts=2000, gate=1900)], hygiene=_H_OK)
     a, b = kas.build_session_record(**kw), kas.build_session_record(**kw)

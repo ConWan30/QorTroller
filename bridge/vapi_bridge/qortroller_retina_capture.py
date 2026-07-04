@@ -578,7 +578,8 @@ class RetinaGameCapture:
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
                  death_noise_floor: float = 2.5, death_log_path: str = "",
                  ads_enabled: bool = False, ads_log_path: str = "",
-                 ads_segment_file: str = "", ads_bg_sample_every: int = 30) -> None:
+                 ads_segment_file: str = "", ads_bg_sample_every: int = 30,
+                 hid_events_enabled: bool = False, hid_events_log_path: str = "") -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._capture_enabled = bool(capture_enabled)
         self._inline_enabled = bool(inline_enabled)
@@ -712,6 +713,20 @@ class RetinaGameCapture:
             except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
                 self._ads_monitor = None
                 self._device_clock_l2 = None
+        # HID lobe (dual-lobe fusion, default-off): the DEVICE-clock R2-onset stream feeding the KAS
+        # certificate's HID lobe. Reuses the SAME raw-hidapi device timestamp as l2_ads (offset 28 @ 3 MHz,
+        # survives the burst-drain) via push_l2_raw -> HidOnsetDetector rising-edge detection; onsets drain to
+        # retina_hid_events.jsonl off the ~1 kHz reader thread (flush_hid_events, consumption tick). Independent
+        # of _ads_enabled: either flag ungates the raw-reader L2 push (see dualshock_integration).
+        self._hid_events_enabled = bool(hid_events_enabled)
+        self._hid_events_log_path = str(hid_events_log_path or "retina_hid_events.jsonl")
+        self._hid_onset = None
+        if self._hid_events_enabled:
+            try:
+                from l9_presence.killfeed_hid_event import HidOnsetDetector
+                self._hid_onset = HidOnsetDetector(threshold=self._r2_threshold)
+            except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
+                self._hid_onset = None
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
         from l9_presence.adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
@@ -1039,10 +1054,26 @@ class RetinaGameCapture:
     def push_l2_raw(self, wall_ms: float, ts_u32: int, l2: int) -> None:
         """Called by the RAW hidapi reader (one report per read) with the DEVICE sensor timestamp (offset 28)
         + L2 (offset 5). Feeds the device-clock source, which unwraps + anchors to wall. This is the
-        ingestion point that survives the burst-drain — increment one of the timing fix. No-op if ads off."""
+        ingestion point that survives the burst-drain — increment one of the timing fix. No-op if both the
+        ads and HID-events lobes are off (either flag ungates the raw-reader push in dualshock_integration)."""
         if self._device_clock_l2 is not None:
             self._device_clock_l2.push_raw(wall_ms, ts_u32, l2)
             self._last_raw_l2 = int(l2)
+        if self._hid_onset is not None:                 # HID lobe: detect device-clock R2 rising edges here
+            self._hid_onset.push(wall_ms, ts_u32, l2)   # (drained to the sink off-thread by flush_hid_events)
+
+    def flush_hid_events(self) -> None:
+        """Drain the HID lobe's device-clock R2-onset events to retina_hid_events.jsonl. Called once per
+        consumption tick (off the ~1 kHz reader thread). No-op when the HID lobe is off; fail-open — an append
+        error never breaks capture. issue_kas_records reads this sink for the session's HID lobe."""
+        if self._hid_onset is None:
+            return
+        try:
+            from l9_presence.killfeed_inline import append_near_boundary_jsonl
+            for ev in self._hid_onset.drain_events():
+                append_near_boundary_jsonl(self._hid_events_log_path, ev)
+        except Exception:  # noqa: BLE001 — advisory; never break the loop
+            pass
 
     def crosscheck_l2(self, pyds_l2: int, now_ms: float) -> None:
         """Rider 1: confirm the RAW path's L2 (report offset 5) agrees with pydualsense's L2 (parsed via its
