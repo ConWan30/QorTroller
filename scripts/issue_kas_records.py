@@ -84,6 +84,18 @@ def issue_record_for_label(label: str, date_tag: str = "") -> Optional[dict]:
     span, events, hygiene, coupling = parse_log(logs[-1])
     if span is None:
         return None
+    # U1: re-derive the shared session identifier from the ISSUING log's filename (the stamp is already in
+    # the name — zero live plumbing). Same preimage as the daemon's env mint (session_identity.py). Pins the
+    # issuing INSTANCE under label reuse (D-CERT-9 posture: post-hoc detection, no refusal surface).
+    sid = sdisp = None
+    try:
+        from l9_presence.session_identity import derive_session_id, parse_daemon_log_name, session_display
+        parsed = parse_daemon_log_name(os.path.basename(logs[-1]))
+        if parsed:
+            sid = derive_session_id(*parsed)
+            sdisp = session_display(*parsed)
+    except Exception:  # noqa: BLE001 — the join key is additive; its absence never blocks issuance
+        pass
     a, b = span[0] - 10_000, span[1] + 120_000
     comps = []
     comp_path = os.path.join(_REPO, "retina_kf_composite.jsonl")
@@ -131,7 +143,7 @@ def issue_record_for_label(label: str, date_tag: str = "") -> Optional[dict]:
     rec = build_session_record(session_label=label, handle=os.environ.get("QORTROLLER_HANDLE", "QorTrola30"),
                                composites=comps, event_trail=events, hygiene=hygiene, coupling=coupling,
                                events_root=events_root, events_root_scheme=ev_scheme, events_root_lobes=ev_lobes,
-                               cross_lobe=cross_lobe)
+                               cross_lobe=cross_lobe, session_id=sid, session_display=sdisp)
     d = rec.to_dict()
     date_tag = date_tag or time.strftime("%Y-%m-%d")
     out = os.path.join(_REPO, "audits", f"kas_record_{label}_{date_tag}.json")

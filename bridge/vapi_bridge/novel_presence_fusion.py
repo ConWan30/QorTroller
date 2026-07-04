@@ -195,6 +195,11 @@ def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
         retina_sig = None
     return {
         "nqpv_cocapture": True,
+        # U1 (design doc §2.6): the shared session identifier passthrough — the join key correlating this
+        # meta (and any proof built from it) with the session's KAS record + archive manifest. Null-safe:
+        # None on pre-U1 records / non-daemon runs. NOT a fuse() input (that is U3's manifest question).
+        "session_id": meta.get("session_id"),
+        "session_display": meta.get("session_display"),
         "nqpv_cco_tier": meta.get("cco_presence_ceiling_candidate"),
         "nqpv_l4l5l6_ok": (hp >= 0.5) if isinstance(hp, (int, float)) else None,
         "nqpv_retina_controller_signal": retina_sig,
