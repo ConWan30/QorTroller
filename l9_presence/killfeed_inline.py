@@ -182,6 +182,11 @@ class InlineAuthorshipMonitor:
     # current killer-max — NOT a session-level variable that could lag an R3 demotion. The resolved AUTHORED
     # record carries THIS, so a promoted-regime tag can never land on a record scored while demoted.
     _win_killer_tag: Optional[str] = field(default=None, init=False)
+    # D-TRIO-1: FRAME-CAPTURE ts the KILLER row first appeared this window (mirrors _win_victim_first_ms). This
+    # is the cross-lobe alignment clock — NOT the resolution ts (now_ms at window close, seconds late) and NOT
+    # the OCR read-completion. A future engine swap (v6's 21ms vs tesseract's 2540ms) MUST NOT skew latency.
+    _win_killer_first_ms: float = field(default=-1.0, init=False)
+    _win_killer_read_now_ms: float = field(default=-1.0, init=False)   # classify ts of the winning killer fold
     _win_best_victim: float = field(default=-1.0, init=False)
     _win_victim_first_ms: float = field(default=-1.0, init=False)   # ts the victim row FIRST appeared this window
     _win_members: int = field(default=0, init=False)
@@ -263,7 +268,8 @@ class InlineAuthorshipMonitor:
         return "feed", ("killer" if x_frac < self.killer_max_frac else "victim")
 
     def observe_window(self, score: float, x_frac: Optional[float], y_frac: Optional[float],
-                       now_ms: float, anchor_tag: Optional[str] = None) -> Optional[dict]:
+                       now_ms: float, anchor_tag: Optional[str] = None,
+                       frame_ts_ms: Optional[float] = None) -> Optional[dict]:
         """Fold ONE classify's raw score + position into the CURRENT window's running max — regardless of
         whether this single sample's own verdict cleared the floor. Call once per classify, after
         record_result. `anchor_tag` (session-anchor wiring) is the regime tag AT THIS classification; it is
@@ -275,9 +281,15 @@ class InlineAuthorshipMonitor:
         self._win_members += 1
         self._win_resolved = False
         if region == "feed" and slot == "killer":
+            # D-TRIO-1: anchor the KILLER-row APPEARANCE at its FRAME-CAPTURE ts on the FIRST killer obs (falls
+            # back to now_ms only if the caller didn't supply a frame ts — a fallback that defeats the clock
+            # discipline, so the wiring passes the WGC frame ts).
+            if self._win_killer_first_ms < 0.0:
+                self._win_killer_first_ms = float(frame_ts_ms if frame_ts_ms is not None else now_ms)
             if float(score) > self._win_best_killer:
                 self._win_best_killer = float(score)
                 self._win_killer_tag = anchor_tag          # tag of the fold that set the max (fold-time truth)
+                self._win_killer_read_now_ms = float(now_ms)   # classify ts of the winning read (latency side)
         elif region == "feed" and slot == "victim":
             self._win_best_victim = max(self._win_best_victim, float(score))
             if self._win_victim_first_ms < 0.0:            # anchor the death-row APPEARANCE (first victim obs)
@@ -321,10 +333,18 @@ class InlineAuthorshipMonitor:
             verdict, score = "OWN_DEATH", self._win_best_victim
         else:
             verdict, score = "UNVERIFIABLE", max(self._win_best_killer, self._win_best_victim, 0.0)
+        # D-TRIO-1: killer_first_ms = kill-row FRAME-CAPTURE appearance ts (the cross-lobe alignment clock);
+        # read_latency_ms = winning-read classify ts - appearance ts (rides SEPARATELY so an engine swap can't
+        # skew latency). ts_ms stays the resolution ts (window close) for back-compat / audit.
+        kfirst = self._win_killer_first_ms if self._win_killer_first_ms >= 0.0 else None
+        read_lat = (round(self._win_killer_read_now_ms - self._win_killer_first_ms, 1)
+                    if (kfirst is not None and self._win_killer_read_now_ms >= 0.0) else None)
         return {"ts_ms": round(now_ms, 1), "verdict": verdict, "composite_score": round(float(score), 4),
                 "window_members": self._win_members, "anchor": rec_anchor,
                 "window_gate_ms": round(self._window_gate_ms, 1),
                 "window_end_ms": round(self._window_end_ms, 1),
+                "killer_first_ms": (round(kfirst, 1) if kfirst is not None else None),   # D-TRIO-1 alignment ts
+                "read_latency_ms": read_lat,                                             # engine read latency
                 # death-row appearance anchor (None if no victim obs) — lets loop 2 record the confirmation
                 # lag so a confirmation-gated settle_ts_ms is normalizable to the death instant offline.
                 "victim_first_ms": (round(self._win_victim_first_ms, 1)
@@ -333,6 +353,8 @@ class InlineAuthorshipMonitor:
     def _reset_window(self) -> None:
         self._win_best_killer = -1.0
         self._win_killer_tag = None
+        self._win_killer_first_ms = -1.0
+        self._win_killer_read_now_ms = -1.0
         self._win_best_victim = -1.0
         self._win_victim_first_ms = -1.0
         self._win_members = 0

@@ -72,6 +72,23 @@ def test_coupling_never_gates_the_verdict():
         assert r.verdict == kas.AUTHORED_SESSION and r.coupling_corroboration == coup
 
 
+def test_b2_events_root_rides_into_the_commitment():
+    # B2: the dual-lobe events_root binds the outcomes to the HID commitment — it's IN the commitment body, so
+    # changing the root moves the KAS commitment (the certificate references the bound root). It does NOT gate
+    # the verdict (still AUTHORED on the same kills).
+    kw = dict(session_label="m", handle="h", composites=[_c(ts=1000, gate=900), _c(ts=2000, gate=1900)],
+              hygiene=_H_OK)
+    base = kas.build_session_record(**kw)
+    bound = kas.build_session_record(**kw, events_root="ab" * 32, events_root_scheme="sha256_v1",
+                                     events_root_lobes=["screen", "hid"])
+    assert bound.verdict == kas.AUTHORED_SESSION and base.verdict == kas.AUTHORED_SESSION   # verdict unchanged
+    assert bound.to_dict()["events_root"] == "ab" * 32 and bound.to_dict()["events_root_lobes"] == ["screen", "hid"]
+    assert bound.commitment() != base.commitment()          # root is bound into the commitment
+    # re-derivation is deterministic
+    assert kas.build_session_record(**kw, events_root="ab" * 32, events_root_scheme="sha256_v1",
+                                    events_root_lobes=["screen", "hid"]).commitment() == bound.commitment()
+
+
 def test_commitment_deterministic_and_tamper_evident():
     kw = dict(session_label="m", handle="h", composites=[_c(ts=1000, gate=900), _c(ts=2000, gate=1900)], hygiene=_H_OK)
     a, b = kas.build_session_record(**kw), kas.build_session_record(**kw)

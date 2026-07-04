@@ -74,12 +74,20 @@ class KillAuthorshipSessionRecord:
     span_ms: Optional[list]
     min_kills: int
     notes: list = field(default_factory=list)
+    # Increment B B2: the unified events_root binds this session's kill OUTCOMES to the HID commitment chain in
+    # this window. When present, the claim upgrades from "authorship evidence existed this session" to "these
+    # kill outcomes were bound to this HID commitment in this window." Computed by the caller via the existing
+    # retina_state_commitment.compute_events_root (NO new frozen tag). lobes = which lobes contributed.
+    events_root: Optional[str] = None
+    events_root_scheme: Optional[str] = None
+    events_root_lobes: Optional[list] = None
 
     def body_dict(self) -> dict:
         d = {k: getattr(self, k) for k in (
             "session_label", "handle", "verdict", "authored_kills", "authored_scores", "anchor_tags",
             "windows_total", "composites_total", "own_deaths", "event_trail", "coupling_corroboration",
-            "hygiene", "span_ms", "min_kills", "notes")}
+            "hygiene", "span_ms", "min_kills", "notes", "events_root", "events_root_scheme",
+            "events_root_lobes")}
         return d
 
     def canonical_bytes(self) -> bytes:
@@ -111,10 +119,14 @@ def _hygiene_ok(h: dict, notes: list) -> bool:
 
 def build_session_record(*, session_label: str, handle: str, composites, event_trail=None,
                          hygiene: Optional[dict] = None, coupling: Optional[dict] = None,
-                         min_kills: int = DEFAULT_MIN_KILLS) -> KillAuthorshipSessionRecord:
+                         min_kills: int = DEFAULT_MIN_KILLS, events_root: Optional[str] = None,
+                         events_root_scheme: Optional[str] = None,
+                         events_root_lobes: Optional[list] = None) -> KillAuthorshipSessionRecord:
     """Fold one session's evidence into a KillAuthorshipSessionRecord. FAIL-CLOSED: malformed inputs ->
     UNVERIFIABLE; dirty capture -> HYGIENE_FAIL (no authorship claim over a dirty capture, regardless of
-    kill count); too few authored -> INSUFFICIENT_KILLS. Coupling NEVER gates the verdict (advisory)."""
+    kill count); too few authored -> INSUFFICIENT_KILLS. Coupling NEVER gates the verdict (advisory).
+    events_root (B2, caller-computed via retina_state_commitment.compute_events_root) binds the outcomes to the
+    HID commitment; it rides INTO the commitment (body_dict) but does NOT gate the verdict."""
     notes: list = []
     try:
         # None = MISSING input (unverifiable); [] = a real session that simply had no windows (honest zero).
@@ -127,7 +139,8 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
             authored_kills=0, authored_scores=[], anchor_tags=[], windows_total=0, composites_total=0,
             own_deaths=0, event_trail=list(event_trail or []), coupling_corroboration=coupling,
             hygiene=dict(hygiene or {}), span_ms=None, min_kills=int(min_kills),
-            notes=notes + ["unverifiable: missing composites or hygiene inputs"])
+            notes=notes + ["unverifiable: missing composites or hygiene inputs"],
+            events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes)
 
     authored = [c for c in comps if c.get("verdict") == "AUTHORED_PRESENT"]
     deaths = sum(1 for c in comps if c.get("verdict") == "OWN_DEATH")
@@ -150,4 +163,5 @@ def build_session_record(*, session_label: str, handle: str, composites, event_t
         anchor_tags=sorted({str(c.get("anchor")) for c in authored}),
         windows_total=len(comps), composites_total=len(comps), own_deaths=deaths,
         event_trail=list(event_trail or []), coupling_corroboration=coupling,
-        hygiene=dict(hygiene), span_ms=span, min_kills=int(min_kills), notes=notes)
+        hygiene=dict(hygiene), span_ms=span, min_kills=int(min_kills), notes=notes,
+        events_root=events_root, events_root_scheme=events_root_scheme, events_root_lobes=events_root_lobes)
