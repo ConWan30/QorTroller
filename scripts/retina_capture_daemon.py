@@ -96,6 +96,8 @@ def cmd_start(a) -> int:
         env["RETINA_OCR_BOOTSTRAP_ENABLED"] = "true"
     if getattr(a, "dense_classify", False):              # W.2 dense-tail: tighter in-window classify cadence
         env["RETINA_DENSE_CLASSIFY_ENABLED"] = "true"
+    if getattr(a, "hid_events", False):                  # HID lobe: device-clock R2-onset stream (dual-lobe KAS)
+        env["RETINA_HID_EVENTS_ENABLED"] = "true"
     if getattr(a, "death_window", False):                # LOOP 2: post-death stick-activity corpus (no verdict)
         env["RETINA_DEATH_WINDOW_ENABLED"] = "true"
     lf = open(log_path, "w", encoding="utf-8")
@@ -269,6 +271,8 @@ def main() -> int:
                    help="OCR-verified bootstrap catch (rendering-independent; needs --session-anchor + tesseract)")
     s.add_argument("--dense-classify", action="store_true",
                    help="W.2 dense-tail: tighter in-window classify cadence (still R2-gated; fixes sparse-sampling starvation)")
+    s.add_argument("--hid-events", action="store_true",
+                   help="HID lobe: device-clock R2-onset stream -> retina_hid_events.jsonl (dual-lobe KAS root + cross-lobe latency; needs --killfeed-inline)")
     s.add_argument("--death-window", action="store_true",
                    help="LOOP 2: post-death stick-activity corpus (consumes loop-1 victim-slot; no verdict)")
     s.add_argument("--port", type=int, default=8080); s.add_argument("--health-timeout", type=int, default=180)

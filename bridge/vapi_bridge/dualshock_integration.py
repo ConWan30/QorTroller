@@ -472,6 +472,8 @@ class DualShockTransport:
                     ads_log_path=str(getattr(cfg, "retina_ads_coupling_log", "")),
                     ads_segment_file=str(getattr(cfg, "retina_ads_segment_file", "")),
                     ads_bg_sample_every=int(getattr(cfg, "retina_ads_bg_sample_every", 30)),
+                    hid_events_enabled=bool(getattr(cfg, "retina_hid_events_enabled", False)),
+                    hid_events_log_path=str(getattr(cfg, "retina_hid_events_log", "")),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
                     # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer
@@ -788,8 +790,10 @@ class DualShockTransport:
                     # l2_ads increment one: this raw reader (one report per read, ~1kHz — NOT burst-drained
                     # like the pydualsense consumption loop) is the timing-authoritative L2 source. Push the
                     # device sensor timestamp (offset 28, uint32 LE @ 3MHz) + L2 (offset 5) per report so
-                    # feed_ads gets device-precise L2 edge timing. Gated on ads-enabled + capture present.
-                    _push_l2 = (getattr(self._cfg, "retina_ads_coupling_enabled", False)
+                    # feed_ads gets device-precise L2 edge timing. Ungated by EITHER lobe: l2_ads (feed_ads
+                    # drain) OR the HID lobe (dual-lobe fusion — HidOnsetDetector rising-edge). Capture present.
+                    _push_l2 = ((getattr(self._cfg, "retina_ads_coupling_enabled", False)
+                                 or getattr(self._cfg, "retina_hid_events_enabled", False))
                                 and self._retina_game_capture is not None)
                     while self._hid_counter_running:
                         data = handle.read(128, timeout_ms=200)
@@ -1751,6 +1755,11 @@ class DualShockTransport:
                         # Phase 1: resolve a window that quietly went cold (no further R2 onset) so combat
                         # that stops firing still gets its max-over-window composite logged promptly.
                         self._retina_game_capture.flush_stale_inline_window(_now_ms)
+                        # HID lobe (dual-lobe fusion, default-off): drain the device-clock R2-onset events
+                        # (detected in push_l2_raw on the raw path) to retina_hid_events.jsonl off the ~1 kHz
+                        # reader thread. No-ops when the HID lobe is off. Pairs with the screen lobe (killfeed
+                        # composites) so issue_kas_records can bind a dual-lobe events_root + cross-lobe latency.
+                        self._retina_game_capture.flush_hid_events()
                     # l2_ads — ADS coupling channel (second anti-splice). The L2 stream is NOT taken from
                     # these pydualsense frames (their per-frame timing collapses to the ~1.2s tick under the
                     # burst-drain, docs/hid-timing-resolution-2026-07-01.md); it comes from the RAW hidapi

@@ -10,9 +10,10 @@ import pytest
 
 pytest.importorskip("cv2")   # bridge import pulls the retina stack
 
+from l9_presence import killfeed_hid_event as he  # noqa: E402
 from l9_presence import killfeed_screen_event as se  # noqa: E402
 from vapi_bridge.retina_session_root import (  # noqa: E402
-    LOBE_HID, LOBE_SCREEN, unify_session_events_root,
+    LOBE_HID, LOBE_SCREEN, cross_lobe_coherence, unify_session_events_root,
 )
 
 
@@ -46,6 +47,26 @@ def test_lobes_tagged_so_they_never_collide():
 def test_screen_only_session_labels_honestly():
     u = unify_session_events_root(screen_events=[_screen(1100.0)])
     assert u["lobes"] == [LOBE_SCREEN] and u["n_hid"] == 0
+
+
+def test_cross_lobe_coherence_measures_input_to_outcome_latency():
+    # the payoff: each screen kill-OUTCOME matched to a preceding HID R2-onset INPUT -> COHERENT + the
+    # per-outcome cross-lobe latency (screen frame-capture ts - HID onset device ts) is measured.
+    scr = [{"type": "kill_authored", "t_ms": 1120.0, "input_caused": True},
+           {"type": "kill_authored", "t_ms": 2200.0, "input_caused": True},
+           {"type": "kill_authored", "t_ms": 3300.0, "input_caused": True}]
+    hid = [he.hid_onset_event(t_ms=1000.0), he.hid_onset_event(t_ms=2100.0), he.hid_onset_event(t_ms=3200.0)]
+    d = cross_lobe_coherence(scr, hid)
+    assert d["verdict"] == "COHERENT" and d["n_matched"] == 3 and d["n_hid_inputs"] == 3
+    assert d["latencies_s"] == [0.12, 0.1, 0.1]              # 1120-1000, 2200-2100, 3300-3200 ms
+    assert d["calibration"] == "UNCALIBRATED"                # honest: hypothesis until co-capture
+
+
+def test_cross_lobe_coherence_screen_only_and_fail_open():
+    # no HID lobe -> no inputs to explain the outcomes (screen-only session); and garbage never raises
+    d = cross_lobe_coherence([{"type": "kill_authored", "t_ms": 1120.0, "input_caused": True}], [])
+    assert d["n_hid_inputs"] == 0 and d["n_matched"] == 0
+    assert cross_lobe_coherence([{"nonsense": 1}], [{"nonsense": 1}])["calibration"] == "UNCALIBRATED"
 
 
 def test_session_screen_events_only_authored():

@@ -2203,6 +2203,15 @@ class Config:
     retina_ads_coupling_enabled: bool = field(
         default_factory=lambda: _env_bool("RETINA_ADS_COUPLING_ENABLED", False)
     )
+    # HID lobe (dual-lobe fusion, default-off): device-clock R2-onset stream feeding the KAS certificate's HID
+    # lobe. Either this OR ads-coupling ungates the raw-hidapi L2 push (dualshock_integration); onsets drain to
+    # the log below off the ~1 kHz reader thread. Pairs with the killfeed screen lobe for a dual-lobe root.
+    retina_hid_events_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_HID_EVENTS_ENABLED", False)
+    )
+    retina_hid_events_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_HID_EVENTS_LOG", "retina_hid_events.jsonl")
+    )
     retina_ads_coupling_log: str = field(
         default_factory=lambda: os.environ.get("RETINA_ADS_COUPLING_LOG", "retina_ads_coupling.jsonl")
     )
