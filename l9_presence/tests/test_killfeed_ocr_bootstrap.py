@@ -63,6 +63,38 @@ def test_noise_image_no_false_read():
     assert r.matched is False or r.taxonomy() != ob.OWN_KILL     # never a fabricated own-kill on noise
 
 
+def test_c2_match_kind_exact_vs_fuzzy_vs_reject():
+    # C2 (A3-closure): exact = handle is its OWN whitespace token; fuzzy = substring of a longer token
+    # (weapon-artifact bleed OR extension-name); None = no match. The load-bearing case: the hostile
+    # extension-name QorTro1a300 is FUZZY (flagged), never EXACT — so a certificate path can reject it, while
+    # a real spaced kill row exact-matches.
+    h = ob.canon(ob.default_handle())                      # q0rtr01a30
+    assert ob.match_kind(h, "Qortrola30") == ob.MATCH_EXACT
+    assert ob.match_kind(h, "Qortrola30 mamahefen1234") == ob.MATCH_EXACT   # handle is its own token
+    assert ob.match_kind(h, "Qortrola30Tca") == ob.MATCH_FUZZY              # fused weapon-artifact (real, flagged)
+    assert ob.match_kind(h, "QorTro1a300") == ob.MATCH_FUZZY                # hostile extension -> NOT exact
+    assert ob.match_kind(h, "TeckMirage") is None                          # different name -> no match
+    assert ob.match_kind(h, "") is None and ob.match_kind("", "Qortrola30") is None
+
+
+def test_engine_chain_default_tesseract_v6_when_flagged(monkeypatch):
+    # A1: default chain is tesseract-only (byte-identical live path); RETINA_OCR_ENGINE=rapidocr_v6 puts v6
+    # FIRST with tesseract as fallback (provenance flip stays behind the flag until the C1 gate passes).
+    monkeypatch.delenv("RETINA_OCR_ENGINE", raising=False)
+    assert ob.engine_chain() == (ob.ENGINE_TESS,)
+    monkeypatch.setenv("RETINA_OCR_ENGINE", "rapidocr_v6")
+    assert ob.engine_chain() == (ob.ENGINE_V6, ob.ENGINE_TESS)
+
+
+def test_c2_matched_set_unchanged_flag_added():
+    # matched set = exact ∪ fuzzy = the OLD substring set (no recall regression); only the flag + engine add.
+    r = ob.OcrRead(True, "Qortrola30", 100.0, 0.16, 0.30, "killer", ob.MATCH_EXACT, "tesseract_row_v1")
+    assert r.taxonomy() == ob.OWN_KILL and r.match_kind == ob.MATCH_EXACT and r.engine == "tesseract_row_v1"
+    # positional back-compat: old 6-arg construction still valid (new fields default None)
+    r2 = ob.OcrRead(True, "q", 100.0, 0.15, 0.30, "killer")
+    assert r2.match_kind is None and r2.engine is None and r2.taxonomy() == ob.OWN_KILL
+
+
 @pytest.mark.skipif(not os.path.exists(_KNOWN_CROP), reason="ground-truth crop is gitignored/local-only")
 def test_known_crop_reads_own_kill():
     # T-OCR-7: the proven live read — the crop where the tight-row recipe reads 'Qortrola30'. Documents the

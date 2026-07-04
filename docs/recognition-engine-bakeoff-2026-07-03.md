@@ -183,3 +183,71 @@ per-char engine exists) confidence fields. Dependency: paddle install is Windows
 
 NO live-path change in this increment. The shipped `killfeed_ocr_bootstrap` / audit lane / KAS issuance are
 byte-unchanged; the bake-off is scoring scripts + evidence only. Paddle lives ONLY in the isolated vbko venv.
+
+## D-PKG-1(b′) parity re-check — PRE-REGISTRATION (frozen before scoring, 2026-07-03)
+
+D-PKG-1(b) via paddle2onnx export is BLOCKED on this rig (onnx no-3.13-wheel; paddle2onnx C++ DLL/ABI
+mismatch vs paddlepaddle 3.3.1 — version-pin spiral declined per the no-workaround rail). (b′)
+rapidocr-onnxruntime is the clean ONNX+onnxruntime realization (64ms, bridge-native 3.13, NO paddlepaddle so
+Tesseract-fallback stays uncontaminated) BUT bundles `ch_PP-OCRv3_rec_infer.onnx` (sha 897a3ededb38fee0) — 2
+generations older than the D-ENGINE-1-validated PP-OCRv5_mobile_rec. A different rec head has a different
+recall AND hallucination AND splice-read profile; NONE transfer from the bake-off. So (b′) is NOT adoptable
+until rapidocr's model reproduces the frozen bake-off numbers on the SAME corpora.
+
+**Parity = PASS iff ALL of (frozen NOW, before scoring):**
+- **B2 recall ≥ v5_mobile on EVERY rendering, no regression:** b2trace ≥ 18/91 crop AND ≥ 4/5 kill-events;
+  seg3 ≥ 8/267. A regression on any rendering = FAIL.
+- **B1 zero-false HELD on BOTH negatives:** no HALLUCINATED handle read on a1spectate or splice (genuine
+  own-kill rows present in the capture don't count — same adjudication rule as the bake-off).
+- **B5 ≤ 250ms/row:** (64ms already clears; re-confirmed on the corpus).
+- **B8 splice-read count MEASURED (property, not pass/fail):** rapidocr-v3's reads on the 600-crop splice vs
+  v5_mobile's 80/600 — fewer = smaller C1 attack surface, more = harder C1. Reported, not gated.
+
+PASS -> (b′) adopted (strictly better than (c): faster, no subprocess, no permanent paddle env). FAIL any bar
+-> (c) sidecar with the EXACT v5_mobile model (managed-subprocess cost = the price of not re-opening
+D-ENGINE-1). Provenance: whichever wins, the C3 engine id records the ACTUAL live model
+(rapidocr_ppocrv3 sha 897a3ede... | paddle_svtr_v1/v5_mobile) + SHA — model identity is provenance.
+
+## D-PKG-1 RESOLVED (2026-07-03): PP-OCRv6_rec_small via rapidocr/onnxruntime — parity PASS
+
+The (b) paddle2onnx export being blocked forced a hunt for a pre-exported ONNX; it found something BETTER than
+the target: the newer `rapidocr` package bundles **PP-OCRv6_rec_small.onnx** (sha 6f327246b50388f3) — NEWER than the
+D-ENGINE-1-validated v5_mobile — running on onnxruntime (bridge-native 3.13, NO paddlepaddle, so the Tesseract
+fallback stays uncontaminated; NO subprocess). Parity re-check (frozen threshold above) vs the v5 numbers:
+
+| bar | v5_mobile (validated) | PP-OCRv6_rec_small |
+|-----|-----------------------|--------------------|
+| B2 b2trace (crop) | 18/91 | **28/91** (+55%, no regression) |
+| B2 b2trace (kill-event) | 4/5 | **5/5** (catches all present) |
+| B2 seg3 | 8/267 | **13/267** (+62%) |
+| B5 latency median | 122 ms | **21 ms** (6× faster) |
+| B1 a1spectate false reads | 0 (1 genuine) | **0** (2 reads, BOTH adjudicated GENUINE own-kill rows by eye) |
+| B8 splice-read surface | 80/600 | **80/600** (IDENTICAL — C1 stakes unchanged) |
+
+PARITY = **PASS on every pre-registered bar** (B2 no-regression — in fact improved on every rendering; B1
+zero-hallucination held on both negatives; B5 within budget). B8 identical (same 80 recaptured own-kill rows;
+same C1 gate stakes). **DECISION: adopt PP-OCRv6_rec_small** — strictly better than both v5-sidecar (faster,
+newer, no subprocess, no permanent paddle env, no fallback contamination) and rapidocr-v3 (which regressed,
+dropping the leading Q). Bridge deps: `rapidocr` + `onnxruntime` (both pip, 3.13-native, no paddle). C3
+engine id = `rapidocr_ppocrv6_small` + sha 6f327246b50388f3. The paddle2onnx-export spiral declined was the right call —
+the pre-exported v6 ONNX is cleaner than anything that toolchain would have produced.
+
+## C1 gate result (2026-07-03) — GREEN, with the honest fresh-row finding
+
+The wired producer (v6 live, RETINA_OCR_ENGINE=rapidocr_v6 + OCR bootstrap) replayed the 600-crop splice
+corpus. **KAS verdict INSUFFICIENT_KILLS, 0 authored, 0 promotions -> ZERO adversarial certificates (bar
+HELD).** Mechanism, reported explicitly per the pre-registration:
+- v6 READS the spliced own-kill rows (B8: 80/600). One coincided with fresh_row=True -> **FRESH-ROW DID NOT
+  BLOCK IT.** Recaptured video frames change frame-to-frame, so a spliced row DOES present as "fresh." Fresh-
+  row differencing is NOT the splice wall.
+- The one bootstrap catch attempt was rejected by the CUT-QUALITY gate (`cut_failed` — the recapture-degraded
+  row failed the scale-aware cut's vertical-isolation/width gate). No anchor cut -> no promotion -> no cert.
+- **Load-bearing splice defense = cut-quality gate + K=3 promotion, NOT fresh-row.** The R2 window keeps
+  classification input-gated throughout.
+- **Caveat (standing B8, sharpened):** held on WGC-recapture-degraded splice; the cut-quality rejection leaned
+  partly on that degradation. A native-res HDMI-splice (untested) could present a clean row that passes the
+  cut gate — thinner margin there. This is where Increment B's freshness-evidence field (D-TRIO-2) matters.
+
+**B8 acceptance was CONDITIONAL-ON-C1** (correcting the earlier "accepted-with-tracked-mitigations" phrasing in
+ee9b01b3): C1 GREEN MEETS the condition, so B8 acceptance now stands as measured. Increment A commits;
+Increment B (Trio-Retina alignment) proceeds.
