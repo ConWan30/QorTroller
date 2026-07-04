@@ -110,27 +110,44 @@ def test_composite_resolves_exactly_once_flush_then_onset():
 
 def test_dtrio1_killer_first_ms_is_frame_capture_not_resolution():
     # D-TRIO-1: the composite's alignment ts is the kill-row FRAME-CAPTURE ts (killer_first_ms), NOT the
-    # window-resolution ts (seconds late) nor the classify/read time. read_latency rides SEPARATELY.
+    # window-resolution ts (seconds late) nor the classify/read time. read_latency rides SEPARATELY and is
+    # SINGLE-CLOCK — loop-time from the FIRST killer obs to the WINNING read (never frame-capture minus loop,
+    # which the live sess_ab run proved yields negative garbage across two clock bases).
     m = ki.InlineAuthorshipMonitor(window_ms=(50.0, 5000.0), min_gap_ms=10.0, match_floor=0.66)
     m.mark_onset(1000.0)
-    m.observe_window(0.80, 0.15, 0.30, 1200.0, anchor_tag="t", frame_ts_ms=1100.0)  # frame@1100, classify@1200
-    rec = m.flush_if_expired(9000.0)                                                 # window resolves @9000
+    m.observe_window(0.70, 0.15, 0.30, 1200.0, anchor_tag="t", frame_ts_ms=1100.0)   # first obs: frame@1100 loop@1200
+    m.observe_window(0.84, 0.15, 0.30, 1400.0, anchor_tag="t", frame_ts_ms=1150.0)   # higher score -> winning read
+    rec = m.flush_if_expired(9000.0)                                                  # window resolves @9000
     assert rec["verdict"] == "AUTHORED_PRESENT"
-    assert rec["killer_first_ms"] == 1100.0    # FRAME-CAPTURE — not 1200 (classify), not 9000 (resolution)
-    assert rec["read_latency_ms"] == 100.0     # 1200 - 1100, separate field
+    assert rec["killer_first_ms"] == 1100.0    # FRAME-CAPTURE of FIRST obs — not 1150/1200/1400 (reads) nor 9000
+    assert rec["read_latency_ms"] == 200.0     # 1400 (winning read, loop) - 1200 (first obs, loop) — single-clock
     assert rec["ts_ms"] == 9000.0              # resolution ts preserved for audit
+
+
+def test_dtrio1_read_latency_is_single_clock_never_negative():
+    # The sess_ab defect, pinned: even when the frame-capture ts is AHEAD of the loop clock (WGC wall-anchor
+    # offset can put frame_ts > now_ms), read_latency stays a clean loop-only delta — never the negative garbage
+    # the cross-clock form produced live. killer_first_ms carries the (larger) frame-capture ts for alignment.
+    m = ki.InlineAuthorshipMonitor(window_ms=(50.0, 5000.0), min_gap_ms=10.0, match_floor=0.66)
+    m.mark_onset(1000.0)
+    m.observe_window(0.84, 0.15, 0.30, 1200.0, anchor_tag="t", frame_ts_ms=1800.0)   # frame ts AHEAD of loop ts
+    rec = m.flush_if_expired(9000.0)
+    assert rec["killer_first_ms"] == 1800.0    # frame-capture (alignment) — even though it's ahead of the loop
+    assert rec["read_latency_ms"] == 0.0       # single-flight winning read == first obs -> 0, NOT 1200-1800=-600
 
 
 def test_dtrio1_engine_swap_cannot_skew_alignment():
     # The load-bearing invariant: a slow engine (tesseract 2540ms) vs fast (v6 21ms) changes read_latency ONLY;
-    # the alignment ts (killer_first_ms = frame capture) is IDENTICAL. So an engine swap can't move cross-lobe
-    # latency.
-    for read_now in (1110.0, 3600.0):
+    # the alignment ts (killer_first_ms = frame capture) is IDENTICAL. read_latency is single-clock (loop-time
+    # from first obs to the winning read), so it reflects engine speed without ever mixing the frame-capture clock.
+    for winning_read, expect_lat in ((1250.0, 50.0), (3600.0, 2400.0)):
         m = ki.InlineAuthorshipMonitor(window_ms=(50.0, 5000.0), min_gap_ms=10.0, match_floor=0.66)
         m.mark_onset(1000.0)
-        m.observe_window(0.80, 0.15, 0.30, read_now, anchor_tag="t", frame_ts_ms=1100.0)
+        m.observe_window(0.70, 0.15, 0.30, 1200.0, anchor_tag="t", frame_ts_ms=1100.0)        # first obs @loop 1200
+        m.observe_window(0.84, 0.15, 0.30, winning_read, anchor_tag="t", frame_ts_ms=1105.0)  # winning read later
         rec = m.flush_if_expired(9000.0)
-        assert rec["killer_first_ms"] == 1100.0    # SAME regardless of read speed
+        assert rec["killer_first_ms"] == 1100.0        # SAME regardless of read speed (frame-capture of first obs)
+        assert rec["read_latency_ms"] == expect_lat    # loop-time to the winning read — moves with engine speed
 
 
 def test_r2_b2_invariant_dense_gap_never_defeats_the_window_gate():
