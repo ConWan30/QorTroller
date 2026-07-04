@@ -188,6 +188,20 @@ def cmd_stop(a) -> int:
     if len(sessions) < 10:
         print(f"[daemon] NOTE: {len(sessions)} usable sessions (<10/class floor) — play longer next time "
               "or lower --diag-every.")
+    # Increment 2 step 5 (G4 green 2026-07-03): session-close KAS certificate issuance — EXPLICIT opt-in
+    # (--kas), default-OFF. Issues the Kill-Authorship Session Record over THIS session's log + composites
+    # (fail-closed enum; a bad session honestly reads INSUFFICIENT_KILLS / HYGIENE_FAIL, never a false cert).
+    if getattr(a, "kas", False):
+        try:
+            from issue_kas_records import issue_record_for_label
+            rec = issue_record_for_label(label)
+            if rec is None:
+                print("[daemon] KAS: no issuable record (log/span unusable)")
+            else:
+                print(f"[daemon] KAS: {rec['verdict']} authored={rec['authored_kills']} "
+                      f"commit={rec['commitment'][:16]} -> {rec['_path']}")
+        except Exception as e:  # noqa: BLE001 — issuance must never break the stop path
+            print(f"[daemon] KAS issuance failed (non-fatal): {e!r}")
     return 0
 
 
@@ -225,6 +239,8 @@ def main() -> int:
     s.add_argument("--port", type=int, default=8080); s.add_argument("--health-timeout", type=int, default=180)
     st = sub.add_parser("status"); st.set_defaults(fn=cmd_status)
     sp = sub.add_parser("stop"); sp.set_defaults(fn=cmd_stop); sp.add_argument("--label", default=None)
+    sp.add_argument("--kas", action="store_true",
+                    help="issue the Kill-Authorship Session Record at close (G4-green; default-OFF)")
     c = sub.add_parser("calibrate"); c.set_defaults(fn=cmd_calibrate)
     c.add_argument("--genuine", required=True); c.add_argument("--forged", required=True)
     a = ap.parse_args()

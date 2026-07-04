@@ -1,0 +1,32 @@
+{
+  "session_label": "a1spectate",
+  "handle": "QorTrola30",
+  "verdict": "INSUFFICIENT_KILLS",
+  "authored_kills": 0,
+  "authored_scores": [],
+  "anchor_tags": [],
+  "windows_total": 11,
+  "composites_total": 11,
+  "own_deaths": 0,
+  "event_trail": [],
+  "coupling_corroboration": {
+    "th2_coupled_true_ticks": 39,
+    "inline_classifications": 32,
+    "inline_composite_windows": 11
+  },
+  "hygiene": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "timespan"
+  },
+  "span_ms": [
+    1783119077830.5,
+    1783119754266.0
+  ],
+  "min_kills": 2,
+  "notes": [
+    "authored 0 < min_kills 2"
+  ],
+  "kas_domain_tag": "QORTROLLER-KAS-v0",
+  "commitment": "f2641165ef63ca13385be1ba9d518ddba8e22982794aaaa6f6ec3cf7f49df38f"
+}
