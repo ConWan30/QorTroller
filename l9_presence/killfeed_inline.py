@@ -187,6 +187,11 @@ class InlineAuthorshipMonitor:
     # the OCR read-completion. A future engine swap (v6's 21ms vs tesseract's 2540ms) MUST NOT skew latency.
     _win_killer_first_ms: float = field(default=-1.0, init=False)
     _win_killer_read_now_ms: float = field(default=-1.0, init=False)   # classify ts of the winning killer fold
+    # read_latency BASE — the LOOP-clock now_ms at the first killer obs. read_latency is a SINGLE-CLOCK measure
+    # (read_now[loop] - first_seen[loop]); it must NOT subtract the frame-capture ts (_win_killer_first_ms), which
+    # rides the WGC screen clock. The live sess_ab run proved the cross-clock form yields negative garbage —
+    # different clock bases. killer_first_ms (frame-capture) is the alignment clock; read_latency is loop-only.
+    _win_killer_first_seen_ms: float = field(default=-1.0, init=False)
     _win_best_victim: float = field(default=-1.0, init=False)
     _win_victim_first_ms: float = field(default=-1.0, init=False)   # ts the victim row FIRST appeared this window
     _win_members: int = field(default=0, init=False)
@@ -286,6 +291,7 @@ class InlineAuthorshipMonitor:
             # discipline, so the wiring passes the WGC frame ts).
             if self._win_killer_first_ms < 0.0:
                 self._win_killer_first_ms = float(frame_ts_ms if frame_ts_ms is not None else now_ms)
+                self._win_killer_first_seen_ms = float(now_ms)   # LOOP clock — read-latency base (single-clock)
             if float(score) > self._win_best_killer:
                 self._win_best_killer = float(score)
                 self._win_killer_tag = anchor_tag          # tag of the fold that set the max (fold-time truth)
@@ -333,12 +339,13 @@ class InlineAuthorshipMonitor:
             verdict, score = "OWN_DEATH", self._win_best_victim
         else:
             verdict, score = "UNVERIFIABLE", max(self._win_best_killer, self._win_best_victim, 0.0)
-        # D-TRIO-1: killer_first_ms = kill-row FRAME-CAPTURE appearance ts (the cross-lobe alignment clock);
-        # read_latency_ms = winning-read classify ts - appearance ts (rides SEPARATELY so an engine swap can't
-        # skew latency). ts_ms stays the resolution ts (window close) for back-compat / audit.
+        # D-TRIO-1: killer_first_ms = kill-row FRAME-CAPTURE appearance ts (the cross-lobe alignment clock, WGC
+        # screen clock). read_latency_ms = winning-read classify ts - FIRST-KILLER-OBS ts, BOTH on the loop clock
+        # (single-clock, so an engine swap can't skew it and the two clock bases never mix — the sess_ab fix).
+        # ts_ms stays the resolution ts (window close) for back-compat / audit.
         kfirst = self._win_killer_first_ms if self._win_killer_first_ms >= 0.0 else None
-        read_lat = (round(self._win_killer_read_now_ms - self._win_killer_first_ms, 1)
-                    if (kfirst is not None and self._win_killer_read_now_ms >= 0.0) else None)
+        read_lat = (round(self._win_killer_read_now_ms - self._win_killer_first_seen_ms, 1)
+                    if (self._win_killer_first_seen_ms >= 0.0 and self._win_killer_read_now_ms >= 0.0) else None)
         return {"ts_ms": round(now_ms, 1), "verdict": verdict, "composite_score": round(float(score), 4),
                 "window_members": self._win_members, "anchor": rec_anchor,
                 "window_gate_ms": round(self._window_gate_ms, 1),
@@ -355,6 +362,7 @@ class InlineAuthorshipMonitor:
         self._win_killer_tag = None
         self._win_killer_first_ms = -1.0
         self._win_killer_read_now_ms = -1.0
+        self._win_killer_first_seen_ms = -1.0
         self._win_best_victim = -1.0
         self._win_victim_first_ms = -1.0
         self._win_members = 0

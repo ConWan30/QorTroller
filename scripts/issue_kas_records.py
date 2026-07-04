@@ -24,7 +24,11 @@ for p in (os.path.join(_REPO, "bridge"), _REPO):
 from l9_presence.kill_authorship_session import build_session_record  # noqa: E402
 
 _TS = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
-_EV = re.compile(r"session-anchor: (\w+) regime=(\w+) sha=(\S+)")
+# The optional ` engine=.. match=.. raw=..` tail is the C3 provenance (added 2026-07-03 after sess_ab showed
+# the KAS trail carried engine/match/raw=None). raw is rest-of-line so a spacey misread can't break the parse;
+# old logs without the tail still match (the group is optional).
+_EV = re.compile(r"session-anchor: (\w+) regime=(\w+) sha=(\S+)"
+                 r"(?: engine=(\S+) match=(\S+) raw=(.*))?\s*$")
 
 
 def _epoch_ms(stamp: str) -> float:
@@ -45,8 +49,12 @@ def parse_log(path: str):
                     first = m.group(1)
             e = _EV.search(line)
             if e and m:
-                events.append({"ts": m.group(1), "event": e.group(1), "regime": e.group(2),
-                               "sha": e.group(3)})
+                ev = {"ts": m.group(1), "event": e.group(1), "regime": e.group(2), "sha": e.group(3)}
+                if e.group(4) is not None:                       # C3 provenance tail present
+                    ev["engine"] = e.group(4)
+                    ev["match_kind"] = None if e.group(5) == "-" else e.group(5)
+                    ev["raw_read"] = None if e.group(6) in ("-", "") else e.group(6)
+                events.append(ev)
             if "RGC diag: {" in line:
                 try:
                     diag = ast.literal_eval(line.split("RGC diag: ", 1)[1].strip())
@@ -88,10 +96,18 @@ def issue_record_for_label(label: str, date_tag: str = "") -> Optional[dict]:
     # lobe joins when both are captured together — the root is dual-lobe-ready). Binds outcomes to the
     # commitment; fail-open (a root failure never blocks issuance).
     events_root = ev_scheme = ev_lobes = None
+    # C3: the session's bootstrap provenance (actual live model id + exact|fuzzy + raw read) parsed from the
+    # candidate_cut log line — threaded as the screen-events provenance DEFAULT so every screen-lobe event (and
+    # thus the events_root) carries the real recognizer identity, not None. Newest cut wins (stall-recut).
+    prov = {}
+    for ev in events:
+        if ev.get("engine"):
+            prov = {"engine": ev["engine"], "match_kind": ev.get("match_kind"),
+                    "raw_read": ev.get("raw_read"), "anchor_sha": ev.get("sha")}
     try:
         from l9_presence.killfeed_screen_event import session_screen_events
         from vapi_bridge.retina_session_root import unify_session_events_root
-        scr = session_screen_events(comps)
+        scr = session_screen_events(comps, provenance=prov or None)
         u = unify_session_events_root(screen_events=scr)
         events_root, ev_scheme, ev_lobes = u["events_root"], u["scheme"], u["lobes"]
     except Exception:  # noqa: BLE001

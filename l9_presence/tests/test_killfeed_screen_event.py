@@ -39,6 +39,22 @@ def test_only_authored_becomes_an_outcome():
     assert se.authored_screen_event(None) is None
 
 
+def test_session_provenance_default_fills_c3_when_composites_lack_it():
+    # sess_ab case: live composites carry NO engine/match/raw (C3 lives on the candidate_cut log line, not the
+    # composite). session_screen_events threads a session-wide provenance default so the screen-lobe events STILL
+    # carry the actual live model id — not None. Per-composite C3 (if present) still wins over the default.
+    comps = [{"verdict": "AUTHORED_PRESENT", "killer_first_ms": 1100.0, "ts_ms": 6100.0, "composite_score": 0.8},
+             {"verdict": "AUTHORED_PRESENT", "killer_first_ms": 2200.0, "ts_ms": 7200.0, "composite_score": 0.9,
+              "engine": "tesseract_row_v1", "match_kind": "fuzzy", "raw_read": "qortrola30x"}]
+    prov = {"engine": "rapidocr_ppocrv6_small", "anchor_sha": "6f327246", "raw_read": "Qortrola30",
+            "match_kind": "exact"}
+    evs = se.session_screen_events(comps, provenance=prov)
+    assert len(evs) == 2
+    assert evs[0]["engine"] == "rapidocr_ppocrv6_small" and evs[0]["match_kind"] == "exact"   # default fills
+    assert evs[0]["raw_read"] == "Qortrola30" and evs[0]["anchor"] == "6f327246"
+    assert evs[1]["engine"] == "tesseract_row_v1" and evs[1]["match_kind"] == "fuzzy"          # per-composite wins
+
+
 def test_to_timed_event_seconds_and_outcome():
     ev = se.authored_screen_event(_authored())
     te = se.to_timed_event(ev)

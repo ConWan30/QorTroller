@@ -935,8 +935,16 @@ class RetinaGameCapture:
                                             now_ms=now_ms, raw_killer_authored=raw_auth)
             if ev2 is not None and ev2.get("event") in ("candidate_cut", "promoted", "candidate_demoted_fp",
                                                         "candidate_demoted_stall"):
-                log.info("session-anchor: %s regime=%s sha=%s", ev2["event"], gen.regime,
-                         ev2.get("sha") or ev2.get("candidate_sha"))
+                # C3 provenance rides the DURABLE log line so the (log-parsed) KAS trail carries the ACTUAL live
+                # model id + exact|fuzzy + raw pre-canon read — not just event/regime/sha. The sess_ab run showed
+                # the trail landed engine/match/raw=None because the cut's C3 (present on ev2) never reached the
+                # log. raw is the LAST field (rest-of-line) so a spacey OCR misread can't break the parse.
+                c3 = ""
+                if ev2.get("engine") is not None:
+                    raw = str(ev2.get("raw_read") or "-").replace("\n", " ").replace("\r", " ")
+                    c3 = " engine=%s match=%s raw=%s" % (ev2.get("engine"), ev2.get("match_kind") or "-", raw)
+                log.info("session-anchor: %s regime=%s sha=%s%s", ev2["event"], gen.regime,
+                         ev2.get("sha") or ev2.get("candidate_sha"), c3)
             # AUTHORED fold ONLY when PROMOTED, tagged with the regime AT THIS classification (carry-forward 1).
             if gen.is_promoted() and kxf is not None and kyf is not None:
                 mon.observe_window(kscore, kxf, kyf, now_ms, anchor_tag=gen.active_anchor_tag(),
