@@ -916,7 +916,8 @@ class RetinaGameCapture:
                     ev2 = gen.observe_bootstrap(          # keep the R2 fresh-row + geometry gates (anti-splice)
                         score=kscore, x_frac=ox, y_frac=oy, fresh_row=fresh,
                         cut_fn=lambda: self._cut_session_anchor(bgr, ox, oy),
-                        now_ms=now_ms, ocr_verified=True, source="ocr_row_v1")
+                        now_ms=now_ms, ocr_verified=True,   # C3: actual model id + exact|fuzzy + raw read
+                        source=(ocr.engine or "ocr_row_v1"), match_kind=ocr.match_kind, raw_read=ocr.text)
                 else:                                      # legacy feed_v1 template catch (marginal-score gated)
                     ev2 = gen.observe_bootstrap(
                         score=kscore, x_frac=kxf, y_frac=kyf, fresh_row=fresh,

@@ -27,6 +27,7 @@ worse than a missed bootstrap).
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -43,17 +44,41 @@ DEFAULT_UPSCALE = 4
 DEFAULT_KILLER_MAX_FRAC = 0.28
 DEFAULT_FEED_REGION_MAX_YFRAC = 0.42
 
+# C2 match kinds (the A3-closure the bake-off proved off-the-shelf recall could not deliver alone):
+MATCH_EXACT = "exact"    # handle canon EQUALS a whitespace token of the read -> clean own-kill
+MATCH_FUZZY = "fuzzy"    # handle canon is a SUBSTRING of a longer token (weapon-icon bleed OR an extension-
+                         # name like QorTro1a300) -> accepted for RECALL but FLAGGED so the certificate path
+                         # treats it cautiously. exact vs fuzzy is the honest signal, carried on every record.
+
+
+def match_kind(handle_canon: str, raw_text: str) -> Optional[str]:
+    """C2: classify a canon match as EXACT (handle == some whitespace token) vs FUZZY (substring of a longer
+    token) vs None. Exact-token distinguishes a real `Qortrola30 [icon] victim` (handle is its own token ->
+    exact) from a hostile extension-name `QorTro1a300` (one longer token, handle a strict prefix -> fuzzy) and
+    from a fused weapon-artifact read `Qortrola30Tca` (one token -> fuzzy: a real kill, but flagged, not
+    silently trusted). Parity note: the shipped/bake-off match was bare `handle in canon(text)` (= fuzzy for
+    all three) with NO exact/reject distinction; this adds it."""
+    if not handle_canon:
+        return None
+    for tok in (raw_text or "").split():
+        if canon(tok) == handle_canon:
+            return MATCH_EXACT
+    return MATCH_FUZZY if handle_canon in canon(raw_text or "") else None
+
 
 @dataclass
 class OcrRead:
     """Result of the tight-row OCR over a panel crop. matched=True only when a canon()-matching handle word
-    cleared the confidence floor; x_frac/y_frac/slot locate it (killer<killer_max_frac => own kill)."""
+    cleared the confidence floor; x_frac/y_frac/slot locate it (killer<killer_max_frac => own kill).
+    C3 provenance: text is the RAW pre-canon read; match_kind is exact|fuzzy; engine is the recognizer id."""
     matched: bool
-    text: str                  # the matched word's raw OCR text (or best band text on no match)
-    conf: float                # tesseract confidence of the matched word (0 if none)
+    text: str                  # RAW pre-canon read (the matched word's text, or best band text on no match)
+    conf: float                # recognizer confidence of the matched word (0 if none)
     x_frac: Optional[float]    # matched handle-word centre x-fraction of panel width
     y_frac: Optional[float]
     slot: Optional[str]        # "killer" | "victim" | None
+    match_kind: Optional[str] = None   # C2/C3: exact | fuzzy | None (the A3-assurance signal)
+    engine: Optional[str] = None       # C3: recognizer id (paddle_svtr_v1 | tesseract_row_v1 | ...)
 
     def taxonomy(self, killer_max_frac: float = DEFAULT_KILLER_MAX_FRAC) -> str:
         """Map this OCR read to the shared taxonomy (ocr_row_v1 labeler)."""
@@ -73,6 +98,63 @@ def ocr_ready() -> bool:
 
 def _abstain(text: str = "") -> OcrRead:
     return OcrRead(matched=False, text=text, conf=0.0, x_frac=None, y_frac=None, slot=None)
+
+
+# --- engine chain (A1 wiring, D-PKG-1 = PP-OCRv6_rec_small via rapidocr/onnxruntime) -----------------
+# Provenance flip: RETINA_OCR_ENGINE=rapidocr_v6 -> v6 PRIMARY, tesseract FALLBACK, human_oracle last.
+# DEFAULT stays "tesseract" so the live path is byte-identical until the C1 adversarial gate passes and the
+# operator flips it; the C1 rerun runs with the flag on. v6 (onnxruntime) is contamination-safe with the
+# tesseract fallback in-process (verified) — no paddlepaddle, no subprocess.
+ENGINE_V6 = "rapidocr_ppocrv6_small"       # sha 6f327246b50388f3 (PP-OCRv6_rec_small.onnx)
+ENGINE_TESS = "tesseract_row_v1"
+_UNSET = object()
+_V6 = _UNSET
+
+
+def _v6_engine():
+    """Lazy-load the rapidocr PP-OCRv6_rec_small recognizer (onnxruntime). None if rapidocr/onnxruntime absent
+    -> the chain silently falls to tesseract (no hard dependency on the ONNX stack)."""
+    global _V6
+    if _V6 is _UNSET:
+        try:
+            from rapidocr import RapidOCR
+            _V6 = RapidOCR()
+        except Exception:  # noqa: BLE001
+            _V6 = None
+    return _V6
+
+
+def engine_chain():
+    """The ordered recognizer chain per RETINA_OCR_ENGINE (default tesseract-only = unchanged live path)."""
+    pref = os.environ.get("RETINA_OCR_ENGINE", "tesseract").strip().lower()
+    if pref in ("rapidocr_v6", "v6", ENGINE_V6):
+        return (ENGINE_V6, ENGINE_TESS)    # v6 primary -> tesseract fallback (human_oracle is caller-side)
+    return (ENGINE_TESS,)
+
+
+def _engine_reads(engine_id, up):
+    """Yield (raw_text, conf) candidate reads from one engine over the upscaled crop."""
+    import cv2
+    if engine_id == ENGINE_V6:
+        eng = _v6_engine()
+        if eng is None:
+            return
+        try:
+            res = eng(up, use_det=False, use_cls=False, use_rec=True)
+            txts, scores = getattr(res, "txts", None), getattr(res, "scores", None)
+            if txts:
+                yield str(txts[0]), (float(scores[0]) * 100.0 if scores else 0.0)
+        except Exception:  # noqa: BLE001
+            return
+    else:  # tesseract_row_v1 — Otsu + psm7, both polarities (the shipped recipe)
+        import pytesseract
+        g = cv2.threshold(cv2.cvtColor(up, cv2.COLOR_BGR2GRAY), 0, 255,
+                          cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        for im in (g, 255 - g):
+            try:
+                yield pytesseract.image_to_string(im, config="--psm 7").strip(), 100.0
+            except Exception:  # noqa: BLE001
+                continue
 
 
 DEFAULT_LOCATE_THRESHOLD = 0.40   # loose template score just to LOCATE a candidate row (well below B's 0.66
@@ -97,7 +179,6 @@ def tight_row_ocr(panel_bgr, *, handle: Optional[str] = None, anchor=None, prev_
     handle_canon = canon(handle) if handle is not None else canon(default_handle())
     try:
         import cv2
-        import pytesseract
         from l9_presence.killfeed_cv import killer_slot_best, load_anchor
         if anchor is None:
             anchor = load_anchor("l9_presence/assets/own_handle_anchor_feed.png")
@@ -111,15 +192,15 @@ def tight_row_ocr(panel_bgr, *, handle: Optional[str] = None, anchor=None, prev_
         if crop.size == 0:
             return _abstain()
         up = cv2.resize(crop, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
-        g = cv2.threshold(cv2.cvtColor(up, cv2.COLOR_BGR2GRAY), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-        for im in (g, 255 - g):
-            try:
-                txt = pytesseract.image_to_string(im, config="--psm 7").strip()
-            except Exception:
-                continue
-            if handle_canon and handle_canon in canon(txt):        # STRICT full-handle read
-                slot = "killer" if cxf < killer_max_frac else "victim"
-                return OcrRead(matched=True, text=txt, conf=100.0, x_frac=cxf, y_frac=cyf, slot=slot)
+        # engine chain (v6 primary -> tesseract fallback per RETINA_OCR_ENGINE); first canon-matching read wins,
+        # stamped with its engine id + C2 match_kind (C3 provenance).
+        for engine_id in engine_chain():
+            for txt, conf in _engine_reads(engine_id, up):
+                mk = match_kind(handle_canon, txt)   # C2: exact (own token) | fuzzy (substring) | None
+                if mk is not None:                   # matched set = exact ∪ fuzzy = the old substring set
+                    slot = "killer" if cxf < killer_max_frac else "victim"
+                    return OcrRead(matched=True, text=txt, conf=conf, x_frac=cxf, y_frac=cyf, slot=slot,
+                                   match_kind=mk, engine=engine_id)
         return _abstain()
     except Exception:
         return _abstain()

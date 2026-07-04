@@ -61,6 +61,7 @@ class SessionAnchorGenerator:
     _candidate_anchor: Any = field(default=None, init=False)   # opaque template the caller scores with
     _candidate_sha: Optional[str] = field(default=None, init=False)
     stall_limit: int = DEFAULT_STALL_LIMIT
+    _bootstrap_provenance: dict = field(default_factory=dict, init=False)   # C3: engine + match_kind + raw_read
     _bootstrap_source: Optional[str] = field(default=None, init=False)   # how the anchor was born (provenance):
     _consistent: int = field(default=0, init=False)            # ocr_row_v1 | static_feed_v1 | human_oracle
     _stalls: int = field(default=0, init=False)                # raw-authored crops this candidate missed
@@ -103,7 +104,8 @@ class SessionAnchorGenerator:
     def observe_bootstrap(self, *, score: float, x_frac: Optional[float], y_frac: Optional[float],
                           fresh_row: bool, cut_fn: Callable[[], Optional[tuple]],
                           now_ms: float = 0.0, ocr_verified: bool = False,
-                          source: str = "static_feed_v1") -> Optional[dict]:
+                          source: str = "static_feed_v1", match_kind: Optional[str] = None,
+                          raw_read: Optional[str] = None) -> Optional[dict]:
         """In BOOTSTRAP, catch the first real feed kill row and auto-cut. Two catch sources:
           - `ocr_verified=True` (source=ocr_row_v1): the caller READ the literal handle glyphs in the killer
             slot — a strict full-canon read is STRONGER evidence than any template score, so the marginal
@@ -128,11 +130,14 @@ class SessionAnchorGenerator:
             return {"event": "bootstrap_cut_failed", "ts_ms": now_ms, "score": round(score, 4)}
         self._candidate_anchor, self._candidate_sha = cut
         self._bootstrap_source = source
+        # C3 provenance: the actual live model identity + the exact|fuzzy A3-assurance flag + the raw pre-canon
+        # read that seeded this anchor — carried on the candidate_cut event so it flows into the KAS trail.
+        self._bootstrap_provenance = {"engine": source, "match_kind": match_kind, "raw_read": raw_read}
         self._regime = CANDIDATE
         self._consistent = 0
         return {"event": "candidate_cut", "ts_ms": now_ms, "bootstrap_score": round(score, 4),
                 "candidate_sha": self._candidate_sha, "session_id": self.session_id,
-                "bootstrap_source": source}
+                "bootstrap_source": source, "engine": source, "match_kind": match_kind, "raw_read": raw_read}
 
     def human_oracle_cut(self, anchor_obj: Any, sha: str, now_ms: float = 0.0) -> dict:
         """STUB (operator-fired, NOT auto-live): inject a manually-identified anchor when both OCR and the
@@ -225,5 +230,6 @@ class SessionAnchorGenerator:
             "promotions": self._promotions,
             "candidate_sha": self._candidate_sha,
             "bootstrap_source": self._bootstrap_source,
+            "bootstrap_provenance": dict(self._bootstrap_provenance),
             "failures": list(self._failures),
         }

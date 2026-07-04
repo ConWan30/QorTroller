@@ -159,6 +159,19 @@ def test_template_catch_records_static_feed_v1_source():
     assert ev["bootstrap_source"] == "static_feed_v1" and g.status()["bootstrap_source"] == "static_feed_v1"
 
 
+def test_c3_provenance_flows_from_ocr_bootstrap():
+    # C3: the ACTUAL model id + exact|fuzzy flag + raw pre-canon read ride the candidate_cut event (-> KAS
+    # trail) and land in status().bootstrap_provenance. Model identity is provenance, not "paddle_svtr_v1".
+    g = _mk()
+    ev = g.observe_bootstrap(score=0.30, x_frac=0.16, y_frac=0.30, fresh_row=True, cut_fn=_cut_ok,
+                             ocr_verified=True, source="rapidocr_ppocrv6_small",
+                             match_kind="exact", raw_read="Qortrola30")
+    assert ev["engine"] == "rapidocr_ppocrv6_small" and ev["match_kind"] == "exact"
+    assert ev["raw_read"] == "Qortrola30" and ev["bootstrap_source"] == "rapidocr_ppocrv6_small"
+    prov = g.status()["bootstrap_provenance"]
+    assert prov["engine"] == "rapidocr_ppocrv6_small" and prov["match_kind"] == "exact"
+
+
 def test_human_oracle_cut_is_third_fallback_source():
     g = _mk()
     ev = g.human_oracle_cut("MANUAL_ANCHOR", "sha_human")

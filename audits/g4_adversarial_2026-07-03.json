@@ -119,13 +119,20 @@
           "effective_floor": 0.55,
           "consistent": 0,
           "k_needed": 3,
-          "bootstrap_catches": 0,
+          "bootstrap_catches": 1,
           "fp_fires": 0,
           "demotions": 0,
           "promotions": 0,
           "candidate_sha": null,
           "bootstrap_source": null,
-          "failures": []
+          "bootstrap_provenance": {},
+          "failures": [
+            {
+              "kind": "cut_failed",
+              "ts_ms": 46600.0,
+              "score": 0.54
+            }
+          ]
         }
       }
     ],
@@ -144,6 +151,6 @@
       "authored 0 < min_kills 2"
     ],
     "kas_domain_tag": "QORTROLLER-KAS-v0",
-    "commitment": "3cf261bdd1e58148b332122ec64a4405d11b2b9f0f432f028b32d93a75c026ae"
+    "commitment": "3768ba880a16f9974bc8c68981ae62fe388fd878cae4068e274feb06efaf7fd5"
   }
 }
