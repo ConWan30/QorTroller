@@ -168,6 +168,74 @@ def cmd_status(a) -> int:
     return 0
 
 
+def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
+    """U2b: issue the PoSP reference-and-bind record at session close, after KAS issuance.
+
+    Surfaces collected: KAS (always present when called), NQPV co-capture rows from bridge DB
+    (fail-open if DB unreachable — new sessions won't have rows yet if this is the first run after U2a),
+    tier-1 archive manifest (written by _archive_ring). Writes audits/posp_record_<label>_<date>.json.
+
+    REFERENCE-AND-BIND design (D-CERT-5.1 hybrid b→a): no new commitment / domain tag / FROZEN-v1
+    family. Integrity derives entirely from the commitments PoSP references (KAS commitment, PoAC hashes,
+    archive SHA-256s). Never mistake this for an eleventh FROZEN-v1 family.
+    """
+    import sqlite3
+    from datetime import date
+    from l9_presence.posp import build_posp
+
+    sid = kas_rec.get("session_id")
+
+    # --- NQPV fusion rows from bridge DB (fail-open) ---
+    fusion_rows: list = []
+    try:
+        db_path = os.environ.get("DB_PATH") or str(Path.home() / ".vapi" / "bridge.db")
+        if Path(db_path).exists():
+            with sqlite3.connect(db_path, timeout=5) as conn:
+                conn.row_factory = sqlite3.Row
+                if sid:
+                    rows = conn.execute(
+                        "SELECT * FROM nqpv_cocapture_log WHERE session_id = ? "
+                        "ORDER BY created_at DESC LIMIT 500",
+                        (sid,),
+                    ).fetchall()
+                    fusion_rows = [dict(r) for r in rows]
+        else:
+            print(f"[daemon] PoSP: bridge DB not found at {db_path} — fusion rows unavailable")
+    except Exception as e:  # noqa: BLE001
+        print(f"[daemon] PoSP: DB query failed (non-fatal): {e!r}")
+
+    # --- Tier-1 archive manifest (written by _archive_ring) ---
+    archive_manifest = None
+    try:
+        manifest_path = _REPO / "retina_kf_archive" / f"{label}_{stamp}" / "manifest.json"
+        if manifest_path.exists():
+            archive_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as e:  # noqa: BLE001
+        print(f"[daemon] PoSP: manifest read failed (non-fatal): {e!r}")
+
+    # retina_perception_root is the Trio-Retina perception events_root (Phase 3c DA witness path);
+    # the KAS events_root is the KAS dual-lobe root (§2.3 — two named, parallel roots).
+    rec = build_posp(
+        session_id=sid,
+        session_display=kas_rec.get("session_display"),
+        kas_record=kas_rec,
+        fusion_rows=fusion_rows or None,
+        archive_manifest=archive_manifest,
+        retina_perception_root=None,   # Phase 3c: perception root from retina_controller_embedder path
+    )
+    out = _REPO / "audits" / f"posp_record_{label}_{date.today().isoformat()}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(rec.to_json(), encoding="utf-8")
+    kas_ok = rec.kas.get("id_verified") if rec.kas else None
+    fusion_n = rec.fusion.get("n_id_verified", 0) if rec.fusion else 0
+    arch_ok = rec.archive.get("id_verified") if rec.archive else None
+    print(f"[daemon] PoSP: {rec.verdict} kas_verified={kas_ok} fusion_rows={fusion_n} "
+          f"archive_verified={arch_ok} -> {out.relative_to(_REPO)}")
+    if rec.notes:
+        for note in rec.notes:
+            print(f"[daemon] PoSP NOTE: {note}")
+
+
 def _archive_ring(label, started_at):
     """R3 fix (2026-07-03, 2nd archive-loss): copy the dense ring into a per-session archive at STOP so the
     NEXT session's captures can't overwrite this session's rendering. The rolling 600-crop ring silently cost
@@ -265,17 +333,25 @@ def cmd_stop(a) -> int:
     # Increment 2 step 5 (G4 green 2026-07-03): session-close KAS certificate issuance — EXPLICIT opt-in
     # (--kas), default-OFF. Issues the Kill-Authorship Session Record over THIS session's log + composites
     # (fail-closed enum; a bad session honestly reads INSUFFICIENT_KILLS / HYGIENE_FAIL, never a false cert).
+    _kas_rec = None
     if getattr(a, "kas", False):
         try:
             from issue_kas_records import issue_record_for_label
-            rec = issue_record_for_label(label)
-            if rec is None:
+            _kas_rec = issue_record_for_label(label)
+            if _kas_rec is None:
                 print("[daemon] KAS: no issuable record (log/span unusable)")
             else:
-                print(f"[daemon] KAS: {rec['verdict']} authored={rec['authored_kills']} "
-                      f"commit={rec['commitment'][:16]} -> {rec['_path']}")
+                print(f"[daemon] KAS: {_kas_rec['verdict']} authored={_kas_rec['authored_kills']} "
+                      f"commit={_kas_rec['commitment'][:16]} -> {_kas_rec['_path']}")
         except Exception as e:  # noqa: BLE001 — issuance must never break the stop path
             print(f"[daemon] KAS issuance failed (non-fatal): {e!r}")
+    # U2b: PoSP reference-and-bind record — only when KAS issued and rec is available (fail-open).
+    # Writes audits/posp_record_<label>_<date>.json with verdict SYNCHRONIZED/PARTIAL/UNVERIFIABLE.
+    if _kas_rec is not None:
+        try:
+            _issue_posp(label, st["started_at"], dict(_kas_rec))
+        except Exception as e:  # noqa: BLE001
+            print(f"[daemon] PoSP issuance failed (non-fatal): {e!r}")
     return 0
 
 
