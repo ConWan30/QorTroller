@@ -1,7 +1,7 @@
 # Phase C — C-2.1: Biometric Signal Power Measurement Protocol
 
-**Status: DRAFT — awaiting review/approval per C-2.1's own exit criteria before C-2.2 (data
-collection) begins. No sessions run, no code changed by this document.**
+**Status: APPROVED (2026-07-05) — open questions resolved below (§7); C-2.2 may begin once the
+operator is at the rig. No sessions run, no code changed by this document.**
 
 ## 1. Purpose and scope
 
@@ -79,9 +79,12 @@ whether player-clusters exist at all, but it does not simulate what an actual to
 enrollment flow would look like: enroll once, verify many times later, on sessions the enrollment
 centroid never saw.
 
-This protocol's session design:
-- **Enrollment set**: N=10 sessions/player minimum (matching the AIT defensibility gate's own
-  `n>=10` floor — CLAUDE.md Phase 231), one probe type held fixed for the enrollment centroid.
+This protocol's session design (**split size DECIDED 2026-07-05: N=10/10**, not scaled to match
+the existing N=37 AIT corpus — the goal of this first pass is proving the holdout methodology
+itself, not matching prior corpus size; scale to 15/15 or larger in a follow-on iteration once
+the methodology is validated):
+- **Enrollment set**: N=10 sessions/player (matching the AIT defensibility gate's own `n>=10`
+  floor — CLAUDE.md Phase 231), one probe type held fixed for the enrollment centroid.
 - **Verification set**: N=10 additional sessions/player, collected in a SEPARATE capture pass
   (not interleaved with enrollment — session-order matters here, unlike LOO which is
   order-agnostic), same probe type.
@@ -93,17 +96,18 @@ This protocol's session design:
   reported FAR/FRR at a stated threshold, which is the number a tournament-eligibility decision
   actually needs.
 
-### 3.2 Probe type
+### 3.2 Probe type (DECIDED 2026-07-05: AIT only)
 
-Recommend **AIT** (Adaptive-trigger Isometric Tremor probe) as the primary probe for this
-protocol: it is the only probe type that has already cleared the `>1.0` separation bar
-(1.199, N=37, all_pairs_above_1=True per Phase 229/231) and has an established defensibility gate
+**AIT** (Adaptive-trigger Isometric Tremor probe) as the sole probe for this protocol: it is the
+only probe type that has already cleared the `>1.0` separation bar (1.199, N=37,
+all_pairs_above_1=True per Phase 229/231) and has an established defensibility gate
 (`ait_defensibility_ok`) already wired into `store.py`/`operator_api.py`. Reusing a
 proven-separating probe means this protocol tests the ENROLLMENT/VERIFICATION SPLIT methodology
 against a known-good signal, isolating "does the split reduce the ratio vs LOO" as the finding,
-rather than conflating it with "is this probe type any good" (touchpad_corners already answered
-that question negatively for its own probe — 0.728, structurally capped by P2/P3 biometric
-proximity).
+rather than conflating it with "is this probe type any good." touchpad_corners (known structural
+ceiling — 0.728, capped by P2/P3 biometric proximity) is explicitly deferred to a later iteration
+if there's appetite to re-measure it under this same holdout methodology; including it now would
+dilute this pass's primary goal.
 
 ### 3.3 Corpus target
 
@@ -114,13 +118,16 @@ that supports a holdout metric the current corpus cannot produce after the fact 
 train/test are not interchangeable after collection; the split has to be by session-collection
 order, decided before capture).
 
-### 3.4 L6B campaign (parallel, per §2.3)
+### 3.4 L6B campaign (parallel, per §2.3) — DECIDED 2026-07-05: honest interim report, no N=50 gate
 
-N≥50 L6B probe sessions per player is the standing gate for `L6B_ENABLED`. This protocol does
-not commit to hitting N=50 in one pass — it specifies the SAME enrollment/verification discipline
-(hold out a verification set) so that whatever N is reached, the resulting number is a real
-holdout separation estimate, not another LOO figure layered on top of the ones that already
-exist for L4.
+N≥50 L6B probe sessions per player remains the standing gate for `L6B_ENABLED` — that flag stays
+false regardless of this protocol's outcome. But this protocol's own C-2.3 report is **not gated
+on reaching N=50**: it reports an honest interim holdout number at whatever N is reached in the
+available capture window, explicitly stating the gap to N=50, rather than stalling the entire
+Phase C report (including the independent L4/L5 findings) on a hardware-calibration campaign that
+may take longer than this pass. The same enrollment/verification discipline (hold out a
+verification set) applies at whatever N is reached, so the interim number is a real holdout
+estimate, not another LOO figure layered on top of what already exists for L4.
 
 ## 4. Statistical approach
 
@@ -180,13 +187,10 @@ an input, not a bare ratio.
 3. C-2.3 consumes the resulting corpus and produces the holdout ratio, LOO-vs-holdout delta,
    bootstrap CI, and FAR/FRR table described above.
 
-## 7. Open questions for review (do not resolve unilaterally)
+## 7. Decisions (resolved 2026-07-05)
 
-- Is N=10/10 enrollment/verification per player the right split size, or should it track the
-  existing N=37 AIT corpus more closely (e.g., 15/15, reusing more of what may already exist as
-  enrollment data if those sessions can be legitimately treated as pre-existing enrollment)?
-- Should the L6B campaign's target be a hard N=50 before this protocol's C-2.3 report, or an
-  honest interim report at whatever N is reached in the time available, with N=50 as a follow-on?
-- Is AIT the right sole probe for this pass, or should touchpad_corners also get the
-  enrollment/verification treatment despite its known ceiling (to check whether the holdout
-  methodology itself changes its 0.728, even if it's expected to stay sub-1.0)?
+| Question | Decision | Rationale |
+|---|---|---|
+| Enrollment/verification split size | N=10/10 per player | Focused on validating the holdout methodology itself, not matching the existing N=37 AIT corpus size; scale up in a follow-on iteration |
+| L6B N=50 requirement | Honest interim report at whatever N is reached | Avoids stalling the whole Phase C arc on one hardware-calibration campaign; N=50 remains the `L6B_ENABLED` gate regardless |
+| Probe choice | AIT only | Strongest existing signal (only probe past the >1.0 bar); touchpad_corners deferred to a later iteration |
