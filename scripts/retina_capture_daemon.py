@@ -186,9 +186,20 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     sid = kas_rec.get("session_id")
 
     # --- NQPV fusion rows from bridge DB (fail-open) ---
+    # DB_PATH may be set in bridge/.env (e.g. presence_lean.db) but not in the daemon process
+    # environment. Fall back to bridge/.env so _issue_posp() finds the same DB the bridge wrote to.
     fusion_rows: list = []
     try:
-        db_path = os.environ.get("DB_PATH") or str(Path.home() / ".vapi" / "bridge.db")
+        _db_path_from_env = os.environ.get("DB_PATH")
+        if not _db_path_from_env:
+            _dot_env = _REPO / "bridge" / ".env"
+            if _dot_env.exists():
+                for _line in _dot_env.read_text(encoding="utf-8").splitlines():
+                    _line = _line.strip()
+                    if _line.startswith("DB_PATH="):
+                        _db_path_from_env = _line.split("=", 1)[1].strip().strip('"').strip("'")
+                        break
+        db_path = _db_path_from_env or str(Path.home() / ".vapi" / "bridge.db")
         if Path(db_path).exists():
             with sqlite3.connect(db_path, timeout=5) as conn:
                 conn.row_factory = sqlite3.Row
