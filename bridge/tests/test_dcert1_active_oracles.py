@@ -36,8 +36,9 @@ def _fuse(**kw):
 def test_all_present_all_contributed():
     p = _fuse(retina_report=SimpleNamespace(verdict="COUPLED_CLEAN"),
               cco_report=SimpleNamespace(tier="PREMIUM_EDGE"), poep_present=True, l4_l5_l6_ok=True)
+    # D-CERT-5 U3: kas joins the manifest as a 5th declared oracle; absent here (no kas_report passed).
     assert p.active_oracles == {"retina": "contributed", "cco": "contributed",
-                                "poep": "contributed", "l4l5l6": "contributed"}
+                                "poep": "contributed", "l4l5l6": "contributed", "kas": "absent"}
 
 
 def test_retina_absent_vs_abstained_are_distinct():
@@ -87,5 +88,6 @@ def test_null_safe_backward_compat():
 
 def test_oracle_manifest_pure_helper():
     m = _oracle_manifest(None, None, None, None, None, None)                     # nothing wired
+    # D-CERT-5 U3: kas_report/kas_verdict default to None -> "absent", same as every other unwired oracle.
     assert m == {"retina": "absent", "cco": "absent",
-                 "poep": "abstained_or_absent", "l4l5l6": "abstained_or_absent"}
+                 "poep": "abstained_or_absent", "l4l5l6": "abstained_or_absent", "kas": "absent"}
