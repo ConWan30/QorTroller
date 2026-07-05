@@ -188,6 +188,15 @@ class VAPIPresenceProof:
     # verdicts on different evidence sets, indistinguishable). None on pre-cycle-59 records.
     active_oracles: Optional[dict] = None
 
+    # D-CERT-5 U3 (docs/d-cert5-unified-presence-design-2026-07-04.md): KAS (per-kill-event authorship)
+    # as a declared oracle in active_oracles["kas"]. Advisory-only fields, like PoVCA below — never
+    # folded into presence_score. None mid-session (KAS issues post-hoc at daemon stop) or on
+    # pre-U3 records.
+    kas_verdict: Optional[str] = None
+    kas_commitment: Optional[str] = None
+    kas_events_root: Optional[str] = None
+    kas_authored_kills: Optional[int] = None
+
     # PoVCA (Cycle 42 integration, renamed PoSCA -> PoVCA per critique to avoid "skill" over-claim):
     # Per discrete game-action: verified device + causal input authorship + L4/L5 structure.
     # Composes as oracle into NQPV presence_score. Always advisory until live co-capture + study.
@@ -263,6 +272,11 @@ class VAPIPresenceProof:
             "posca_structure_ok": self.posca_structure_ok,
             "posca_coupling_score": self.posca_coupling_score,
             "posca_action_count": self.posca_action_count,
+            # D-CERT-5 U3: KAS as a declared oracle (None mid-session / on pre-U3 records)
+            "kas_verdict": self.kas_verdict,
+            "kas_commitment": self.kas_commitment,
+            "kas_events_root": self.kas_events_root,
+            "kas_authored_kills": self.kas_authored_kills,
         }
 
 
@@ -330,6 +344,11 @@ class VAPIPresence:
                 posca_structure_ok=body.get("posca_structure_ok"),
                 posca_coupling_score=body.get("posca_coupling_score"),
                 posca_action_count=int(body.get("posca_action_count", 0)),
+                # D-CERT-5 U3: KAS declared-oracle fields (absent on pre-U3 records -> None)
+                kas_verdict=body.get("kas_verdict"),
+                kas_commitment=body.get("kas_commitment"),
+                kas_events_root=body.get("kas_events_root"),
+                kas_authored_kills=body.get("kas_authored_kills"),
             )
         except Exception as exc:
             return VAPIPresenceProof(
