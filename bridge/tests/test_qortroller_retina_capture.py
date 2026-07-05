@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from vapi_bridge.qortroller_retina_capture import (
+from bridge.vapi_bridge.qortroller_retina_capture import (
     RetinaGameCaptureCore,
     _u8_from_scale,
     align_timespan_ms,
@@ -170,7 +170,7 @@ def test_killfeed_authorship_wired_spectated(monkeypatch):
 
 # --- Dense panel-crop capture (calibration corpus) — gating + bounded write ---
 def test_save_capture_crops_enabled_writes(tmp_path):
-    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", capture_enabled=True, capture_dir=str(tmp_path),
                             capture_max=10, panel_roi="0.0,0.28,0.32,0.67")
     rgc._source._panel_bgr = np.zeros((20, 30, 3), np.uint8)   # stand-in for a stashed panel crop
@@ -182,7 +182,7 @@ def test_save_capture_crops_enabled_writes(tmp_path):
 def test_panel_crop_is_full_res_not_downscaled():
     # Regression: the offline-review panel crop MUST come from the full-res frame, not the governor's
     # downscaled optical-flow buffer (which shrinks the ~600px panel to ~76px -> handle unreadable).
-    from vapi_bridge.qortroller_retina_capture import _panel_roi_crop
+    from bridge.vapi_bridge.qortroller_retina_capture import _panel_roi_crop
     buf = np.zeros((1080, 1920, 4), np.uint8)                 # full-res BGRA frame
     crop = _panel_roi_crop(buf, (0.0, 0.28, 0.32, 0.67), None)
     assert crop.shape[1] >= 500 and crop.shape[0] >= 600      # full-res panel (~614x724), NOT ~76px
@@ -190,7 +190,7 @@ def test_panel_crop_is_full_res_not_downscaled():
 
 
 def test_save_capture_crops_disabled_is_noop(tmp_path):
-    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", capture_enabled=False, capture_dir=str(tmp_path),
                             panel_roi="0.0,0.28,0.32,0.67")
     rgc._source._panel_bgr = np.zeros((20, 30, 3), np.uint8)
@@ -203,7 +203,7 @@ def test_save_capture_crops_disabled_is_noop(tmp_path):
 def _mk_death_capture(tmp_path):
     """A capture with the death monitor live but inline OFF (so no anchor-load needed) — we drive the
     composite path directly, which is exactly what mark_r2_onset / flush_stale_inline_window do live."""
-    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     import threading
     from l9_presence.killfeed_inline import DeathWindowMonitor
     rgc = RetinaGameCapture("Remote Play", capture_dir=str(tmp_path),
@@ -245,7 +245,7 @@ def test_worker_no_longer_fires_mark_death_directly(tmp_path):
     file is now inside _log_composite (composite-driven). Two triggers would double-fire -> phantom
     restart-truncations. Assert the worker body no longer calls mark_death."""
     import inspect
-    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     worker_src = inspect.getsource(RetinaGameCapture._inline_classify_worker)
     assert ".mark_death(" not in worker_src                   # no CALL in the worker (comment may name it)
     log_src = inspect.getsource(RetinaGameCapture._log_composite)
@@ -255,7 +255,7 @@ def test_worker_no_longer_fires_mark_death_directly(tmp_path):
 # --- l2_ads ADS coupling channel wiring (second anti-splice channel; scaffold, abstains until calibrated) ---
 
 def _mk_ads(tmp_path, bg_every=30):
-    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", ads_enabled=True,
                             ads_log_path=str(tmp_path / "ads.jsonl"),
                             ads_segment_file=str(tmp_path / "ads_segment.json"),
@@ -341,7 +341,7 @@ def test_ads_background_negative_sampling(tmp_path):
 
 
 def test_ads_disabled_is_noop(tmp_path):
-    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", ads_enabled=False, ads_log_path=str(tmp_path / "ads.jsonl"))
     rgc.push_l2_raw(1000.0, 3_000_000, 200)                  # no source -> noop
     rgc.feed_ads(1000.0)                                      # no monitor -> noop

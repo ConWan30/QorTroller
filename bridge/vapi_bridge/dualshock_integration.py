@@ -802,8 +802,16 @@ class DualShockTransport:
                             self._hid_report_total += 1
                             if _push_l2 and len(data) > 31:
                                 _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
-                                self._retina_game_capture.push_l2_raw(
-                                    time.time() * 1000.0, _ts32, data[5])
+                                _now_wall = time.time() * 1000.0
+                                self._retina_game_capture.push_l2_raw(_now_wall, _ts32, data[5])
+                                # FOUND 2026-07-05 (Phase C C-1.1): the HID lobe's "r2_onset" detector was
+                                # being fed data[5] (L2) via push_l2_raw above, so it fired on L2 presses and
+                                # never on R2. R2 is the next byte (raw offset 6 — confirmed against
+                                # tests/hardware/test_dualshock_biometric.py and
+                                # tests/hardware/test_dualshock_adaptive_triggers.py, both hardware-validated
+                                # "l2": data[5], "r2": data[6]). Feed it through its own ingestion point.
+                                if len(data) > 6:
+                                    self._retina_game_capture.push_r2_raw(_now_wall, _ts32, data[6])
                             # RP-config diagnostic (RETINA_ADS_RP_DIAG): buffer the RAW report bytes IN
                             # MEMORY during Remote Play; scripts/analyze_rp_l2_diag.py finds offline which
                             # offset tracks true L2 under RP (offset 5 sticks high on release — 2026-07-02)
