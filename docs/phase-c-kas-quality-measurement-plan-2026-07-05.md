@@ -1,7 +1,7 @@
 # Phase C — C-3.1: KAS Authorship Quality Measurement Plan
 
-**Status: DRAFT — awaiting review/approval per C-3.1's own exit criteria before C-3.2 (session
-capture) begins. No sessions run, no code changed by this document.**
+**Status: APPROVED (2026-07-05) — open questions resolved below (§6); C-3.2 may begin once the
+operator is at the rig. No sessions run, no code changed by this document.**
 
 ## 1. Purpose and scope
 
@@ -34,8 +34,10 @@ final kill count. This is an INDEPENDENT source — it derives from the game's o
 kill tracking, not from anything the killfeed OCR/template pipeline touches. For every C-3.2
 session:
 
-1. Capture the end-of-match summary screen (a still crop, same capture pipeline, different ROI)
-   alongside the normal killfeed capture.
+1. Capture the end-of-match summary screen. **DECIDED (2026-07-05): a manual screenshot per
+   session, taken immediately after the match ends and stored with the session artifacts** — for
+   a first-pass corpus this small, a new automated capture hook isn't justified; revisit if this
+   measurement becomes recurring.
 2. Record the summary screen's kill count as the session's ground-truth `N_true_kills`.
 3. Separately, a human reviewer scrubs the session's video/crop timeline in real time (not
    crop-by-crop adjudication — a continuous watch-through) and timestamps each real kill event,
@@ -74,18 +76,22 @@ crop), and cluster sessions by that measured color rather than by name. This reu
 color channel) but applied to the killfeed row region instead of the hitmarker ROI — no new
 capture mechanism, just a new extraction point over crops already being saved.
 
-### 3.3 Coverage target
+### 3.3 Coverage target (DECIDED 2026-07-05)
 
-At minimum, this plan's corpus should include:
+At minimum, this plan's core corpus should include:
 - One session from each of the 3 rendering families already characterized in G1' (the
   seg3/sess_ab/sess_hid tesseract-era renderings) — reusable AS ARCHIVE for the precision side,
   but these have no independent ground truth (they predate this plan) and so can only inform the
   rendering-family taxonomy (§3.2), not the precision/recall numbers in §5.
-- At least 2 NEW live sessions per distinct measured rendering family observed during C-3.2
-  capture, so precision/recall is reported per family with N≥2, not a single point.
-- Deliberately include the marginal-color case if it recurs (match3's `inline_bg_max ≈ 0.65`
-  band) — this is the session type most likely to produce a genuine miss, and the plan should
-  not avoid it by only capturing "easy" renderings.
+- **2 NEW live sessions per distinct measured "typical" rendering family** observed during C-3.2
+  capture — decided sufficient for this first pass (live confirmation of D-CG-1/C1 + rough
+  per-family recall, not statistical precision; the bar can be raised later if numbers are
+  marginal or governance requires tighter confidence).
+- **Marginal-color sessions (`inline_bg_max` in the ~0.65 band, e.g. match3's rendering) are
+  EXPLICITLY EXTRA — outside the core minimum corpus above.** If one recurs during capture,
+  capture it, but report its recall as its own broken-out category, never folded into the core
+  "typical rendering" headline number. This is the known weak spot; the point is to see how much
+  it drags performance down in isolation, not to let one hard session distort the aggregate.
 
 ## 4. Metrics
 
@@ -122,7 +128,7 @@ classify density) and conflating them would misdirect any future hardening.
 | Freeze-frame transition | C1 (`7d036b2f`) — a single-frame freeze can seed a spurious CANDIDATE | Whether any session produces a `candidate_cut` that the 5s persist-timer then demotes (confirms the containment works live, not just in the synthetic test) |
 | Marginal-color rendering | match3, `inline_bg_max ≈ 0.65` | Recall specifically on sessions in the marginal-color band (§3.3) vs. sessions with a clearly-separated color |
 | B-instrument off-fit anchor (candidate false read) | G1' — all 7 candidates were this, zero real false reads | Not re-measured directly here (that's G1's job); noted as context for why this plan's OWN false-read escalation threshold is "any single instance," not a rate |
-| **Handle collision** (new — not yet tested in this corpus) | Named in the Phase C task breakdown, not yet a finding in this repo | No natural occurrence has appeared in any session captured to date. Two options, NOT decided by this plan: (a) wait for a natural occurrence (an opponent handle textually close to `q0rtr01a30`, e.g. a lookalike with a 0/O or 1/l substitution) and flag it if one appears in the C-3.2 corpus, or (b) synthetically inject a lookalike-handle crop into the offline audit lane as a targeted test. Recommend (a) for this plan (keeps the corpus honest/unmanipulated) with (b) flagged as a future finding if C-3.2 produces zero natural instances — **this is one of this plan's open questions for review (§6)**. |
+| **Handle collision** (new — not yet tested in this corpus) | Named in the Phase C task breakdown, not yet a finding in this repo | **DECIDED (2026-07-05): natural occurrence only for this plan.** No synthetic injection — keeps the corpus honest/unmanipulated. If C-3.2 produces zero natural instances (an opponent handle textually close to `q0rtr01a30`, e.g. a 0/O or 1/l lookalike substitution), that absence is itself recorded as a finding, and synthetic injection into the offline audit lane is flagged as separate future work, not folded into this plan. |
 
 ## 5. What this plan deliberately does not attempt
 
@@ -135,19 +141,14 @@ classify density) and conflating them would misdirect any future hardening.
 - **Not** a chain/on-chain measurement — KAS is `QORTROLLER-KAS-v0` CANDIDATE, off-chain; nothing
   here touches PV-CI, FROZEN-v1, or any deploy.
 
-## 6. Open questions for review (do not resolve unilaterally)
+## 6. Decisions (resolved 2026-07-05)
 
-- Handle-collision testing: natural occurrence only (§4.3 option a) or also synthetic injection
-  (option b) if none appears?
-- Is 2 new live sessions per rendering family (§3.3) enough for a first pass, or should the
-  target be higher given how much D-CG-1/C1 hinges on live (not offline-replay) validation?
-- Should the end-of-match summary-screen ground truth (§2.2) be captured via a NEW small capture
-  hook, or is a manual screenshot per session sufficient for this first pass (lower engineering
-  cost, same evidentiary value for N this small)?
-- Do the marginal-color sessions (§3.3, deliberately-included hard case) count toward this plan's
-  minimum corpus, or are they explicitly EXTRA — i.e., is the plan's core recall number reported
-  only on "typical" renderings with the marginal case broken out separately, so one hard session
-  doesn't dominate an aggregate the way a single 0-recall outlier could?
+| Question | Decision | Rationale |
+|---|---|---|
+| Handle-collision testing | Natural occurrence only | Keeps the corpus honest/unmanipulated; synthetic injection is separate future work if zero natural instances occur |
+| Sessions per rendering family | 2 new live sessions (first pass) | Sufficient for live confirmation of D-CG-1/C1 + rough recall; not a statistical-precision target — can raise later |
+| Summary-screen ground truth | Manual screenshot per session | New automated hook not justified for a first-pass corpus this small |
+| Marginal-color sessions | Explicitly EXTRA, broken out separately | Prevents one known-hard session from distorting the core "typical rendering" recall number |
 
 ## 7. Deliverables (this plan's own exit criteria)
 
