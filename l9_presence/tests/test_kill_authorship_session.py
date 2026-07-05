@@ -97,9 +97,9 @@ def test_cross_lobe_coherence_is_advisory_not_in_the_commitment():
               hygiene=_H_OK, events_root="cd" * 32, events_root_scheme="sha256_v1",
               events_root_lobes=["screen", "hid"])
     base = kas.build_session_record(**kw)
-    withx = kas.build_session_record(**kw, cross_lobe={"verdict": "COHERENT", "latencies_s": [0.12]})
+    withx = kas.build_session_record(**kw, cross_lobe={"verdict": "COHERENT", "nearest_preceding_latency_s": [0.12]})
     assert withx.commitment() == base.commitment()             # advisory -> NOT in the commitment
-    assert withx.to_dict()["cross_lobe_coherence"] == {"verdict": "COHERENT", "latencies_s": [0.12]}
+    assert withx.to_dict()["cross_lobe_coherence"] == {"verdict": "COHERENT", "nearest_preceding_latency_s": [0.12]}
     assert base.to_dict()["cross_lobe_coherence"] is None
     assert withx.verdict == kas.AUTHORED_SESSION and base.verdict == kas.AUTHORED_SESSION
 

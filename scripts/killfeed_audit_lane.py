@@ -26,6 +26,10 @@ UNRESOLVED is a first-class output (below-confidence OCR / sub-floor template) �
 UNRESOLVED contact sheet is ALSO the human_oracle bootstrap's input artifact (Phase W.1 consumes it).
 
 READ-ONLY: no writes outside the chosen --out prefix; no bridge/session/chain/IOTX. l2_ads untouched.
+
+--workers N parallelizes ACROSS crops with a process pool (spawn-safe: each worker loads the ensemble once
+in its initializer). The instruments are byte-identical per crop — parallelism changes scheduling only, never
+the measurement; results are emitted in path order (imap) so the JSONL is deterministic.
 """
 from __future__ import annotations
 
@@ -50,6 +54,14 @@ INSTR_A = "ocr_row_v1"
 INSTR_B = "template_ensemble_v1"
 _R4_PREFIX = "session_anchor"          # a winning anchor whose name starts with this is R4 (rendering-specific)
 
+# Feed row pitch (F-G1P-2, operator-approved 2026-07-04): one feed row = ~24px text (the calibrated feed
+# anchor's height) + ~8-10px inter-row gap on the calibrated 724px panel -> ~33px = 0.045 y-frac; confirmed
+# by horizontal-projection band measurement on real multi-row crops (c4 adjacent rows: dy=0.033). Derived
+# from the feed's ACTUAL geometry, not a generic tolerance — a double-kill's two genuinely distinct rows sit
+# >= one pitch apart and must NOT be bucketed as "same row".
+ROW_PITCH_YFRAC = 0.045
+SAME_ROW_MAX_DY = ROW_PITCH_YFRAC / 2.0    # same-row test: |A.y - B.y| within half a pitch
+
 
 # ------------------------------------------------------------------ ensemble ----------------------------
 def load_ensemble(r4_dir: str = "retina_kf_anchors"):
@@ -69,10 +81,13 @@ def load_ensemble(r4_dir: str = "retina_kf_anchors"):
 
 # ------------------------------------------------------------------ instruments -------------------------
 def instrument_a(img) -> dict:
-    """A — tight-row OCR (killer-slot READER). taxonomy in {OWN_KILL, UNRESOLVED} by construction."""
+    """A — tight-row OCR (killer-slot READER). taxonomy in {OWN_KILL, UNRESOLVED} by construction.
+    `engine` records the ACTUAL recognizer that produced this read (C3 discipline): with an engine chain
+    (RETINA_OCR_ENGINE=rapidocr_v6 -> tesseract fallback) per-record attribution is what keeps a parity
+    comparison honest — aggregate numbers must never mix engines invisibly."""
     r = ob.tight_row_ocr(img)
-    return {"labeler": INSTR_A, "taxonomy": r.taxonomy(),
-            "matched": r.matched, "text": r.text, "x_frac": r.x_frac, "slot": r.slot}
+    return {"labeler": INSTR_A, "taxonomy": r.taxonomy(), "engine": r.engine,
+            "matched": r.matched, "text": r.text, "x_frac": r.x_frac, "y_frac": r.y_frac, "slot": r.slot}
 
 
 def instrument_b(img, ensemble) -> dict:
@@ -88,9 +103,9 @@ def instrument_b(img, ensemble) -> dict:
         win = best_k[1]
         return {"labeler": INSTR_B, "taxonomy": ob.OWN_KILL, "killer_score": round(best_k[0], 3),
                 "winning_anchor": win, "is_r4": bool(win and win.startswith(_R4_PREFIX)),
-                "x_frac": best_k[2]}
+                "x_frac": best_k[2], "y_frac": best_k[3]}
     # no confident killer signal — refine the non-kill class from the strongest classify_panel
-    best = None                                            # (priority, score, taxonomy, anchor, region, x_frac)
+    best = None                                # (priority, score, taxonomy, anchor, region, x_frac, y_frac)
     _pri = {ob.OWN_DEATH: 2, ob.OTHER_ROW: 1, ob.UNRESOLVED: 0}
     for name, anchor in ensemble.items():
         res = kc.classify_panel(img, anchor, match_floor=kc.DEFAULT_MATCH_FLOOR)
@@ -102,24 +117,43 @@ def instrument_b(img, ensemble) -> dict:
             tax = ob.OTHER_ROW
         else:
             tax = ob.UNRESOLVED
-        cand = (_pri[tax], res.score, tax, name, region, res.x_frac)
+        cand = (_pri[tax], res.score, tax, name, region, res.x_frac, (res.evidence or {}).get("y_frac"))
         if best is None or cand[:2] > best[:2]:
             best = cand
     return {"labeler": INSTR_B, "taxonomy": best[2], "killer_score": round(best_k[0], 3),
-            "winning_anchor": best[3], "is_r4": False, "region": best[4], "x_frac": best[5]}
+            "winning_anchor": best[3], "is_r4": False, "region": best[4], "x_frac": best[5],
+            "y_frac": best[6]}
 
 
 # ------------------------------------------------------------------ disagreement adjudication -----------
+def _same_row(a: dict, b: dict):
+    """True/False when both instruments carry y_frac (|dy| within half a row pitch), None when either is
+    missing — the caller FAILS TOWARD REVIEW on None (a potential contradiction is never silently
+    downgraded for lack of geometry)."""
+    ay, by = a.get("y_frac"), b.get("y_frac")
+    if ay is None or by is None:
+        return None
+    return abs(float(ay) - float(by)) <= SAME_ROW_MAX_DY
+
+
 def adjudicate(a: dict, b: dict) -> str:
     """Category for the disagreement report. The zero-false-read control is CONFLICT_A_KILL_B_DEATH: A read
-    an own-kill where B scored the handle in the VICTIM slot — a candidate A false read, operator-adjudicated."""
+    an own-kill where B scored the handle in the VICTIM slot OF THE SAME ROW — a candidate A false read,
+    operator-adjudicated.
+
+    F-G1P-2 location gate (operator-approved 2026-07-04, empirically supported — all 7 archive conflicts
+    were different-row): B disagreeing from a DIFFERENT row (|dy| > half a row pitch; the roster at y~0.97
+    is always different-row from a feed read) is B-blindness/mis-slot, NOT a read contradiction ->
+    A_KILL_B_ELSEWHERE. Only a same-row disagreement is a CONFLICT. Missing y on either side keeps the
+    CONFLICT label (fail-toward-review)."""
     ta, tb = a["taxonomy"], b["taxonomy"]
     if ta == tb:
         return "AGREE"
-    if ta == ob.OWN_KILL and tb == ob.OWN_DEATH:
-        return "CONFLICT_A_KILL_B_DEATH"          # hardest: A false read? or B mis-slot? -> contact sheet
-    if ta == ob.OWN_KILL and tb == ob.OTHER_ROW:
-        return "CONFLICT_A_KILL_B_ROSTER"         # A read a kill where B saw only roster presence
+    if ta == ob.OWN_KILL and tb in (ob.OWN_DEATH, ob.OTHER_ROW):
+        if _same_row(a, b) is False:
+            return "A_KILL_B_ELSEWHERE"           # different row: expected B-blindness, not suspicion
+        return ("CONFLICT_A_KILL_B_DEATH" if tb == ob.OWN_DEATH
+                else "CONFLICT_A_KILL_B_ROSTER")  # same row (or unknown geometry): candidate A false read
     if ta == ob.OWN_KILL and tb == ob.UNRESOLVED:
         return "A_KILL_B_GAP" if not b.get("is_r4") else "A_KILL_B_MISS"  # B-coverage gap vs real B miss
     if ta == ob.UNRESOLVED and tb == ob.OWN_KILL:
@@ -131,8 +165,69 @@ def adjudicate(a: dict, b: dict) -> str:
     return f"DIVERGE_{ta}_vs_{tb}"
 
 
+# ------------------------------------------------------------------ parallel workers ---------------------
+_W_ENS = None                                          # per-process ensemble (loaded once in the initializer)
+
+
+def _worker_init(r4_dir: str):
+    global _W_ENS
+    _W_ENS = load_ensemble(r4_dir)
+
+
+def _label_one(path: str):
+    """One crop -> (basename, a, b) with BOTH instruments, or None on unreadable image. Runs in a worker
+    process; identical per-crop computation to the sequential path (scheduling-only parallelism)."""
+    img = cv2.imread(path)
+    if img is None:
+        return None
+    return os.path.basename(path), instrument_a(img), instrument_b(img, _W_ENS)
+
+
+def _iter_labels(paths, ens, workers: int):
+    """Yield (basename, a, b) in path order — sequential (workers<=1) or via a spawn-safe process pool."""
+    if workers <= 1:
+        for p in paths:
+            img = cv2.imread(p)
+            if img is None:
+                continue
+            yield os.path.basename(p), instrument_a(img), instrument_b(img, ens)
+        return
+    import multiprocessing as mp
+    ctx = mp.get_context("spawn")
+    with ctx.Pool(processes=workers, initializer=_worker_init, initargs=(_R4_DIR_FOR_WORKERS,)) as pool:
+        for out in pool.imap(_label_one, paths, chunksize=4):
+            if out is not None:
+                yield out
+
+
+_R4_DIR_FOR_WORKERS = "retina_kf_anchors"              # set by run_lane before pool spawn (picklable str)
+
+
 # ------------------------------------------------------------------ run ----------------------------------
-def run_lane(crop_dir: str, out_prefix: str, limit: int, r4_dir: str) -> dict:
+def _load_resume_rows(jsonl_path: str) -> list:
+    """Parse an interrupted run's JSONL (tolerant of a truncated trailing line from a killed buffer)."""
+    rows = []
+    try:
+        with open(jsonl_path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                    if "crop" in r and INSTR_A in r and INSTR_B in r:
+                        rows.append(r)
+                except Exception:  # noqa: BLE001 — truncated flush boundary; the crop just re-runs
+                    pass
+    except OSError:
+        pass
+    return rows
+
+
+def run_lane(crop_dir: str, out_prefix: str, limit: int, r4_dir: str, workers: int = 1,
+             resume: bool = False) -> dict:
+    global _R4_DIR_FOR_WORKERS
+    _R4_DIR_FOR_WORKERS = r4_dir
     ens = load_ensemble(r4_dir)
     r4_anchors = [n for n in ens if n.startswith(_R4_PREFIX)]
     paths = sorted(glob.glob(os.path.join(crop_dir, "*.png")))
@@ -143,19 +238,28 @@ def run_lane(crop_dir: str, out_prefix: str, limit: int, r4_dir: str) -> dict:
               file=sys.stderr)
 
     jsonl_path = out_prefix + ".taxonomy.jsonl"
-    rows = []
+    rows = _load_resume_rows(jsonl_path) if resume else []
+    if rows:
+        done = {r["crop"] for r in rows}
+        paths = [p for p in paths if os.path.basename(p) not in done]
+        with open(jsonl_path, "w", encoding="utf-8") as fh:      # rewrite clean (drops any truncated tail)
+            for r in rows:
+                fh.write(json.dumps(r) + "\n")
+        print(f"  resume: {len(rows)} crops already labeled, {len(paths)} remaining", file=sys.stderr)
     a_cnt, b_cnt, disagree_cnt = Counter(), Counter(), Counter()
     b_kill_anchor = Counter()                      # which anchors carry B's OWN_KILLs (coverage annotation)
+    for r in rows:                                 # prime counters from resumed rows (summary covers ALL)
+        a_cnt[r[INSTR_A]["taxonomy"]] += 1
+        b_cnt[r[INSTR_B]["taxonomy"]] += 1
+        if r["category"] not in ("AGREE", "BENIGN_A_ABSTAIN"):
+            disagree_cnt[r["category"]] += 1
+        if r[INSTR_B]["taxonomy"] == ob.OWN_KILL:
+            b_kill_anchor[r[INSTR_B].get("winning_anchor")] += 1
     t0 = time.time()
-    with open(jsonl_path, "w", encoding="utf-8") as fh:
-        for i, p in enumerate(paths):
-            img = cv2.imread(p)
-            if img is None:
-                continue
-            a = instrument_a(img)
-            b = instrument_b(img, ens)
+    with open(jsonl_path, "a" if rows else "w", encoding="utf-8") as fh:
+        for i, (base, a, b) in enumerate(_iter_labels(paths, ens, workers)):
             cat = adjudicate(a, b)
-            rec = {"crop": os.path.basename(p), INSTR_A: a, INSTR_B: b, "category": cat}
+            rec = {"crop": base, INSTR_A: a, INSTR_B: b, "category": cat}
             fh.write(json.dumps(rec) + "\n")
             rows.append(rec)
             a_cnt[a["taxonomy"]] += 1
@@ -190,8 +294,35 @@ def run_lane(crop_dir: str, out_prefix: str, limit: int, r4_dir: str) -> dict:
     }
     _write_report(out_prefix + ".report.md", summary, false_read_candidates, r4_anchors)
     _write_contact_sheet(out_prefix + ".contact_sheet.md", false_read_candidates, unresolved_both)
+    _write_evidence(out_prefix, crop_dir, false_read_candidates)
     summary["jsonl"] = jsonl_path
     return summary
+
+
+def _write_evidence(out_prefix: str, crop_dir: str, false_reads) -> None:
+    """F-G1P-1 (operator-required): conflict evidence must survive rolling-buffer eviction — copy every
+    conflict crop into `<out>.evidence/` at report time, PLUS a FULL-Y-GATE-RANGE zoom (y<0.55, i.e. the
+    whole feed gate + margin, 2.5x). The zoom range is a hard requirement, not a convenience: the c7
+    adjudication (2026-07-04) initially missed a REAL kill row because a shallow y<0.35 zoom cropped it out
+    — a partial zoom can flip an adjudication. Fail-open: evidence copying never breaks the report."""
+    if not false_reads:
+        return
+    ev_dir = out_prefix + ".evidence"
+    try:
+        os.makedirs(ev_dir, exist_ok=True)
+        import shutil
+        for r in false_reads:
+            src = os.path.join(crop_dir, r["crop"])
+            img = cv2.imread(src)
+            if img is None:
+                continue
+            shutil.copy2(src, os.path.join(ev_dir, r["crop"]))
+            h, w = img.shape[:2]
+            zoom = cv2.resize(img[0:max(1, int(h * 0.55)), 0:w], None, fx=2.5, fy=2.5,
+                              interpolation=cv2.INTER_CUBIC)
+            cv2.imwrite(os.path.join(ev_dir, r["crop"].rsplit(".", 1)[0] + "_fullgate2.5x.png"), zoom)
+    except Exception as e:  # noqa: BLE001 — evidence is additive; the report itself must still land
+        print(f"  evidence-copy WARNING: {e!r}", file=sys.stderr)
 
 
 def _write_report(path, s, false_reads, r4_anchors):
@@ -261,11 +392,15 @@ def main():
     ap.add_argument("--out", default="audits/killfeed_audit_lane", help="output path prefix")
     ap.add_argument("--limit", type=int, default=0, help="cap crops (0 = all)")
     ap.add_argument("--r4-dir", default="retina_kf_anchors", help="R4 session-anchor library dir")
+    ap.add_argument("--workers", type=int, default=1,
+                    help="process-pool size (1 = sequential; parallelism is scheduling-only)")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip crops already in the output JSONL (rewrites it clean, then appends)")
     a = ap.parse_args()
     crop_dir = a.crops if os.path.isabs(a.crops) else os.path.join(_REPO, a.crops)
     out = a.out if os.path.isabs(a.out) else os.path.join(_REPO, a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    s = run_lane(crop_dir, out, a.limit, a.r4_dir)
+    s = run_lane(crop_dir, out, a.limit, a.r4_dir, workers=a.workers, resume=a.resume)
     print(json.dumps(s, indent=2))
 
 

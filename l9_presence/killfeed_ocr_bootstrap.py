@@ -101,10 +101,16 @@ def _abstain(text: str = "") -> OcrRead:
 
 
 # --- engine chain (A1 wiring, D-PKG-1 = PP-OCRv6_rec_small via rapidocr/onnxruntime) -----------------
-# Provenance flip: RETINA_OCR_ENGINE=rapidocr_v6 -> v6 PRIMARY, tesseract FALLBACK, human_oracle last.
-# DEFAULT stays "tesseract" so the live path is byte-identical until the C1 adversarial gate passes and the
-# operator flips it; the C1 rerun runs with the flag on. v6 (onnxruntime) is contamination-safe with the
-# tesseract fallback in-process (verified) — no paddlepaddle, no subprocess.
+# DEFAULT FLIPPED 2026-07-04 (D-PKG-1 parity recheck PASSED, operator-adopted): v6 PRIMARY with tesseract
+# FALLBACK is now the default chain. Evidence (docs/dpkg1-v6-parity-2026-07-04.md): full 1,800-crop archive
+# both-engine comparison — v6 recall >= tesseract in ALL sessions (seg3 13v5 +160% on the rendering
+# tesseract was 99.2% blind to; sess_ab 141v134; sess_hid 110v100); zero false reads (2 candidates both
+# visually adjudicated TRUE with preserved evidence); per-record engine attribution 100% v6 on all 264 kill
+# reads (no fallback contamination). RETINA_OCR_ENGINE=tesseract forces the legacy tesseract-only chain
+# (the pre-flip escape hatch). v6 (onnxruntime) is contamination-safe with the tesseract fallback
+# in-process (verified) — no paddlepaddle, no subprocess. B8 posture unchanged: v6 CAN read recaptured
+# splice content tesseract was blind to — the accepted mitigations (fresh-row diff + cut-quality gate +
+# K=3 promotion + R2 gating) remain the wall, re-verified per the splice-lane run.
 ENGINE_V6 = "rapidocr_ppocrv6_small"       # sha 6f327246b50388f3 (PP-OCRv6_rec_small.onnx)
 ENGINE_TESS = "tesseract_row_v1"
 _UNSET = object()
@@ -125,11 +131,12 @@ def _v6_engine():
 
 
 def engine_chain():
-    """The ordered recognizer chain per RETINA_OCR_ENGINE (default tesseract-only = unchanged live path)."""
-    pref = os.environ.get("RETINA_OCR_ENGINE", "tesseract").strip().lower()
-    if pref in ("rapidocr_v6", "v6", ENGINE_V6):
-        return (ENGINE_V6, ENGINE_TESS)    # v6 primary -> tesseract fallback (human_oracle is caller-side)
-    return (ENGINE_TESS,)
+    """The ordered recognizer chain per RETINA_OCR_ENGINE. DEFAULT (unset) = v6 primary -> tesseract
+    fallback (D-PKG-1 parity-adopted 2026-07-04); "tesseract" forces the legacy tesseract-only chain."""
+    pref = os.environ.get("RETINA_OCR_ENGINE", "rapidocr_v6").strip().lower()
+    if pref in ("tesseract", ENGINE_TESS):
+        return (ENGINE_TESS,)              # legacy escape hatch — the pre-flip live path
+    return (ENGINE_V6, ENGINE_TESS)        # v6 primary -> tesseract fallback (human_oracle is caller-side)
 
 
 def _engine_reads(engine_id, up):

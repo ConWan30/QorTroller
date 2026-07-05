@@ -77,13 +77,17 @@ def test_c2_match_kind_exact_vs_fuzzy_vs_reject():
     assert ob.match_kind(h, "") is None and ob.match_kind("", "Qortrola30") is None
 
 
-def test_engine_chain_default_tesseract_v6_when_flagged(monkeypatch):
-    # A1: default chain is tesseract-only (byte-identical live path); RETINA_OCR_ENGINE=rapidocr_v6 puts v6
-    # FIRST with tesseract as fallback (provenance flip stays behind the flag until the C1 gate passes).
+def test_engine_chain_default_v6_tesseract_escape_hatch(monkeypatch):
+    # D-PKG-1 FLIP (2026-07-04, parity-adopted): DEFAULT chain is v6-primary + tesseract fallback.
+    # Evidence: 1,800-crop both-engine parity — v6 recall >= tesseract in all 3 sessions (seg3 13v5 on the
+    # rendering tesseract was 99.2% blind to), zero false reads, 100% per-record v6 attribution.
+    # RETINA_OCR_ENGINE=tesseract remains the legacy escape hatch (the pre-flip live path).
     monkeypatch.delenv("RETINA_OCR_ENGINE", raising=False)
-    assert ob.engine_chain() == (ob.ENGINE_TESS,)
+    assert ob.engine_chain() == (ob.ENGINE_V6, ob.ENGINE_TESS)
     monkeypatch.setenv("RETINA_OCR_ENGINE", "rapidocr_v6")
     assert ob.engine_chain() == (ob.ENGINE_V6, ob.ENGINE_TESS)
+    monkeypatch.setenv("RETINA_OCR_ENGINE", "tesseract")
+    assert ob.engine_chain() == (ob.ENGINE_TESS,)
 
 
 def test_c2_matched_set_unchanged_flag_added():

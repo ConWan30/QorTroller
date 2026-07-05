@@ -946,6 +946,20 @@ class RetinaGameCapture:
                 # Stall-recut signal (G3 match-2): feed_v1's raw per-sample verdict on THIS crop said
                 # killer-slot AUTHORED (>=0.66) — an independent kill signal the candidate must also see.
                 raw_auth = (getattr(getattr(res, "verdict", None), "value", None) == "AUTHORED_PRESENT")
+                # D-CG-1 (2026-07-04): OCR as an ADDITIONAL stall witness. feed_v1 raw >=0.66 is precisely
+                # the marginal signal in BR rendering, so a weak cut was doubly stuck — no K progress AND no
+                # witnessed misses (corpus-growth session sat CANDIDATE ~35 min; KAS INSUFFICIENT_KILLS).
+                # Gates keep the cost + splice posture: only when the candidate scored SUB-floor (a
+                # potential miss), only on a FRESH row (bounds OCR to row appearances — the bootstrap
+                # discipline), only with the OCR bootstrap enabled. Structurally demote-only:
+                # raw_killer_authored feeds the stall counter alone — it can NEVER increment consistency or
+                # fold AUTHORED, so the worst a false/spliced witness does is recut a candidate
+                # (availability, not integrity; the read itself measured 0 false positives / 2,411 crops).
+                if (not raw_auth and fresh and kscore < gen.promote_floor
+                        and getattr(self, "_ocr_bootstrap_enabled", False)):
+                    ocr_w = self._ocr_bootstrap_read(bgr)
+                    if ocr_w is not None and ocr_w.matched and ocr_w.slot == "killer":
+                        raw_auth = True
                 ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
                                             now_ms=now_ms, raw_killer_authored=raw_auth)
             if ev2 is not None and ev2.get("event") in ("candidate_cut", "promoted", "candidate_demoted_fp",
