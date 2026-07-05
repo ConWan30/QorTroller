@@ -69,7 +69,7 @@ def cmd_start(a) -> int:
     env["PYTHONPATH"] = os.pathsep.join([str(_REPO / "bridge"), str(_REPO), env.get("PYTHONPATH", "")])
     env.update({
         "RETINA_GAME_CAPTURE_ENABLED": "true",
-        "RETINA_GAME_CAPTURE_MONITOR": str(a.monitor),   # monitor capture (works for fullscreen Remote Play)
+        "RETINA_GAME_CAPTURE_MONITOR": str(a.monitor),   # 0 = window-name capture ("Remote Play"); >=1 = full monitor
         "RETINA_CAPTURE_BURST_ENABLED": "false",         # CONTINUOUS capture (start() called) — guaranteed
         "RETINA_CAPTURE_MIN_INTERVAL_MS": str(a.min_interval_ms),  # throttle (~30fps) to limit observer-effect lag
         "RETINA_DIAG_EVERY": str(a.diag_every),          # dense sampling -> enough calibration samples
@@ -102,7 +102,8 @@ def cmd_start(a) -> int:
         env["RETINA_KILLFEED_INLINE_ENABLED"] = "true"
     if getattr(a, "session_anchor", False):              # per-session feed-cut anchor auto-generation (killer-slot)
         env["RETINA_SESSION_ANCHOR_ENABLED"] = "true"
-    if getattr(a, "ocr_bootstrap", False):               # OCR-verified bootstrap catch (rendering-independent)
+        env["RETINA_OCR_BOOTSTRAP_ENABLED"] = "true"    # auto-on with session-anchor: rendering-family-agnostic
+    if getattr(a, "ocr_bootstrap", False):               # explicit flag is now a no-op (always on with --session-anchor)
         env["RETINA_OCR_BOOTSTRAP_ENABLED"] = "true"
     if getattr(a, "dense_classify", False):              # W.2 dense-tail: tighter in-window classify cadence
         env["RETINA_DENSE_CLASSIFY_ENABLED"] = "true"
@@ -380,7 +381,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="detached retina capture daemon")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("start"); s.set_defaults(fn=cmd_start)
-    s.add_argument("--label", default="genuine"); s.add_argument("--monitor", type=int, default=1)
+    s.add_argument("--label", default="genuine"); s.add_argument("--monitor", type=int, default=0,
+                   help="0=window-name capture ('Remote Play' — default; immune to monitor layout); >=1=full monitor")
     s.add_argument("--diag-every", type=int, default=4, help="emit RGC diag every N records (dense=lower)")
     s.add_argument("--min-interval-ms", type=int, default=33, help="WGC capture rate cap (ms); 33=~30fps, "
                    "limits the observer-effect lag of continuous capture")
