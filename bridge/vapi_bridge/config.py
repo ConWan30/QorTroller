@@ -2168,6 +2168,21 @@ class Config:
     retina_dense_classify_min_gap_ms: float = field(
         default_factory=lambda: float(os.environ.get("RETINA_DENSE_CLASSIFY_MIN_GAP_MS", "50"))
     )
+    # Phase C classify-burst (docs/phase-c-classify-sampling-bottleneck-mitigation-2026-07-05.md):
+    # dense-classify's min_gap only helps if the main _session_loop calls maybe_classify_in_window
+    # more than once per its own interval (dualshock_record_interval_s, default 1.0s) -- it does not.
+    # This is a SEPARATE mitigation: an independent async task polls maybe_classify_in_window at
+    # retina_classify_burst_poll_s cadence for retina_classify_burst_duration_ms after an R2 rising
+    # edge, armed alongside (not instead of) the existing combat-trigger detection.
+    retina_classify_burst_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_CLASSIFY_BURST_ENABLED", False)
+    )
+    retina_classify_burst_duration_ms: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_CLASSIFY_BURST_DURATION_MS", "5000"))
+    )
+    retina_classify_burst_poll_s: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_CLASSIFY_BURST_POLL_S", "0.15"))
+    )
     retina_session_anchor_archive_dir: str = field(   # R4: session anchor PNG+SHA archived here (gitignored)
         default_factory=lambda: os.environ.get("RETINA_SESSION_ANCHOR_ARCHIVE_DIR", "retina_kf_anchors")
     )

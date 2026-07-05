@@ -110,10 +110,12 @@ otherwise, same discipline as `--dense-classify`/`--ocr-bootstrap`.
 
 ## 6. Open questions for review (do not resolve unilaterally)
 
-- **Burst duration**: 5000ms (proposed, matches R2_WINDOW_MS hi) — or should it re-arm/extend on
-  each subsequent rising edge within the burst (sustained fire keeps it open), mirroring
-  `mark_onset`'s own "sustained fire keeps the window open" semantics? Recommend yes (extend, not
-  restart), for consistency with how the classify window itself already behaves.
+- **Burst duration — RESOLVED 2026-07-05**: 5000ms per rising edge, and the burst **extends** (not
+  restarts) on each subsequent rising edge within the window — `arm(now_ms)` sets
+  `self._armed_until_ms = now_ms + duration_ms` unconditionally on every trigger call, which
+  naturally extends forward on sustained fire without needing separate restart/extend branches.
+  This matches `mark_onset`'s own "sustained fire keeps the window open" semantics exactly, keeping
+  the classify-window state and the burst state consistent with each other.
 - **Poll interval**: 150ms proposed (comfortably above `classify_panel`'s own ~100ms cost, so the
   burst task never queues up faster than classify can actually complete) — is this the right
   balance, or should it be tied to `RETINA_DENSE_CLASSIFY_MIN_GAP_MS` instead of a new independent

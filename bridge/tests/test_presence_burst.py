@@ -6,7 +6,7 @@ does not auto-loop.
 """
 import asyncio
 
-from vapi_bridge.presence_burst import PresenceBurstController, should_combat_fire
+from bridge.vapi_bridge.presence_burst import PresenceBurstController, should_combat_fire
 
 
 class MockRGC:

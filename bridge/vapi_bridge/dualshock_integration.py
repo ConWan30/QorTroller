@@ -438,6 +438,9 @@ class DualShockTransport:
         # A/B (2026-06-26) confirmed Remote Play yields a live, biometrically-rich stream to couple against.
         self._retina_game_capture = None
         self._presence_burst = None
+        self._classify_burst = None
+        self._prev_r2_classify_burst = 0        # R2 edge state for the classify-burst trigger (independent
+                                                 # of presence-burst's own _prev_r2_combat state/gate)
         if getattr(cfg, "retina_game_capture_enabled", False):
             try:
                 from .qortroller_retina_capture import RetinaGameCapture
@@ -504,6 +507,18 @@ class DualShockTransport:
                     log.warning("QorTroller Retina Game Capture failed to start (window not found?) — abstaining")
             except Exception as _rgc_exc:
                 log.debug("QorTroller Retina Game Capture init skipped (fail-open): %s", _rgc_exc)
+        # Phase C classify-burst (docs/phase-c-classify-sampling-bottleneck-mitigation-2026-07-05.md):
+        # independent of presence-burst — works whether or not retina_capture_burst_enabled is on, since
+        # it densifies classify sampling within an ALREADY-capturing session, not WGC start/stop toggling.
+        if self._retina_game_capture is not None and getattr(cfg, "retina_classify_burst_enabled", False):
+            from .classify_burst import ClassifyBurstController
+            self._classify_burst = ClassifyBurstController(
+                self._retina_game_capture,
+                duration_ms=float(getattr(cfg, "retina_classify_burst_duration_ms", 5000.0)),
+                poll_s=float(getattr(cfg, "retina_classify_burst_poll_s", 0.15)))
+            log.info("QorTroller classify-burst armed on R2 rising edge (duration=%.0fms poll=%.2fs)",
+                     float(getattr(cfg, "retina_classify_burst_duration_ms", 5000.0)),
+                     float(getattr(cfg, "retina_classify_burst_poll_s", 0.15)))
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -876,6 +891,13 @@ class DualShockTransport:
         if getattr(self, "_presence_burst", None) is not None:
             asyncio.create_task(self._presence_burst.run())
             log.info("QorTroller Retina presence-burst loop spawned")
+
+        # Phase C classify-burst loop — independent of presence-burst; densifies classify sampling
+        # within an active R2 window instead of waiting on _session_loop's own ~1Hz cadence. No-op
+        # unless retina_classify_burst_enabled.
+        if getattr(self, "_classify_burst", None) is not None:
+            asyncio.create_task(self._classify_burst.run())
+            log.info("QorTroller classify-burst loop spawned")
 
         # On-chain device registration — idempotent, runs once per identity.
         # Skipped on subsequent startups when is_chain_registered is True.
@@ -1827,6 +1849,20 @@ class DualShockTransport:
                                      max(0.0, float(getattr(self._cfg, "retina_combat_cooldown_s", 18.0))
                                          - (time.time() - self._last_combat_burst_ts)))
                         self._prev_r2_combat = _r2
+                    # Phase C classify-burst arm: an R2 rising edge arms/extends the classify-burst window
+                    # (independent of presence-burst — self._classify_burst is None unless
+                    # retina_classify_burst_enabled is on, regardless of retina_capture_burst_enabled).
+                    # Reuses the SAME rising-edge shape should_combat_fire checks (r2_now>=thr>r2_prev),
+                    # but with its own state variable — classify-burst has no cooldown/is_active gate
+                    # (unlike a WGC-toggle burst, calling arm() again mid-window is exactly the desired
+                    # "sustained fire extends the window" behavior, not something to suppress).
+                    if self._classify_burst is not None:
+                        _r2cb = int(getattr(frames[-1], "r2_trigger", 0) or 0)
+                        if (_r2cb >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40))
+                                and self._prev_r2_classify_burst
+                                < int(getattr(self._cfg, "retina_combat_r2_threshold", 40))):
+                            self._classify_burst.arm(_now_ms)
+                        self._prev_r2_classify_burst = _r2cb
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients
