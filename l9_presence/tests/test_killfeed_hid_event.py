@@ -70,7 +70,7 @@ def test_to_timed_event_is_an_input_for_the_coherence_engine():
     assert te == {"kind": "input", "type": "controller.trigger.onset", "t": 1.5, "input_caused": False}
     assert he.to_timed_event({"t_ms": None}) is None
     # the type is exactly what assess_coherence counts as a play action
-    from vapi_bridge.retina_causal_coherence import INPUT_EVENT_TYPES
+    from bridge.vapi_bridge.retina_causal_coherence import INPUT_EVENT_TYPES
     assert te["type"] in INPUT_EVENT_TYPES
 
 
@@ -78,7 +78,7 @@ def test_hid_input_explains_a_screen_outcome_measurable_latency():
     # the payoff: an r2_onset (input) precedes a killfeed AUTHORED (outcome) -> COHERENT + nearest_input_dt is
     # the cross-lobe latency. Screen outcome via the screen lobe's to_timed_event, HID via ours.
     import pytest
-    from vapi_bridge.retina_causal_coherence import (CoherenceConfig, TimedEvent, assess_coherence)
+    from bridge.vapi_bridge.retina_causal_coherence import (CoherenceConfig, TimedEvent, assess_coherence)
     from l9_presence.killfeed_screen_event import authored_screen_event, to_timed_event as screen_te
     hid = he.to_timed_event(he.hid_onset_event(t_ms=1000.0, device_ts=1, wall_ms=1000.0, l2=200))
     scr = screen_te(authored_screen_event({"verdict": "AUTHORED_PRESENT", "killer_first_ms": 1120.0,

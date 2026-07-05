@@ -1067,14 +1067,28 @@ class RetinaGameCapture:
 
     def push_l2_raw(self, wall_ms: float, ts_u32: int, l2: int) -> None:
         """Called by the RAW hidapi reader (one report per read) with the DEVICE sensor timestamp (offset 28)
-        + L2 (offset 5). Feeds the device-clock source, which unwraps + anchors to wall. This is the
-        ingestion point that survives the burst-drain — increment one of the timing fix. No-op if both the
-        ads and HID-events lobes are off (either flag ungates the raw-reader push in dualshock_integration)."""
+        + L2 (offset 5). Feeds the device-clock L2 source (l2_ads only), which unwraps + anchors to wall.
+        This is the ingestion point that survives the burst-drain — increment one of the timing fix. No-op
+        if the ads lobe is off (device_clock_l2 is None).
+
+        FOUND 2026-07-05 (Phase C C-1.1 live rig validation): this method used to ALSO feed `_hid_onset`
+        (the "R2-onset" detector) with this same L2 value — so retina_hid_events.jsonl's r2_onset events
+        were actually firing on L2 presses and never on R2. Confirmed live: with only this path wired, R2
+        presses produced zero onsets while L2 presses produced onsets immediately. Fixed by giving the HID
+        lobe its own ingestion point (push_r2_raw, below) fed the real R2 byte (raw offset 6) — see
+        dualshock_integration.py's raw reader thread, which now reads both offset 5 and offset 6."""
         if self._device_clock_l2 is not None:
             self._device_clock_l2.push_raw(wall_ms, ts_u32, l2)
             self._last_raw_l2 = int(l2)
-        if self._hid_onset is not None:                 # HID lobe: detect device-clock R2 rising edges here
-            self._hid_onset.push(wall_ms, ts_u32, l2)   # (drained to the sink off-thread by flush_hid_events)
+
+    def push_r2_raw(self, wall_ms: float, ts_u32: int, r2: int) -> None:
+        """Called by the RAW hidapi reader with the DEVICE sensor timestamp (offset 28) + R2 (raw offset 6).
+        Feeds the HID lobe's onset detector (device-clock R2 rising edges), drained to the sink off-thread
+        by flush_hid_events. No-op when the HID lobe is off (_hid_onset is None). Split out from
+        push_l2_raw 2026-07-05 — see that method's docstring for why (F found via live C-1.1 validation:
+        the detector was being fed L2's byte, not R2's)."""
+        if self._hid_onset is not None:
+            self._hid_onset.push(wall_ms, ts_u32, r2)
 
     def flush_hid_events(self) -> None:
         """Drain the HID lobe's device-clock R2-onset events to retina_hid_events.jsonl. Called once per
