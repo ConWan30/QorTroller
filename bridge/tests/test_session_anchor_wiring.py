@@ -14,7 +14,7 @@ pytest.importorskip("cv2")
 from l9_presence import killfeed_cv as kc
 from l9_presence.killfeed_inline import InlineAuthorshipMonitor
 from l9_presence.killfeed_session_anchor import SessionAnchorGenerator
-from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
 
 
 class _Res:                                          # stand-in for the classify_panel result (victim path)
@@ -97,7 +97,7 @@ def test_wired_fold_no_authored_before_promotion(tmp_path, monkeypatch):
 def test_constructor_builds_generator_only_when_flag_set(monkeypatch):
     # TURNKEY: the flag -> generator seam through the REAL __init__ (mock WgcFrameSource so no display is
     # needed). If this broke, `--session-anchor` would silently run the match with the generator OFF.
-    import vapi_bridge.qortroller_retina_capture as rc
+    import bridge.vapi_bridge.qortroller_retina_capture as rc
 
     class _FakeSource:
         def __init__(self, *a, **k):

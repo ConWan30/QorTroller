@@ -50,7 +50,7 @@ def cross_lobe_coherence(screen_events: Optional[Sequence[Mapping[str, Any]]] = 
                          window_s: Optional[float] = None) -> dict:
     """Input->outcome causal coherence over the two lobes: each screen kill-OUTCOME (killfeed AUTHORED) matched
     to a preceding HID R2-onset INPUT within the causal window (retina_causal_coherence.assess_coherence). This
-    is where the cross-lobe latency BECOMES MEASURABLE — `latencies_s` is the per-outcome nearest_input_dt
+    is where the cross-lobe latency BECOMES MEASURABLE — `nearest_preceding_latency_s` is the per-outcome nearest_input_dt
     (screen frame-capture ts minus the HID onset device-clock ts).
 
     UNCALIBRATED by construction: the causal map + window are a hypothesis, and the latency is only as good as
@@ -75,7 +75,7 @@ def cross_lobe_coherence(screen_events: Optional[Sequence[Mapping[str, Any]]] = 
         cfg = CoherenceConfig(window_s=float(window_s)) if window_s else CoherenceConfig()
         rep = assess_coherence(tes, cfg)
         d = rep.to_dict()
-        d["latencies_s"] = [round(m.nearest_input_dt, 4)
+        d["nearest_preceding_latency_s"] = [round(m.nearest_input_dt, 4)
                             for m in rep.matches if m.nearest_input_dt is not None]
         d["n_hid_inputs"] = sum(1 for t in tes if t.kind == "input")
         return d

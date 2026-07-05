@@ -40,8 +40,45 @@ def test_adjudicate_agree():
 
 def test_adjudicate_conflict_is_the_false_read_control():
     # A read an own-kill where B scored the handle in the VICTIM slot -> candidate A false read (must be 0).
+    # No geometry on either side -> FAIL-TOWARD-REVIEW: the CONFLICT label is kept, never silently downgraded.
     assert lane.adjudicate(_a(ob.OWN_KILL), _b(ob.OWN_DEATH)) == "CONFLICT_A_KILL_B_DEATH"
     assert lane.adjudicate(_a(ob.OWN_KILL), _b(ob.OTHER_ROW)) == "CONFLICT_A_KILL_B_ROSTER"
+
+
+def _ay(tax, y):
+    return {"labeler": lane.INSTR_A, "taxonomy": tax, "y_frac": y}
+
+
+def _by(tax, y):
+    return {"labeler": lane.INSTR_B, "taxonomy": tax, "is_r4": False, "y_frac": y}
+
+
+def test_adjudicate_location_gate_same_row_is_conflict():
+    # F-G1P-2: B contradicting A ON THE SAME ROW (|dy| <= half a pitch) stays a CONFLICT — the real control.
+    assert lane.adjudicate(_ay(ob.OWN_KILL, 0.30), _by(ob.OWN_DEATH, 0.31)) == "CONFLICT_A_KILL_B_DEATH"
+    assert lane.adjudicate(_ay(ob.OWN_KILL, 0.30), _by(ob.OTHER_ROW, 0.30)) == "CONFLICT_A_KILL_B_ROSTER"
+
+
+def test_adjudicate_location_gate_different_row_is_elsewhere():
+    # B's signal from a DIFFERENT row (roster at 0.97, or another feed row) = B-blindness, not suspicion.
+    # All 7 archive conflicts (2026-07-04, adjudicated TRUE) were exactly this class.
+    assert lane.adjudicate(_ay(ob.OWN_KILL, 0.30), _by(ob.OTHER_ROW, 0.97)) == "A_KILL_B_ELSEWHERE"
+    assert lane.adjudicate(_ay(ob.OWN_KILL, 0.30), _by(ob.OWN_DEATH, 0.40)) == "A_KILL_B_ELSEWHERE"
+
+
+def test_adjudicate_location_gate_double_kill_pitch_guard():
+    # Two genuinely distinct rows sit >= ONE pitch apart; the same-row tolerance is HALF a pitch, so a
+    # double-kill's adjacent rows are never bucketed as one row (operator rider on F-G1P-2).
+    assert lane.SAME_ROW_MAX_DY == lane.ROW_PITCH_YFRAC / 2.0 and 0.0 < lane.ROW_PITCH_YFRAC < 0.1
+    dy_one_pitch = lane.ROW_PITCH_YFRAC
+    assert lane.adjudicate(_ay(ob.OWN_KILL, 0.30),
+                           _by(ob.OWN_DEATH, 0.30 + dy_one_pitch)) == "A_KILL_B_ELSEWHERE"
+
+
+def test_adjudicate_location_gate_missing_y_fails_toward_review():
+    # y on only ONE side -> geometry unknown -> keep CONFLICT (a potential contradiction is never dropped).
+    a_no_y = {"labeler": lane.INSTR_A, "taxonomy": ob.OWN_KILL}
+    assert lane.adjudicate(a_no_y, _by(ob.OWN_DEATH, 0.97)) == "CONFLICT_A_KILL_B_DEATH"
 
 
 def test_adjudicate_b_gap_vs_b_miss():

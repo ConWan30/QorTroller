@@ -58,7 +58,7 @@ def test_cross_lobe_coherence_measures_input_to_outcome_latency():
     hid = [he.hid_onset_event(t_ms=1000.0), he.hid_onset_event(t_ms=2100.0), he.hid_onset_event(t_ms=3200.0)]
     d = cross_lobe_coherence(scr, hid)
     assert d["verdict"] == "COHERENT" and d["n_matched"] == 3 and d["n_hid_inputs"] == 3
-    assert d["latencies_s"] == [0.12, 0.1, 0.1]              # 1120-1000, 2200-2100, 3300-3200 ms
+    assert d["nearest_preceding_latency_s"] == [0.12, 0.1, 0.1]   # 1120-1000, 2200-2100, 3300-3200 ms
     assert d["calibration"] == "UNCALIBRATED"                # honest: hypothesis until co-capture
 
 
