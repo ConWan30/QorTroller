@@ -16,10 +16,10 @@ strict canon fails); (b) a LOOSE feed_v1 template match (score >= 0.40) to centr
 We take (b). Independence from Instrument B (template_ensemble_v1) is therefore at the VERDICT MECHANISM, not
 location: A returns OWN_KILL by READING the literal handle glyphs; B by SCORING template correlation >= 0.66.
 A resolves rows in the 0.40-0.66 band that B's verdict floor rejects — that disagreement is the independence
-payoff. The one correlated blind spot is the deep tail (feed_v1 < 0.40: A cannot even locate); the audit lane
-annotates it alongside B's R4-coverage gaps so neither reads as suspicion.  (Row-differencing, the plan's
-literal Instrument-A locator, gives a fresh/not-fresh boolean, not an (x,y) for the tight crop, and is
-unavailable on the non-sequential archive bag anyway — hence the template-locate resolution.)
+payoff. The prior correlated blind spot (feed_v1 < 0.40: A could not locate) is CLOSED by D-FUSE-loc-v2
+(2026-07-05): when the template scores below locate_threshold, _strip_scan_killer_column scans the killer
+column in 32px horizontal strips, reading glyphs directly on each — template-free, rendering-agnostic.
+(Row-differencing gives a fresh/not-fresh boolean, not an (x,y) for the tight crop — hence the strip-scan.)
 
 PURE: no bridge/session state; cv2 + pytesseract imported inside functions; FAIL-OPEN — unreadable/
 below-confidence/failing-canon -> ABSTAIN (matched=False), NEVER a guessed handle (a hallucinated handle is
@@ -100,6 +100,46 @@ def _abstain(text: str = "") -> OcrRead:
     return OcrRead(matched=False, text=text, conf=0.0, x_frac=None, y_frac=None, slot=None)
 
 
+def _strip_scan_killer_column(panel_bgr, handle_canon: str,
+                               killer_max_frac: float = DEFAULT_KILLER_MAX_FRAC,
+                               feed_region_max_yfrac: float = DEFAULT_FEED_REGION_MAX_YFRAC,
+                               upscale: int = DEFAULT_UPSCALE,
+                               strip_h: int = 32, stride: int = 16) -> Optional[OcrRead]:
+    """Rendering-agnostic locate fallback (D-FUSE-loc-v2, 2026-07-05): scan the killer column in
+    horizontal strips when killer_slot_best scores below locate_threshold.
+
+    Template-free — reads handle glyphs directly on each strip so it works on any map/rendering
+    family regardless of kill-highlight colour. Kill rows are ~32px tall; stride=16 (50% overlap)
+    ensures a row spanning a strip boundary is fully captured in at least one strip.
+
+    x_frac returned is the approximate centre of the scanned column (not OCR-position-derived).
+    The session-anchor cut quality gate (cut_killer_name_anchor column-clustering) handles small
+    offsets; a rejected cut leaves the generator in BOOTSTRAP and waits for the next kill row.
+
+    Returns an OcrRead(matched=True) on the first canon-matching strip, None if no match found."""
+    import cv2
+    h, w = panel_bgr.shape[:2]
+    feed_h = int(h * feed_region_max_yfrac)
+    # Cap x-range at 300px — killer name appears in the leftmost portion of the killer column
+    kw = min(int(w * killer_max_frac), 300)
+    if kw <= 0 or feed_h <= strip_h:
+        return None
+    for sy in range(0, feed_h - strip_h, stride):
+        strip = panel_bgr[sy:sy + strip_h, 0:kw]
+        if strip.size == 0:
+            continue
+        up = cv2.resize(strip, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
+        for engine_id in engine_chain():
+            for txt, conf in _engine_reads(engine_id, up):
+                mk = match_kind(handle_canon, txt)
+                if mk is not None:
+                    cxf = (kw / 2) / w            # approximate centre of scanned column
+                    cyf = (sy + strip_h / 2) / h  # strip midpoint in panel coordinates
+                    return OcrRead(matched=True, text=txt, conf=conf, x_frac=cxf, y_frac=cyf,
+                                   slot="killer", match_kind=mk, engine=engine_id)
+    return None
+
+
 # --- engine chain (A1 wiring, D-PKG-1 = PP-OCRv6_rec_small via rapidocr/onnxruntime) -----------------
 # DEFAULT FLIPPED 2026-07-04 (D-PKG-1 parity recheck PASSED, operator-adopted): v6 PRIMARY with tesseract
 # FALLBACK is now the default chain. Evidence (docs/dpkg1-v6-parity-2026-07-04.md): full 1,800-crop archive
@@ -168,7 +208,8 @@ DEFAULT_LOCATE_THRESHOLD = 0.40   # loose template score just to LOCATE a candid
                                   # verdict floor) — so A reads (rendering-independent) exactly the rows whose
                                   # off-rendering score B's strict threshold misses. This is A's independence
                                   # from B: shared loose location, INDEPENDENT verdict mechanism (OCR read vs
-                                  # template score). Correlated failure only in the deep tail (score < 0.40).
+                                  # template score). Score < 0.40 falls through to _strip_scan_killer_column
+                                  # (D-FUSE-loc-v2) — rendering-agnostic; the prior correlated blind spot CLOSED.
 
 
 def tight_row_ocr(panel_bgr, *, handle: Optional[str] = None, anchor=None, prev_gray=None,
@@ -193,7 +234,12 @@ def tight_row_ocr(panel_bgr, *, handle: Optional[str] = None, anchor=None, prev_
         score, cxf, cyf = killer_slot_best(panel_bgr, anchor, killer_max_frac=killer_max_frac,
                                            feed_region_max_yfrac=feed_region_max_yfrac)
         if cxf is None or cyf is None or score < locate_threshold:
-            return _abstain()
+            # D-FUSE-loc-v2 (2026-07-05): strip-scan fallback — rendering-agnostic locate when the
+            # template anchor scores below threshold (non-FK maps, different kill-highlight colour).
+            # "It shouldn't matter which map whatsoever" — operator mandate 2026-07-05.
+            fb = _strip_scan_killer_column(panel_bgr, handle_canon, killer_max_frac,
+                                           feed_region_max_yfrac, upscale)
+            return fb if fb is not None else _abstain()
         px, py = int(cxf * w), int(cyf * h)
         crop = panel_bgr[max(0, py - 16):min(h, py + 16), max(0, px - 95):min(w, px + 120)]  # handle-centred
         if crop.size == 0:

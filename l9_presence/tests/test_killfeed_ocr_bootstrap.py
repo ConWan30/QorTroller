@@ -107,3 +107,46 @@ def test_known_crop_reads_own_kill():
         pytest.skip("tesseract unavailable")
     r = ob.tight_row_ocr(cv2.imread(_KNOWN_CROP))
     assert r.matched is True and r.slot == "killer" and r.taxonomy() == ob.OWN_KILL
+
+
+def test_strip_scan_fallback_routing_no_match(monkeypatch):
+    # T-OCR-8: D-FUSE-loc-v2 routing — when killer_slot_best returns sub-threshold score, tight_row_ocr
+    # delegates to _strip_scan_killer_column; when strip-scan returns None, tight_row_ocr returns abstain.
+    # Verifies the route exists without needing real OCR.
+    panel = np.zeros((200, 400, 3), np.uint8)
+    monkeypatch.setattr(ob, "ocr_ready", lambda: True)
+    # Make template locate always fail below threshold
+    from l9_presence import killfeed_ocr_bootstrap as _ob
+    import importlib
+    import l9_presence.killfeed_cv as kcv
+    monkeypatch.setattr(kcv, "killer_slot_best", lambda *a, **kw: (0.10, None, None))
+    # Strip-scan returns None (no handle found on the blank panel)
+    monkeypatch.setattr(_ob, "_strip_scan_killer_column", lambda *a, **kw: None)
+    r = ob.tight_row_ocr(panel)
+    assert r.matched is False and r.taxonomy() == ob.UNRESOLVED
+
+
+def test_strip_scan_fallback_routing_match_returned(monkeypatch):
+    # T-OCR-9: D-FUSE-loc-v2 — when strip-scan finds a match, tight_row_ocr returns that OcrRead unchanged.
+    panel = np.zeros((200, 400, 3), np.uint8)
+    monkeypatch.setattr(ob, "ocr_ready", lambda: True)
+    import l9_presence.killfeed_cv as kcv
+    monkeypatch.setattr(kcv, "killer_slot_best", lambda *a, **kw: (0.10, None, None))
+    expected = ob.OcrRead(True, "Qortrola30", 95.0, 0.078, 0.15, "killer", ob.MATCH_EXACT, ob.ENGINE_V6)
+    import l9_presence.killfeed_ocr_bootstrap as _ob
+    monkeypatch.setattr(_ob, "_strip_scan_killer_column", lambda *a, **kw: expected)
+    r = ob.tight_row_ocr(panel)
+    assert r is expected and r.taxonomy() == ob.OWN_KILL
+
+
+def test_strip_scan_no_false_read_on_noise():
+    # T-OCR-10: zero-false-read discipline for the fallback path — random noise must not match the handle.
+    # The strip-scan reads 26 strips; none should produce a canon-matching read on random noise.
+    if not ob.ocr_ready():
+        pytest.skip("tesseract unavailable")
+    rng = np.random.default_rng(42)
+    noise = rng.integers(0, 255, (300, 600, 3), dtype=np.uint8)
+    handle_canon = ob.canon(ob.default_handle())
+    r = ob._strip_scan_killer_column(noise, handle_canon)
+    # Must abstain (None) — no hallucinated own-kills on noise
+    assert r is None or r.taxonomy() != ob.OWN_KILL
