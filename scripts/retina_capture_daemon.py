@@ -101,6 +101,7 @@ def cmd_start(a) -> int:
     if getattr(a, "killfeed_inline", False):             # R2-gated INLINE authorship classification (live)
         env["RETINA_KILLFEED_INLINE_ENABLED"] = "true"
     if getattr(a, "session_anchor", False):              # per-session feed-cut anchor auto-generation (killer-slot)
+        env["RETINA_KILLFEED_INLINE_ENABLED"] = "true"  # load _inline_monitor + _anchor (structural prereq for all below)
         env["RETINA_SESSION_ANCHOR_ENABLED"] = "true"
         env["RETINA_OCR_BOOTSTRAP_ENABLED"] = "true"    # auto-on with session-anchor: rendering-family-agnostic
         env["RETINA_CLASSIFY_BURST_ENABLED"] = "true"   # auto-on with session-anchor: R2-burst to catch transient kill rows
