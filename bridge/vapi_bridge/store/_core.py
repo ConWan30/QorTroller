@@ -318,7 +318,9 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             posca_commitment              TEXT,
             posca_structure_ok            INTEGER,
             posca_coupling_score          REAL,
-            posca_action_count            INTEGER
+            posca_action_count            INTEGER,
+            session_id                    TEXT,
+            session_display               TEXT
         )
         """,
         # Cycle-42 PoVCA columns for pre-existing nqpv_cocapture_log tables (cycle-33 created the table
@@ -329,8 +331,15 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_structure_ok INTEGER",
         "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_coupling_score REAL",
         "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_action_count INTEGER",
+        # U1 join key (2026-07-04, d-cert5 design §2.6): persisted so the PoSP wrapper (U2) can collect a
+        # SESSION's fusion rows by one field at stop time. U1 threaded the id into the in-memory PITL meta;
+        # without these columns the join key died at the DB boundary (surfaced by U2a Phase-0 verification).
+        # Same idempotent PoVCA pattern; nullable — pre-U1 rows read NULL, never inferred.
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN session_id TEXT",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN session_display TEXT",
         "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_created ON nqpv_cocapture_log(created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_device ON nqpv_cocapture_log(device_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_session ON nqpv_cocapture_log(session_id, created_at DESC)",
     ]
 
     def _init_schema(self):
@@ -4872,6 +4881,9 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         posca_structure_ok: bool | None = None,
         posca_coupling_score: float | None = None,
         posca_action_count: int | None = None,
+        # U1 join key (d-cert5 design §2.6): the shared session identifier + display, nullable.
+        session_id: str | None = None,
+        session_display: str | None = None,
     ) -> None:
         """NQPV cycle-33 (Option B): persist one co-capture row for the RETINA-EXCL-2 study corpus.
 
@@ -4889,8 +4901,9 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 INSERT INTO nqpv_cocapture_log (
                     device_id, record_hash_hex, nqpv_cco_tier, nqpv_l4l5l6_ok, nqpv_poep_present,
                     nqpv_retina_controller_signal, nqpv_retina_coupled_verdict, humanity_prob, created_at,
-                    posca_verdict, posca_commitment, posca_structure_ok, posca_coupling_score, posca_action_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    posca_verdict, posca_commitment, posca_structure_ok, posca_coupling_score, posca_action_count,
+                    session_id, session_display
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     device_id or "",
@@ -4907,25 +4920,30 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     None if posca_structure_ok is None else int(bool(posca_structure_ok)),
                     posca_coupling_score,
                     posca_action_count,
+                    session_id,
+                    session_display,
                 ),
             )
 
-    def get_nqpv_cocapture_rows(self, limit: int = 500, device_id: str | None = None) -> list[dict]:
+    def get_nqpv_cocapture_rows(self, limit: int = 500, device_id: str | None = None,
+                                session_id: str | None = None) -> list[dict]:
         """NQPV cycle-33: read co-capture rows newest-first for the study loader (load_from_rows
         consumes these directly -- the column names are the nqpv_* keys it normalizes).
-        PoVCA (Cycle 42) columns included when present (nullable; ABSTAIN if missing -> NQPV abstains)."""
+        PoVCA (Cycle 42) columns included when present (nullable; ABSTAIN if missing -> NQPV abstains).
+        U1/PoSP: optional session_id filter — collect ONE session's fusion rows by the join key."""
+        clauses, params = [], []
+        if device_id:
+            clauses.append("device_id = ?")
+            params.append(device_id)
+        if session_id:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         with self._conn() as conn:
-            if device_id:
-                rows = conn.execute(
-                    "SELECT * FROM nqpv_cocapture_log WHERE device_id = ? "
-                    "ORDER BY created_at DESC LIMIT ?",
-                    (device_id, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM nqpv_cocapture_log ORDER BY created_at DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
+            rows = conn.execute(
+                f"SELECT * FROM nqpv_cocapture_log{where} ORDER BY created_at DESC LIMIT ?",
+                (*params, limit),
+            ).fetchall()
             return [dict(r) for r in rows]
 
     def count_records(self, device_id: str | None = None) -> int:
