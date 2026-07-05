@@ -103,6 +103,7 @@ def cmd_start(a) -> int:
     if getattr(a, "session_anchor", False):              # per-session feed-cut anchor auto-generation (killer-slot)
         env["RETINA_SESSION_ANCHOR_ENABLED"] = "true"
         env["RETINA_OCR_BOOTSTRAP_ENABLED"] = "true"    # auto-on with session-anchor: rendering-family-agnostic
+        env["RETINA_CLASSIFY_BURST_ENABLED"] = "true"   # auto-on with session-anchor: R2-burst to catch transient kill rows
     if getattr(a, "ocr_bootstrap", False):               # explicit flag is now a no-op (always on with --session-anchor)
         env["RETINA_OCR_BOOTSTRAP_ENABLED"] = "true"
     if getattr(a, "dense_classify", False):              # W.2 dense-tail: tighter in-window classify cadence
