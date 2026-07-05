@@ -1090,6 +1090,16 @@ class RetinaGameCapture:
         if self._hid_onset is not None:
             self._hid_onset.push(wall_ms, ts_u32, r2)
 
+    def hid_onset_count(self) -> Optional[int]:
+        """Monotonic count of device-clock R2 onsets seen by the HID lobe (D-HIDW-1, 2026-07-05). None when
+        the lobe is off. The consumption loop compares successive values to detect R2 edges from the RAW
+        hidapi path — the byte stream that actually carries trigger input in dual-connection rigs, where the
+        pydualsense r2_trigger path missed an entire match (match 8: 111 raw onsets, windows_total=0). Same
+        reliability gap that moved l2_ads to the raw path; this is the window-opening path catching up."""
+        if self._hid_onset is None:
+            return None
+        return self._hid_onset.onset_count()
+
     def flush_hid_events(self) -> None:
         """Drain the HID lobe's device-clock R2-onset events to retina_hid_events.jsonl. Called once per
         consumption tick (off the ~1 kHz reader thread). No-op when the HID lobe is off; fail-open — an append

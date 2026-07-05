@@ -83,6 +83,12 @@ class HidOnsetDetector:
         out, self._events = self._events, []
         return out
 
+    def onset_count(self) -> int:
+        """Monotonic total of R2 onsets detected (never reset by drain_events). D-HIDW-1: the consumption
+        loop polls this to detect device-clock R2 edges for inline-window opening + classify-burst arming —
+        independent of the event buffer, so JSONL draining and edge detection cannot race each other."""
+        return int(self._onsets)
+
     def stats(self) -> dict:
         d = {"hid_onsets": self._onsets, "hid_events_buffered": len(self._events)}
         d.update({"hid_devclock_" + k: v for k, v in self._src.stats().items()})

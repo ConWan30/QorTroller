@@ -441,6 +441,8 @@ class DualShockTransport:
         self._classify_burst = None
         self._prev_r2_classify_burst = 0        # R2 edge state for the classify-burst trigger (independent
                                                  # of presence-burst's own _prev_r2_combat state/gate)
+        self._prev_hid_onset_count = 0           # D-HIDW-1: last-seen raw-path (HID lobe) R2 onset counter —
+                                                 # increases open the inline window + arm the classify-burst
         if getattr(cfg, "retina_game_capture_enabled", False):
             try:
                 from .qortroller_retina_capture import RetinaGameCapture
@@ -1768,6 +1770,15 @@ class DualShockTransport:
                         if _death_on:
                             self._retina_game_capture.feed_death_stick(
                                 _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
+                    # D-HIDW-1 (2026-07-05): device-clock R2 edge from the RAW hidapi path (HID lobe onset
+                    # counter). The pydualsense r2_trigger fields below missed an ENTIRE live match in the
+                    # dual-connection rig (match 8: 111 raw-path onsets, windows_total=0) — the same
+                    # byte-stream reliability gap that moved l2_ads to the raw path. Live-input gating is
+                    # preserved: these are real controller trigger onsets, never screen content (anti-splice
+                    # invariant intact — B2 still never opens a window). None/0 when --hid-events is off →
+                    # pydualsense path below remains the only opener (unchanged legacy behavior).
+                    _hoc = self._retina_game_capture.hid_onset_count()
+                    _hid_r2_edge = _hoc is not None and _hoc > self._prev_hid_onset_count
                     # Trigger-gated INLINE authorship: on R2 fire onset, open the classification window; each
                     # cycle, schedule ONE off-event-loop classify inside the window (single-flight). This is
                     # classification scheduling, NOT capture bursting — capture stays continuous, and nothing
@@ -1779,7 +1790,7 @@ class DualShockTransport:
                         # extends the window; maybe_classify throttles (single-flight + min-gap) so combat is
                         # sampled continuously and idle closes the window after ~5s.
                         _r2i = max((int(getattr(_f, "r2_trigger", 0) or 0) for _f in frames), default=0)
-                        if _r2i >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40)):
+                        if _r2i >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40)) or _hid_r2_edge:
                             self._retina_game_capture.mark_r2_onset(_now_ms)
                         self._retina_game_capture.maybe_classify_in_window(_now_ms)
                         # Phase 1: resolve a window that quietly went cold (no further R2 onset) so combat
@@ -1858,11 +1869,16 @@ class DualShockTransport:
                     # "sustained fire extends the window" behavior, not something to suppress).
                     if self._classify_burst is not None:
                         _r2cb = int(getattr(frames[-1], "r2_trigger", 0) or 0)
-                        if (_r2cb >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40))
-                                and self._prev_r2_classify_burst
-                                < int(getattr(self._cfg, "retina_combat_r2_threshold", 40))):
+                        if (_hid_r2_edge                    # D-HIDW-1: raw-path onset also arms the burst
+                                or (_r2cb >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40))
+                                    and self._prev_r2_classify_burst
+                                    < int(getattr(self._cfg, "retina_combat_r2_threshold", 40)))):
                             self._classify_burst.arm(_now_ms)
                         self._prev_r2_classify_burst = _r2cb
+                    # D-HIDW-1: consume the raw-path onset counter AFTER both edge uses (inline window +
+                    # burst arm) — updating between them would drop the edge for whichever runs second.
+                    if _hoc is not None:
+                        self._prev_hid_onset_count = _hoc
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients

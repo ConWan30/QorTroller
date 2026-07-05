@@ -49,6 +49,26 @@ def test_push_l2_raw_never_feeds_the_r2_onset_detector(tmp_path):
     assert _rows(sink) == []
 
 
+def test_hid_onset_count_none_when_lobe_off_monotonic_when_on(tmp_path):
+    # D-HIDW-1 (2026-07-05): hid_onset_count() is the consumption loop's raw-path R2 edge source for
+    # inline-window opening + classify-burst arming (match 8: 111 raw onsets vs windows_total=0 on the
+    # pydualsense path). Off-lobe -> None (legacy pydualsense-only behavior); on-lobe -> monotonic count
+    # that survives flush_hid_events (JSONL drain and edge detection must not race each other).
+    rgc_off = RetinaGameCapture("Remote Play")
+    assert rgc_off.hid_onset_count() is None
+    sink = str(tmp_path / "hid.jsonl")
+    rgc = RetinaGameCapture("Remote Play", hid_events_enabled=True, hid_events_log_path=sink)
+    assert rgc.hid_onset_count() == 0
+    for wall, r2 in [(1000.0, 0), (1010.0, 200), (1020.0, 200)]:   # one rising edge
+        rgc.push_r2_raw(wall, int(wall * 3000.0) & 0xFFFFFFFF, r2)
+    assert rgc.hid_onset_count() == 1
+    rgc.flush_hid_events()                                    # JSONL drain must not consume the counter
+    assert rgc.hid_onset_count() == 1
+    for wall, r2 in [(1030.0, 0), (1040.0, 200)]:             # release -> second edge
+        rgc.push_r2_raw(wall, int(wall * 3000.0) & 0xFFFFFFFF, r2)
+    assert rgc.hid_onset_count() == 2
+
+
 def test_hid_events_detects_device_clock_onset_on_r2_and_flushes_once(tmp_path):
     sink = str(tmp_path / "hid.jsonl")
     rgc = RetinaGameCapture("Remote Play", hid_events_enabled=True, hid_events_log_path=sink)

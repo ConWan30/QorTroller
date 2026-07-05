@@ -37,6 +37,19 @@ def test_rising_edge_fires_once_per_crossing_device_clock():
     assert det.stats()["hid_onsets"] == 2
 
 
+def test_onset_count_monotonic_survives_drain():
+    # D-HIDW-1: onset_count() is the window-opening edge source for the consumption loop — it must be
+    # monotonic and NOT reset by drain_events(), so JSONL draining and edge detection cannot race.
+    det = he.HidOnsetDetector(threshold=40)
+    assert det.onset_count() == 0
+    _feed(det, [(1000.0, 0, 0), (1010.0, 30000, 200)])       # one rising edge
+    assert det.onset_count() == 1
+    det.drain_events()                                        # JSONL drain must not consume the counter
+    assert det.onset_count() == 1
+    _feed(det, [(1020.0, 60000, 0), (1030.0, 90000, 200)])   # second edge after release
+    assert det.onset_count() == 2
+
+
 def test_no_spurious_onset_on_a_mid_hold_start():
     # a session that starts while L2 is ALREADY down must NOT fabricate an onset (we only catch edges we saw)
     det = he.HidOnsetDetector(threshold=40)
