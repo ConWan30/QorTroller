@@ -27,8 +27,9 @@ Default-off (retina_classify_burst_enabled). No FROZEN-v1 / 228B PoAC / chain / 
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
-from typing import Any
+from typing import Any, Optional
 
 
 class ClassifyBurstController:
@@ -58,7 +59,13 @@ class ClassifyBurstController:
     async def run(self) -> None:
         """Poll at poll_s cadence, calling maybe_classify_in_window while armed. Fail-open: any
         single call raising never breaks the loop. Runs for the lifetime of the session (started
-        once via asyncio.create_task, like presence_burst's run()); stop() ends it at teardown."""
+        once via asyncio.create_task, like presence_burst's run()); stop() ends it at teardown.
+
+        D-BURST-2 CAVEAT (2026-07-05, match 9): this asyncio variant's timers run at the EVENT
+        LOOP's effective cadence, not poll_s. Live-measured: the session loop iterated at p50=3.0s
+        under game load, so `await asyncio.sleep(0.15)` fired every ~3s and the burst contributed
+        ~zero extra classifications (14 total across 7 windows — bare loop cadence). Kept for
+        API compatibility; production uses start_thread(), which asyncio starvation cannot touch."""
         self._running = True
         while self._running:
             now_ms = time.time() * 1000.0
@@ -68,6 +75,37 @@ class ClassifyBurstController:
                 except Exception:  # noqa: BLE001 — the burst loop must survive any single failure
                     pass
             await asyncio.sleep(self._poll_s)
+
+    def start_thread(self) -> None:
+        """D-BURST-2 (2026-07-05): run the burst on a DEDICATED daemon thread instead of the event
+        loop. Motivation is measured, not theoretical — match 9 showed the loop starved to ~3s
+        iterations under live capture load, degrading every asyncio timer (including this burst's
+        150ms poll) to loop cadence; the OCR-bootstrap chain, which only runs inside classify
+        calls, got 14 chances for 15 kills. A time.sleep thread polls at TRUE poll_s regardless of
+        loop health (same discipline as the codebase's sync-work-off-the-loop invariant).
+
+        The thread prefers the RGC's thread-native entry `classify_in_window_sync` (runs the
+        already-synchronous classify worker directly, lock-guarded admission); it falls back to
+        maybe_classify_in_window only if the sync entry is absent (that path schedules onto the
+        possibly-starved loop, so the fallback preserves function but not density). Idempotent —
+        a second call while the thread lives is a no-op. stop() ends the thread loop."""
+        if getattr(self, "_thread", None) is not None and self._thread.is_alive():
+            return
+        self._running = True
+        self._thread: Optional[threading.Thread] = threading.Thread(
+            target=self._thread_loop, name="vapi-classify-burst", daemon=True)
+        self._thread.start()
+
+    def _thread_loop(self) -> None:
+        entry = getattr(self._rgc, "classify_in_window_sync", None) or self._rgc.maybe_classify_in_window
+        while self._running:
+            now_ms = time.time() * 1000.0
+            if now_ms < self._armed_until_ms:
+                try:
+                    entry(now_ms)
+                except Exception:  # noqa: BLE001 — the burst loop must survive any single failure
+                    pass
+            time.sleep(self._poll_s)
 
     def stop(self) -> None:
         self._running = False
