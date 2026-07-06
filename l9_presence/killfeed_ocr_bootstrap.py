@@ -181,12 +181,14 @@ def _v6_engine():
 
 
 def engine_chain():
-    """The ordered recognizer chain per RETINA_OCR_ENGINE. DEFAULT (unset) = v6 primary -> tesseract
-    fallback (D-PKG-1 parity-adopted 2026-07-04); "tesseract" forces the legacy tesseract-only chain."""
+    """The ordered recognizer chain per RETINA_OCR_ENGINE. DEFAULT (unset) = v6 sole engine.
+    D-PKG-1 (2026-07-04, 2411-crop parity): v6 recall >= tesseract in every session, 100% per-record
+    v6 attribution — tesseract never supplied a read that v6 missed; removed from default chain.
+    RETINA_OCR_ENGINE=tesseract is the legacy escape hatch (forced tesseract-only)."""
     pref = os.environ.get("RETINA_OCR_ENGINE", "rapidocr_v6").strip().lower()
     if pref in ("tesseract", ENGINE_TESS):
         return (ENGINE_TESS,)              # legacy escape hatch — the pre-flip live path
-    return (ENGINE_V6, ENGINE_TESS)        # v6 primary -> tesseract fallback (human_oracle is caller-side)
+    return (ENGINE_V6,)                    # v6 sole engine — tesseract adds 122ms/call for zero proven benefit
 
 
 def _engine_reads(engine_id, up):

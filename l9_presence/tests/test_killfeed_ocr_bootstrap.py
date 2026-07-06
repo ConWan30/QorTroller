@@ -77,15 +77,15 @@ def test_c2_match_kind_exact_vs_fuzzy_vs_reject():
     assert ob.match_kind(h, "") is None and ob.match_kind("", "Qortrola30") is None
 
 
-def test_engine_chain_default_v6_tesseract_escape_hatch(monkeypatch):
-    # D-PKG-1 FLIP (2026-07-04, parity-adopted): DEFAULT chain is v6-primary + tesseract fallback.
-    # Evidence: 1,800-crop both-engine parity — v6 recall >= tesseract in all 3 sessions (seg3 13v5 on the
-    # rendering tesseract was 99.2% blind to), zero false reads, 100% per-record v6 attribution.
-    # RETINA_OCR_ENGINE=tesseract remains the legacy escape hatch (the pre-flip live path).
+def test_engine_chain_default_v6_only_tesseract_escape_hatch(monkeypatch):
+    # D-PKG-1 COMPLETE (2026-07-06): DEFAULT chain is v6-only. Evidence: 2,411-crop parity across all
+    # sessions — v6 recall >= tesseract in every session, 100% per-record v6 attribution (tesseract never
+    # supplied a read v6 missed). Tesseract fallback removed from default; RETINA_OCR_ENGINE=tesseract is
+    # the sole legacy escape hatch for operator override.
     monkeypatch.delenv("RETINA_OCR_ENGINE", raising=False)
-    assert ob.engine_chain() == (ob.ENGINE_V6, ob.ENGINE_TESS)
+    assert ob.engine_chain() == (ob.ENGINE_V6,)
     monkeypatch.setenv("RETINA_OCR_ENGINE", "rapidocr_v6")
-    assert ob.engine_chain() == (ob.ENGINE_V6, ob.ENGINE_TESS)
+    assert ob.engine_chain() == (ob.ENGINE_V6,)
     monkeypatch.setenv("RETINA_OCR_ENGINE", "tesseract")
     assert ob.engine_chain() == (ob.ENGINE_TESS,)
 
@@ -153,11 +153,11 @@ def test_engine_ids_restricts_strip_scan_to_v6_never_tesseract(monkeypatch):
     r = ob._strip_scan_killer_column(panel, "q0rtr01a30", engine_ids=(ob.ENGINE_V6,))
     assert r is None
     assert calls and set(calls) == {ob.ENGINE_V6}           # every strip ran v6 ONLY
-    # default (engine_ids=None) keeps the full chain for the offline audit lane
+    # default (engine_ids=None) uses the global engine_chain() — v6-only after D-PKG-1 complete
     calls.clear()
     monkeypatch.delenv("RETINA_OCR_ENGINE", raising=False)
     ob._strip_scan_killer_column(panel, "q0rtr01a30")
-    assert set(calls) == {ob.ENGINE_V6, ob.ENGINE_TESS}     # offline default: both engines still run
+    assert set(calls) == {ob.ENGINE_V6}                     # global default is v6-only; tesseract=escape-hatch only
 
 
 def test_engine_ids_threads_through_tight_row_ocr(monkeypatch):
