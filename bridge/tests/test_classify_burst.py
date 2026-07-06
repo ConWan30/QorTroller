@@ -98,6 +98,83 @@ def test_fail_open_rgc_exception_never_breaks_the_loop():
     _run(drive())                      # no exception propagates out of the loop -> pass
 
 
+class MockRGCSync(MockRGC):
+    """RGC exposing the D-BURST-2 thread-native entry; records which entry was used."""
+
+    def __init__(self, *, raises=False):
+        super().__init__(raises=raises)
+        self.sync_calls = []
+
+    def classify_in_window_sync(self, now_ms):
+        if self._raises:
+            raise RuntimeError("boom")
+        self.sync_calls.append(now_ms)
+
+
+def test_thread_mode_polls_true_cadence_with_no_event_loop_at_all():
+    # D-BURST-2 core guarantee: the threaded burst polls at TRUE poll_s independent of asyncio —
+    # this test runs with NO event loop anywhere, the exact condition that starves the async
+    # variant (match 9: loop p50=3.0s degraded the 150ms timer to ~zero extra classifications).
+    import time
+    rgc = MockRGCSync()
+    c = ClassifyBurstController(rgc, duration_ms=200.0, poll_s=0.02)
+    c.start_thread()
+    try:
+        c.arm(time.time() * 1000.0)
+        time.sleep(0.3)                       # past the 200ms armed window
+        n_during = len(rgc.sync_calls)
+        assert n_during >= 4                  # dense polling actually happened (~10 expected)
+        assert rgc.calls == []                # thread used the sync entry, never the async one
+        time.sleep(0.15)                      # well past expiry
+        assert len(rgc.sync_calls) == n_during   # no further calls after the window closed
+    finally:
+        c.stop()
+
+
+def test_thread_mode_falls_back_to_async_entry_when_sync_absent():
+    # An RGC without classify_in_window_sync still works (function preserved, density best-effort).
+    import time
+    rgc = MockRGC()
+    c = ClassifyBurstController(rgc, duration_ms=150.0, poll_s=0.02)
+    c.start_thread()
+    try:
+        c.arm(time.time() * 1000.0)
+        time.sleep(0.25)
+        assert len(rgc.calls) >= 3            # fallback entry was polled while armed
+    finally:
+        c.stop()
+
+
+def test_thread_mode_start_is_idempotent_and_stop_ends_it():
+    import time
+    rgc = MockRGCSync()
+    c = ClassifyBurstController(rgc, duration_ms=5000.0, poll_s=0.02)
+    c.start_thread()
+    t1 = c._thread
+    c.start_thread()                          # second start while alive -> no new thread
+    assert c._thread is t1
+    c.arm(time.time() * 1000.0)
+    time.sleep(0.08)
+    c.stop()
+    time.sleep(0.08)
+    n_after_stop = len(rgc.sync_calls)
+    time.sleep(0.1)
+    assert len(rgc.sync_calls) == n_after_stop   # zero further calls once stopped
+
+
+def test_thread_mode_fail_open_rgc_exception_never_kills_the_thread():
+    import time
+    rgc = MockRGCSync(raises=True)
+    c = ClassifyBurstController(rgc, duration_ms=200.0, poll_s=0.02)
+    c.start_thread()
+    try:
+        c.arm(time.time() * 1000.0)
+        time.sleep(0.1)                       # several raising ticks
+        assert c._thread.is_alive()           # the thread survived every exception
+    finally:
+        c.stop()
+
+
 def test_stop_ends_the_loop():
     rgc = MockRGC()
     c = ClassifyBurstController(rgc, duration_ms=5000.0, poll_s=0.02)

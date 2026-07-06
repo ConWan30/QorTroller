@@ -894,12 +894,17 @@ class DualShockTransport:
             asyncio.create_task(self._presence_burst.run())
             log.info("QorTroller Retina presence-burst loop spawned")
 
-        # Phase C classify-burst loop — independent of presence-burst; densifies classify sampling
-        # within an active R2 window instead of waiting on _session_loop's own ~1Hz cadence. No-op
-        # unless retina_classify_burst_enabled.
+        # Phase C classify-burst — independent of presence-burst; densifies classify sampling
+        # within an active R2 window. D-BURST-2 (2026-07-05): runs on a DEDICATED THREAD, not the
+        # event loop — match 9 measured the loop starving to p50=3.0s iterations under live game
+        # load, degrading the asyncio burst's 150ms timer to loop cadence (14 classifications
+        # across 7 windows = zero burst contribution; the OCR bootstrap only runs inside classify
+        # calls, so 15 kills got 14 chances). The thread polls at true poll_s and calls the RGC's
+        # thread-native classify_in_window_sync (lock-guarded admission, same single-flight/
+        # min-gap gates). No-op unless retina_classify_burst_enabled.
         if getattr(self, "_classify_burst", None) is not None:
-            asyncio.create_task(self._classify_burst.run())
-            log.info("QorTroller classify-burst loop spawned")
+            self._classify_burst.start_thread()
+            log.info("QorTroller classify-burst THREAD spawned (loop-starvation-immune)")
 
         # On-chain device registration — idempotent, runs once per identity.
         # Skipped on subsequent startups when is_chain_registered is True.

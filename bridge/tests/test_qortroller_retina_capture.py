@@ -390,3 +390,76 @@ def test_ads_tripwire_clean_read_does_not_trip(tmp_path):
         rgc._last_raw_l2 = raw
         rgc.crosscheck_l2(pyds, 1000.0)
     assert rgc.ads_tripwire_status().get("tripped") is False
+
+
+# --- D-BURST-2: thread-native classify entry (classify_in_window_sync) ------------------------------
+class _AdmitMonitor:
+    """Minimal InlineAuthorshipMonitor stand-in: admits once, then reports inflight until end()."""
+
+    def __init__(self, admit=True):
+        self._admit = admit
+        self._inflight = False
+        self.begun, self.ended = 0, 0
+
+    def should_classify(self, now_ms):
+        return self._admit and not self._inflight
+
+    def begin(self, now_ms):
+        self._inflight = True
+        self.begun += 1
+
+    def end(self):
+        self._inflight = False
+        self.ended += 1
+
+
+def _mk_sync_rgc(tmp_path, monitor):
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", capture_dir=str(tmp_path),
+                            panel_roi="0.0,0.28,0.32,0.67")
+    rgc._inline_monitor = monitor
+    rgc._anchor = object()                                   # sentinel: anchor present
+    rgc._source._panel_bgr = np.zeros((20, 30, 3), np.uint8)
+    return rgc
+
+
+def test_classify_in_window_sync_runs_worker_in_calling_thread(tmp_path):
+    # D-BURST-2: the sync entry runs the (already-synchronous) worker DIRECTLY — no asyncio, no
+    # event loop anywhere in this test. begin/end bracket the call (single-flight preserved).
+    import threading
+    mon = _AdmitMonitor()
+    rgc = _mk_sync_rgc(tmp_path, mon)
+    seen = []
+    rgc._inline_classify_worker = lambda bgr, now_ms: seen.append(threading.current_thread().name)
+    rgc.classify_in_window_sync(1000.0)
+    assert seen and seen[0] == threading.current_thread().name   # ran HERE, synchronously
+    assert mon.begun == 1 and mon.ended == 1
+
+
+def test_classify_in_window_sync_gates_no_monitor_no_panel_no_admission(tmp_path):
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    # no inline monitor -> no-op, never raises
+    bare = RetinaGameCapture("Remote Play", capture_dir=str(tmp_path),
+                             panel_roi="0.0,0.28,0.32,0.67")
+    bare.classify_in_window_sync(1000.0)
+    # monitor present but should_classify False (inflight/min-gap/window) -> worker NOT called
+    mon = _AdmitMonitor(admit=False)
+    rgc = _mk_sync_rgc(tmp_path, mon)
+    rgc._inline_classify_worker = lambda *a: (_ for _ in ()).throw(AssertionError("must not run"))
+    rgc.classify_in_window_sync(1000.0)
+    assert mon.begun == 0
+    # panel missing -> no-op before admission
+    mon2 = _AdmitMonitor()
+    rgc2 = _mk_sync_rgc(tmp_path, mon2)
+    rgc2._source._panel_bgr = None
+    rgc2.classify_in_window_sync(1000.0)
+    assert mon2.begun == 0
+
+
+def test_classify_in_window_sync_end_fires_even_when_worker_raises(tmp_path):
+    # fail-open: a raising worker must still release single-flight (end()), never propagate.
+    mon = _AdmitMonitor()
+    rgc = _mk_sync_rgc(tmp_path, mon)
+    rgc._inline_classify_worker = lambda *a: (_ for _ in ()).throw(RuntimeError("boom"))
+    rgc.classify_in_window_sync(1000.0)                      # no raise
+    assert mon.begun == 1 and mon.ended == 1                 # inflight released

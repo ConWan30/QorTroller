@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 import time
 from collections import deque
 from typing import Optional
@@ -607,6 +608,10 @@ class RetinaGameCapture:
         self._composite_log_path = str(composite_log_path or "retina_kf_composite.jsonl")
         self._r2_threshold = int(r2_threshold)
         self._inline_logged = False
+        # D-BURST-2: classify admission is now reachable from TWO threads (event loop via
+        # maybe_classify_in_window + the burst thread via classify_in_window_sync); the lock makes
+        # the should_classify->begin sequence atomic so single-flight cannot double-admit.
+        self._inline_admission_lock = threading.Lock()
         if self._inline_enabled:
             try:
                 from l9_presence.killfeed_cv import (
@@ -667,7 +672,6 @@ class RetinaGameCapture:
         self._death_logged = False
         if self._death_enabled:
             try:
-                import threading
                 from l9_presence.killfeed_inline import DeathWindowMonitor
                 self._death_monitor = DeathWindowMonitor(window_ms=float(death_window_ms),
                                                          noise_floor=float(death_noise_floor))
@@ -843,16 +847,44 @@ class RetinaGameCapture:
         + min-gap bounded. Called per consumption cycle. No work is added to the WGC frame callback."""
         if self._inline_monitor is None or self._anchor is None:
             return
-        if not self._inline_monitor.should_classify(float(now_ms)):
+        bgr = getattr(self._source, "_panel_bgr", None)
+        if bgr is None:
+            return
+        with self._inline_admission_lock:          # D-BURST-2: atomic vs the burst thread's admission
+            if not self._inline_monitor.should_classify(float(now_ms)):
+                return
+            self._inline_monitor.begin(float(now_ms))
+        try:
+            import asyncio
+            asyncio.create_task(self._inline_classify(bgr, float(now_ms)))
+        except RuntimeError:                       # no running loop (non-async caller) -> abstain, unblock
+            self._inline_monitor.end()
+
+    def classify_in_window_sync(self, now_ms: float) -> None:
+        """Thread-native classify entry (D-BURST-2, 2026-07-05): identical gates to
+        maybe_classify_in_window, but runs the (already-synchronous) classify worker DIRECTLY in
+        the calling thread — no asyncio anywhere on the path. Built for the threaded classify-burst:
+        the asyncio burst was armed correctly in match 9 yet contributed ~zero classifications,
+        because the event loop starved to p50=3.0s iterations under live capture load and every
+        loop timer (including the burst's 150ms sleep) degraded to that cadence. The OCR-bootstrap
+        chain runs ONLY inside classify calls, so classify density IS bootstrap opportunity — 15
+        kills got 14 chances. A time.sleep burst thread calling this entry polls at true cadence
+        regardless of loop health. Admission is lock-guarded against the loop path; single-flight
+        and min-gap semantics are unchanged (the monitor decides, same as always)."""
+        if self._inline_monitor is None or self._anchor is None:
             return
         bgr = getattr(self._source, "_panel_bgr", None)
         if bgr is None:
             return
-        try:
-            import asyncio
+        with self._inline_admission_lock:
+            if not self._inline_monitor.should_classify(float(now_ms)):
+                return
             self._inline_monitor.begin(float(now_ms))
-            asyncio.create_task(self._inline_classify(bgr, float(now_ms)))
-        except RuntimeError:                       # no running loop (non-async caller) -> abstain, unblock
+        try:
+            self._inline_classify_worker(bgr, float(now_ms))
+        except Exception:  # noqa: BLE001 — inline classify must never break the burst thread
+            pass
+        finally:
             self._inline_monitor.end()
 
     async def _inline_classify(self, bgr, now_ms: float) -> None:
