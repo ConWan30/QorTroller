@@ -139,6 +139,48 @@ def test_strip_scan_fallback_routing_match_returned(monkeypatch):
     assert r is expected and r.taxonomy() == ob.OWN_KILL
 
 
+def test_engine_ids_restricts_strip_scan_to_v6_never_tesseract(monkeypatch):
+    # T-OCR-11 (D-BURST-3): with engine_ids=(ENGINE_V6,), the strip-scan must NEVER invoke tesseract —
+    # the tesseract-per-strip fallback measured 31.4s on a no-match frame (26 strips x ~1.2s both
+    # polarities), which single-flight turned into ~1 classify per 65s live (match 10b). The live
+    # bootstrap is v6-only; this pins that the restriction actually reaches _engine_reads.
+    calls = []
+    def _fake_reads(engine_id, up):
+        calls.append(engine_id)
+        return iter(())                                     # no reads -> scan continues, returns None
+    monkeypatch.setattr(ob, "_engine_reads", _fake_reads)
+    panel = np.zeros((300, 600, 3), np.uint8)
+    r = ob._strip_scan_killer_column(panel, "q0rtr01a30", engine_ids=(ob.ENGINE_V6,))
+    assert r is None
+    assert calls and set(calls) == {ob.ENGINE_V6}           # every strip ran v6 ONLY
+    # default (engine_ids=None) keeps the full chain for the offline audit lane
+    calls.clear()
+    monkeypatch.delenv("RETINA_OCR_ENGINE", raising=False)
+    ob._strip_scan_killer_column(panel, "q0rtr01a30")
+    assert set(calls) == {ob.ENGINE_V6, ob.ENGINE_TESS}     # offline default: both engines still run
+
+
+def test_engine_ids_threads_through_tight_row_ocr(monkeypatch):
+    # T-OCR-12 (D-BURST-3): tight_row_ocr forwards engine_ids to BOTH its tight-crop chain and the
+    # strip-scan fallback (locate-fail path), so the live v6-only bound holds on every branch.
+    calls = []
+    def _fake_reads(engine_id, up):
+        calls.append(engine_id)
+        return iter(())
+    monkeypatch.setattr(ob, "ocr_ready", lambda: True)
+    monkeypatch.setattr(ob, "_engine_reads", _fake_reads)
+    import l9_presence.killfeed_cv as kcv
+    # locate-FAIL branch -> strip-scan fallback
+    monkeypatch.setattr(kcv, "killer_slot_best", lambda *a, **kw: (0.10, None, None))
+    ob.tight_row_ocr(np.zeros((300, 600, 3), np.uint8), engine_ids=(ob.ENGINE_V6,))
+    assert calls and set(calls) == {ob.ENGINE_V6}
+    # locate-PASS branch -> tight-crop chain
+    calls.clear()
+    monkeypatch.setattr(kcv, "killer_slot_best", lambda *a, **kw: (0.80, 0.15, 0.30))
+    ob.tight_row_ocr(np.zeros((300, 600, 3), np.uint8), engine_ids=(ob.ENGINE_V6,))
+    assert calls and set(calls) == {ob.ENGINE_V6}
+
+
 def test_strip_scan_no_false_read_on_noise():
     # T-OCR-10: zero-false-read discipline for the fallback path — random noise must not match the handle.
     # The strip-scan reads 26 strips; none should produce a canon-matching read on random noise.
