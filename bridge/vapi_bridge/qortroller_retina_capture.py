@@ -1016,8 +1016,15 @@ class RetinaGameCapture:
     def _ocr_bootstrap_read(self, bgr):
         """Rendering-independent bootstrap catch source: OCR the panel for a killer-slot own-handle read.
         Called only from the BOOTSTRAP branch of _session_anchor_fold (itself off the event loop via
-        to_thread), so the ~1-2s OCR is a once-per-cold-start cost, not per-frame — and it stops entirely
-        once the generator promotes. Fail-open -> None (never breaks the fold)."""
+        to_thread), so the OCR cost is a bootstrap-phase cost, not per-frame — and it stops entirely
+        once the generator promotes. Fail-open -> None (never breaks the fold).
+
+        D-BURST-3 (2026-07-05): LIVE reads are v6-ONLY. The full engine chain's tesseract-per-strip
+        fallback measured 31.4s on a no-match strip-scan frame (the common case) — single-flight then
+        capped classification at ~1/65s and the burst thread's density bought nothing (match 10b: 4
+        classifications, 4.3 min). v6-only bounds the worst case at ~550ms; D-PKG-1's parity showed v6
+        recall >= tesseract on every session, so the fallback bought marginal recall at 26x-multiplied
+        cost. The offline audit lane keeps the full chain (engine_ids=None default)."""
         try:
             from l9_presence import killfeed_ocr_bootstrap as ob
             # Geometry flows from the monitor (single source, incl. env overrides like the MP-rendering
@@ -1026,7 +1033,8 @@ class RetinaGameCapture:
             mon = self._inline_monitor
             return ob.tight_row_ocr(bgr, anchor=self._anchor,
                                     killer_max_frac=mon.killer_max_frac,
-                                    feed_region_max_yfrac=mon.feed_region_max_yfrac)
+                                    feed_region_max_yfrac=mon.feed_region_max_yfrac,
+                                    engine_ids=(ob.ENGINE_V6,))
         except Exception:  # noqa: BLE001
             return None
 

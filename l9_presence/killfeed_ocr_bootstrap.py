@@ -104,7 +104,8 @@ def _strip_scan_killer_column(panel_bgr, handle_canon: str,
                                killer_max_frac: float = DEFAULT_KILLER_MAX_FRAC,
                                feed_region_max_yfrac: float = DEFAULT_FEED_REGION_MAX_YFRAC,
                                upscale: int = DEFAULT_UPSCALE,
-                               strip_h: int = 32, stride: int = 16) -> Optional[OcrRead]:
+                               strip_h: int = 32, stride: int = 16,
+                               engine_ids: Optional[tuple] = None) -> Optional[OcrRead]:
     """Rendering-agnostic locate fallback (D-FUSE-loc-v2, 2026-07-05): scan the killer column in
     horizontal strips when killer_slot_best scores below locate_threshold.
 
@@ -116,6 +117,14 @@ def _strip_scan_killer_column(panel_bgr, handle_canon: str,
     The session-anchor cut quality gate (cut_killer_name_anchor column-clustering) handles small
     offsets; a rejected cut leaves the generator in BOOTSTRAP and waits for the next kill row.
 
+    engine_ids (D-BURST-3, 2026-07-05): the LIVE bootstrap passes (ENGINE_V6,) — v6-only. On a
+    NO-MATCH frame (the common case) every strip runs the full chain, and the tesseract fallback
+    costs ~1.2s/strip × 26 strips = 31.4s MEASURED per scan (match 10b: single-flight ate six
+    5s windows per classify; 4 classifications in 4.3 min despite a perfectly-cadenced burst
+    thread). v6-only is ~550ms worst case, and D-PKG-1's 2,411-crop parity showed v6 recall >=
+    tesseract everywhere — the fallback buys marginal recall at 50x cost, 26x multiplied here.
+    Default None keeps the FULL chain for the offline audit lane (recall > latency offline).
+
     Returns an OcrRead(matched=True) on the first canon-matching strip, None if no match found."""
     import cv2
     h, w = panel_bgr.shape[:2]
@@ -124,12 +133,13 @@ def _strip_scan_killer_column(panel_bgr, handle_canon: str,
     kw = min(int(w * killer_max_frac), 300)
     if kw <= 0 or feed_h <= strip_h:
         return None
+    chain = engine_ids if engine_ids is not None else engine_chain()
     for sy in range(0, feed_h - strip_h, stride):
         strip = panel_bgr[sy:sy + strip_h, 0:kw]
         if strip.size == 0:
             continue
         up = cv2.resize(strip, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
-        for engine_id in engine_chain():
+        for engine_id in chain:
             for txt, conf in _engine_reads(engine_id, up):
                 mk = match_kind(handle_canon, txt)
                 if mk is not None:
@@ -216,12 +226,17 @@ def tight_row_ocr(panel_bgr, *, handle: Optional[str] = None, anchor=None, prev_
                   locate_threshold: float = DEFAULT_LOCATE_THRESHOLD,
                   killer_max_frac: float = DEFAULT_KILLER_MAX_FRAC,
                   feed_region_max_yfrac: float = DEFAULT_FEED_REGION_MAX_YFRAC,
-                  upscale: int = DEFAULT_UPSCALE) -> OcrRead:
+                  upscale: int = DEFAULT_UPSCALE,
+                  engine_ids: Optional[tuple] = None) -> OcrRead:
     """THE shared bootstrap read (live bootstrap + audit-lane Instrument A). Locate the candidate killer-slot
     row via a LOOSE template match (score >= locate_threshold, below B's verdict floor), then read a TIGHT
     handle-CENTRED crop with the proven recipe (upscale + Otsu + image_to_string, both polarities) and STRICT
     full-canon match. matched=True only on a full 10-glyph read (the zero-false-read control). FAIL-OPEN:
-    engine absent / no located row / no read -> abstain (matched=False)."""
+    engine absent / no located row / no read -> abstain (matched=False).
+
+    engine_ids (D-BURST-3): None = full engine_chain() (offline audit lane — recall over latency).
+    The LIVE bootstrap passes (ENGINE_V6,) to bound worker duration — see _strip_scan_killer_column's
+    docstring for the measured 31.4s no-match cost the tesseract-per-strip fallback incurred live."""
     if panel_bgr is None or not ocr_ready():
         return _abstain()
     handle_canon = canon(handle) if handle is not None else canon(default_handle())
@@ -238,7 +253,7 @@ def tight_row_ocr(panel_bgr, *, handle: Optional[str] = None, anchor=None, prev_
             # template anchor scores below threshold (non-FK maps, different kill-highlight colour).
             # "It shouldn't matter which map whatsoever" — operator mandate 2026-07-05.
             fb = _strip_scan_killer_column(panel_bgr, handle_canon, killer_max_frac,
-                                           feed_region_max_yfrac, upscale)
+                                           feed_region_max_yfrac, upscale, engine_ids=engine_ids)
             return fb if fb is not None else _abstain()
         px, py = int(cxf * w), int(cyf * h)
         crop = panel_bgr[max(0, py - 16):min(h, py + 16), max(0, px - 95):min(w, px + 120)]  # handle-centred
@@ -247,7 +262,7 @@ def tight_row_ocr(panel_bgr, *, handle: Optional[str] = None, anchor=None, prev_
         up = cv2.resize(crop, None, fx=upscale, fy=upscale, interpolation=cv2.INTER_CUBIC)
         # engine chain (v6 primary -> tesseract fallback per RETINA_OCR_ENGINE); first canon-matching read wins,
         # stamped with its engine id + C2 match_kind (C3 provenance).
-        for engine_id in engine_chain():
+        for engine_id in (engine_ids if engine_ids is not None else engine_chain()):
             for txt, conf in _engine_reads(engine_id, up):
                 mk = match_kind(handle_canon, txt)   # C2: exact (own token) | fuzzy (substring) | None
                 if mk is not None:                   # matched set = exact ∪ fuzzy = the old substring set
