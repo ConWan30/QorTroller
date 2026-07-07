@@ -10010,7 +10010,9 @@ class VAPIPoSPRecord:
 
     def is_synchronized(self) -> bool:
         """True only when BOTH surfaces present AND BOTH id-verified."""
-        return self.verdict == "SYNCHRONIZED"
+        return (self.verdict == "SYNCHRONIZED"
+                and self.kas_id_verified is True
+                and self.fusion_id_verified is True)
 
     @classmethod
     def from_dict(cls, d: dict) -> "VAPIPoSPRecord":
