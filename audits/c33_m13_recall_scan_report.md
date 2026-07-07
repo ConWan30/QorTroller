@@ -60,20 +60,46 @@ The 30% overall recall is not a system fault — it reflects two orthogonal stru
 2. **R2 window / kill row timing gap** (3 misses): promotable clusters where the live R2 window
    and the kill row display didn't overlap with enough classify density within the window.
 
+## K=3 floor vs K=2 ceiling — decision record (2026-07-07)
+
+Two K values in the system — neither was changed:
+
+| Parameter | Location | Value | Decision |
+|-----------|----------|-------|----------|
+| `DEFAULT_K_CONSISTENCY` | `killfeed_session_anchor.py:43` | 3 | **Unchanged** — live session anchor gate |
+| Offline scan K | `scripts/c33_recall_analysis.py --k` | 3 (default) | **Unchanged** — conservative floor |
+
+**K=3 is the operative floor for the PoSP authored-kills claim.** Lowering `DEFAULT_K_CONSISTENCY`
+to 2 would risk false anchor promotion on weak crops; K=3 is more defensible for the
+QORTROLLER-POSP-v0 CANDIDATE three-surface join.
+
+**K=2 ceiling = 55.6% (15/27)** — computed from existing scan JSON without re-running the 415s
+OCR pass (`scripts/c33_recall_analysis.py --k 2`). Interpretation: 7 kills appeared exactly twice
+in the dense archive within a 5s window; all 7 had clean reads (zero noise). If the live system's
+classify stream had also seen 2+ reads on those kills within an R2 window, it could have attested
+them. The archive stream is denser than the live classify stream, so the 55.6% is a ceiling, not
+a guarantee.
+
+The K=2 analysis is available on demand (`--k 2`); the K=3 floor is the published PoSP figure.
+
 ## Live system posture
 
 | Property | Value |
 |----------|-------|
 | Precision | 100% (0 false authored kills) |
-| Recall (all clusters) | 29.6% |
-| Recall (promotable clusters) | 73% |
-| Character | High-precision, moderate-recall — conservative but honest |
+| Recall — K=3 floor (operative) | **29.6%** (8/27) |
+| Recall — K=2 ceiling (exploratory) | 55.6% (15/27, theoretical) |
+| Recall within K=3-promotable clusters | 72.7% (8/11) |
+| Character | High-precision, conservative-recall — honest floor for attestation claims |
 
 For the D-CERT-5 unified presence-gameplay proof: every authored kill is genuinely verified; the
-cost is that brief or R2-misaligned kill rows go unattested.
+cost is that brief or R2-misaligned kill rows go unattested. The 29.6% floor is the operative
+claim; 55.6% is the ceiling available if future matches show the live stream reliably catches
+2-crop kills.
 
 ## Files
 
 - Raw scan result: `audits/c33_m13_recall_scan.json`
+- Recall analysis script: `scripts/c33_recall_analysis.py` (`--k 3` default, `--k 2` for ceiling)
 - Match 13 KAS record: `audits/kas_record_match13_hdmi_direct_2026-07-06.json`
 - Match 13 PoSP record: `audits/posp_record_match13_hdmi_direct_2026-07-06.json`
