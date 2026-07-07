@@ -1,0 +1,249 @@
+{
+  "archive": "retina_kf_archive\\match13_hdmi_direct_1783385280",
+  "total_crops": 524,
+  "own_kill_crops": 77,
+  "kill_clusters": 27,
+  "kas_authored_kills": 8,
+  "recall_floor_pct": 29.6,
+  "clusters": [
+    {
+      "size": 7,
+      "span_ms": 12232.7,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 2,
+      "span_ms": 2154.8,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 3,
+      "span_ms": 3578.8,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30so"
+      ]
+    },
+    {
+      "size": 8,
+      "span_ms": 5776.6,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 4,
+      "span_ms": 3194.1,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 4,
+      "span_ms": 2945.8,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 2,
+      "span_ms": 4862.3,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 2,
+      "span_ms": 2109.9,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 2,
+      "span_ms": 558.9,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 4,
+      "span_ms": 6380.1,
+      "texts": [
+        "Qortrola30mi",
+        "Qortrola30mi",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 2,
+      "span_ms": 704.7,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 6,
+      "span_ms": 9175.1,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 3,
+      "span_ms": 1826.4,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 4,
+      "span_ms": 8471.8,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 2,
+      "span_ms": 1913.2,
+      "texts": [
+        "Qortrola30La",
+        "Qortrola30La"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 8,
+      "span_ms": 12600.8,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30n",
+        "Qortrola30n",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 2,
+      "span_ms": 1229.8,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 3,
+      "span_ms": 1300.4,
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "Qortrola30"
+      ]
+    },
+    {
+      "size": 1,
+      "span_ms": 0.0,
+      "texts": [
+        "krfn88Qortrola30"
+      ]
+    }
+  ]
+}
