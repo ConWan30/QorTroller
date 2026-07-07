@@ -1,0 +1,81 @@
+{
+  "scan": "rp-ocr-precision-v1",
+  "results": [
+    {
+      "archive": "retina_kf_archive/match12_kas_validation_1783382836",
+      "total_crops": 35,
+      "read_errors": 0,
+      "matched_crops": 0,
+      "abstained_crops": 35,
+      "clusters": [],
+      "n_clusters": 0,
+      "suspect_reads": [],
+      "matched_texts": [],
+      "matched_slots": [],
+      "elapsed_s": 43.2,
+      "ms_per_crop": 1235.0,
+      "engine": "v6-only (ENGINE_V6) -- same as live bootstrap",
+      "cluster_window_ms": 5000.0
+    },
+    {
+      "archive": "retina_kf_archive/match11_kas_validation_1783378335",
+      "total_crops": 116,
+      "read_errors": 0,
+      "matched_crops": 5,
+      "abstained_crops": 111,
+      "clusters": [
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30"
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30"
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30Xx"
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola3011"
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30"
+          ]
+        }
+      ],
+      "n_clusters": 5,
+      "suspect_reads": [],
+      "matched_texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30Xx",
+        "Qortrola3011",
+        "Qortrola30"
+      ],
+      "matched_slots": [
+        "killer"
+      ],
+      "elapsed_s": 127.3,
+      "ms_per_crop": 1098.0,
+      "engine": "v6-only (ENGINE_V6) -- same as live bootstrap",
+      "cluster_window_ms": 5000.0
+    }
+  ]
+}
