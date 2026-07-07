@@ -41,6 +41,14 @@ def _env_float(key: str, default: float = 0.0) -> float:
     return float(os.environ.get(key, str(default)))
 
 
+# L6B human-reflex MAX band ceilings — enforced by Config.__post_init__ (see l6b_human_max_ms /
+# l6b_desk_posture_enabled). The production ceiling is the calibrated human voluntary-reaction
+# upper bound; the desk-posture ceiling is the explicit opt-in widen for still-controller
+# enrollment sessions. A larger L6B_HUMAN_MAX_MS env value is clamped, never honored silently.
+_L6B_HUMAN_MAX_PRODUCTION_CEILING_MS = 280.0
+_L6B_DESK_POSTURE_MAX_MS = 350.0
+
+
 @dataclass(frozen=True)
 class Config:
     """Immutable bridge configuration, loaded once at startup."""
@@ -831,7 +839,14 @@ class Config:
     l6b_human_max_ms: float = field(
         default_factory=lambda: float(_env("L6B_HUMAN_MAX_MS", "280.0"))
     )
-    """Maximum latency (ms) to classify as HUMAN reflex (cortical loop upper bound)."""
+    """Maximum latency (ms) to classify as HUMAN reflex (cortical loop upper bound). Clamped to
+    the production ceiling (280 ms) by __post_init__ unless l6b_desk_posture_enabled opt-in."""
+    l6b_desk_posture_enabled: bool = field(
+        default_factory=lambda: _env_bool("L6B_DESK_POSTURE_ENABLED", False)
+    )
+    """Explicit opt-in (L6B_DESK_POSTURE_ENABLED=true) to allow the wider desk-posture reflex
+    ceiling (350 ms) for legitimate still-controller enrollment sessions. Default False -> the
+    production 280 ms ceiling clamps l6b_human_max_ms in __post_init__. Never a silent widen."""
     l6b_r2_quiet_threshold: int = field(
         default_factory=lambda: int(_env("L6B_R2_QUIET_THRESHOLD", "15"))
     )
@@ -2080,6 +2095,154 @@ class Config:
     # for FULLSCREEN Remote Play (set to the laptop's display, usually 1). Captures all of that monitor.
     retina_game_capture_monitor: int = field(
         default_factory=lambda: int(os.environ.get("RETINA_GAME_CAPTURE_MONITOR", "0") or 0)
+    )
+    # How often (every N co-capture records) to emit the `RGC diag:` status line — the calibration
+    # sample feed. Default 25 keeps the log quiet; lower it (e.g. 4) for a dense latency-calibration
+    # session so a few minutes of play yields ~10x the cross-channel samples (high-rate sampler).
+    retina_diag_every: int = field(
+        default_factory=lambda: max(1, int(os.environ.get("RETINA_DIAG_EVERY", "25") or 25))
+    )
+    # Kill-feed authorship (anti-spectate differentiator; default-off, fail-open w/o tesseract). OCR the
+    # kill-feed ROI -> own-handle kill rows bound to YOUR R2 onset = AUTHORED; others' kills = SPECTATED.
+    # ROI is fractional "fx,fy,fw,fh" (0..1) of the captured frame (Warzone feed is top-right).
+    retina_killfeed_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_KILLFEED_ENABLED", False)
+    )
+    retina_killfeed_roi: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_ROI", "0.62,0.10,0.36,0.22")
+    )
+    retina_killfeed_every: int = field(
+        default_factory=lambda: max(1, int(os.environ.get("RETINA_KILLFEED_EVERY", "20") or 20))
+    )
+    # Dense feed+roster crop capture (CALIBRATION CORPUS). The killfeed authorship detector is built FROM a
+    # dense offline-reviewed crop corpus (it cannot be calibrated on 2 frames); this saves the left HUD panel
+    # (kill-feed + squad roster, where the own-handle anchor lives) as a bounded ring of PNGs during a match.
+    # Default-OFF; advisory. NOTE: retina_killfeed_roi default (top-right) is WRONG for Warzone — its feed is
+    # LEFT-middle under the minimap; retina_capture_panel_roi covers the correct left panel for the corpus.
+    retina_killfeed_capture_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_KILLFEED_CAPTURE_ENABLED", False)
+    )
+    retina_killfeed_capture_dir: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_CAPTURE_DIR", "retina_kf_crops")
+    )
+    retina_killfeed_capture_max: int = field(
+        default_factory=lambda: max(0, int(os.environ.get("RETINA_KILLFEED_CAPTURE_MAX", "600") or 600))
+    )
+    retina_capture_panel_roi: str = field(
+        default_factory=lambda: os.environ.get("RETINA_CAPTURE_PANEL_ROI", "0.0,0.28,0.32,0.67")
+    )
+    # Trigger-gated INLINE authorship classification. On R2 fire onset (>= retina_combat_r2_threshold), the
+    # calibrated killfeed_cv.classify_panel runs LIVE on the already-arriving panel crop (off the event loop,
+    # single-flight) so the labelled corpus grows in real time and near-margin scores surface as they happen.
+    # Classification-scheduling only — capture stays continuous; NOTHING added to the WGC frame callback.
+    # Default-OFF, advisory; does NOT touch the cert verdict or any threshold (match_floor stays 0.66).
+    retina_killfeed_inline_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_KILLFEED_INLINE_ENABLED", False)
+    )
+    # FEED-derived anchor (feed_v1) is the default: the roster-derived own_handle_anchor.png scores the
+    # persistent squad-roster Qortrola30 at 0.87-0.91 so multiscale global-best locks onto ROSTER and masks
+    # the feed kill row (live 0/19 root cause, 2026-07-02); the feed anchor scores the feed killer-slot row
+    # higher and is FP-re-validated (0 killer-slot false positives over the 1200-crop archive @ floor 0.66).
+    # docs/l2ads-holdc... sibling: the roster anchor is retained as an asset for reference/cross-check.
+    retina_killfeed_anchor_path: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_ANCHOR_PATH",
+                                               "l9_presence/assets/own_handle_anchor_feed.png")
+    )
+    retina_killfeed_anchor_id: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_ANCHOR_ID", "feed_v1")
+    )
+    # Per-session feed-cut anchor auto-generation (killer-slot/AUTHORED path only). DEFAULT-OFF. When on, the
+    # inline worker runs the SessionAnchorGenerator: bootstrap-catch the first real feed kill row (feed_v1 @
+    # lowered floor + R2 fresh-row gate) -> auto-cut this session's anchor -> K/FP self-consistency gate ->
+    # promote at 0.66. Fixes the per-match kill-highlight rendering variance (static anchor is a treadmill;
+    # see project memory 2026-07-03). Victim-slot/OWN_DEATH stays on static feed_v1 regardless (scope).
+    retina_session_anchor_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_SESSION_ANCHOR_ENABLED", False)
+    )
+    retina_ocr_bootstrap_enabled: bool = field(       # OCR-verified bootstrap catch (rendering-independent);
+        default_factory=lambda: _env_bool("RETINA_OCR_BOOTSTRAP_ENABLED", False)   # within session-anchor
+    )                                                 # envelope; bypasses the marginal feed_v1 score gate
+    retina_dense_classify_enabled: bool = field(      # W.2 dense-tail: tighter in-window classify cadence
+        default_factory=lambda: _env_bool("RETINA_DENSE_CLASSIFY_ENABLED", False)  # (still R2-gated; premise-free)
+    )
+    retina_dense_classify_min_gap_ms: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_DENSE_CLASSIFY_MIN_GAP_MS", "50"))
+    )
+    # Phase C classify-burst (docs/phase-c-classify-sampling-bottleneck-mitigation-2026-07-05.md):
+    # dense-classify's min_gap only helps if the main _session_loop calls maybe_classify_in_window
+    # more than once per its own interval (dualshock_record_interval_s, default 1.0s) -- it does not.
+    # This is a SEPARATE mitigation: an independent async task polls maybe_classify_in_window at
+    # retina_classify_burst_poll_s cadence for retina_classify_burst_duration_ms after an R2 rising
+    # edge, armed alongside (not instead of) the existing combat-trigger detection.
+    retina_classify_burst_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_CLASSIFY_BURST_ENABLED", False)
+    )
+    retina_classify_burst_duration_ms: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_CLASSIFY_BURST_DURATION_MS", "5000"))
+    )
+    retina_classify_burst_poll_s: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_CLASSIFY_BURST_POLL_S", "0.15"))
+    )
+    retina_session_anchor_archive_dir: str = field(   # R4: session anchor PNG+SHA archived here (gitignored)
+        default_factory=lambda: os.environ.get("RETINA_SESSION_ANCHOR_ARCHIVE_DIR", "retina_kf_anchors")
+    )
+    retina_killfeed_near_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_NEAR_LOG", "retina_kf_near_boundary.jsonl")
+    )
+    # Phase 1 (floor-transfer diagnostic fix, docs/floor-transfer-diagnostic-2026-07-01.md): max-over-window
+    # composite verdicts (one per R2 window, resolved from the window's BEST killer/victim score rather than
+    # a single sample). Additive to inline_authored, not a replacement.
+    retina_killfeed_composite_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_COMPOSITE_LOG", "retina_kf_composite.jsonl")
+    )
+    # LOOP 2 — Death-Window Reactive Presence (oracle-in-training; corpus-only, NO verdict). Consumes loop
+    # 1's discarded victim-slot branch (own-death) and measures whether stick activity continues through the
+    # post-death window (live human) vs the silence of an idle controller. Default-OFF; does NOT modify loop
+    # 1, emit a verdict, or touch the cert. noise floor is grounded in the DualSense idle-stick ADC noise +
+    # measured live from the baseline segment; raw variance/range are logged so settle_ts is re-derivable.
+    retina_death_window_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_DEATH_WINDOW_ENABLED", False)
+    )
+    retina_death_window_ms: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_DEATH_WINDOW_MS", "4000"))
+    )
+    retina_death_stick_noise_floor: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_DEATH_STICK_NOISE_FLOOR", "2.5"))
+    )
+    retina_death_window_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_DEATH_WINDOW_LOG", "retina_death_window.jsonl")
+    )
+    # l2_ads — ADS coupling channel (second anti-splice channel; l9_presence/ads_coupling.py). SCAFFOLD:
+    # the detector is UNCALIBRATED so every record logs raw + ADS_ABSTAIN_UNCALIBRATED (never a fabricated
+    # verdict). Default-OFF. Captures the calibration corpus (onset/held/exit center-ROI scalar sequences).
+    retina_ads_coupling_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_ADS_COUPLING_ENABLED", False)
+    )
+    # HID lobe (dual-lobe fusion, default-off): device-clock R2-onset stream feeding the KAS certificate's HID
+    # lobe. Either this OR ads-coupling ungates the raw-hidapi L2 push (dualshock_integration); onsets drain to
+    # the log below off the ~1 kHz reader thread. Pairs with the killfeed screen lobe for a dual-lobe root.
+    retina_hid_events_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_HID_EVENTS_ENABLED", False)
+    )
+    retina_hid_events_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_HID_EVENTS_LOG", "retina_hid_events.jsonl")
+    )
+    retina_ads_coupling_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_ADS_COUPLING_LOG", "retina_ads_coupling.jsonl")
+    )
+    # Operator-set segment, read per-record-emit (rare, not per-tick). Increment A: a JSON control file
+    # {optic, fire_state, segment} the calibration runner writes ATOMICALLY (temp + os.replace) as the
+    # operator announces each firing-range segment live. FAIL-CLOSED: absent / partial / corrupt read ->
+    # all three fields "unlabeled" (never a stale previous segment, never an empty field).
+    retina_ads_segment_file: str = field(
+        default_factory=lambda: os.environ.get(
+            "RETINA_ADS_SEGMENT_FILE", os.path.expanduser("~/.vapi/ads_segment.json"))
+    )
+    # Background negative sampling cadence (consumption ticks between passive center-ROI samples OUTSIDE L2
+    # windows) — captures the screen-transitions-without-L2 negative distribution. Piggybacks the consumption
+    # loop; NO new thread.
+    retina_ads_bg_sample_every: int = field(
+        default_factory=lambda: int(os.environ.get("RETINA_ADS_BG_SAMPLE_EVERY", "30"))
     )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
@@ -3526,6 +3689,19 @@ class Config:
     )
     """Phase 193 — Publish to alert bus channel on MEDIUM coherence failures. Default False
     (advisory only — reduce noise; MEDIUM contradictions logged to wiki but not alerted)."""
+
+    def __post_init__(self) -> None:
+        # L6B human-reflex MAX band clamp (frozen dataclass -> object.__setattr__). Production
+        # ceiling is 280 ms (calibrated human voluntary-reaction upper bound). A wider
+        # L6B_HUMAN_MAX_MS silently weakens liveness, so it is clamped back to the ceiling UNLESS
+        # the operator explicitly opts into desk-posture mode (L6B_DESK_POSTURE_ENABLED=true) for
+        # legitimate still-controller enrollment, where reflex timing can run slightly longer
+        # (capped at 350 ms). Tightening only: this never widens a value already <= the ceiling,
+        # and the opt-in is explicit, never a silent default-widen.
+        ceiling = (_L6B_DESK_POSTURE_MAX_MS if self.l6b_desk_posture_enabled
+                   else _L6B_HUMAN_MAX_PRODUCTION_CEILING_MS)
+        if self.l6b_human_max_ms > ceiling:
+            object.__setattr__(self, "l6b_human_max_ms", float(ceiling))
 
     def get_oauth_clients(
         self,

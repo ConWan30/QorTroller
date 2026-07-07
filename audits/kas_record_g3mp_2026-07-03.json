@@ -1,0 +1,51 @@
+{
+  "session_label": "g3mp",
+  "handle": "QorTrola30",
+  "verdict": "AUTHORED_SESSION",
+  "authored_kills": 5,
+  "authored_scores": [
+    0.8045,
+    0.9252,
+    0.7056,
+    0.7662,
+    0.7707
+  ],
+  "anchor_tags": [
+    "session_20260703_131828@0.66"
+  ],
+  "windows_total": 12,
+  "composites_total": 12,
+  "own_deaths": 0,
+  "event_trail": [
+    {
+      "ts": "2026-07-03 13:20:58",
+      "event": "candidate_cut",
+      "regime": "CANDIDATE",
+      "sha": "c7dd3b58985cbd6c"
+    },
+    {
+      "ts": "2026-07-03 13:22:02",
+      "event": "promoted",
+      "regime": "PROMOTED",
+      "sha": "c7dd3b58985cbd6c"
+    }
+  ],
+  "coupling_corroboration": {
+    "th2_coupled_true_ticks": 5,
+    "inline_classifications": 31,
+    "inline_composite_windows": 23
+  },
+  "hygiene": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "timespan"
+  },
+  "span_ms": [
+    1783102857350.6,
+    1783103145913.1
+  ],
+  "min_kills": 2,
+  "notes": [],
+  "kas_domain_tag": "QORTROLLER-KAS-v0",
+  "commitment": "73ecafc7e97b29c8bc79f9b4abed0364bde03f43b74ccb8d03b99edc56855bca"
+}

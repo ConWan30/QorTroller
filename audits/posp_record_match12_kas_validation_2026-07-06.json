@@ -1,0 +1,58 @@
+{
+  "archive": {
+    "count": 35,
+    "id_verified": true,
+    "manifest_schema": "qortroller-session-archive-v1"
+  },
+  "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+  "events_roots": {
+    "kas_session_root": "5df81c7eee6ef09828bde94a136c36f421be2dfb3c95e25c816922dae3e4331d",
+    "retina_perception_root": null
+  },
+  "fusion": {
+    "id_verified": true,
+    "n_id_verified": 23,
+    "n_rows": 23,
+    "record_hashes": [
+      "d6fa8e5959730f237063b8e819c2cf738144d07e933db58b8867fd70393f2f85",
+      "d28b812fd2e2e37373073d0a2ab0f08a51a489bc811485819e46b15e6ee8582b",
+      "8a04940d9fca19235e690e61c73b4f399fbd5e2b19e5fb1b7e314d699993e30c",
+      "ac3fe445b832e8236ae4b2dbe4e4766ade1340b4fad4ef3a68e4043ceb046809",
+      "4983b256faed1b5ec07aeb3a11ec50dec15be7efd3760906dcb555d313513f4a",
+      "a18c0f198bf41bd65cc754947e067e5ccc4a8d534d313dd23fdfa7d188d1a39d",
+      "32452b7d213276ea6fc978b3b200eaca3c25799f47f0835fbfcea7abfb4a8893",
+      "0310a397c1e6e88a6fc5b6688b1fb49e122e8c241a79d43306c6eb5e8bd9dc9e",
+      "43f3639d578f0db6617330b58ea785d54d1c3690dcb2fa893e7adb667c41ed64",
+      "4d8c822d6c0d1b85170cb9512af849189ad18e356cbc1aa007f4025ed00152b0",
+      "441f7d6e1cadc9c9006c46d85bc074f87b7d95dafc90d8d143d5fe1f88bddfce",
+      "52462f8f311a8d6ff8ef0de42ac220b4fa1463fdafbe9a13e7e3ed28419a7f22",
+      "49bd45ab88c453ebbdad496de73ea3fd8e8dd2175115557f18062db7d50d6ebc",
+      "691d578fe70004b0738f3c2d34a2a79346db4fd9db93bb183cbf12e8465889a2",
+      "1408aa4d61edae80c8d307fb6a2de872116db3f6a6fe5cd7d3b554b46c9da961",
+      "05e468ad7d4d632c942282fd67f070fcabe376d00d423f5c54f8845d8e2fdf29",
+      "6a827693efc68e93d14183705e81c33b0777b76efff080f57035eebc54720172",
+      "6cf4add3b8a8dc051c50ecf34df0a52ee694e3e16aa8887fef6a86da0442a2dd",
+      "2e58c01a03c40a7ae4ff1a28027f3263ac9fce9258c96e49b934d0f4c7503b8d",
+      "5e660f8a541ca5226c3042ab9a74dc4e8f8445eb719dabff655e5930afc63772",
+      "5b2cd7a75884f20d641d64ab169dfd6cb6690518b902feb09ee50fa8a4e43314",
+      "1e17b2fee7d893e6ead86dbed6c7e1dcf754785e5fc3b6e0b89aefcc37d99440",
+      "ea7e18cd4717d0f7c33fd12748acb7ad14dcce43419f2c2c4f3bf8b05cf2c4ca"
+    ]
+  },
+  "kas": {
+    "authored_kills": 0,
+    "commitment": "ae2d950dfef271c8de4f42a70e2d222c45d450b968c691edbbe507ebbfc0dbfa",
+    "id_verified": true,
+    "kas_domain_tag": "QORTROLLER-KAS-v0",
+    "verdict": "INSUFFICIENT_KILLS"
+  },
+  "notes": [],
+  "schema": "qortroller-posp-v0",
+  "session_display": "match12_kas_validation_1783382836",
+  "session_id": "c3ef9db6d30c87b0ae364f8a8a67ff38e69e10be4aba767e7966548c8d77a00e",
+  "span_ms": [
+    1783382975073.5,
+    1783383477233.5
+  ],
+  "verdict": "SYNCHRONIZED"
+}

@@ -169,6 +169,33 @@ class VAPIPresenceProof:
     # the population/tournament claim — only True after breadth + real adversaries + the study pass.
     cert_scope: str = "advisory"
     population_certified: bool = False
+    # cycle-59 D-CERT-7: explicit verifier-independence rail (was implicit in population_certified).
+    # None = advisory (N/A); False = self-certified (developer_self: verifier == subject; do NOT
+    # launder into third-party trust); True = independent verifier (population/tournament; not today).
+    verifier_independence: Optional[bool] = None
+    # cycle-58 D-CERT-8: the calibration evidence base, carried on the SDK proof so it is
+    # self-describing too — an external auditor reading via the SDK needs NO filesystem/poep_l9
+    # access (closes the F-CERT-008 recomputability gap one layer up, for exactly the audience the
+    # fix was aimed at). calibration_band_commitment is a COMMITMENT (never raw band values). All
+    # null-safe: None when no developer-self band governs the proof (advisory) or on old records.
+    governing_model: Optional[str] = None
+    calibration_band_commitment: Optional[str] = None
+    calibration_n: Optional[int] = None
+    calibration_player_scope: Optional[str] = None
+    # cycle-59 D-CERT-1: the active-oracles manifest (per-oracle outcome: contributed / abstained /
+    # absent / abstained_or_absent). Under one-scope manifest-differentiation this is the LOAD-BEARING
+    # comparability field — an SDK consumer that cannot read it is back in the F-CERT-005 world (two
+    # verdicts on different evidence sets, indistinguishable). None on pre-cycle-59 records.
+    active_oracles: Optional[dict] = None
+
+    # D-CERT-5 U3 (docs/d-cert5-unified-presence-design-2026-07-04.md): KAS (per-kill-event authorship)
+    # as a declared oracle in active_oracles["kas"]. Advisory-only fields, like PoVCA below — never
+    # folded into presence_score. None mid-session (KAS issues post-hoc at daemon stop) or on
+    # pre-U3 records.
+    kas_verdict: Optional[str] = None
+    kas_commitment: Optional[str] = None
+    kas_events_root: Optional[str] = None
+    kas_authored_kills: Optional[int] = None
 
     # PoVCA (Cycle 42 integration, renamed PoSCA -> PoVCA per critique to avoid "skill" over-claim):
     # Per discrete game-action: verified device + causal input authorship + L4/L5 structure.
@@ -182,6 +209,27 @@ class VAPIPresenceProof:
     def is_developer_self_certified(self) -> bool:
         """True iff this is a developer-self-scoped cert (single-subject; NOT a population claim)."""
         return self.cert_scope == "developer_self" and not self.advisory
+
+    def verifier_is_independent(self) -> Optional[bool]:
+        """The independence rail as a FIRST-CLASS signal — read this, do not infer from
+        population_certified. None -> no cert scope (advisory), the question is N/A. False ->
+        self-certified (developer_self): verifier == subject; MUST NOT be laundered into
+        independent/third-party trust. True -> an independent verifier certified this
+        (population/tournament); not reachable today. A consumer gating on independent
+        verification passes ONLY on True (None and False both fail closed)."""
+        return self.verifier_independence
+
+    def evidence_base(self) -> dict:
+        """The D-CERT-8 calibration evidence base as a first-class dict — the basis that authorized
+        this proof, so an SDK auditor reads it WITHOUT filesystem/poep_l9 access (closes F-CERT-008
+        one layer up). calibration_band_commitment is a COMMITMENT, never raw band values. Fields
+        are None when no developer-self band governs the proof (advisory) or on pre-cycle-58 records."""
+        return {
+            "governing_model": self.governing_model,
+            "calibration_band_commitment": self.calibration_band_commitment,
+            "calibration_n": self.calibration_n,
+            "calibration_player_scope": self.calibration_player_scope,
+        }
 
     def is_consistent_human(self) -> bool:
         """True for the two positive human verdicts."""
@@ -211,12 +259,24 @@ class VAPIPresenceProof:
             "certified": self.certified,
             "cert_scope": self.cert_scope,
             "population_certified": self.population_certified,
+            "verifier_independence": self.verifier_independence,   # cycle-59 D-CERT-7 independence rail
+            # cycle-58 D-CERT-8 evidence base (commitment only; None when advisory/absent)
+            "governing_model": self.governing_model,
+            "calibration_band_commitment": self.calibration_band_commitment,
+            "calibration_n": self.calibration_n,
+            "calibration_player_scope": self.calibration_player_scope,
+            "active_oracles": self.active_oracles,   # cycle-59 D-CERT-1 comparability manifest
             # PoVCA fields (Cycle 42)
             "posca_verdict": self.posca_verdict,
             "posca_commitment": self.posca_commitment,
             "posca_structure_ok": self.posca_structure_ok,
             "posca_coupling_score": self.posca_coupling_score,
             "posca_action_count": self.posca_action_count,
+            # D-CERT-5 U3: KAS as a declared oracle (None mid-session / on pre-U3 records)
+            "kas_verdict": self.kas_verdict,
+            "kas_commitment": self.kas_commitment,
+            "kas_events_root": self.kas_events_root,
+            "kas_authored_kills": self.kas_authored_kills,
         }
 
 
@@ -268,12 +328,27 @@ class VAPIPresence:
                 certified=bool(body.get("certified", False)),
                 cert_scope=str(body.get("cert_scope", "advisory")),
                 population_certified=bool(body.get("population_certified", False)),
+                # cycle-59 D-CERT-7: absent (old records) -> None (N/A), never coerced to False.
+                verifier_independence=body.get("verifier_independence"),
+                # cycle-58 D-CERT-8 evidence base: absent on old records -> None (self-describing
+                # via the SDK; calibration_band_commitment is a commitment, never raw band values).
+                governing_model=body.get("governing_model"),
+                calibration_band_commitment=body.get("calibration_band_commitment"),
+                calibration_n=body.get("calibration_n"),
+                calibration_player_scope=body.get("calibration_player_scope"),
+                # cycle-59 D-CERT-1: the comparability manifest (absent on old records -> None).
+                active_oracles=body.get("active_oracles"),
                 # PoVCA (Cycle 42)
                 posca_verdict=str(body.get("posca_verdict", "UNVERIFIABLE")),
                 posca_commitment=str(body.get("posca_commitment", "")),
                 posca_structure_ok=body.get("posca_structure_ok"),
                 posca_coupling_score=body.get("posca_coupling_score"),
                 posca_action_count=int(body.get("posca_action_count", 0)),
+                # D-CERT-5 U3: KAS declared-oracle fields (absent on pre-U3 records -> None)
+                kas_verdict=body.get("kas_verdict"),
+                kas_commitment=body.get("kas_commitment"),
+                kas_events_root=body.get("kas_events_root"),
+                kas_authored_kills=body.get("kas_authored_kills"),
             )
         except Exception as exc:
             return VAPIPresenceProof(
@@ -9888,3 +9963,86 @@ class VAPIPoEPRegistryClient:
         req = urllib.request.Request(url, headers={"x-api-key": api_key} if api_key else {})
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode())
+
+
+@dataclass(slots=True)
+class VAPIPoSPRecord:
+    """PoSP — Proof of Synchronized Presence (QORTROLLER-POSP-v0, CANDIDATE). Increment U2b.
+
+    Reference-and-bind reader over a PoSP artifact (audits/posp_record_*.json). Advisory: not a
+    certified eligibility gate; signal only until U2c live gate passes and the study certifies an
+    operating point.
+
+    PoSP makes ONE claim: for ONE session (identified by the U1 session_id), the per-kill-event
+    authorship certificate (KAS) and the session-level presence fusion evidence (NQPV co-capture
+    rows) describe the SAME session on the SAME device — verifiably, by a common identifier.
+
+    REFERENCE-AND-BIND design: no new commitment / domain tag / FROZEN-v1 family. Integrity
+    derives entirely from the commitments it references (KAS commitment, PoAC record hashes, archive
+    SHA-256s). A verifier recomputes THOSE; PoSP is the map that says which ones belong together.
+
+    TWO NAMED ROOTS (design §2.3): kas_session_root (KAS dual-lobe events_root) and
+    retina_perception_root (Trio-Retina perception events_root, when that stack ran) are DIFFERENT
+    roots over DIFFERENT event vocabularies. Either may honestly be None.
+    """
+    verdict: str = "UNVERIFIABLE"
+    session_id: Optional[str] = None
+    session_display: Optional[str] = None
+    device_id: Optional[str] = None
+    span_ms: Optional[list] = None
+    # KAS surface
+    kas_commitment: Optional[str] = None
+    kas_verdict: Optional[str] = None
+    kas_authored_kills: Optional[int] = None
+    kas_id_verified: bool = False
+    # Fusion surface
+    n_fusion_rows: int = 0
+    n_fusion_id_verified: int = 0
+    fusion_id_verified: bool = False
+    # Archive provenance (not a proof surface — a mismatch still poisons)
+    archive_id_verified: Optional[bool] = None
+    # Named events roots (§2.3 — both named, either honestly None)
+    kas_session_root: Optional[str] = None
+    retina_perception_root: Optional[str] = None
+    notes: list = field(default_factory=list)
+    schema: str = "qortroller-posp-v0"
+    advisory: bool = True    # machine-readable: not a certified eligibility gate
+
+    def is_synchronized(self) -> bool:
+        """True only when BOTH surfaces present AND BOTH id-verified."""
+        return (self.verdict == "SYNCHRONIZED"
+                and self.kas_id_verified is True
+                and self.fusion_id_verified is True)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "VAPIPoSPRecord":
+        """Null-safe construction from a PoSP to_dict."""
+        kas = d.get("kas") or {}
+        fusion = d.get("fusion") or {}
+        roots = d.get("events_roots") or {}
+        archive = d.get("archive") or {}
+        return cls(
+            verdict=d.get("verdict", "UNVERIFIABLE"),
+            session_id=d.get("session_id"),
+            session_display=d.get("session_display"),
+            device_id=d.get("device_id"),
+            span_ms=d.get("span_ms"),
+            kas_commitment=kas.get("commitment"),
+            kas_verdict=kas.get("verdict"),
+            kas_authored_kills=kas.get("authored_kills"),
+            kas_id_verified=bool(kas.get("id_verified")),
+            n_fusion_rows=int(fusion.get("n_rows") or 0),
+            n_fusion_id_verified=int(fusion.get("n_id_verified") or 0),
+            fusion_id_verified=bool(fusion.get("id_verified")),
+            archive_id_verified=archive.get("id_verified"),
+            kas_session_root=roots.get("kas_session_root"),
+            retina_perception_root=roots.get("retina_perception_root"),
+            notes=list(d.get("notes") or []),
+            schema=d.get("schema", "qortroller-posp-v0"),
+        )
+
+    @classmethod
+    def from_file(cls, path: str) -> "VAPIPoSPRecord":
+        """Load from an audits/posp_record_*.json artifact (pure-stdlib, no bridge dep)."""
+        import pathlib
+        return cls.from_dict(json.loads(pathlib.Path(path).read_text(encoding="utf-8")))

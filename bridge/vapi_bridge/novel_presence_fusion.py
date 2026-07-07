@@ -56,12 +56,28 @@ class FusedGamerPresenceProof:
     timestamp_ns: int = 0
     commitments: dict[str, str] = field(default_factory=dict)  # e.g. {"retina": "...", "pda": "..."}
     notes: str = ""
+    # ---- D-CERT-1 (a) INVARIANT — three orthogonal questions, three fields, none doing another's job:
+    #     cert_scope            answers "WHO vouches" (the certification regime);
+    #     verifier_independence answers "is the voucher INDEPENDENT of the subject";
+    #     active_oracles        answers "WHAT evidence backed this verdict" (per-oracle outcome).
+    #   Comparability (F-CERT-005) is solved by DECLARATION in active_oracles, NOT by multiplying
+    #   cert_scope strings. When a new oracle joins the fusion it is declared in the manifest — do NOT
+    #   mint a new scope string for it (that would reintroduce the uncoordinated-literal drift D-CERT-6
+    #   closed, at the scope layer). Retina/authorship joining the fusion stays a D-CERT-5 question. ----
     # cycle-38 developer-self-cert (d-developer-self-cert): the CERTIFICATION SCOPE of this proof.
     # "advisory" (default) = uncertified signal; "developer_self" = certified for the developer's own
     # single-subject scope (NOT population/tournament). population_certified stays False until a
     # population corpus + real adversaries pass the study. The verdict is the result WITHIN the scope.
     cert_scope: str = "advisory"
     population_certified: bool = False
+    # cycle-59 D-CERT-7: the verifier-independence rail, made EXPLICIT (was implicit in
+    # population_certified=False). A structural fact of the cert scope, NOT enrollment data:
+    #   None  -> no cert scope applies (advisory) -> the question is N/A;
+    #   False -> self-certified (developer_self: verifier == subject) -> MUST NOT be laundered
+    #            into independent/third-party trust;
+    #   True  -> an independent verifier certified this (population/tournament) -> not reachable today.
+    # Consumers read this directly instead of inferring independence from population_certified.
+    verifier_independence: bool | None = None
 
     # Cycle-42 PoVCA (Proof of Verified Causal Authorship): input-grounded per-action authorship
     # (provenance + L9 causal + L4/L5 structure). Composes as oracle into NQPV (abstains if missing).
@@ -73,6 +89,41 @@ class FusedGamerPresenceProof:
     posca_structure_ok: Optional[bool] = None
     posca_coupling_score: Optional[float] = None
     posca_action_count: int = 0
+
+    # cycle-58 D-CERT-8 (d-cert8-emit-evidence-base): the calibration EVIDENCE BASE that
+    # authorized this proof, emitted inline so the proof STREAM ALONE is self-describing
+    # (closes F-CERT-008 — an auditor of the stream no longer needs poep_l9/ to reconstruct
+    # the basis). All null-safe: None = no developer-self band governing this proof (advisory).
+    # `calibration_band_commitment` is a BIOMETRIC-SNAPSHOT-v1 COMMITMENT (reflex_band_commitment),
+    # NEVER raw band values — the raw (mu, sigma, salt) stays operator-held for audit disclosure
+    # per VAPI_BIOMETRIC_PRIVACY.md. Self-describing != more-certified: population_certified stays
+    # False; this closes an AUDITABILITY gap, not a certification gap. The commitment also pins the
+    # authorizing band per proof, incidentally closing the F-CERT-007 band-drift anomaly.
+    governing_model: str | None = None
+    calibration_band_commitment: str | None = None
+    calibration_n: int | None = None
+    calibration_player_scope: str | None = None
+
+    # cycle-59 D-CERT-1: the active-oracles manifest — per-oracle OUTCOME (contributed / abstained /
+    # absent / abstained_or_absent) for THIS proof, so two verdicts resting on DIFFERENT evidence sets
+    # are distinguishable (closes F-CERT-005 comparability, incl. the same-set-different-abstention
+    # variant). Derived inside fuse() from the same oracle checks it scores -> cannot disagree with the
+    # verdict. Null-safe: None on old records / the abstain path (NEVER inferred retroactively; the
+    # honest answer for an unrecorded fusion is "unrecorded"). See _oracle_manifest for the honest
+    # abstained-vs-absent conflation on the Optional[bool] oracles (poep / l4l5l6).
+    active_oracles: dict[str, str] | None = None
+
+    # D-CERT-5 U3 (docs/d-cert5-unified-presence-design-2026-07-04.md, option a): KAS (per-kill-event
+    # authorship, l9_presence/kill_authorship_session.py) joins the fusion as a DECLARED oracle per the
+    # D-CERT-1 invariant (manifest declaration, not a new scope string). Advisory field only — like PoVCA,
+    # NEVER folded into presence_score until a calibration study sets a weight under the anti-GCAP rail.
+    # KAS exists only post-hoc (issued at daemon stop), so a mid-session fuse() honestly reports
+    # kas_report=None -> "absent"; that asymmetry is inherent to option (a) alone (see doc §3) and is not
+    # a bug. Null-safe: None on pre-U3 records / whenever kas_report is not passed.
+    kas_verdict: str | None = None
+    kas_commitment: str | None = None
+    kas_events_root: str | None = None
+    kas_authored_kills: int | None = None
 
 
 # --- Calibrated model (cycle-29) — PROVISIONAL operating point ---
@@ -99,6 +150,51 @@ def _retina_presence_contribution(retina_verdict: str | None) -> float | None:
     return None  # INACTIVE / unknown -> abstain
 
 
+def _oracle_manifest(
+    retina_report, retina_contribution, cco_report, cco_tier, poep_present, l4_l5_l6_ok,
+    kas_report=None, kas_verdict=None,
+) -> dict[str, str]:
+    """D-CERT-1 active-oracles manifest: per-oracle OUTCOME for THIS proof, derived from the SAME
+    oracle inputs the fusion scores (so the manifest can NEVER disagree with the verdict). Closes
+    F-CERT-005 comparability: two verdicts resting on different evidence sets become distinguishable.
+
+    Outcomes:
+      "contributed"         -> the oracle moved presence_score;
+      "abstained"           -> consulted (input present) but produced no usable signal;
+      "absent"              -> not wired (input missing);
+      "abstained_or_absent" -> poep / l4l5l6 ONLY. They are passed as Optional[bool], so their
+                               non-contributed state CANNOT distinguish consulted-and-abstained from
+                               not-wired (the F-CERT-005 comparability gap surviving in miniature).
+                               Distinguishing them would require passing those oracles as a richer
+                               input type (a report object, or a (wired, value) pair) — a schema change
+                               deferred; the manifest NAMES the conflation rather than papering over it.
+
+    D-CERT-5 U3: kas is a report-object input like retina/cco, but "contributed" here means
+    "declared a real per-session outcome", NOT "moved presence_score" (KAS is advisory-only, never
+    scored — see the kas_verdict field docstring). AUTHORED_SESSION / INSUFFICIENT_KILLS / HYGIENE_FAIL
+    are all informative per-session outcomes (kill_authorship_session.py's own verdict doc: hygiene-fail
+    and insufficient-kills are honest results, not failures to produce a reading) -> "contributed".
+    UNVERIFIABLE (malformed/empty inputs, never guessed) -> "abstained" (consulted, no usable signal).
+    kas_report is None (mid-session; KAS issues post-hoc at daemon stop) -> "absent".
+    """
+    manifest: dict[str, str] = {}
+    # retina + cco are report-object inputs -> full 3-way (absent = report is None; abstained = report
+    # present but no usable signal; contributed = a value that moved the score).
+    manifest["retina"] = ("absent" if retina_report is None
+                          else "abstained" if retina_contribution is None
+                          else "contributed")
+    manifest["cco"] = ("absent" if cco_report is None
+                       else "abstained" if not cco_tier
+                       else "contributed")
+    # poep + l4l5l6 are Optional[bool] -> only contributed vs the honest conflation.
+    manifest["poep"] = "contributed" if poep_present is not None else "abstained_or_absent"
+    manifest["l4l5l6"] = "contributed" if l4_l5_l6_ok is not None else "abstained_or_absent"
+    manifest["kas"] = ("absent" if kas_report is None
+                       else "abstained" if kas_verdict == "UNVERIFIABLE" or not kas_verdict
+                       else "contributed")
+    return manifest
+
+
 def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
     """Capture-time co-capture (cycle-30): derive the NQPV oracle inputs from the live per-record PITL
     meta sidecar, for the RETINA-EXCL-2 study corpus. HONEST about what is actually live in the session
@@ -123,6 +219,11 @@ def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
         retina_sig = None
     return {
         "nqpv_cocapture": True,
+        # U1 (design doc §2.6): the shared session identifier passthrough — the join key correlating this
+        # meta (and any proof built from it) with the session's KAS record + archive manifest. Null-safe:
+        # None on pre-U1 records / non-daemon runs. NOT a fuse() input (that is U3's manifest question).
+        "session_id": meta.get("session_id"),
+        "session_display": meta.get("session_display"),
         "nqpv_cco_tier": meta.get("cco_presence_ceiling_candidate"),
         "nqpv_l4l5l6_ok": (hp >= 0.5) if isinstance(hp, (int, float)) else None,
         "nqpv_retina_controller_signal": retina_sig,
@@ -183,6 +284,17 @@ class NovelPresenceFusionOrchestrator:
         posca_coupling_score: Optional[float] = None,
         posca_action_count: int = 0,
         posca_commitment: str = "",
+        # cycle-58 D-CERT-8: the calibration evidence base (from the live developer-self verdict),
+        # carried onto the proof so the stream is self-describing. All None-default -> absent on
+        # advisory proofs. `calibration_band_commitment` is a commitment (never raw band values).
+        governing_model: str | None = None,
+        calibration_band_commitment: str | None = None,
+        calibration_n: int | None = None,
+        calibration_player_scope: str | None = None,
+        # D-CERT-5 U3: optional KAS report object (verdict / commitment / events_root / authored_kills).
+        # None mid-session (KAS issues post-hoc at daemon stop) -> declared "absent" in active_oracles,
+        # never fabricated. Advisory-only like PoVCA: never folded into presence_score.
+        kas_report: Any | None = None,
     ) -> FusedGamerPresenceProof:
         """
         Perform the fusion.
@@ -212,6 +324,21 @@ class NovelPresenceFusionOrchestrator:
         # Basic binding check (device + record + time assumed by caller)
         binding_ok = bool(device_id and record_hash)
 
+        # D-CERT-5 U3: extract KAS fields the same way retina/cco are extracted above — from a
+        # duck-typed report object, never fabricated when kas_report is None (mid-session).
+        kas_verdict = getattr(kas_report, "verdict", None) if kas_report is not None else None
+        kas_commitment = getattr(kas_report, "commitment", None) if kas_report is not None else None
+        kas_events_root = getattr(kas_report, "events_root", None) if kas_report is not None else None
+        kas_authored_kills = getattr(kas_report, "authored_kills", None) if kas_report is not None else None
+
+        # D-CERT-1: hoist the retina contribution (both the score and the manifest use it) + build the
+        # active-oracles manifest from the SAME oracle inputs the fusion scores, BEFORE the verdict
+        # branching, so it is recorded on every path (hard-gate + scoring) and cannot disagree with the
+        # verdict it accompanies.
+        _rc = _retina_presence_contribution(retina_verdict)
+        active_oracles = _oracle_manifest(retina_report, _rc, cco_report, cco_tier,
+                                          poep_present, l4_l5_l6_ok, kas_report, kas_verdict)
+
         # --- Calibrated split-output model (cycle-29; replaces the conjunctive string-match tree) ---
         # SHARPENING KEPT: COUPLED_CLEAN (L9/PoCP, no screen) is still an accepted presence input, so
         # RETINA-EXCL-1 stays dissolved. CHANGED: presence is a GRADED weighted score (a single
@@ -231,8 +358,7 @@ class NovelPresenceFusionOrchestrator:
         else:
             # Per-oracle presence contributions in [0,1]; an ABSENT oracle is OMITTED (abstains).
             contribs: dict[str, float] = {}
-            _rc = _retina_presence_contribution(retina_verdict)
-            if _rc is not None:
+            if _rc is not None:                       # _rc hoisted above (D-CERT-1 manifest reuse)
                 contribs["retina"] = _rc
             if poep_present is not None:
                 contribs["poep"] = 1.0 if poep_present else 0.0
@@ -274,6 +400,8 @@ class NovelPresenceFusionOrchestrator:
             commitments["retina"] = getattr(retina_report, "commitment", "") or ""
         if cco_report:
             commitments["cco"] = getattr(cco_report, "commitment", "") or ""
+        if kas_commitment:                    # D-CERT-5 U3: the KAS commitment joins the commitments dict
+            commitments["kas"] = kas_commitment
 
         # cycle-38 developer-self-cert: cert_scope describes the certification REGIME (not the verdict).
         # developer_self when the operator's dev-cert mode is on; else advisory. population_certified
@@ -282,6 +410,9 @@ class NovelPresenceFusionOrchestrator:
         _scope_note = ("developer-self cert scope (single-subject; population_certified=False)"
                        if developer_self_cert
                        else "advisory; not certifying until RETINA-EXCL-2 study")
+        # D-CERT-7: independence rail derived from the scope (structural fact, not enrollment data).
+        # developer_self -> False (verifier == subject; do not launder); advisory -> None (N/A).
+        verifier_independence = False if cert_scope == "developer_self" else None
         # PoVCA verdict (authorship + structure, NOT skill rank). Single source of truth honoring the
         # tri-state structure signal (None = abstain -> UNVERIFIABLE, never AUTHENTIC without L4 evidence)
         # and the emulated gate. The commitment is the recomputable one minted at action-detection time
@@ -303,13 +434,23 @@ class NovelPresenceFusionOrchestrator:
             binding_ok=binding_ok,
             timestamp_ns=timestamp_ns,
             commitments=commitments,
+            active_oracles=active_oracles,
             cert_scope=cert_scope,
             population_certified=False,
+            verifier_independence=verifier_independence,
             posca_verdict=posca_v,
             posca_commitment=posca_commit,
             posca_structure_ok=posca_structure_ok,
             posca_coupling_score=posca_coupling_score,
             posca_action_count=posca_action_count,
+            governing_model=governing_model,
+            calibration_band_commitment=calibration_band_commitment,
+            calibration_n=calibration_n,
+            calibration_player_scope=calibration_player_scope,
+            kas_verdict=kas_verdict,
+            kas_commitment=kas_commitment,
+            kas_events_root=kas_events_root,
+            kas_authored_kills=kas_authored_kills,
             notes=(f"calibrated-v1; score={presence_score:.2f} "
                    f"disagreement={disagreement_index:.2f}; {_scope_note}; "
                    f"posca={posca_v} (advisory authorship field; NOT skill rank; not scored until study)")

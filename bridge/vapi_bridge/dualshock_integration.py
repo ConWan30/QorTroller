@@ -46,6 +46,7 @@ import hashlib
 import json
 import logging
 import math as _math
+import os
 import struct
 import sys
 import time
@@ -70,6 +71,32 @@ from .l4_humanity import p_l4_from_distance
 from .store import Store
 
 log = logging.getLogger(__name__)
+
+# F-RP-DIAG-1 (2026-07-02): RP dual-L2 diagnostic flush. The ~1kHz raw reader must NOT do per-frame
+# disk I/O — a hot-path fopen would measure its own jitter and could manufacture false 'stream
+# starved' evidence, the exact hypothesis the RP session forks on. Both diag streams buffer IN MEMORY
+# (drop-oldest deques) and flush ONCE when this trigger file appears (fired at HOLD B) or at stop.
+_RPDIAG_FLUSH_TRIGGER = "retina_rp_diag_flush"
+
+
+def _write_rpdiag(path: str, stream: str, buf, seen: int) -> None:
+    """Flush an RP dual-L2 diagnostic ring buffer to jsonl ONCE (off the hot path). Drop-oldest deque
+    -> the MOST RECENT window is retained (the stuck-high recurs on every release); the `_meta` header
+    marks `capped` / `total_seen` so a post-cap event is either present, or the record says it can't."""
+    try:
+        rows = list(buf or ())
+        with open(path, "w", encoding="utf-8") as _fh:
+            _fh.write('{"_meta": {"stream": "%s", "kept": %d, "total_seen": %d, "capped": %s}}\n' % (
+                stream, len(rows), seen, "true" if seen > len(rows) else "false"))
+            if stream == "raw":
+                for _wall_ms, _hex in rows:
+                    _fh.write('{"wall_ms": %.3f, "hex": "%s"}\n' % (_wall_ms, _hex))
+            else:
+                for _wall_ms, _l2max, _l2last in rows:
+                    _fh.write('{"wall_ms": %.3f, "pyds_l2_max": %d, "pyds_l2_last": %d}\n' % (
+                        _wall_ms, _l2max, _l2last))
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # Gaming inference codes (extension of base VAPI protocol)
@@ -411,6 +438,11 @@ class DualShockTransport:
         # A/B (2026-06-26) confirmed Remote Play yields a live, biometrically-rich stream to couple against.
         self._retina_game_capture = None
         self._presence_burst = None
+        self._classify_burst = None
+        self._prev_r2_classify_burst = 0        # R2 edge state for the classify-burst trigger (independent
+                                                 # of presence-burst's own _prev_r2_combat state/gate)
+        self._prev_hid_onset_count = 0           # D-HIDW-1: last-seen raw-path (HID lobe) R2 onset counter —
+                                                 # increases open the inline window + arm the classify-burst
         if getattr(cfg, "retina_game_capture_enabled", False):
             try:
                 from .qortroller_retina_capture import RetinaGameCapture
@@ -418,6 +450,35 @@ class DualShockTransport:
                     getattr(cfg, "retina_game_capture_window", "Remote Play"),
                     monitor_index=int(getattr(cfg, "retina_game_capture_monitor", 0)),
                     min_update_interval_ms=int(getattr(cfg, "retina_capture_min_interval_ms", 0)),
+                    killfeed_enabled=bool(getattr(cfg, "retina_killfeed_enabled", False)),
+                    killfeed_roi=str(getattr(cfg, "retina_killfeed_roi", "")),
+                    killfeed_every=int(getattr(cfg, "retina_killfeed_every", 20)),
+                    capture_enabled=bool(getattr(cfg, "retina_killfeed_capture_enabled", False)),
+                    capture_dir=str(getattr(cfg, "retina_killfeed_capture_dir", "retina_kf_crops")),
+                    capture_max=int(getattr(cfg, "retina_killfeed_capture_max", 600)),
+                    panel_roi=str(getattr(cfg, "retina_capture_panel_roi", "")),
+                    inline_enabled=bool(getattr(cfg, "retina_killfeed_inline_enabled", False)),
+                    anchor_path=str(getattr(cfg, "retina_killfeed_anchor_path", "")),
+                    anchor_id=str(getattr(cfg, "retina_killfeed_anchor_id", "feed_v1")),
+                    session_anchor_enabled=bool(getattr(cfg, "retina_session_anchor_enabled", False)),
+                    ocr_bootstrap_enabled=bool(getattr(cfg, "retina_ocr_bootstrap_enabled", False)),
+                    dense_classify_enabled=bool(getattr(cfg, "retina_dense_classify_enabled", False)),
+                    dense_classify_min_gap_ms=float(getattr(cfg, "retina_dense_classify_min_gap_ms", 50.0)),
+                    session_anchor_archive_dir=str(getattr(cfg, "retina_session_anchor_archive_dir",
+                                                           "retina_kf_anchors")),
+                    near_log_path=str(getattr(cfg, "retina_killfeed_near_log", "")),
+                    composite_log_path=str(getattr(cfg, "retina_killfeed_composite_log", "")),
+                    r2_threshold=int(getattr(cfg, "retina_combat_r2_threshold", 40)),
+                    death_window_enabled=bool(getattr(cfg, "retina_death_window_enabled", False)),
+                    death_window_ms=float(getattr(cfg, "retina_death_window_ms", 4000.0)),
+                    death_noise_floor=float(getattr(cfg, "retina_death_stick_noise_floor", 2.5)),
+                    death_log_path=str(getattr(cfg, "retina_death_window_log", "")),
+                    ads_enabled=bool(getattr(cfg, "retina_ads_coupling_enabled", False)),
+                    ads_log_path=str(getattr(cfg, "retina_ads_coupling_log", "")),
+                    ads_segment_file=str(getattr(cfg, "retina_ads_segment_file", "")),
+                    ads_bg_sample_every=int(getattr(cfg, "retina_ads_bg_sample_every", 30)),
+                    hid_events_enabled=bool(getattr(cfg, "retina_hid_events_enabled", False)),
+                    hid_events_log_path=str(getattr(cfg, "retina_hid_events_log", "")),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
                     # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer
@@ -435,6 +496,7 @@ class DualShockTransport:
                                                                    de_gate=_dg, de_keep_quantile=_dq)
                     self._prev_r2_combat = 0          # R2 edge state for the combat-triggered burst
                     self._last_combat_burst_ts = 0.0
+                    self._prev_r2_inline = 0          # R2 edge state for inline authorship classification
                     log.info("QorTroller Retina presence-burst mode — %s (burst=%.1fs%s)",
                              ("ON-DEMAND (no capture until trigger %r)" % _tp) if _bp <= 0
                              else "periodic duty-cycle, capture OFF between bursts",
@@ -447,6 +509,18 @@ class DualShockTransport:
                     log.warning("QorTroller Retina Game Capture failed to start (window not found?) — abstaining")
             except Exception as _rgc_exc:
                 log.debug("QorTroller Retina Game Capture init skipped (fail-open): %s", _rgc_exc)
+        # Phase C classify-burst (docs/phase-c-classify-sampling-bottleneck-mitigation-2026-07-05.md):
+        # independent of presence-burst — works whether or not retina_capture_burst_enabled is on, since
+        # it densifies classify sampling within an ALREADY-capturing session, not WGC start/stop toggling.
+        if self._retina_game_capture is not None and getattr(cfg, "retina_classify_burst_enabled", False):
+            from .classify_burst import ClassifyBurstController
+            self._classify_burst = ClassifyBurstController(
+                self._retina_game_capture,
+                duration_ms=float(getattr(cfg, "retina_classify_burst_duration_ms", 5000.0)),
+                poll_s=float(getattr(cfg, "retina_classify_burst_poll_s", 0.15)))
+            log.info("QorTroller classify-burst armed on R2 rising edge (duration=%.0fms poll=%.2fs)",
+                     float(getattr(cfg, "retina_classify_burst_duration_ms", 5000.0)),
+                     float(getattr(cfg, "retina_classify_burst_poll_s", 0.15)))
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -698,6 +772,13 @@ class DualShockTransport:
             # Self-healing loop: re-enumerates the device on each attempt so
             # that USB re-enumeration events (e.g. PS5 BT host arbitration)
             # don't permanently kill the counter thread.
+            # F-RP-DIAG-1: RP dual-L2 diag buffer lives OUTSIDE the re-enum loop so a mid-session
+            # re-enumeration does not reset it. Drop-oldest deque -> most recent ~90s @ 1kHz retained.
+            _rpdiag = os.environ.get("RETINA_ADS_RP_DIAG", "") == "true"
+            _rpdiag_buf = deque(maxlen=90000) if _rpdiag else None
+            _rpdiag_seen = 0
+            _rpdiag_flushed = False
+            _rpdiag_check = 0
             while self._hid_counter_running:
                 # Re-enumerate each attempt — path may change after re-enum.
                 _tgt = None
@@ -723,11 +804,49 @@ class DualShockTransport:
                     handle.set_nonblocking(False)
                     log.info("Phase 235-PCC-RATE-FIX: hidapi rate counter live "
                              "on interface %s", _tgt.get("interface_number"))
+                    # l2_ads increment one: this raw reader (one report per read, ~1kHz — NOT burst-drained
+                    # like the pydualsense consumption loop) is the timing-authoritative L2 source. Push the
+                    # device sensor timestamp (offset 28, uint32 LE @ 3MHz) + L2 (offset 5) per report so
+                    # feed_ads gets device-precise L2 edge timing. Ungated by EITHER lobe: l2_ads (feed_ads
+                    # drain) OR the HID lobe (dual-lobe fusion — HidOnsetDetector rising-edge). Capture present.
+                    _push_l2 = ((getattr(self._cfg, "retina_ads_coupling_enabled", False)
+                                 or getattr(self._cfg, "retina_hid_events_enabled", False))
+                                and self._retina_game_capture is not None)
                     while self._hid_counter_running:
                         data = handle.read(128, timeout_ms=200)
                         if data:
                             # CPython GIL makes single-producer safe without lock.
                             self._hid_report_total += 1
+                            if _push_l2 and len(data) > 31:
+                                _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
+                                _now_wall = time.time() * 1000.0
+                                self._retina_game_capture.push_l2_raw(_now_wall, _ts32, data[5])
+                                # FOUND 2026-07-05 (Phase C C-1.1): the HID lobe's "r2_onset" detector was
+                                # being fed data[5] (L2) via push_l2_raw above, so it fired on L2 presses and
+                                # never on R2. R2 is the next byte (raw offset 6 — confirmed against
+                                # tests/hardware/test_dualshock_biometric.py and
+                                # tests/hardware/test_dualshock_adaptive_triggers.py, both hardware-validated
+                                # "l2": data[5], "r2": data[6]). Feed it through its own ingestion point.
+                                if len(data) > 6:
+                                    self._retina_game_capture.push_r2_raw(_now_wall, _ts32, data[6])
+                            # RP-config diagnostic (RETINA_ADS_RP_DIAG): buffer the RAW report bytes IN
+                            # MEMORY during Remote Play; scripts/analyze_rp_l2_diag.py finds offline which
+                            # offset tracks true L2 under RP (offset 5 sticks high on release — 2026-07-02)
+                            # and whether device-ts @28 is stale (starved) vs merely lagged. NO per-frame
+                            # disk write on this ~1kHz thread; flush once on the trigger file / at stop.
+                            if _rpdiag:
+                                _rpdiag_buf.append((time.time() * 1000.0, bytes(data).hex()))
+                                _rpdiag_seen += 1
+                                _rpdiag_check += 1
+                                if _rpdiag_check >= 1024:          # ~1s: poll the flush trigger off-hot-path
+                                    _rpdiag_check = 0
+                                    if os.path.exists(_RPDIAG_FLUSH_TRIGGER):
+                                        if not _rpdiag_flushed:
+                                            _write_rpdiag("retina_rp_rawdump.jsonl", "raw",
+                                                          _rpdiag_buf, _rpdiag_seen)
+                                            _rpdiag_flushed = True
+                                    else:
+                                        _rpdiag_flushed = False
                 except Exception as exc:
                     log.warning("Phase 235-PCC-RATE-FIX: rate counter reconnecting "
                                 "(%s)", exc)
@@ -738,6 +857,8 @@ class DualShockTransport:
                             handle.close()
                         except Exception:
                             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+                    if _rpdiag_buf is not None:   # F-RP-DIAG-1 safety flush at stop / re-enum
+                        _write_rpdiag("retina_rp_rawdump.jsonl", "raw", _rpdiag_buf, _rpdiag_seen)
                 if self._hid_counter_running:
                     time.sleep(1.0)
 
@@ -772,6 +893,18 @@ class DualShockTransport:
         if getattr(self, "_presence_burst", None) is not None:
             asyncio.create_task(self._presence_burst.run())
             log.info("QorTroller Retina presence-burst loop spawned")
+
+        # Phase C classify-burst — independent of presence-burst; densifies classify sampling
+        # within an active R2 window. D-BURST-2 (2026-07-05): runs on a DEDICATED THREAD, not the
+        # event loop — match 9 measured the loop starving to p50=3.0s iterations under live game
+        # load, degrading the asyncio burst's 150ms timer to loop cadence (14 classifications
+        # across 7 windows = zero burst contribution; the OCR bootstrap only runs inside classify
+        # calls, so 15 kills got 14 chances). The thread polls at true poll_s and calls the RGC's
+        # thread-native classify_in_window_sync (lock-guarded admission, same single-flight/
+        # min-gap gates). No-op unless retina_classify_burst_enabled.
+        if getattr(self, "_classify_burst", None) is not None:
+            self._classify_burst.start_thread()
+            log.info("QorTroller classify-burst THREAD spawned (loop-starvation-immune)")
 
         # On-chain device registration — idempotent, runs once per identity.
         # Skipped on subsequent startups when is_chain_registered is True.
@@ -1628,6 +1761,8 @@ class DualShockTransport:
                 if self._retina_game_capture is not None and frames:
                     _now_ms = time.time() * 1000.0
                     _last_dev = float(getattr(frames[-1], "timestamp_ms", 0) or 0)
+                    _death_on = getattr(self._cfg, "retina_death_window_enabled", False)
+                    _ads_on = getattr(self._cfg, "retina_ads_coupling_enabled", False)
                     for _rs in frames:
                         _dev = float(getattr(_rs, "timestamp_ms", 0) or 0)
                         _delta = _last_dev - _dev
@@ -1635,6 +1770,79 @@ class DualShockTransport:
                         self._retina_game_capture.feed_hid(
                             _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
                         self._retina_game_capture.feed_trigger(_ts, float(_rs.r2_trigger))  # Channel B1: trigger->HUD
+                        # LOOP 2: feed each frame's stick into the post-death window (if open). Consumes the
+                        # SAME rx/ry loop 1 reads; the window is opened by loop 1's victim-slot branch.
+                        if _death_on:
+                            self._retina_game_capture.feed_death_stick(
+                                _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
+                    # D-HIDW-1 (2026-07-05): device-clock R2 edge from the RAW hidapi path (HID lobe onset
+                    # counter). The pydualsense r2_trigger fields below missed an ENTIRE live match in the
+                    # dual-connection rig (match 8: 111 raw-path onsets, windows_total=0) — the same
+                    # byte-stream reliability gap that moved l2_ads to the raw path. Live-input gating is
+                    # preserved: these are real controller trigger onsets, never screen content (anti-splice
+                    # invariant intact — B2 still never opens a window). None/0 when --hid-events is off →
+                    # pydualsense path below remains the only opener (unchanged legacy behavior).
+                    _hoc = self._retina_game_capture.hid_onset_count()
+                    _hid_r2_edge = _hoc is not None and _hoc > self._prev_hid_onset_count
+                    # Trigger-gated INLINE authorship: on R2 fire onset, open the classification window; each
+                    # cycle, schedule ONE off-event-loop classify inside the window (single-flight). This is
+                    # classification scheduling, NOT capture bursting — capture stays continuous, and nothing
+                    # is added to the WGC frame callback. Default-off (retina_killfeed_inline_enabled).
+                    if getattr(self._cfg, "retina_killfeed_inline_enabled", False):
+                        # ANY active R2 fire (max across the batch >= threshold) keeps the classification
+                        # window open — NOT a rising edge: sustained/held fire only edges once, so an edge
+                        # gate fires a single classify per trigger-hold (the segment-2 bug). mark_onset
+                        # extends the window; maybe_classify throttles (single-flight + min-gap) so combat is
+                        # sampled continuously and idle closes the window after ~5s.
+                        _r2i = max((int(getattr(_f, "r2_trigger", 0) or 0) for _f in frames), default=0)
+                        if _r2i >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40)) or _hid_r2_edge:
+                            self._retina_game_capture.mark_r2_onset(_now_ms)
+                        self._retina_game_capture.maybe_classify_in_window(_now_ms)
+                        # Phase 1: resolve a window that quietly went cold (no further R2 onset) so combat
+                        # that stops firing still gets its max-over-window composite logged promptly.
+                        self._retina_game_capture.flush_stale_inline_window(_now_ms)
+                        # HID lobe (dual-lobe fusion, default-off): drain the device-clock R2-onset events
+                        # (detected in push_l2_raw on the raw path) to retina_hid_events.jsonl off the ~1 kHz
+                        # reader thread. No-ops when the HID lobe is off. Pairs with the screen lobe (killfeed
+                        # composites) so issue_kas_records can bind a dual-lobe events_root + cross-lobe latency.
+                        self._retina_game_capture.flush_hid_events()
+                    # l2_ads — ADS coupling channel (second anti-splice). The L2 stream is NOT taken from
+                    # these pydualsense frames (their per-frame timing collapses to the ~1.2s tick under the
+                    # burst-drain, docs/hid-timing-resolution-2026-07-01.md); it comes from the RAW hidapi
+                    # reader via push_l2_raw() carrying the DEVICE sensor timestamp. feed_ads drains that
+                    # device-clock source + merges it with the WGC ROI history — device-precise L2 timing.
+                    if _ads_on:
+                        self._retina_game_capture.feed_ads(_now_ms)
+                        # rider 1: cross-check the raw-path L2 (offset 5) against pydualsense's L2 (its own
+                        # parse) in the threshold sense — a disagreement is a parsing finding to catch before
+                        # the raw path is authoritative.
+                        self._retina_game_capture.crosscheck_l2(
+                            max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
+                            _now_ms)
+                    # RP-config diagnostic: pydualsense-L2 side of the dual dump (paired with the raw dump in
+                    # the hidapi thread). F-RP-DIAG-2 (2026-07-02): env-gated ONLY — NOT nested under _ads_on.
+                    # The pyds L2 is GROUND TRUTH for the offset scan (marks release edges where pyds drops to
+                    # 0). Logging it emits NO l2_ads verdict, so the "no enabled=True" rail (about the detector)
+                    # does not apply — moving it here is the correct constraint reading, not a bend. Buffered in
+                    # memory + flushed on the trigger; same time.time() clock as the raw dump.
+                    if os.environ.get("RETINA_ADS_RP_DIAG", "") == "true":
+                        _pbuf = getattr(self, "_rpdiag_pyds_buf", None)
+                        if _pbuf is None:
+                            _pbuf = self._rpdiag_pyds_buf = deque(maxlen=40000)
+                            self._rpdiag_pyds_seen = 0
+                            self._rpdiag_pyds_flushed = False
+                        _pbuf.append((
+                            _now_ms,
+                            max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
+                            int(getattr(frames[-1], "l2_trigger", 0) or 0)))
+                        self._rpdiag_pyds_seen += 1
+                        if os.path.exists(_RPDIAG_FLUSH_TRIGGER):
+                            if not self._rpdiag_pyds_flushed:
+                                _write_rpdiag("retina_rp_pyds.jsonl", "pyds", _pbuf,
+                                              self._rpdiag_pyds_seen)
+                                self._rpdiag_pyds_flushed = True
+                        else:
+                            self._rpdiag_pyds_flushed = False
                     # Combat-triggered burst: R2 crossing the fire threshold auto-fires a presence burst so the
                     # trigger->HUD window is captured hands-free. Default-off; cooldown + single-flight prevent
                     # stacking. Honest cost: capturing briefly lags the gunfight (WGC observer effect).
@@ -1657,6 +1865,25 @@ class DualShockTransport:
                                      max(0.0, float(getattr(self._cfg, "retina_combat_cooldown_s", 18.0))
                                          - (time.time() - self._last_combat_burst_ts)))
                         self._prev_r2_combat = _r2
+                    # Phase C classify-burst arm: an R2 rising edge arms/extends the classify-burst window
+                    # (independent of presence-burst — self._classify_burst is None unless
+                    # retina_classify_burst_enabled is on, regardless of retina_capture_burst_enabled).
+                    # Reuses the SAME rising-edge shape should_combat_fire checks (r2_now>=thr>r2_prev),
+                    # but with its own state variable — classify-burst has no cooldown/is_active gate
+                    # (unlike a WGC-toggle burst, calling arm() again mid-window is exactly the desired
+                    # "sustained fire extends the window" behavior, not something to suppress).
+                    if self._classify_burst is not None:
+                        _r2cb = int(getattr(frames[-1], "r2_trigger", 0) or 0)
+                        if (_hid_r2_edge                    # D-HIDW-1: raw-path onset also arms the burst
+                                or (_r2cb >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40))
+                                    and self._prev_r2_classify_burst
+                                    < int(getattr(self._cfg, "retina_combat_r2_threshold", 40)))):
+                            self._classify_burst.arm(_now_ms)
+                        self._prev_r2_classify_burst = _r2cb
+                    # D-HIDW-1: consume the raw-path onset counter AFTER both edge uses (inline window +
+                    # burst arm) — updating between them would drop the edge for whichever runs second.
+                    if _hoc is not None:
+                        self._prev_hid_onset_count = _hoc
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients
@@ -2200,7 +2427,11 @@ class DualShockTransport:
                                 self._retina_game_capture.tune()
                             _rc_v = self._retina_game_capture.latest_coupled_verdict()  # already NQPV vocab
                             self._rgc_diag_n = getattr(self, "_rgc_diag_n", 0) + 1
-                            if self._rgc_diag_n % 25 == 1:
+                            # Emit the RGC diag (calibration sample) every retina_diag_every records — lower
+                            # it (RETINA_DIAG_EVERY=4) for a dense latency-calibration session. (n-1)%e==0 so
+                            # e=1 logs every record (the naive %e==1 never fires for e=1).
+                            _diag_every = max(1, int(getattr(self._cfg, "retina_diag_every", 25)))
+                            if (self._rgc_diag_n - 1) % _diag_every == 0:
                                 log.info("RGC diag: %s", self._retina_game_capture.status())
                             # Positive coupling always injects; IMPLAUSIBLE only when negative-detection is
                             # enabled (aim-games). In a dead-zone/auto-camera game (NCAA) IMPLAUSIBLE is a
@@ -2243,6 +2474,16 @@ class DualShockTransport:
                         except Exception as _posca_exc:
                             log.debug("posca slice skipped (fail-open): %s", _posca_exc)
 
+                        # U1 (design doc §2.6): the shared session identifier, minted once by the daemon
+                        # (session_identity.py preimage) and threaded here via env — so every fusion proof
+                        # built from this session's meta is correlatable with the session's KAS record and
+                        # tier-1 archive manifest by ONE field. Null-safe: absent env (non-daemon runs)
+                        # leaves the meta unchanged.
+                        _sid = os.environ.get("QORTROLLER_SESSION_ID")
+                        if _sid:
+                            self._pending_pitl_meta.setdefault("session_id", _sid)
+                            self._pending_pitl_meta.setdefault(
+                                "session_display", os.environ.get("QORTROLLER_SESSION_DISPLAY"))
                         self._pending_pitl_meta.update(
                             cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
                         )

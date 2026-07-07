@@ -253,3 +253,31 @@ docs/disaster-recovery-runbook.private.md
 # defensive layer.
 backups/
 bridge-*.db
+
+# Dense kill-feed panel-crop calibration corpus (gameplay-derived; operator-local)
+retina_kf_crops/
+
+# Archived gameplay crop corpora (per-session; gameplay-derived)
+retina_kf_archive/
+# Per-session auto-cut authorship anchors (PNG+SHA; gameplay-derived; R4 archival, NOT the committed static assets)
+retina_kf_anchors/
+retina_kf_near_boundary.jsonl
+retina_death_window.jsonl
+retina_kf_composite.jsonl
+retina_kf_composite_offline_relabel_*.jsonl
+adv_splice_*.jsonl
+retina_kf_adv_splice*/
+adv_splice_shown_*.jsonl
+retina_daemon_adv_splice_*.log
+retina_ads_*.jsonl
+retina_ads_label.txt
+retina_daemon_ads_*.log
+retina_ads_l2debug.jsonl
+retina_hid_rawdump.jsonl
+retina_rp_rawdump.jsonl
+retina_rp_pyds.jsonl
+# B2 instrumented trace (per-frame redness; gameplay-derived; local-only)
+retina_b2_trace*.jsonl
+
+# Recognition bake-off raw per-crop OCR (derived from gitignored crops; other-player gamertags; bulky)
+audits/rbo_*.jsonl

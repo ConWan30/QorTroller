@@ -1,0 +1,53 @@
+[
+  {
+    "label": "g3mp",
+    "verdict": "AUTHORED_SESSION",
+    "authored": 5,
+    "deaths": 0,
+    "windows": 12,
+    "anchor_tags": [
+      "session_20260703_131828@0.66"
+    ],
+    "commitment": "73ecafc7e97b29c8"
+  },
+  {
+    "label": "g3wz2",
+    "verdict": "INSUFFICIENT_KILLS",
+    "authored": 0,
+    "deaths": 0,
+    "windows": 24,
+    "anchor_tags": [],
+    "commitment": "f2c17229014613e7"
+  },
+  {
+    "label": "g3br_recut",
+    "verdict": "INSUFFICIENT_KILLS",
+    "authored": 0,
+    "deaths": 0,
+    "windows": 23,
+    "anchor_tags": [],
+    "commitment": "a83e496f161764d8"
+  },
+  {
+    "label": "g3br_gatedcut",
+    "verdict": "AUTHORED_SESSION",
+    "authored": 13,
+    "deaths": 0,
+    "windows": 18,
+    "anchor_tags": [
+      "session_20260703_155058@0.66"
+    ],
+    "commitment": "19898add7da49c42"
+  },
+  {
+    "label": "b2trace",
+    "verdict": "AUTHORED_SESSION",
+    "authored": 10,
+    "deaths": 0,
+    "windows": 34,
+    "anchor_tags": [
+      "session_20260703_162507@0.66"
+    ],
+    "commitment": "d056ff9584e81556"
+  }
+]

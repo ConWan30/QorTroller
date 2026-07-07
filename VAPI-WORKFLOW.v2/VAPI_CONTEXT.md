@@ -52,7 +52,7 @@
 | Bridge pytest | **2,517** | ~2,572 passing | ✅ (+8 Phase 236-WATCHDOG, +8 Phase 236-VAME, +8 Phase 236-CORPUS-SNAPSHOT, +8 Phase 237-CONSENT, +1 Phase 237-EXTEND FSCA; Phase 238 added 0 bridge tests; +7 Phase 237.5 T237.5-1..6 (T237.5-6 has 2 sub-tests); 147 pre-existing failures: Phase 58 security + Phase 69 curator config) |
 | Autoresearch pytest | **7** | 7 | ✅ Phase 238 (T238-FSCA-1, 1b, 2, 2b, 3, 3b, 3c — 0.27s) |
 | SDK pytest | **539** | 539 | ✅ +4 Phase 237-EXTEND (T237-S1..S4); Phase 238/237.5 unchanged |
-| PV-CI invariants | **28** | 28 | ✅ +INV-CORPUS-001 (anchor_corpus_snapshot signature), +INV-CORPUS-002 (b"VAPI_CORPUS_SNAPSHOT_v1" deviceIdHash literal — Path X retargeted) |
+| PV-CI invariants | **read the gate** — `scripts/vapi_invariant_gate.py` (182 as of 2026-07-02) | — | ✅ MOVING VALUE — trust the gate output, not a doc literal (prior "28" was Phase-237.5-stale; NEVER conflate with the cycle-57 vault NOTE count 128→139) |
 | SDK tests | **535** | 535 | ✅ PASS |
 | Hardhat tests | **502** (delta) | 522 | ✅ PASS (6 pre-existing Phase 186 failures excluded from delta) |
 | Hardware tests | 37 | — | ⚠️ HARDWARE-ONLY |

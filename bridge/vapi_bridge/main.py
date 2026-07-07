@@ -295,6 +295,10 @@ class Bridge:
                     posca_structure_ok=pitl_meta.get("posca_structure_ok"),
                     posca_coupling_score=pitl_meta.get("posca_coupling_score"),
                     posca_action_count=pitl_meta.get("posca_action_count"),
+                    # U1 join key (d-cert5 §2.6): persist the session identifier so PoSP (U2) can
+                    # collect this session's fusion rows by one field at stop time. Null-safe.
+                    session_id=pitl_meta.get("session_id"),
+                    session_display=pitl_meta.get("session_display"),
                 )
             except Exception as e:  # noqa: BLE001 — co-capture is advisory, never fatal
                 log.debug("nqpv co-capture persist skipped: %s", e)

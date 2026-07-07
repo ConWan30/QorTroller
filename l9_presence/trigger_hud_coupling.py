@@ -106,6 +106,25 @@ class TriggerHudCouplingOracle:
         self._roi_ts.append(float(ts_ms))
         self._roi_v.append(float(roi_value))
 
+    def latest_roi(self) -> Optional[float]:
+        """Most recent center-ROI luminance value (O(1)) — reused by l2_ads at the consumption hook so the
+        ADS channel adds ZERO work to the WGC callback (the value is already computed there for B1)."""
+        return self._roi_v[-1] if self._roi_v else None
+
+    def roi_since(self, ts_ms: float) -> list:
+        """Timestamped center-ROI samples NEWER than ts_ms, oldest-first: [(t, v), ...]. Reused by l2_ads
+        for retroactive window fill — the consumption loop ticks ~1.7s apart, far coarser than the ADS
+        onset window (300ms), but this deque holds the WGC-rate history (~25ms), so the wiring can replay
+        the true timeline through the monitor after the fact. Scans from the right (recent) — cheap for
+        the per-tick delta."""
+        out = []
+        for t, v in zip(reversed(self._roi_ts), reversed(self._roi_v)):
+            if t <= ts_ms:
+                break
+            out.append((float(t), float(v)))
+        out.reverse()
+        return out
+
     def _grid(self) -> Optional[np.ndarray]:
         if len(self._tr_ts) < 4 or len(self._roi_ts) < 4:
             return None

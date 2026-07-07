@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import types
 
-from vapi_bridge.novel_presence_fusion import (
+from bridge.vapi_bridge.novel_presence_fusion import (
     NQPVVerdict,
     NovelPresenceFusionOrchestrator,
     cocapture_fields_from_pitl_meta,
