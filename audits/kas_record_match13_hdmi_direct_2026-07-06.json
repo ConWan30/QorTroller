@@ -1,0 +1,87 @@
+{
+  "session_label": "match13_hdmi_direct",
+  "handle": "QorTrola30",
+  "verdict": "AUTHORED_SESSION",
+  "authored_kills": 8,
+  "authored_scores": [
+    0.7671,
+    0.7671,
+    0.7584,
+    0.749,
+    0.7305,
+    0.7219,
+    0.8529,
+    0.6866
+  ],
+  "anchor_tags": [
+    "session_20260706_194813@0.66"
+  ],
+  "windows_total": 30,
+  "composites_total": 30,
+  "own_deaths": 0,
+  "event_trail": [
+    {
+      "ts": "2026-07-06 19:50:18",
+      "event": "candidate_cut",
+      "regime": "CANDIDATE",
+      "sha": "9d6a1f1ef8f01d34",
+      "engine": "rapidocr_ppocrv6_small",
+      "match_kind": "exact",
+      "raw_read": "Qortrola30"
+    },
+    {
+      "ts": "2026-07-06 19:52:09",
+      "event": "promoted",
+      "regime": "PROMOTED",
+      "sha": "9d6a1f1ef8f01d34"
+    }
+  ],
+  "coupling_corroboration": {
+    "th2_coupled_true_ticks": 28,
+    "inline_classifications": 166,
+    "inline_composite_windows": 32
+  },
+  "hygiene": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "timespan"
+  },
+  "span_ms": [
+    1783385360007.0,
+    1783386035893.4
+  ],
+  "min_kills": 2,
+  "notes": [],
+  "events_root": "c344cf52eddc2c3fe5dcdac3604ee8a6b70b6b23898669aa7b983d317aa1682e",
+  "events_root_scheme": "sha256_v1",
+  "events_root_lobes": [
+    "screen",
+    "hid"
+  ],
+  "kas_domain_tag": "QORTROLLER-KAS-v0",
+  "commitment": "3120c498f23aaaddeaa931861dfaac2d424e09641c0f06540522eb13d1d1072d",
+  "cross_lobe_coherence": {
+    "schema": "vapi-retina-causal-coherence-v1",
+    "calibration": "UNCALIBRATED",
+    "verdict": "COHERENT",
+    "coherence_ratio": 1.0,
+    "n_outcomes_required": 9,
+    "n_matched": 9,
+    "n_orphan_outcomes": 0,
+    "n_inputs": 65,
+    "nearest_preceding_latency_s": [
+      2.8648,
+      1.3127,
+      1.4064,
+      1.4071,
+      4.1719,
+      1.4776,
+      0.6223,
+      2.0068,
+      2.0068
+    ],
+    "n_hid_inputs": 65
+  },
+  "session_id": "0283fc1e400999426c6af613325579b577c73d3ede5ce79abaeeb2fd80509b86",
+  "session_display": "match13_hdmi_direct_1783385280"
+}
