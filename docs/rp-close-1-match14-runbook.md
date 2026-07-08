@@ -25,40 +25,41 @@ Get-CimInstance Win32_Process -Filter "Name like 'python%'" | Select ProcessId,C
 
 # 2. VPN OFF — McAfee/WireGuard throttled RP 16->29fps (2026-06-27 measured)
 
-# 3. Fresh DB (F-RP5-1: bridge DB regrown to 5.3GB; cycle-49 fresh-DB fix)
-$env:DB_PATH = "$HOME\.vapi\bridge_match14.db"
-
-# 4. Lean bridge for RP headroom (73%->43-50% CPU measured)
-#    GOTCHA (load-bearing): NQPV co-capture must stay ON or coupling reads None
-#    AND PoSP's fusion surface gets zero rows -> no SYNCHRONIZED possible.
-$env:PRESENCE_LEAN_MODE = "true"
-$env:NQPV_COCAPTURE_ENABLED = "true"
-
-# 5. Start the lean bridge (own terminal)
-python -m bridge.vapi_bridge.main
-
-# 6. Preflight gate — must print GO or GO_WITH_WARNINGS (investigate any WARN)
+# 3. Preflight gate — must print GO or GO_WITH_WARNINGS (investigate any WARN)
 $env:RETINA_KILLFEED_CAPTURE_MAX = "1800"
 python scripts/match_preflight.py --capture-dir retina_kf_crops_match14
 ```
 
-## Launch (second terminal; PS5 streaming via Remote Play, controller USB to laptop)
+## Launch (ONE terminal — the daemon spawns its own lean bridge; see NOTE below)
 
 ```powershell
+# CRITICAL: the daemon's spawned bridge AND its stop-time PoSP issuance both read
+# DB_PATH from THIS shell's env (falls back to bridge/.env, then the default 5.3GB DB).
+# Wrong DB at stop -> zero fusion rows -> PARTIAL, never SYNCHRONIZED.
+$env:DB_PATH = "$HOME\.vapi\bridge_match14.db"
+$env:PRESENCE_LEAN_MODE = "true"
+$env:NQPV_COCAPTURE_ENABLED = "true"
 $env:RETINA_KILLFEED_CAPTURE_MAX = "1800"
 python scripts/retina_capture_daemon.py start --session-anchor --killfeed-inline `
-    --dense-classify --classify-burst --hid-events --kas `
+    --dense-classify --classify-burst --hid-events `
     --capture --capture-dir retina_kf_crops_match14 `
     --label "match14_rp_option_b" --diag-every 4
 ```
 
+NOTE (learned live, Match 14): `--kas` is a STOP flag, not a start flag — KAS issues at
+close. ALSO: the daemon SPAWNS its own bridge (detached, port 8080) — do NOT start a
+separate bridge first; two bridges = port bind failure + shared-HID contention (the
+exact M12 failure mode). The daemon-only launch IS the whole stack; set the lean/NQPV
+env in the daemon's shell so the spawned bridge inherits it.
+
 Play one full match. Do not run anything else heavy on the laptop during it.
 
-## Stop (CRITICAL: same capture dir, or the archive copies the wrong ring)
+## Stop (CRITICAL: same capture dir, or the archive copies the wrong ring;
+## run from the SAME launch terminal so DB_PATH is still set; --kas lives HERE)
 
 ```powershell
 $env:RETINA_KILLFEED_CAPTURE_DIR = "retina_kf_crops_match14"
-python scripts/retina_capture_daemon.py stop
+python scripts/retina_capture_daemon.py stop --kas --label "match14_rp_option_b"
 ```
 
 Stop issues the KAS record, the PoSP record (`audits/posp_record_match14_*.json`),
