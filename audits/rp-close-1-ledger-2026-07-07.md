@@ -79,6 +79,13 @@ half of QorTroller is RP-proven; the authorship/PoSP half is HDMI-proven and RP-
 RP-2b / Match 15 (Option A) for the full-density RP authorship figure that F-RP2-1
 priced. RP-4/RP-6 remain rig-gated.
 
+## RP-2c / RP-2d — card-free authorship gates (opened + executed 2026-07-07)
+
+| Gate | State | Evidence |
+|------|-------|----------|
+| RP-2d deferred-attestation tier | **CLOSED 2026-07-07** — M14 **DEFERRED_AUTHORED_SESSION 3/11** (conjunction-preserving; +1 OBSERVED); M13 cross-check PASSED (deferred 9 ⊇ live 8); verifiers OK (20+59 checks); 12 tests | `audits/rp-close-1-rp2d-report.md` |
+| RP-2c window-gated densification | **CODE SHIPPED, default-OFF** — Fix A REFUTED (F-RP2C-1: live classify already full-res); Fix B = `RETINA_KF_EVERY_BURST` + burst-thread flush-on-new-stash; anti-splice rail pinned (test caught a real sentinel bug); live validation rig-gated (bar: reads/cluster ≥ 2.5) | same report |
+
 ## LUMEN track — meaning-plane gates (opened 2026-07-07, per D-RP-1 follow-through)
 
 Second track under the same closure discipline. Design basis:
@@ -89,7 +96,7 @@ everything advisory + default-OFF until calibrated; no perception output touches
 
 | Gate | Title | State | Unblocked by |
 |------|-------|-------|--------------|
-| LUMEN-1 | Game-state buffer vs archives (ROI persistence + temporal event clusters; offline, advisory, no flags) | **UNBLOCKED 2026-07-07** (Match 14 done; corpus now M13 524 + M14 413 crops + 92 diag samples) | RP-2 ✓ |
+| LUMEN-1 | Game-state buffer vs archives (ROI persistence + temporal event clusters; offline, advisory, no flags) | **CLOSED 2026-07-07** — `game_state_buffer.py` + runner; M14 403 events / M13 484 events, joins OK; F-LUMEN-1 panel-scale threshold noted (LUMEN-2 refinement) | RP-2 ✓ |
 | LUMEN-2 | Structured scene stream + session_id join (scene events emitted from archive replays, commitment-referenced, joined against real KAS/PoSP records) | QUEUED | LUMEN-1 |
 | LUMEN-3 | Predictive-coupling study offline (N5: expected-screen-response-given-input vs observed — the anti-GCAP oracle measurement; synthetic -> archive first) | QUEUED | LUMEN-1 (parallel-safe with LUMEN-2) |
 | LUMEN-4 | Live perception on the sidecar node (retina perception ON in the witness box; first real `retina_perception_root` in a PoSP record; ioID registration scoped) | HARDWARE-GATED | RP-2b / OA-RP-1 (capture card) |
@@ -118,9 +125,13 @@ Design + first probe: `docs/edge-sense-controller-as-perception-2026-07-07.md`.
 
 ## OPERATOR-ACTION box
 
-- **OA-RP-1:** Acquire HDMI/USB capture card (≈$20–150) for the Match 15 Option-A rerun
-  (sidecar-device witness of the RP client output). No deadline; Match 14 does not wait.
-  Convergence note (2026-07-07): this box is also the seed hardware of the trio-retina
-  perception node — one purchase serves both the RP recall ceiling and the future
-  DePIN gaming-witness-node track. See
-  `docs/trio-retina-lumen-qortroller-alignment-2026-07-07.md` (N3).
+- **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
+  re-planned card-free):** HDMI/USB capture card (USB — no internal slot needed;
+  cheapest ~$20) remains the *someday* path to live full-density RP attestation +
+  the sidecar witness node (trio alignment N3). Nothing on the board requires it.
+  The card-free replacements: **RP-2c** (software densification — killfeed-ROI-priority
+  capture + window-gated dense bursts on the same laptop) and **RP-2d**
+  (deferred-attestation tier — the archive is manifest-committed live evidence;
+  M14's sealed archive already holds 4/11 kills at K=3 with 0 false reads =
+  DEFERRED_AUTHORED 36%, honestly labeled vs live AUTHORED). Match 15/Option A
+  parks until funds exist; RP-2b task parked accordingly.
