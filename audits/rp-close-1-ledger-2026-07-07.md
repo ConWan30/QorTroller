@@ -84,7 +84,7 @@ priced. RP-4/RP-6 remain rig-gated.
 | Gate | State | Evidence |
 |------|-------|----------|
 | RP-2d deferred-attestation tier | **CLOSED 2026-07-07** — M14 **DEFERRED_AUTHORED_SESSION 3/11** (conjunction-preserving; +1 OBSERVED); M13 cross-check PASSED (deferred 9 ⊇ live 8); verifiers OK (20+59 checks); 12 tests | `audits/rp-close-1-rp2d-report.md` |
-| RP-2c window-gated densification | **CODE SHIPPED, default-OFF** — Fix A REFUTED (F-RP2C-1: live classify already full-res); Fix B = `RETINA_KF_EVERY_BURST` + burst-thread flush-on-new-stash; anti-splice rail pinned (test caught a real sentinel bug); live validation rig-gated (bar: reads/cluster ≥ 2.5) | same report |
+| RP-2c window-gated densification | **CLOSED 2026-07-08 (M17)** — Fix B VALIDATED live: 2.08/s in-window vs 0.53 outside (3.9×), 7.5 reads/cluster (bar was ≥2.5) → live authored 17/18. **F-FIXB-1 FIXED same day**: dedicated 0.15s flush thread unbinds the flush from the ~1s classify worker (spawns only when armed+capture; NO flush after stop() — the lifecycle test caught the shutdown race on first run, fixed); next match should approach the ~5-6/s stash-limited ceiling | M17 report + 2 lifecycle tests |
 
 ## LUMEN track — meaning-plane gates (opened 2026-07-07, per D-RP-1 follow-through)
 
@@ -122,7 +122,7 @@ Design + first probe: `docs/edge-sense-controller-as-perception-2026-07-07.md`.
 | ES-P0 | RP haptic-forwarding premise (fire a weapon, feel it — never assumed) | **OPERATOR, ~2 min** | — |
 | ES-P1 | Mine already-captured M14 data | **CLOSED 2026-07-07** — substrate confirmed (334 IMU-feature records); F-ES-2 sparse flag, F-ES-3 idle tail (23% over haptic threshold; game haptics / grip / Cycle25 tether candidates), F-ES-4 120Hz spectral ceiling | — |
 | ES-P2 | Instrumented 1000Hz capture, 4 segments (tether-on idle / tether-off idle / firing / damage-taking) | RIG-GATED (~15 min; can share rig time with any match session) | ES-P0 |
-| ES-P3 | Haptic-vs-tremor separation study (>=10x band-power bar, zero false events on idle) | QUEUED | ES-P2 |
+| ES-P3 | Haptic-vs-tremor separation study | **CLOSED 2026-07-08 — PRE-REGISTERED BAR MET** (`audits/es_p3_spectral_result.json`): haptic-band (30-200Hz) fire/idle ratio **40.4×** (bar ≥10×); zero-false on idle **HELD** (0/602 windows at idle-max×1.5); fire events 9% of windows (burst cadence). **F-ES-P3-1 (honest caveat):** tremor-band control also rose 10.3× (recoil/hand motion confound) — the 40× vs 10× margin + M15's in-match 49Hz support the motor interpretation, and deferred seg-3 (damage rumble while STILL) is now the precisely-scoped disconfound stimulus | ES-P2 segs 1+2 ✓ |
 | ES-P4 | Three-lobe alignment (echo x screen x HID on session_id) — IS LUMEN-3's third channel | QUEUED | ES-P3 (merges with LUMEN track) |
 | ES-W | Advisory oracle wiring (EchoEvent -> NQPV active_oracles, default-OFF) | GATED on P0–P4 green | ES-P4 |
 

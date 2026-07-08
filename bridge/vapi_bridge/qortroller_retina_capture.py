@@ -760,6 +760,31 @@ class RetinaGameCapture:
 
     def start(self) -> bool:
         self.started = self._source.start()
+        # F-FIXB-1 fix (2026-07-08): the window-gated ring flush was classify-thread-bound
+        # (~2/s measured M17 vs ~5-6/s stash-limited theoretical, because the burst thread
+        # spends ~1s inside each OCR worker). A dedicated 0.15s flush thread unbinds it.
+        # Spawned ONLY when Fix B is armed + capture enabled; daemon thread; fail-open;
+        # all gating stays inside maybe_flush_burst_crop (window predicate unchanged --
+        # the anti-splice rail is untouched, this only changes WHO calls the flusher).
+        if (self.started and self._capture_enabled
+                and getattr(self._source, "_kf_burst_every", 0) > 0):
+            import threading as _th
+            import time as _t
+            self._burst_flush_stop = False
+
+            def _flush_loop() -> None:
+                while not getattr(self, "_burst_flush_stop", True):
+                    _t.sleep(0.15)
+                    if getattr(self, "_burst_flush_stop", True):
+                        break              # re-check after sleep: NO flush after stop()
+                    try:
+                        self.maybe_flush_burst_crop(_t.time() * 1000.0)
+                    except Exception:  # noqa: BLE001 — flusher must never die loudly
+                        pass
+
+            _th.Thread(target=_flush_loop, daemon=True,
+                       name="qt-burst-flush").start()
+            log.info("RetinaGameCapture: dedicated burst-flush thread ON (F-FIXB-1)")
         return self.started
 
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
@@ -1438,4 +1463,5 @@ class RetinaGameCapture:
         }
 
     def stop(self) -> None:
+        self._burst_flush_stop = True      # F-FIXB-1: end the dedicated flush thread
         self._source.stop()
