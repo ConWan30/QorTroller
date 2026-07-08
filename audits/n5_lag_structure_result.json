@@ -1,0 +1,81 @@
+{
+  "classes": {
+    "genuine": [
+      "match13_hdmi_direct_1783385280.jsonl",
+      "match14_rp_option_b_1783475385.jsonl"
+    ],
+    "decoupled": [
+      "a1spectate_1783118822.jsonl"
+    ],
+    "n_genuine": 426,
+    "n_decoupled": 213
+  },
+  "separates_any": false,
+  "channels": [
+    {
+      "channel": "geometric",
+      "separates": false,
+      "note": "bar missed (genuine 0.244 vs decoupled 0.889)",
+      "genuine": {
+        "channel": "geometric",
+        "n_total": 142,
+        "n_informative": 41,
+        "median_lag_ms": 108.3,
+        "consistency": 0.244,
+        "verdict": "LAG_INCOHERENT"
+      },
+      "decoupled": {
+        "channel": "geometric",
+        "n_total": 71,
+        "n_informative": 9,
+        "median_lag_ms": 0.0,
+        "consistency": 0.889,
+        "verdict": "LAG_COHERENT"
+      }
+    },
+    {
+      "channel": "b1_flash",
+      "separates": false,
+      "note": "bar missed (genuine 0.778 vs decoupled 0.762)",
+      "genuine": {
+        "channel": "b1_flash",
+        "n_total": 142,
+        "n_informative": 27,
+        "median_lag_ms": 33.3,
+        "consistency": 0.778,
+        "verdict": "LAG_COHERENT"
+      },
+      "decoupled": {
+        "channel": "b1_flash",
+        "n_total": 71,
+        "n_informative": 21,
+        "median_lag_ms": 33.3,
+        "consistency": 0.762,
+        "verdict": "LAG_COHERENT"
+      }
+    },
+    {
+      "channel": "b2_killmark",
+      "separates": false,
+      "note": "bar missed (genuine 0.237 vs decoupled 0.614)",
+      "genuine": {
+        "channel": "b2_killmark",
+        "n_total": 142,
+        "n_informative": 59,
+        "median_lag_ms": 275.0,
+        "consistency": 0.237,
+        "verdict": "LAG_INCOHERENT"
+      },
+      "decoupled": {
+        "channel": "b2_killmark",
+        "n_total": 71,
+        "n_informative": 44,
+        "median_lag_ms": 50.0,
+        "consistency": 0.614,
+        "verdict": "LAG_COHERENT"
+      }
+    }
+  ],
+  "pre_registered_bar": "genuine>=0.60 AND decoupled<=genuine-0.25, N>=8/class",
+  "advisory": true
+}
