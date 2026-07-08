@@ -100,6 +100,22 @@ Honest scale note: LUMEN-1..3 are session-scale offline builds against existing 
 world model beyond the narrow game-state model is a roadmap, not a gate — it earns
 entry only after LUMEN-1..3 produce calibrated keep.
 
+## EDGE-SENSE track — the controller as perception hardware (opened 2026-07-07)
+
+The operator's existing DualSense Edge prototyped as Lumen/Retina hardware: cause-lobe
+sensor + haptic-echo witness (game -> haptic actuation -> IMU signature — a
+screen-independent, capture-contention-immune event lobe INSIDE the signing device).
+Design + first probe: `docs/edge-sense-controller-as-perception-2026-07-07.md`.
+
+| Gate | Title | State | Unblocked by |
+|------|-------|-------|--------------|
+| ES-P0 | RP haptic-forwarding premise (fire a weapon, feel it — never assumed) | **OPERATOR, ~2 min** | — |
+| ES-P1 | Mine already-captured M14 data | **CLOSED 2026-07-07** — substrate confirmed (334 IMU-feature records); F-ES-2 sparse flag, F-ES-3 idle tail (23% over haptic threshold; game haptics / grip / Cycle25 tether candidates), F-ES-4 120Hz spectral ceiling | — |
+| ES-P2 | Instrumented 1000Hz capture, 4 segments (tether-on idle / tether-off idle / firing / damage-taking) | RIG-GATED (~15 min; can share rig time with any match session) | ES-P0 |
+| ES-P3 | Haptic-vs-tremor separation study (>=10x band-power bar, zero false events on idle) | QUEUED | ES-P2 |
+| ES-P4 | Three-lobe alignment (echo x screen x HID on session_id) — IS LUMEN-3's third channel | QUEUED | ES-P3 (merges with LUMEN track) |
+| ES-W | Advisory oracle wiring (EchoEvent -> NQPV active_oracles, default-OFF) | GATED on P0–P4 green | ES-P4 |
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1:** Acquire HDMI/USB capture card (≈$20–150) for the Match 15 Option-A rerun
