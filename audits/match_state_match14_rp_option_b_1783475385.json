@@ -1,0 +1,42 @@
+{
+  "advisory": true,
+  "bucket_s": 10.0,
+  "containment": {
+    "kills_contained": "7/7",
+    "missed_windows": [],
+    "ok": true,
+    "windows_contained": "7/7"
+  },
+  "events": [
+    {
+      "event": "MATCH_STARTED",
+      "ts_ms": 1783475395000.0
+    },
+    {
+      "event": "MATCH_ENDED",
+      "ts_ms": 1783475855000.0
+    }
+  ],
+  "n_matches": 1,
+  "notes": [],
+  "schema": "qortroller-match-state-v0",
+  "session_display": "match14_rp_option_b_1783475385",
+  "session_id": "1c9847111fb464b49a536f56b2cbc48ac365a3edfca8e6660c4228fe2cdd583b",
+  "spans": [
+    {
+      "end_ms": 1783475395000.0,
+      "start_ms": 1783475385000.0,
+      "state": "LOBBY"
+    },
+    {
+      "end_ms": 1783475855000.0,
+      "start_ms": 1783475395000.0,
+      "state": "IN_MATCH"
+    },
+    {
+      "end_ms": 1783476088000.0,
+      "start_ms": 1783475855000.0,
+      "state": "LOBBY"
+    }
+  ]
+}

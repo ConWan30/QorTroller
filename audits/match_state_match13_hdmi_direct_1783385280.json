@@ -1,0 +1,42 @@
+{
+  "advisory": true,
+  "bucket_s": 10.0,
+  "containment": {
+    "kills_contained": "18/18",
+    "missed_windows": [],
+    "ok": true,
+    "windows_contained": "30/30"
+  },
+  "events": [
+    {
+      "event": "MATCH_STARTED",
+      "ts_ms": 1783385330000.0
+    },
+    {
+      "event": "MATCH_ENDED",
+      "ts_ms": 1783386040000.0
+    }
+  ],
+  "n_matches": 1,
+  "notes": [],
+  "schema": "qortroller-match-state-v0",
+  "session_display": "match13_hdmi_direct_1783385280",
+  "session_id": "0283fc1e400999426c6af613325579b577c73d3ede5ce79abaeeb2fd80509b86",
+  "spans": [
+    {
+      "end_ms": 1783385330000.0,
+      "start_ms": 1783385280000.0,
+      "state": "LOBBY"
+    },
+    {
+      "end_ms": 1783386040000.0,
+      "start_ms": 1783385330000.0,
+      "state": "IN_MATCH"
+    },
+    {
+      "end_ms": 1783386101000.0,
+      "start_ms": 1783386040000.0,
+      "state": "LOBBY"
+    }
+  ]
+}
