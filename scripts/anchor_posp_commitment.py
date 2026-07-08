@@ -107,9 +107,22 @@ def main() -> int:
     if cost > COST_BUDGET_IOTX:
         print(f"  ABORT: est cost {cost:.4f} exceeds hard cap {COST_BUDGET_IOTX}.", file=sys.stderr)
         return 3
+    # Key sourcing: env first; else read BRIDGE_PRIVATE_KEY from bridge/.env INSIDE the
+    # script (same pattern as the daemon's DB_PATH fallback) so key material never
+    # transits the shell (no history, no process args, never printed).
     key = os.environ.get("OPERATOR_PRIVATE_KEY", "")
     if not key:
-        print("  ABORT: OPERATOR_PRIVATE_KEY not in env.", file=sys.stderr)
+        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "bridge", ".env")
+        if os.path.isfile(env_path):
+            for line in open(env_path, encoding="utf-8"):
+                line = line.strip()
+                if line.startswith("BRIDGE_PRIVATE_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if not key:
+        print("  ABORT: no signing key (OPERATOR_PRIVATE_KEY env or BRIDGE_PRIVATE_KEY "
+              "in bridge/.env).", file=sys.stderr)
         return 3
 
     signed = w3.eth.account.sign_transaction(tx, key)
