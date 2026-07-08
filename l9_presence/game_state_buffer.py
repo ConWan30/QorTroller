@@ -34,6 +34,13 @@ KILL_ROW_CLUSTER = "KILL_ROW_CLUSTER"
 INPUT_WINDOW = "INPUT_WINDOW"
 
 DEFAULT_FRESH_DIFF = 6.0     # mirrors _SESSION_ANCHOR_FRESH_DIFF (live fresh-row gate)
+# F-LUMEN-1 CALIBRATED (2026-07-08 study, audits/f-lumen-1-panel-threshold-study): the 6.0
+# killer-slot threshold is ~8x below the PANEL-scale delta MEDIAN (p50~47 on BOTH M14-RP and
+# M13-HDMI — cross-topology stable), which is why panel streams read ~92% SCENE_CHANGE.
+# 63.0 = the cross-topology p75: ~25% ambient change rate (stable segments exist) with ~60%
+# kill-onset sensitivity (kills sit at delta ~68-72). SCENE_CHANGE is generic structure, NOT
+# a kill detector (OCR owns kills) — consumers wanting a different operating point read the sweep.
+PANEL_FRESH_DIFF = 63.0
 MIN_STABLE_RUN = 3           # crops; shorter runs are transitions, not segments
 
 

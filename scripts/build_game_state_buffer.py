@@ -27,7 +27,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from l9_presence.game_state_buffer import (
-    build_scene_stream, compute_crop_deltas, verify_stream_references,
+    PANEL_FRESH_DIFF, build_scene_stream, compute_crop_deltas, verify_stream_references,
 )
 
 _TS_RE = re.compile(r"panel_(\d+)\.png$")
@@ -58,6 +58,8 @@ def main() -> int:
     ap.add_argument("--scan", default=None, help="v2 precision-scan JSON (optional)")
     ap.add_argument("--kas", default=None, help="KAS record (span source for windows)")
     ap.add_argument("--composites", default="retina_kf_composite.jsonl")
+    ap.add_argument("--fresh-diff", type=float, default=PANEL_FRESH_DIFF,
+                    help="scene-change threshold (default: F-LUMEN-1 calibrated panel p75)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -94,7 +96,7 @@ def main() -> int:
         windows = _load_windows(args.composites, kas.get("span_ms"))
 
     stream = build_scene_stream(manifest=manifest, deltas=deltas, scan=scan,
-                                windows=windows)
+                                windows=windows, fresh_diff=args.fresh_diff)
     join = verify_stream_references(stream, manifest)
 
     sep = "-" * 64

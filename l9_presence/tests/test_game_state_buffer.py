@@ -128,3 +128,12 @@ def test_compute_crop_deltas_end_to_end(tmp_path):
     deltas = compute_crop_deltas(paths)
     assert len(deltas) == 2
     assert deltas[0][1] < 0.5 and deltas[1][1] > 6.0
+
+
+def test_panel_fresh_diff_calibrated_constant():
+    """F-LUMEN-1: the panel-scale constant is the calibrated cross-topology p75 (63.0),
+    distinct from the killer-slot 6.0 -- never conflate the two scopes."""
+    from l9_presence.game_state_buffer import DEFAULT_FRESH_DIFF, PANEL_FRESH_DIFF
+    assert PANEL_FRESH_DIFF == 63.0
+    assert DEFAULT_FRESH_DIFF == 6.0
+    assert PANEL_FRESH_DIFF > DEFAULT_FRESH_DIFF * 8

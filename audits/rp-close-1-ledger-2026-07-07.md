@@ -16,7 +16,7 @@ half of QorTroller is RP-proven; the authorship/PoSP half is HDMI-proven and RP-
 | RP-4 | Cross-lobe latency calibration (USB-direct, then RP delta) | **RIG-GATED** | Feeds fusion window + recoil-precognition band (human Δ∈[+80,+280]ms vs macro Δ≤0) |
 | RP-5 | Match preflight gate (contention hygiene) | **CLOSED 2026-07-07** | `l9_presence/match_preflight.py` + `scripts/match_preflight.py`, 11/11 tests; first live run surfaced F-RP5-1 |
 | RP-6 | Adversarial pairing vs RP-encoded replays | **RIG-GATED** (corpus capture) | B2 anti-GCAP property to be validated vs real RP replay, not synthetic only |
-| RP-7 | Claim-limiting rails (independence / population / PoEP / AIT) | **TRACKED — own arc** | C-4.2 `advisory_presence_confidence.py` encodes honestly; verifier_independence=False by design |
+| RP-7 | Claim-limiting rails (independence / population / PoEP / AIT) | **CLOSED-AS-ENCODED 2026-07-08** — the rails are now MACHINE-READABLE, not prose: C-4.2 `advisory_presence_confidence.py` (AIT=LOW w/ FAR/FRR pinned not-usable; PoEP/L6B UNCALIBRATED N=0; OPERATING_CONSERVATIVE), `verifier_independence=False` + `cert_scope=developer_self` + `population_certified=False` on every fused proof, `advisory=True` on PoSP/deferred/scene/match-state records. Every new artifact this arc inherited them. The gate's residue is the LONG-ARC work itself (witness-node independence, population corpus) — tracked on ES/LUMEN/OA rows, not here | C-4.2 + record fields |
 
 ## Findings
 
@@ -169,8 +169,25 @@ the way arcs keep their findings.
 | Session-close report | **BUILT + VALIDATED on M14** — `scripts/session_close_report.py`: one command -> PoSP 7/7 + match timeline + session & per-match deferred attestation + perception-root recompute (matched the anchored `4f335588…`) + beacon ref + honest GAP list. The casual-product "personal integrity certificate" seed, running today. `audits/session_report_match14_*.md` |
 
 Next `--kas` session now mints: both named roots + beacon ref + auto-reportable in one
-command. Remaining offline: A1-b (BCC match-lane, own design pass), F-LUMEN-1 threshold
-study, LUMEN-3/N5 study, RP-6 harness prep.
+command.
+
+## Offline continuation 2 (2026-07-08): F-LUMEN-1 CLOSED + A1-b design-resolved
+
+- **F-LUMEN-1 CLOSED** — panel-threshold study (`audits/f-lumen-1-panel-threshold-study-
+  2026-07-08.md`): delta distributions CROSS-TOPOLOGY STABLE (RP p50=47.4 vs HDMI p50=47.2
+  — ambient change energy is the game's HUD, not the capture path); kill onsets sit at
+  ~p75-p80 (median 68-72); **`PANEL_FRESH_DIFF=63.0`** (cross-topology p75) calibrated +
+  wired as runner default. M14 stream: 403 events (0 stable) -> **168 events (36 stable
+  segments)** — legible structure. Rail: SCENE_CHANGE is structure, never kill evidence.
+- **D-A1b-1 (BCC match-lane): implementation DEFERRED on a decisive kill-check** — L9's
+  `_SEP_FEATURES` = 3-feature coupling space; the match flow emits the 13-feature L4
+  vector. DIFFERENT spaces: cross-harvesting would poison BCC corpus semantics. Honest
+  path = a new sub-lane with its own feature contract + gate (PoSP SYNCHRONIZED +
+  coherence fraction) — sized as its own design session, not an adapter. No silent
+  approximation.
+- **RP-7 CLOSED-AS-ENCODED** (rails machine-readable across C-4.2 + record fields).
+- Remaining offline: LUMEN-3/N5 predictive study (next deep arc), A1-b sub-lane design
+  session, RP-6 harness prep.
 
 ## OPERATOR-ACTION box
 

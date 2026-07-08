@@ -1,368 +1,147 @@
-{"advisory": true, "counts": {"INPUT_WINDOW": 7, "KILL_ROW_CLUSTER": 15, "SCENE_CHANGE": 381}, "notes": [], "schema": "qortroller-scene-stream-v0", "session_display": "match14_rp_option_b_1783475385", "session_id": "1c9847111fb464b49a536f56b2cbc48ac365a3edfca8e6660c4228fe2cdd583b"}
+{"advisory": true, "counts": {"INPUT_WINDOW": 7, "KILL_ROW_CLUSTER": 15, "SCENE_CHANGE": 110, "SCENE_STABLE_SEGMENT": 36}, "notes": [], "schema": "qortroller-scene-stream-v0", "session_display": "match14_rp_option_b_1783475385", "session_id": "1c9847111fb464b49a536f56b2cbc48ac365a3edfca8e6660c4228fe2cdd583b"}
 {"confidence": 97.253, "crop_shas": ["4afbc720fe979c4e2290215ef8b41ff4030af22642891178585088890df4a9fa"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475394808.1, 1783475394808.1], "ts_ns": 1783475394808069600}
 {"confidence": 76.34, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475396648760300}
 {"confidence": null, "crop_shas": [], "kind": "INPUT_WINDOW", "source": "retina_kf_composite", "span_ms": [1783475398162.3, 1783475407184.6], "ts_ns": 1783475398162300160}
-{"confidence": 43.14, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475398452016800}
-{"confidence": 41.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475400422624700}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475398452.0, 1783475405484.7], "ts_ns": 1783475398452016800}
 {"confidence": 91.655, "crop_shas": ["de05bf3697eb9d3f4cf74c339f98ff3710c19134afc5c3b9a0d626975ebb037a"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475400422.6, 1783475400422.6], "ts_ns": 1783475400422624700}
-{"confidence": 54.68, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475402494391100}
-{"confidence": 51.46, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475405484699600}
 {"confidence": 95.1, "crop_shas": ["538023ea72ca1abe9a9b3ba7ed1e733b89cac41017e02cf62b3cfbee15a14dd3", "55eeb2eefbd39e85140cb7425af67cc0b691326f79d6496a8b813bd93937b289", "d2d9678dc9d6bf86e1857961eabcd25b8352eb3d8730dff73d8a599890b3234c"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475405484.7, 1783475412476.1], "ts_ns": 1783475405484699600}
 {"confidence": 64.65, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475406763164800}
-{"confidence": 38.18, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475407868277300}
 {"confidence": 89.4, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475408771060400}
-{"confidence": 44.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475410644366900}
-{"confidence": 37.56, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475412476076700}
-{"confidence": 27.62, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475415058978300}
-{"confidence": 42.05, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475417083539900}
-{"confidence": 61.59, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475418984738000}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475410644.4, 1783475418984.7], "ts_ns": 1783475410644366900}
 {"confidence": 80.17, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475420863957800}
 {"confidence": 64.07, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475423424111800}
 {"confidence": 98.21, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475425369184600}
-{"confidence": 48.57, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475427179953900}
-{"confidence": 36.97, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475429036163000}
-{"confidence": 40.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475431492202100}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475427180.0, 1783475431492.2], "ts_ns": 1783475427179953900}
 {"confidence": 76.57, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475433527603300}
-{"confidence": 62.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475435538874100}
-{"confidence": 52.3, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475437285498700}
-{"confidence": 42.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475439700061600}
-{"confidence": 49.95, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475441599019800}
-{"confidence": 53.22, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475443574714700}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475435538.9, 1783475443574.7], "ts_ns": 1783475435538874100}
 {"confidence": 64.44, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475445451994100}
 {"confidence": 82.17, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475448249338300}
 {"confidence": 63.44, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475450189382800}
-{"confidence": 52.55, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475452132483300}
-{"confidence": 55.48, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475454099539000}
-{"confidence": 35.09, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475456982838100}
-{"confidence": 38.29, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475458928533400}
-{"confidence": 54.56, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475461021053800}
-{"confidence": 41.85, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475462979729100}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475452132.5, 1783475462979.7], "ts_ns": 1783475452132483300}
 {"confidence": 78.64, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475465675769700}
-{"confidence": 52.84, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475467798692100}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475467709.5, 1783475469318.8], "ts_ns": 1783475467709520900}
 {"confidence": 74.95, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475470026726900}
 {"confidence": 97.154, "crop_shas": ["fa313fd66e63b6dd164c83f4f104804a597cfcca89d01b16278a8cbbc6565e90", "fa313fd66e63b6dd164c83f4f104804a597cfcca89d01b16278a8cbbc6565e90", "43fa32e96a0098ff3c7a38b096ad6ce06d721cf8342549569803f0d5c1ac4243", "43fa32e96a0098ff3c7a38b096ad6ce06d721cf8342549569803f0d5c1ac4243", "c086365fd756e8744c16ca4abc7cdce675a548c7168abe4be91b0208b6f74b1b"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475470026.7, 1783475477095.1], "ts_ns": 1783475470026726900}
-{"confidence": 44.57, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475472289549100}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475471059.9, 1783475474126.0], "ts_ns": 1783475471059905000}
 {"confidence": 65.2, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475475571481100}
-{"confidence": 50.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475475912885600}
-{"confidence": 41.45, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475477095058800}
-{"confidence": 36.57, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475478046704700}
-{"confidence": 45.86, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475480172809300}
-{"confidence": 30.11, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475482177966200}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475475912.9, 1783475494523.9], "ts_ns": 1783475475912885600}
 {"confidence": 99.912, "crop_shas": ["b9504ef8f117fd851481e1a48d944dc61d154fe7922c75a0bf65b524c57e43ca", "b9504ef8f117fd851481e1a48d944dc61d154fe7922c75a0bf65b524c57e43ca"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475482178.0, 1783475485316.0], "ts_ns": 1783475482177966200}
-{"confidence": 43.54, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475486123103900}
-{"confidence": 58.58, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475488411530300}
-{"confidence": 13.99, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475490231403600}
-{"confidence": 8.41, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475494523863900}
 {"confidence": 141.82, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475496241005600}
 {"confidence": 112.8, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475497841475000}
-{"confidence": 46.58, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475499732693200}
-{"confidence": 57.46, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475502558249000}
-{"confidence": 50.64, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475504447699400}
-{"confidence": 57.4, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475506216266800}
-{"confidence": 46.86, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475508019479600}
-{"confidence": 53.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475510401810200}
-{"confidence": 33.81, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475512354339500}
-{"confidence": 53.87, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475514160641700}
-{"confidence": 46.71, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475516027636400}
-{"confidence": 53.05, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475519114184600}
-{"confidence": 18.93, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475520176840300}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475499732.7, 1783475546665.5], "ts_ns": 1783475499732693200}
 {"confidence": 93.618, "crop_shas": ["0058f3c9ba866add2afbcd756f18234ba52e5256bdc8b9172224ccbfff247a51", "451777dda93ce5a12ef5a22988617858d239607fd158e7bba9e69b41ee3a5446"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475520176.8, 1783475521125.5], "ts_ns": 1783475520176840300}
-{"confidence": 30.74, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475521125512400}
-{"confidence": 33.69, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475521707785400}
-{"confidence": 47.38, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475523120659000}
-{"confidence": 38.55, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475525053678300}
-{"confidence": 45.55, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475527483694100}
 {"confidence": 98.914, "crop_shas": ["5843284eba7902423627bfcb3742c2cd11f659c4792f116518801b16b3e9f644"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475527483.7, 1783475527483.7], "ts_ns": 1783475527483694100}
-{"confidence": 48.31, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475529332874400}
-{"confidence": 42.38, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475531195486800}
-{"confidence": 48.35, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475532892530500}
-{"confidence": 49.18, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475535459105000}
-{"confidence": 38.59, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475537165639700}
-{"confidence": 54.95, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475538992260300}
-{"confidence": 45.77, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475540791312500}
-{"confidence": 56.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475543057285200}
-{"confidence": 47.61, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475544871113200}
-{"confidence": 46.24, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475546665468900}
 {"confidence": 141.68, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475548492350300}
 {"confidence": 117.15, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475552450691900}
-{"confidence": 45.81, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475554381446400}
-{"confidence": 47.21, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475556312749600}
-{"confidence": 42.62, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475558887071300}
-{"confidence": 44.1, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475560659063200}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475554381.4, 1783475560659.1], "ts_ns": 1783475554381446400}
 {"confidence": 67.58, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475562467999300}
 {"confidence": 118.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475564294628700}
-{"confidence": 34.44, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475566558215900}
 {"confidence": 122.69, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475568395618200}
-{"confidence": 45.48, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475570249333700}
-{"confidence": 43.95, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475571990368800}
-{"confidence": 44.46, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475572412732300}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475570249.3, 1783475574319.1], "ts_ns": 1783475570249333700}
 {"confidence": 95.62, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475575403393900}
-{"confidence": 40.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475575826480600}
-{"confidence": 54.19, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475577124568500}
 {"confidence": 104.62, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475577369468800}
 {"confidence": 96.979, "crop_shas": ["611541b8fcc8e125633b9b69009efe8f2ec1b6e0bc2730d05bebe5fbb043905f"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475577369.5, 1783475577369.5], "ts_ns": 1783475577369468800}
 {"confidence": 66.14, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475579282141600}
 {"confidence": null, "crop_shas": [], "kind": "INPUT_WINDOW", "source": "retina_kf_composite", "span_ms": [1783475580860.5, 1783475595059.5], "ts_ns": 1783475580860499968}
 {"confidence": 69.56, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475581100105000}
-{"confidence": 53.13, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475584007478100}
-{"confidence": 42.38, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475586176973700}
-{"confidence": 37.42, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475588282700000}
-{"confidence": 46.79, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475590575315500}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475582910.3, 1783475592584.2], "ts_ns": 1783475582910326400}
 {"confidence": 75.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475593475549800}
 {"confidence": 98.645, "crop_shas": ["7153898f458dbcb687bb26533477084580c0e8c7fdc937c1b73da5daf13c09e2", "249077d739b1139cd811a9ede0accd6277a4dc601840fc2bf7bf9d6eed39cfd9", "106ac433eafcc131d017427c3a594f7ba77965b6c91fc0733e795755eb1efb4f"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475593475.5, 1783475595448.4], "ts_ns": 1783475593475549800}
-{"confidence": 38.66, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475594083765000}
-{"confidence": 31.15, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475595448375600}
-{"confidence": 36.8, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475597224588500}
-{"confidence": 51.18, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475598757468400}
-{"confidence": 47.1, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475600876075200}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475594083.8, 1783475605733.7], "ts_ns": 1783475594083765000}
 {"confidence": 93.936, "crop_shas": ["f7966313b4e2e2ef31cbdca8a3a39db301a6f97dccf730fb9826eb360503e966"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475600876.1, 1783475600876.1], "ts_ns": 1783475600876075200}
-{"confidence": 49.37, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475602512569100}
-{"confidence": 45.32, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475604114404300}
-{"confidence": 51.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475605733723300}
 {"confidence": 67.16, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475607942737600}
 {"confidence": 68.08, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475609528874400}
-{"confidence": 54.49, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475611195148200}
 {"confidence": 92.493, "crop_shas": ["10f88eda25b066f7d93fb408d71016efc8505f2cb098817e92c295b3a4e1168c"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475611195.1, 1783475611195.1], "ts_ns": 1783475611195148200}
-{"confidence": 45.09, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475612885848900}
 {"confidence": 98.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475615139740900}
 {"confidence": 117.9, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475618170773700}
-{"confidence": 44.0, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475619953804300}
-{"confidence": 39.97, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475622431977300}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475619953.8, 1783475634757.1], "ts_ns": 1783475619953804300}
 {"confidence": null, "crop_shas": [], "kind": "INPUT_WINDOW", "source": "retina_kf_composite", "span_ms": [1783475623995.6, 1783475628945.6], "ts_ns": 1783475623995600128}
-{"confidence": 60.96, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475624280135300}
-{"confidence": 53.77, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475626176291400}
-{"confidence": 23.37, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475627493324000}
-{"confidence": 26.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475628219377700}
-{"confidence": 41.46, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475631129808600}
-{"confidence": 49.93, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475632918472800}
-{"confidence": 54.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475634757111400}
 {"confidence": 94.54, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475636554023800}
 {"confidence": 74.54, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475638917692900}
-{"confidence": 53.16, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475640781333400}
-{"confidence": 60.62, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475642623201500}
-{"confidence": 22.63, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475644466373500}
-{"confidence": 28.5, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475646931939200}
-{"confidence": 17.88, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475648698441300}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475640781.3, 1783475648698.4], "ts_ns": 1783475640781333400}
 {"confidence": 67.73, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475650434969000}
 {"confidence": 70.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475652086962600}
-{"confidence": 32.89, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475654278295600}
 {"confidence": 64.75, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475656014528800}
 {"confidence": null, "crop_shas": [], "kind": "INPUT_WINDOW", "source": "retina_kf_composite", "span_ms": [1783475657624.1, 1783475667275.8], "ts_ns": 1783475657624100096}
 {"confidence": 70.24, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475657831909800}
 {"confidence": 71.09, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475659870369100}
 {"confidence": 63.12, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475662671374000}
-{"confidence": 47.1, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475664245514200}
-{"confidence": 48.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475664762302300}
-{"confidence": 31.04, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475666729182500}
-{"confidence": 25.13, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475668750817400}
-{"confidence": 21.34, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475671426777700}
-{"confidence": 28.91, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475673164343900}
-{"confidence": 29.64, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475674898965000}
-{"confidence": 61.76, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475676530134000}
-{"confidence": 47.07, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475678718087800}
-{"confidence": 62.03, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475680342719600}
-{"confidence": 27.16, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475681939129500}
-{"confidence": 32.99, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475683813270300}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475664245.5, 1783475683813.3], "ts_ns": 1783475664245514200}
 {"confidence": 67.44, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475686372977400}
-{"confidence": 35.72, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475688205932500}
 {"confidence": 129.75, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475690035741900}
-{"confidence": 57.95, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475691789657400}
 {"confidence": 64.74, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475693960780200}
-{"confidence": 58.26, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475695780904100}
-{"confidence": 61.98, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475697592928700}
-{"confidence": 62.7, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475699432110600}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475695780.9, 1783475699432.1], "ts_ns": 1783475695780904100}
 {"confidence": 71.99, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475701824082300}
 {"confidence": 80.88, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475703610707000}
-{"confidence": 37.09, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475705516912800}
-{"confidence": 50.61, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475707403343100}
 {"confidence": 103.98, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475710043484600}
-{"confidence": 50.91, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475711883993700}
-{"confidence": 43.89, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475713789951600}
 {"confidence": 106.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475715631475000}
-{"confidence": 48.73, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475718013564900}
-{"confidence": 35.02, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475719861843300}
 {"confidence": 70.26, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475721613815400}
-{"confidence": 62.42, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475723279402700}
 {"confidence": 87.96, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475725447574700}
-{"confidence": 37.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475727082631100}
-{"confidence": 32.31, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475728883381200}
-{"confidence": 44.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475730597514500}
-{"confidence": 33.12, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475732823862300}
-{"confidence": 18.87, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475734576943500}
-{"confidence": 19.96, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475736486709300}
-{"confidence": 18.54, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475738389994700}
-{"confidence": 55.61, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475740564271000}
-{"confidence": 52.6, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475742298725600}
-{"confidence": 61.12, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475744077802900}
-{"confidence": 48.05, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475745929404400}
-{"confidence": 50.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475748171738900}
-{"confidence": 62.85, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475749939930000}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475727082.6, 1783475749939.9], "ts_ns": 1783475727082631100}
 {"confidence": 66.24, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475751631792700}
-{"confidence": 62.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475753336193000}
-{"confidence": 58.02, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475755346415300}
-{"confidence": 38.13, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475757050248300}
-{"confidence": 49.47, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475758762774100}
-{"confidence": 46.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475760511142000}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475753336.2, 1783475760511.1], "ts_ns": 1783475753336193000}
 {"confidence": 63.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475762565347900}
-{"confidence": 59.71, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475764587211700}
-{"confidence": 44.61, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475766623576800}
-{"confidence": 44.61, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475766741083400}
-{"confidence": 44.61, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475768186121400}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475764335.9, 1783475768186.1], "ts_ns": 1783475764335930200}
 {"confidence": 70.02, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475768850219700}
 {"confidence": 75.54, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475771391542000}
 {"confidence": 68.41, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475773119273200}
-{"confidence": 57.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475774866831100}
-{"confidence": 38.76, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475776683198200}
 {"confidence": 63.21, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475778849231500}
 {"confidence": 74.99, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475780631061000}
-{"confidence": 61.45, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475782342995700}
-{"confidence": 55.35, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475784103741200}
 {"confidence": null, "crop_shas": [], "kind": "INPUT_WINDOW", "source": "retina_kf_composite", "span_ms": [1783475786218.0, 1783475791168.0], "ts_ns": 1783475786217999872}
 {"confidence": 80.42, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475786437850600}
-{"confidence": 58.96, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475788372920600}
-{"confidence": 44.55, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475790559196400}
-{"confidence": 33.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475790602370600}
-{"confidence": 20.74, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475792582022600}
-{"confidence": 44.76, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475793033840400}
-{"confidence": 48.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475795490280200}
-{"confidence": 55.07, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475797315006700}
-{"confidence": 61.4, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475799098003400}
-{"confidence": 41.87, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475800980403700}
-{"confidence": 37.34, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475803389255500}
-{"confidence": 48.72, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475805260801500}
-{"confidence": 57.12, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475807191746000}
-{"confidence": 40.35, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475808949886600}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475788233.4, 1783475808949.9], "ts_ns": 1783475788233401100}
 {"confidence": 122.49, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475811276507800}
 {"confidence": 95.92, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475813045175900}
 {"confidence": 80.34, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475814799822300}
-{"confidence": 45.49, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475816499244000}
-{"confidence": 28.24, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475818755249200}
-{"confidence": 20.65, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475820548874400}
-{"confidence": 15.74, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475822370303600}
-{"confidence": 23.95, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475824249003500}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475816499.2, 1783475824249.0], "ts_ns": 1783475816499244000}
 {"confidence": null, "crop_shas": [], "kind": "INPUT_WINDOW", "source": "retina_kf_composite", "span_ms": [1783475826417.1, 1783475833364.5], "ts_ns": 1783475826417100032}
 {"confidence": 104.2, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475826649512000}
-{"confidence": 41.37, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475828897580300}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475828454.8, 1783475830830.9], "ts_ns": 1783475828454831300}
 {"confidence": 89.442, "crop_shas": ["cb6251b6eecf3dcff4fba1333fa269b966a7d5aa6885a9b887d832e5785ea5a0", "cb6251b6eecf3dcff4fba1333fa269b966a7d5aa6885a9b887d832e5785ea5a0", "5f75e3ccdf5ad57082649a3ce8301459f02081cbf34e230bc850b8c58e13d9a0", "5f75e3ccdf5ad57082649a3ce8301459f02081cbf34e230bc850b8c58e13d9a0"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475828897.6, 1783475834833.5], "ts_ns": 1783475828897580300}
 {"confidence": 94.53, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475830980401000}
 {"confidence": 82.34, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475833087254600}
 {"confidence": 93.71, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475835932544700}
-{"confidence": 35.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475837819074500}
-{"confidence": 45.44, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475839708576200}
-{"confidence": 55.32, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475841478147600}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475837819.1, 1783475841478.1], "ts_ns": 1783475837819074500}
 {"confidence": 78.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475843956917600}
 {"confidence": null, "crop_shas": [], "kind": "INPUT_WINDOW", "source": "retina_kf_composite", "span_ms": [1783475845511.8, 1783475852307.0], "ts_ns": 1783475845511800064}
-{"confidence": 59.09, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475845679579000}
-{"confidence": 28.6, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475847501243000}
-{"confidence": 39.35, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475847679174400}
-{"confidence": 38.19, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475849737922700}
-{"confidence": 42.24, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475851074557200}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475845679.6, 1783475851074.6], "ts_ns": 1783475845679579000}
 {"confidence": 97.471, "crop_shas": ["58798b02daac3e3bb608f01f33cf472536aeae72e6225beb265d7d0eac4365d3", "7de6196f88db88a283358b8d2e6415b6a1d1308ea22bb63ced3fc92971498a7c"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475851074.6, 1783475854579.4], "ts_ns": 1783475851074557200}
 {"confidence": 94.38, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475852570263200}
 {"confidence": 68.03, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475854579441100}
-{"confidence": 36.2, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475856476425600}
-{"confidence": 16.54, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475858419708200}
-{"confidence": 36.78, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475860896487700}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475856476.4, 1783475886219.1], "ts_ns": 1783475856476425600}
 {"confidence": 95.548, "crop_shas": ["36680ff262eb99e733ae122c2736a097d6c9c88b07b877b9054bef175dcf27f2"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783475860896.5, 1783475860896.5], "ts_ns": 1783475860896487700}
-{"confidence": 43.7, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475862739271200}
-{"confidence": 26.42, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475864480629600}
-{"confidence": 17.76, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475866321415200}
-{"confidence": 22.21, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475868703424100}
-{"confidence": 29.46, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475870466932000}
-{"confidence": 32.85, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475872272078000}
-{"confidence": 24.38, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475874122008100}
-{"confidence": 21.21, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475876529485500}
-{"confidence": 20.64, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475878374701700}
-{"confidence": 32.92, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475880217643300}
-{"confidence": 23.84, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475882147368200}
-{"confidence": 62.75, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475884415007700}
-{"confidence": 39.68, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475886219118800}
 {"confidence": 64.15, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475888015276500}
 {"confidence": 79.63, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475890037971800}
 {"confidence": 70.5, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475892521905400}
 {"confidence": 73.26, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475894417346800}
-{"confidence": 60.8, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475896335123700}
 {"confidence": 64.18, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475898238586300}
 {"confidence": 72.9, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475900584504700}
-{"confidence": 37.22, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475902393488400}
-{"confidence": 46.74, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475904128294200}
-{"confidence": 21.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475905950901400}
-{"confidence": 53.49, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475908296287100}
-{"confidence": 46.81, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475910132756100}
-{"confidence": 44.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475911947271900}
-{"confidence": 23.12, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475913769873200}
-{"confidence": 25.37, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475916316129800}
-{"confidence": 43.86, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475918082700200}
-{"confidence": 35.31, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475919975302000}
-{"confidence": 45.58, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475921751436100}
-{"confidence": 44.14, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475923890308700}
-{"confidence": 27.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475925717648200}
-{"confidence": 42.32, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475927578497000}
-{"confidence": 26.29, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475929345524300}
-{"confidence": 51.52, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475931359675700}
-{"confidence": 34.16, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475932969095100}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475902393.5, 1783475932969.1], "ts_ns": 1783475902393488400}
 {"confidence": 85.65, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475934536191300}
 {"confidence": 75.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475936117028600}
-{"confidence": 46.81, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475938051230800}
-{"confidence": 57.24, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475939657678900}
-{"confidence": 28.59, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475941242115700}
-{"confidence": 29.85, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475942776868800}
-{"confidence": 22.21, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475944741536800}
-{"confidence": 35.41, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475946365676200}
-{"confidence": 29.35, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475947887956600}
-{"confidence": 37.54, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475949401603600}
-{"confidence": 28.06, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475951186093200}
-{"confidence": 34.23, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475952742662100}
-{"confidence": 37.64, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475954328078700}
-{"confidence": 39.97, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475955857203700}
-{"confidence": 38.87, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475957689443600}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475938051.2, 1783475957689.4], "ts_ns": 1783475938051230800}
 {"confidence": 65.18, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475959253374400}
 {"confidence": 68.65, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475960835043000}
-{"confidence": 29.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475962487108700}
 {"confidence": 93.4, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475964481155100}
 {"confidence": 73.77, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475966079654200}
 {"confidence": 111.37, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475967721139900}
-{"confidence": 29.68, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475969347794800}
 {"confidence": 70.55, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475971432905800}
-{"confidence": 37.7, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475973007535400}
 {"confidence": 85.55, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475974581284700}
-{"confidence": 58.68, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475976142765600}
-{"confidence": 40.8, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475977960776600}
-{"confidence": 30.35, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475979576663600}
-{"confidence": 31.3, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475981229881400}
-{"confidence": 60.26, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475982845587700}
-{"confidence": 48.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475985157320000}
-{"confidence": 53.43, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475986619249900}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475976142.8, 1783475986619.2], "ts_ns": 1783475976142765600}
 {"confidence": 63.81, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475988042678000}
-{"confidence": 54.84, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475989496431200}
-{"confidence": 62.2, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475990886409000}
-{"confidence": 61.96, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475992272593800}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475989496.4, 1783475992272.6], "ts_ns": 1783475989496431200}
 {"confidence": 65.75, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475993639843200}
 {"confidence": 63.45, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475995008863900}
-{"confidence": 50.9, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475996378599000}
-{"confidence": 20.3, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475997727934100}
-{"confidence": 40.21, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783475999106549500}
-{"confidence": 54.94, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476000511738000}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783475996378.6, 1783476000511.7], "ts_ns": 1783475996378599000}
 {"confidence": 79.75, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476001938294100}
 {"confidence": 73.63, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476003344588400}
-{"confidence": 62.36, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476004759579600}
-{"confidence": 42.02, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476006160561800}
-{"confidence": 24.16, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476007581801900}
-{"confidence": 29.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476008904280900}
-{"confidence": 59.25, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476010308114000}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783476004759.6, 1783476010308.1], "ts_ns": 1783476004759579600}
 {"confidence": 141.48, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476011691976000}
-{"confidence": 16.06, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476013073453100}
-{"confidence": 62.49, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476014421433900}
-{"confidence": 61.41, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476015789632200}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783476013073.5, 1783476015789.6], "ts_ns": 1783476013073453100}
 {"confidence": 70.01, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476017153402100}
-{"confidence": 38.51, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476018533484300}
 {"confidence": 66.0, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476019913424700}
-{"confidence": 16.16, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476021318419000}
-{"confidence": 16.11, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476022698079800}
-{"confidence": 62.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476024076393600}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783476021318.4, 1783476024076.4], "ts_ns": 1783476021318419000}
 {"confidence": 70.4, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476025447859200}
-{"confidence": 13.47, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476026781427300}
-{"confidence": 11.28, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476028130210500}
 {"confidence": 116.64, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476029541841000}
 {"confidence": 90.0, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476030944070100}
 {"confidence": 109.74, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476032269147600}
@@ -370,35 +149,21 @@
 {"confidence": 87.82, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476034949308100}
 {"confidence": 130.41, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476036359825900}
 {"confidence": 117.33, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476037769330200}
-{"confidence": 45.78, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476039272462300}
 {"confidence": 125.66, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476040773085400}
 {"confidence": 175.74, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476042242131000}
 {"confidence": 112.62, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476043600530600}
 {"confidence": 97.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476044959216700}
 {"confidence": 99.58, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476046434486700}
 {"confidence": 90.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476047965791400}
-{"confidence": 26.78, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476049447851400}
 {"confidence": 108.55, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476050950792900}
 {"confidence": 68.52, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476052426203300}
-{"confidence": 19.89, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476053883546600}
-{"confidence": 62.83, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476055359774200}
-{"confidence": 20.22, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476056844684400}
-{"confidence": 60.35, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476058317680900}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783476053883.5, 1783476058317.7], "ts_ns": 1783476053883546600}
 {"confidence": 106.66, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476059756097800}
-{"confidence": 53.45, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476061218580500}
 {"confidence": 69.88, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476062702860300}
 {"confidence": 83.92, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476064209292300}
-{"confidence": 50.88, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476065921618000}
-{"confidence": 36.27, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476067519508100}
-{"confidence": 25.9, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476069048253500}
-{"confidence": 31.93, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476070652924100}
-{"confidence": 38.12, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476072188049700}
+{"confidence": null, "crop_shas": [], "kind": "SCENE_STABLE_SEGMENT", "source": "gray_delta_v0", "span_ms": [1783476065921.6, 1783476072188.0], "ts_ns": 1783476065921618000}
 {"confidence": 87.4, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476073736853700}
-{"confidence": 53.45, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476075326481200}
 {"confidence": 82.81, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476076953565500}
 {"confidence": 145.44, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476078492650800}
-{"confidence": 56.68, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476081368338500}
 {"confidence": 95.8, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476083001650700}
 {"confidence": 99.927, "crop_shas": ["d990918723e3fa7369729c1a833c777b4d1086ad731bf7d6f39e856a2462a4b5"], "kind": "KILL_ROW_CLUSTER", "source": "rp-ocr-precision-v2", "span_ms": [1783476083001.7, 1783476083001.7], "ts_ns": 1783476083001650700}
-{"confidence": 32.64, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476084568365100}
-{"confidence": 39.07, "crop_shas": [], "kind": "SCENE_CHANGE", "source": "gray_delta_v0", "span_ms": null, "ts_ns": 1783476086211950200}
