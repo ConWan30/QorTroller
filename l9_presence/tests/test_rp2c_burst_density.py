@@ -101,3 +101,37 @@ def test_flush_no_monitor_is_noop():
     rgc = _rgc(monitor=None)
     rgc.maybe_flush_burst_crop(1000.0)
     assert rgc._flushes == []
+
+
+def test_fixb1_flush_thread_lifecycle():
+    """F-FIXB-1: the dedicated flush thread spawns only when Fix B is armed + capture
+    enabled, calls the flusher at its own cadence (unbound from classify), and stops
+    on stop(). The window predicate/gating stays inside maybe_flush_burst_crop."""
+    import time
+    from types import SimpleNamespace
+    mon, mid = _open_monitor(now=time.time() * 1000.0)
+    rgc = _rgc(monitor=mon)
+    rgc._source.start = lambda: True
+    rgc._source.stop = lambda: None
+    rgc.started = False
+    RetinaGameCapture.start(rgc)
+    assert rgc.started is True
+    time.sleep(0.6)                          # a few flush ticks
+    RetinaGameCapture.stop(rgc)
+    assert rgc._flushes, "flush thread never flushed inside the open window"
+    n = len(rgc._flushes)
+    # after stop, no further flushes even with a new stash
+    rgc._source._panel_ts = 999.0
+    time.sleep(0.5)
+    assert len(rgc._flushes) == n
+
+
+def test_fixb1_no_thread_when_flag_off():
+    import time
+    mon, _ = _open_monitor(now=time.time() * 1000.0)
+    rgc = _rgc(burst_every=0, monitor=mon)
+    rgc._source.start = lambda: True
+    rgc.started = False
+    RetinaGameCapture.start(rgc)
+    time.sleep(0.4)
+    assert rgc._flushes == []                # flag off -> no thread, no flushes
