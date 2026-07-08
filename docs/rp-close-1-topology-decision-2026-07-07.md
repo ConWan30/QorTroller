@@ -1,6 +1,6 @@
 # RP-CLOSE-1 Gate RP-1 — Remote Play Capture-Topology Decision (D-RP-1)
 
-**Status: OPEN — operator decision required.**
+**Status: DECIDED — B-then-A (operator, 2026-07-07).**
 **Date opened: 2026-07-07.**
 
 ## The question
@@ -75,5 +75,10 @@ and the launch stack per the C-3.2 runbook.
 
 ## Decision record
 
-- **D-RP-1:** ___ (operator) — Option A / Option B / B-then-A as recommended.
-- Decided: ___ (date)
+- **D-RP-1: B-then-A** (operator, 2026-07-07) — Match 14 runs Option B (same-machine
+  reduced-density, today's hardware); Match 15 reruns as Option A (sidecar device)
+  after capture-card acquisition. The B/A delta is itself publishable evidence for
+  the sidecar-witness architecture.
+- Match 14 runbook: `docs/rp-close-1-match14-runbook.md`.
+- Option A hardware prerequisite: HDMI/USB capture card for the RP client's display
+  output (≈$20–150) — OPERATOR-ACTION, no deadline.

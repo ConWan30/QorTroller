@@ -10,8 +10,8 @@ half of QorTroller is RP-proven; the authorship/PoSP half is HDMI-proven and RP-
 
 | Gate | Title | State | Evidence |
 |------|-------|-------|----------|
-| RP-1 | Capture-topology decision | **OPERATOR-DECISION** | `docs/rp-close-1-topology-decision-2026-07-07.md` (D-RP-1; rec: B-then-A) |
-| RP-2 | Match 14 under actual RP (AUTHORED + SYNCHRONIZED) | **RIG-GATED** (blocked by RP-1 + RP-5 pass) | Launch stack per C-3.2 runbook; success = AUTHORED_SESSION + PoSP SYNCHRONIZED + published RP recall floor |
+| RP-1 | Capture-topology decision | **CLOSED 2026-07-07 — D-RP-1: B-then-A** (operator) | `docs/rp-close-1-topology-decision-2026-07-07.md` |
+| RP-2 | Match 14 under actual RP (AUTHORED + SYNCHRONIZED) | **READY — awaiting rig** (Option B; Match 15 = Option A rerun after capture-card acquisition) | Runbook: `docs/rp-close-1-match14-runbook.md` |
 | RP-3 | OCR precision on RP-encoded frames | **CLOSED (precision half) 2026-07-07** — bar HELD 0 FP/151 RP-era crops; recall rate deferred to RP-2's archive | `audits/rp-ocr-precision-scan-report-2026-07-07.md` |
 | RP-4 | Cross-lobe latency calibration (USB-direct, then RP delta) | **RIG-GATED** | Feeds fusion window + recoil-precognition band (human Δ∈[+80,+280]ms vs macro Δ≤0) |
 | RP-5 | Match preflight gate (contention hygiene) | **CLOSED 2026-07-07** | `l9_presence/match_preflight.py` + `scripts/match_preflight.py`, 11/11 tests; first live run surfaced F-RP5-1 |
@@ -41,10 +41,25 @@ half of QorTroller is RP-proven; the authorship/PoSP half is HDMI-proven and RP-
 - **2026-07-07 (session 1):** Ledger opened. RP-5 built+tested+closed (11 tests; live
   run → F-RP5-1). RP-3 scan run over M12 (35 crops) + M11 (116 crops) RP-era archives.
   RP-1 decision artifact drafted (D-RP-1 open, rec B-then-A). RP-2/4/6 queued rig-gated.
+  Committed `cbad38e8` (13 files, +1328).
+- **2026-07-07 (session 1, cont.):** **D-RP-1 DECIDED: B-then-A** (operator). RP-1
+  closed. Match 14 runbook written (`docs/rp-close-1-match14-runbook.md`) — Option B,
+  full pre-match/launch/stop/post-audit chain incl. F-RP5-1 fresh-DB mitigation and the
+  NQPV_COCAPTURE_ENABLED lean-mode gotcha (fusion surface needs it or SYNCHRONIZED is
+  unreachable). Match 15 (Option A) queued behind capture-card acquisition.
 
 ## Next-cheapest open gate
 
-**RP-1** (operator picks D-RP-1 — zero build cost) → unblocks **RP-2** (Match 14, the
-claim-converting proof). Rig protocol: preflight must pass (`python
-scripts/match_preflight.py --capture-dir <fresh>`), fresh DB_PATH, VPN off,
-kill stale processes — and never launched unannounced.
+**RP-2** (Match 14, Option B) — everything code-side is ready; needs only the operator
+at the rig. Protocol per the runbook: preflight GO, fresh DB_PATH, VPN off, lean bridge
+with NQPV co-capture ON — and never launched unannounced. After Match 14: rerun the
+precision scan on its archive (closes RP-3's readability half), then Match 15 = Option A.
+
+## OPERATOR-ACTION box
+
+- **OA-RP-1:** Acquire HDMI/USB capture card (≈$20–150) for the Match 15 Option-A rerun
+  (sidecar-device witness of the RP client output). No deadline; Match 14 does not wait.
+  Convergence note (2026-07-07): this box is also the seed hardware of the trio-retina
+  perception node — one purchase serves both the RP recall ceiling and the future
+  DePIN gaming-witness-node track. See
+  `docs/trio-retina-lumen-qortroller-alignment-2026-07-07.md` (N3).
