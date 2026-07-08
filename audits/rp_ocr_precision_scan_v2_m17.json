@@ -1,0 +1,2350 @@
+{
+  "scan": "rp-ocr-precision-v2",
+  "results": [
+    {
+      "scan_version": "rp-ocr-precision-v2",
+      "archive": "retina_kf_archive/match17_rp_fixb3_1783550435",
+      "total_crops": 908,
+      "read_errors": 0,
+      "matched_crops": 210,
+      "abstained_crops": 698,
+      "clusters": [
+        {
+          "size": 7,
+          "span_ms": 11027.7,
+          "texts": [
+            "Qortrola30  20",
+            "Qortrola30  20",
+            "Qortrola30  20",
+            "Qortrola30 ",
+            "Qortrola30 ",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550545778632000.png",
+              "ts_ns": 1783550545778632000,
+              "sha256": "dda8793456cb7d84cb9655362ba88bd36ad38046d786e782ce7d5414f0ff3691",
+              "text": "Qortrola30  20",
+              "conf": 93.366,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550546477145300.png",
+              "ts_ns": 1783550546477145300,
+              "sha256": "03f77f7b5e1c635861fdeec8e674a5303ca1efc5506522946015b49ddaeb372f",
+              "text": "Qortrola30  20",
+              "conf": 93.571,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550548157461000.png",
+              "ts_ns": 1783550548157461000,
+              "sha256": "6955f831bd754d0adbe27d95e02bc49d05518d8ea609b393cbd0a7c222e871ca",
+              "text": "Qortrola30  20",
+              "conf": 92.767,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550548449734600.png",
+              "ts_ns": 1783550548449734600,
+              "sha256": "24f3290a5da6f762ab4e60c5a48d3045899abe5b7232dfb455a984c686419858",
+              "text": "Qortrola30 ",
+              "conf": 88.55499999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550551056765800.png",
+              "ts_ns": 1783550551056765800,
+              "sha256": "24f3290a5da6f762ab4e60c5a48d3045899abe5b7232dfb455a984c686419858",
+              "text": "Qortrola30 ",
+              "conf": 88.55499999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550553593472400.png",
+              "ts_ns": 1783550553593472400,
+              "sha256": "4a097aaad0ae43b72eca892be3df5d5e5932be8cffc251530cdb27209c93cb14",
+              "text": "Qortrola30",
+              "conf": 91.20700000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550556806305800.png",
+              "ts_ns": 1783550556806305800,
+              "sha256": "4a097aaad0ae43b72eca892be3df5d5e5932be8cffc251530cdb27209c93cb14",
+              "text": "Qortrola30",
+              "conf": 91.20700000000001,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 7,
+          "span_ms": 7465.1,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30-",
+            "Qortrola30",
+            "Qortrola30 ",
+            "Qortrola30 "
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550646909003000.png",
+              "ts_ns": 1783550646909003000,
+              "sha256": "d728a150d8baac7d825d45548f358c5a87fd92351820d2ec9fbd8695eb15de6d",
+              "text": "Qortrola30",
+              "conf": 99.91799999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550647052849100.png",
+              "ts_ns": 1783550647052849100,
+              "sha256": "8fcc382028675566a08587bfaead4905dc9c85554c0d02bd51130a8ece8ed286",
+              "text": "Qortrola30",
+              "conf": 99.911,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550648234709400.png",
+              "ts_ns": 1783550648234709400,
+              "sha256": "8fcc382028675566a08587bfaead4905dc9c85554c0d02bd51130a8ece8ed286",
+              "text": "Qortrola30",
+              "conf": 99.911,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550649124751900.png",
+              "ts_ns": 1783550649124751900,
+              "sha256": "c8a7e7d040198b0e31d0ee023ac1e1ef7a5046cd3dd4ae6b6e774d78f175b608",
+              "text": "Qortrola30-",
+              "conf": 95.682,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550651498100600.png",
+              "ts_ns": 1783550651498100600,
+              "sha256": "9500b5c560663b70b6cd39374e5d7554d9b02d0ead9b45cdbda531773e470d9b",
+              "text": "Qortrola30",
+              "conf": 99.369,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550653806196500.png",
+              "ts_ns": 1783550653806196500,
+              "sha256": "6012d24222b0e2daf7e28ced0ef9ab3578a503485ef7eb925fd9f9acfc4b071d",
+              "text": "Qortrola30 ",
+              "conf": 95.937,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550654374121800.png",
+              "ts_ns": 1783550654374121800,
+              "sha256": "2ccecfdb6248bfe385c62272d5b3ee87cdcf4c52593349df2910322c57e46092",
+              "text": "Qortrola30 ",
+              "conf": 95.56700000000001,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30 -"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550660733982200.png",
+              "ts_ns": 1783550660733982200,
+              "sha256": "d1ddacaf9f92b7284dc1d2ddfc640892766f910cb389bbee9946abdb88dd8ccf",
+              "text": "Qortrola30 -",
+              "conf": 91.81899999999999,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30 -r"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550667737894900.png",
+              "ts_ns": 1783550667737894900,
+              "sha256": "9367eb31578f63b32fdbe2f3ee84c7c2b5860ee8db80a3e0447398ab6aab1ca7",
+              "text": "Qortrola30 -r",
+              "conf": 86.91600000000001,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 21,
+          "span_ms": 20064.9,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            " Qortrola30",
+            " Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550700277933300.png",
+              "ts_ns": 1783550700277933300,
+              "sha256": "44dd673be37f0c7a141b41b9406fb13d26e4eda93fa5aaf074f5a51f40f318de",
+              "text": "Qortrola30",
+              "conf": 99.909,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550701654120700.png",
+              "ts_ns": 1783550701654120700,
+              "sha256": "9a7415e7ddd8f68a7d85b22bc6f45718bd67a5f1a76a447b57485412e518fd40",
+              "text": "Qortrola30",
+              "conf": 99.849,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550702485174100.png",
+              "ts_ns": 1783550702485174100,
+              "sha256": "9a7415e7ddd8f68a7d85b22bc6f45718bd67a5f1a76a447b57485412e518fd40",
+              "text": "Qortrola30",
+              "conf": 99.849,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550702729839800.png",
+              "ts_ns": 1783550702729839800,
+              "sha256": "d9dec7473b64107491fa88aac3de0630c9935b19ba0cd10eb3feeb2eabe80029",
+              "text": "Qortrola30",
+              "conf": 99.897,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550703478623900.png",
+              "ts_ns": 1783550703478623900,
+              "sha256": "7905719c9192667cdd39432854aa6d95a8d34d46ff5b76185a4fa293963f845e",
+              "text": "Qortrola30",
+              "conf": 99.612,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550703710022600.png",
+              "ts_ns": 1783550703710022600,
+              "sha256": "b3aaa12615ea4c7a1d6f79126e3d429acb888b077bca1962cd1f6dc4d9386cf3",
+              "text": "Qortrola30",
+              "conf": 99.39099999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550704544740600.png",
+              "ts_ns": 1783550704544740600,
+              "sha256": "b3aaa12615ea4c7a1d6f79126e3d429acb888b077bca1962cd1f6dc4d9386cf3",
+              "text": "Qortrola30",
+              "conf": 99.39099999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550704783346400.png",
+              "ts_ns": 1783550704783346400,
+              "sha256": "26133f3a441d8814548391da9f8c525460328653f8cdca7c2fffb18564c784cd",
+              "text": " Qortrola30",
+              "conf": 95.391,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550705546920200.png",
+              "ts_ns": 1783550705546920200,
+              "sha256": "26133f3a441d8814548391da9f8c525460328653f8cdca7c2fffb18564c784cd",
+              "text": " Qortrola30",
+              "conf": 95.391,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550705791258200.png",
+              "ts_ns": 1783550705791258200,
+              "sha256": "2ad13edffb32928aeb527ab9915a8155636036c86a72e3b2d8e0e68137cb0d90",
+              "text": "Qortrola30",
+              "conf": 99.787,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550706509227300.png",
+              "ts_ns": 1783550706509227300,
+              "sha256": "b928f05b879c88d0040cf1a392cb47384b06845f509be0b40325b332f6558af8",
+              "text": "Qortrola30",
+              "conf": 99.588,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550706632782400.png",
+              "ts_ns": 1783550706632782400,
+              "sha256": "2ad13edffb32928aeb527ab9915a8155636036c86a72e3b2d8e0e68137cb0d90",
+              "text": "Qortrola30",
+              "conf": 99.787,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550706920219100.png",
+              "ts_ns": 1783550706920219100,
+              "sha256": "dab492816fd884033254f1a577aba9359ca935353edde6f3c83a4e7555333aa3",
+              "text": "Qortrola30",
+              "conf": 99.885,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550707750110000.png",
+              "ts_ns": 1783550707750110000,
+              "sha256": "dab492816fd884033254f1a577aba9359ca935353edde6f3c83a4e7555333aa3",
+              "text": "Qortrola30",
+              "conf": 99.885,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550708905477300.png",
+              "ts_ns": 1783550708905477300,
+              "sha256": "aaa42df81f6171f08c05fe04c33cdafc08aece0cc280eb3b3051fa207e7e2e0c",
+              "text": "Qortrola30",
+              "conf": 99.766,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550709579867300.png",
+              "ts_ns": 1783550709579867300,
+              "sha256": "de258a3e8eeb153857660d3639ef517e8ae3694d41047a96856e90d1ad909e1a",
+              "text": "Qortrola30",
+              "conf": 99.912,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550709711422500.png",
+              "ts_ns": 1783550709711422500,
+              "sha256": "aaa42df81f6171f08c05fe04c33cdafc08aece0cc280eb3b3051fa207e7e2e0c",
+              "text": "Qortrola30",
+              "conf": 99.766,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550711520888700.png",
+              "ts_ns": 1783550711520888700,
+              "sha256": "ab8011a6232940d9fe8be0368cf76e1f87b1121e7aa11b32c871aff2b85177d1",
+              "text": "Qortrola30",
+              "conf": 99.708,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550713547176600.png",
+              "ts_ns": 1783550713547176600,
+              "sha256": "7bce015252da7d5e7edac3a78727224cf27a58707db627677db273bb72113e89",
+              "text": "Qortrola30",
+              "conf": 99.009,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550718379017200.png",
+              "ts_ns": 1783550718379017200,
+              "sha256": "5274e019a1bbc4f8ae3ae6a05bfa3ca1eb316a77d8d3df7f40b61925e7854c50",
+              "text": "Qortrola30",
+              "conf": 99.874,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550720342849900.png",
+              "ts_ns": 1783550720342849900,
+              "sha256": "d4df1f3cf659ce3f76c326716ed997801a7035b657cc0071c83367ccc15200a8",
+              "text": "Qortrola30",
+              "conf": 99.953,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 19,
+          "span_ms": 13254.7,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30a",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30rar",
+            "Qortrola30",
+            "Qortrola30rar",
+            "Qortrola30Na",
+            "Qortrola30e",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30a",
+            " Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550740495020800.png",
+              "ts_ns": 1783550740495020800,
+              "sha256": "3c48b9bb2fd873780ac58055f75ed776bcf02da8c8213a931aa68fc43d5d25e7",
+              "text": "Qortrola30",
+              "conf": 99.54499999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550742821380800.png",
+              "ts_ns": 1783550742821380800,
+              "sha256": "34457dff95b6f5e8c61768b9d7276eccf736b6063da5e3c1ebc155a63f4e200d",
+              "text": "Qortrola30",
+              "conf": 99.874,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550743613670500.png",
+              "ts_ns": 1783550743613670500,
+              "sha256": "34457dff95b6f5e8c61768b9d7276eccf736b6063da5e3c1ebc155a63f4e200d",
+              "text": "Qortrola30",
+              "conf": 99.874,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550743860905700.png",
+              "ts_ns": 1783550743860905700,
+              "sha256": "1356aeebae037d37a2da2a726358097ba75b0b3d0a1d2210242e7bd25e71c11a",
+              "text": "Qortrola30",
+              "conf": 99.64699999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550744617509800.png",
+              "ts_ns": 1783550744617509800,
+              "sha256": "961bddf4d8639205f04764443c85f67bfdd94095554f71df563a8932df613422",
+              "text": "Qortrola30",
+              "conf": 99.612,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550744731356300.png",
+              "ts_ns": 1783550744731356300,
+              "sha256": "9c6127c7884d956d5da30c4128ffc140999bde988dc4f073b7eaff4f280f7d8c",
+              "text": "Qortrola30a",
+              "conf": 94.926,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550744995303200.png",
+              "ts_ns": 1783550744995303200,
+              "sha256": "220837d726ba6ceba4bad25314af20339f05a4d35e87f8bd9aafa198f17ecba4",
+              "text": "Qortrola30",
+              "conf": 99.626,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550745758874500.png",
+              "ts_ns": 1783550745758874500,
+              "sha256": "220837d726ba6ceba4bad25314af20339f05a4d35e87f8bd9aafa198f17ecba4",
+              "text": "Qortrola30",
+              "conf": 99.626,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550746012882000.png",
+              "ts_ns": 1783550746012882000,
+              "sha256": "06acefd1ff5b2947cca3b518f218aaa3684bc33c40cd6b8855686e4c870942e1",
+              "text": "Qortrola30rar",
+              "conf": 99.506,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550746817156700.png",
+              "ts_ns": 1783550746817156700,
+              "sha256": "a339b0a8c5f0e40c782c2d113205f25aeb2c029ffb56e14a677856bd023ddbef",
+              "text": "Qortrola30",
+              "conf": 99.754,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550746885666100.png",
+              "ts_ns": 1783550746885666100,
+              "sha256": "06acefd1ff5b2947cca3b518f218aaa3684bc33c40cd6b8855686e4c870942e1",
+              "text": "Qortrola30rar",
+              "conf": 99.506,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550747144877400.png",
+              "ts_ns": 1783550747144877400,
+              "sha256": "8f789faa3b9e57df4fa33b5a8a5d79f04f0090b12055960805a05c03125fed36",
+              "text": "Qortrola30Na",
+              "conf": 96.161,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550747956674300.png",
+              "ts_ns": 1783550747956674300,
+              "sha256": "8a4d4ecfab35bd1960a575d063a4474c1d992ce820833195b2da95cbc31d159c",
+              "text": "Qortrola30e",
+              "conf": 94.809,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550748211817000.png",
+              "ts_ns": 1783550748211817000,
+              "sha256": "760ce118319e4db1b08761c986676ddaeb3d51814eaa42e532fc409a871c5edb",
+              "text": "Qortrola30",
+              "conf": 99.929,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550748828376300.png",
+              "ts_ns": 1783550748828376300,
+              "sha256": "0b9c351bd14e2fc41793be709c73ae9853f0eb9a63c0ddce5792ab1a295bd13f",
+              "text": "Qortrola30",
+              "conf": 99.714,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550749060960100.png",
+              "ts_ns": 1783550749060960100,
+              "sha256": "760ce118319e4db1b08761c986676ddaeb3d51814eaa42e532fc409a871c5edb",
+              "text": "Qortrola30",
+              "conf": 99.929,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550750800985500.png",
+              "ts_ns": 1783550750800985500,
+              "sha256": "00bcc29a01c8cdd95aa13a7cca5ba47aa31305f5b8851292c5e2919bb171f4ea",
+              "text": "Qortrola30a",
+              "conf": 95.06,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550751332695500.png",
+              "ts_ns": 1783550751332695500,
+              "sha256": "929ee2d88494cac787485d938364191331c793a898055a761f76326d01e3a3eb",
+              "text": " Qortrola30",
+              "conf": 95.858,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550753749719900.png",
+              "ts_ns": 1783550753749719900,
+              "sha256": "cdf9e7bb1e202b6d3ac408a948d0a1956719357b24d88a2a47a729d7843a66cc",
+              "text": "Qortrola30",
+              "conf": 99.897,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 2,
+          "span_ms": 1710.6,
+          "texts": [
+            "Qortrola30rar",
+            "Qortrola30rar"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550761732201200.png",
+              "ts_ns": 1783550761732201200,
+              "sha256": "74dc3e3792435be99145fc708824b8b95aa6d7699175593c62794808d8af9c73",
+              "text": "Qortrola30rar",
+              "conf": 99.21900000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550763442822000.png",
+              "ts_ns": 1783550763442822000,
+              "sha256": "5d037c6b9b6f1cbad6498a3a4078ae966f36933b6059532918090a3b4f07dc38",
+              "text": "Qortrola30rar",
+              "conf": 99.425,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 17,
+          "span_ms": 7312.0,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30 ",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30 ",
+            "Qortrola30 ",
+            "Qortrola305",
+            "Qortrola305",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550783842142500.png",
+              "ts_ns": 1783550783842142500,
+              "sha256": "57b9b3137ba630dd3815a68d91133ccc4957cfc64e94e3fd12ef97cbca9e9919",
+              "text": "Qortrola30",
+              "conf": 99.911,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550783965949600.png",
+              "ts_ns": 1783550783965949600,
+              "sha256": "e3aecf216b4521b4ae6350bd191a12582444cad63abb48aea67faf7e32c88f5e",
+              "text": "Qortrola30",
+              "conf": 99.943,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550784664251400.png",
+              "ts_ns": 1783550784664251400,
+              "sha256": "e3aecf216b4521b4ae6350bd191a12582444cad63abb48aea67faf7e32c88f5e",
+              "text": "Qortrola30",
+              "conf": 99.943,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550784960628400.png",
+              "ts_ns": 1783550784960628400,
+              "sha256": "ece768f98affad03e600ce5b314ce55bb195a5841b338758cd31f160f608873a",
+              "text": "Qortrola30",
+              "conf": 99.752,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550785753693500.png",
+              "ts_ns": 1783550785753693500,
+              "sha256": "4a8851bca263c43aa5f6911692338767046f765b967053df68b3ce84bfe2e360",
+              "text": "Qortrola30",
+              "conf": 99.651,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550786805192100.png",
+              "ts_ns": 1783550786805192100,
+              "sha256": "32c5f136637357dad1046bb31c80488f812f66b9ea42170694fa7b8c1dd632bd",
+              "text": "Qortrola30",
+              "conf": 99.875,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550786896676400.png",
+              "ts_ns": 1783550786896676400,
+              "sha256": "a7f9da6c257c576065d6e12c762afce581d0ea32a990991d9ed5d3fb6fab3eae",
+              "text": "Qortrola30 ",
+              "conf": 95.316,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550787046481200.png",
+              "ts_ns": 1783550787046481200,
+              "sha256": "3c74a8f756950a0ebae792bd0e34a860b04a7566e62d4b0052179d230b43f54f",
+              "text": "Qortrola30",
+              "conf": 99.564,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550787850331500.png",
+              "ts_ns": 1783550787850331500,
+              "sha256": "60791a684ff98eeff2717e01a0064a08f5f8fd88293efdd981700d117a24543a",
+              "text": "Qortrola30",
+              "conf": 99.423,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550788101840500.png",
+              "ts_ns": 1783550788101840500,
+              "sha256": "627caba1199efd76fa32bb274481b7a01de61b3fd155446ad3645fcd24e7d82d",
+              "text": "Qortrola30",
+              "conf": 99.876,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550788925983100.png",
+              "ts_ns": 1783550788925983100,
+              "sha256": "78d7d0d0de903a88965800775b2a940b96c884c23deccf33dbb2da070f6d5094",
+              "text": "Qortrola30",
+              "conf": 98.028,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550788988837000.png",
+              "ts_ns": 1783550788988837000,
+              "sha256": "3ad91c7d749880bbcfd08100835b24da5ffb1ee2116a53d335dc16018898fb08",
+              "text": "Qortrola30",
+              "conf": 99.688,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550789166429400.png",
+              "ts_ns": 1783550789166429400,
+              "sha256": "41dd08c2af277909b38bce936b232e5ce9cea490a7ad199f3b677c3359efd159",
+              "text": "Qortrola30 ",
+              "conf": 94.362,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550789970821200.png",
+              "ts_ns": 1783550789970821200,
+              "sha256": "41dd08c2af277909b38bce936b232e5ce9cea490a7ad199f3b677c3359efd159",
+              "text": "Qortrola30 ",
+              "conf": 94.362,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550790221134200.png",
+              "ts_ns": 1783550790221134200,
+              "sha256": "50a9aa2fef4488b4f3f33c40ab79170d86ef571fa94dc5b8d87d2e8a6fe977c1",
+              "text": "Qortrola305",
+              "conf": 94.485,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550791122047600.png",
+              "ts_ns": 1783550791122047600,
+              "sha256": "50a9aa2fef4488b4f3f33c40ab79170d86ef571fa94dc5b8d87d2e8a6fe977c1",
+              "text": "Qortrola305",
+              "conf": 94.485,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550791154132600.png",
+              "ts_ns": 1783550791154132600,
+              "sha256": "bc431a41b1b5f09d88389e963623826e6964242ec32745da2292491b4f875d4f",
+              "text": "Qortrola30",
+              "conf": 99.626,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 2,
+          "span_ms": 4063.7,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30[S]"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550798153680800.png",
+              "ts_ns": 1783550798153680800,
+              "sha256": "7e8819af76961381df212bccec6316e6de5afed2af30cbec67f3627e2be3b64f",
+              "text": "Qortrola30",
+              "conf": 99.642,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550802217374300.png",
+              "ts_ns": 1783550802217374300,
+              "sha256": "fff82feca690b34163af53ee4a3b2c88373a9956fec8b8040cfb4d553b4a0e36",
+              "text": "Qortrola30[S]",
+              "conf": 95.30199999999999,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 16,
+          "span_ms": 15801.1,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30Sm",
+            "Qortrola30Sm",
+            "Qortrola30",
+            "Qortrola30 Sm",
+            "Qortrola30 Sm",
+            "Qortrola30",
+            "Qortrola305",
+            "1 Qortrola30Sm",
+            "Qortrola30Sn",
+            "Qortrola30Sm",
+            "Qortrola30Sm",
+            "Qortrola30Sm",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550834969140100.png",
+              "ts_ns": 1783550834969140100,
+              "sha256": "dbba9fce8e9813d1409df2583c6f67770ed9d509ec36a8e6c4797a92f7f2abda",
+              "text": "Qortrola30",
+              "conf": 99.959,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550835448694900.png",
+              "ts_ns": 1783550835448694900,
+              "sha256": "1a4e92c05d610ad44d53b6b4424a7ca38b6b16f932b7690ed35eae45b601f8d9",
+              "text": "Qortrola30",
+              "conf": 99.929,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550836232916100.png",
+              "ts_ns": 1783550836232916100,
+              "sha256": "1a4e92c05d610ad44d53b6b4424a7ca38b6b16f932b7690ed35eae45b601f8d9",
+              "text": "Qortrola30",
+              "conf": 99.929,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550836472976800.png",
+              "ts_ns": 1783550836472976800,
+              "sha256": "7e38bc613813836dda2f3967478123b4c44c7f1f8bce89a65acf2e98417f530e",
+              "text": "Qortrola30Sm",
+              "conf": 98.71799999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550836972247000.png",
+              "ts_ns": 1783550836972247000,
+              "sha256": "d3dde228bdea965b1eba75b6992bfdf6713b1d0dea35a070aee25e01f90a59b4",
+              "text": "Qortrola30Sm",
+              "conf": 95.824,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550837278209200.png",
+              "ts_ns": 1783550837278209200,
+              "sha256": "7249ad8e4740185f3050d787855e9dd62c5b9515b863abbf61f83dffdde5caac",
+              "text": "Qortrola30",
+              "conf": 99.884,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550837550153100.png",
+              "ts_ns": 1783550837550153100,
+              "sha256": "351c047f32a9b1879db96a626c69f0873956dd62d4b5b03731978569c2dc261f",
+              "text": "Qortrola30 Sm",
+              "conf": 95.577,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550838450483100.png",
+              "ts_ns": 1783550838450483100,
+              "sha256": "351c047f32a9b1879db96a626c69f0873956dd62d4b5b03731978569c2dc261f",
+              "text": "Qortrola30 Sm",
+              "conf": 95.577,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550838688409000.png",
+              "ts_ns": 1783550838688409000,
+              "sha256": "80198fa78b79ae232ebe431c09836257ae719364752307cb918a5670665c67bd",
+              "text": "Qortrola30",
+              "conf": 99.712,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550839473561900.png",
+              "ts_ns": 1783550839473561900,
+              "sha256": "a937f0fc868bc0f613265efc61b11399af17717223149acd6975473ebf607443",
+              "text": "Qortrola305",
+              "conf": 97.697,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550840059266000.png",
+              "ts_ns": 1783550840059266000,
+              "sha256": "3293649cf39738580eb9a65e0e57722b13d330572c9a89f10c8c97694c25f23e",
+              "text": "1 Qortrola30Sm",
+              "conf": 88.44999999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550841986358700.png",
+              "ts_ns": 1783550841986358700,
+              "sha256": "1aa65b3c249e4801df83353644efbe84b76924a0cca8d9061eadc63d3e489ba2",
+              "text": "Qortrola30Sn",
+              "conf": 95.151,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550844098359600.png",
+              "ts_ns": 1783550844098359600,
+              "sha256": "616285275fe578f055c2d972467a980bfc34cc09cda8a94d31073f6b040e5a88",
+              "text": "Qortrola30Sm",
+              "conf": 99.169,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550846049348700.png",
+              "ts_ns": 1783550846049348700,
+              "sha256": "56f16b664c86b406e0eb8604dbb35d3bd97e4b46f6e44c157fa4289ddf6a03e2",
+              "text": "Qortrola30Sm",
+              "conf": 98.24000000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550848880721800.png",
+              "ts_ns": 1783550848880721800,
+              "sha256": "29444599315444d63ce4bf8122326435d14c214ab442b8bc8dfc2390a49d8333",
+              "text": "Qortrola30Sm",
+              "conf": 96.879,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550850770230900.png",
+              "ts_ns": 1783550850770230900,
+              "sha256": "66f0da951675b2760407e683df05085e395737c7770a01b5129023d378391e74",
+              "text": "Qortrola30",
+              "conf": 99.925,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 3,
+          "span_ms": 1134.3,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30 r"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550866748084100.png",
+              "ts_ns": 1783550866748084100,
+              "sha256": "d1cb4a1e05556762cf92f75c3e382c930bc4f09dc90d31c43ee7c40c3fa01604",
+              "text": "Qortrola30",
+              "conf": 98.346,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550867583767100.png",
+              "ts_ns": 1783550867583767100,
+              "sha256": "d74f7ad82ec5f51e4f489e8e2bf55af1eafdb2a232c2a825a22f302a8e76e289",
+              "text": "Qortrola30",
+              "conf": 97.706,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550867882338600.png",
+              "ts_ns": 1783550867882338600,
+              "sha256": "40a86ac967bb4f8137fe4b568e317ad2cd614e0e1ff8875099925ce5c3139142",
+              "text": "Qortrola30 r",
+              "conf": 89.137,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 10,
+          "span_ms": 9317.2,
+          "texts": [
+            "Qortrola30Cu",
+            "Qortrola30r",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550875315216000.png",
+              "ts_ns": 1783550875315216000,
+              "sha256": "f3eb6c0f943997a9ae6b8f967c4c985ae9a55f1ad81caeaddce0a198ae5f7c5f",
+              "text": "Qortrola30Cu",
+              "conf": 98.334,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550876336422100.png",
+              "ts_ns": 1783550876336422100,
+              "sha256": "4bd1046ac46f5f942f2cf955249ca47734920bc612363c1bef8002871d3095cf",
+              "text": "Qortrola30r",
+              "conf": 95.224,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550877168729500.png",
+              "ts_ns": 1783550877168729500,
+              "sha256": "cf3d4c14ecbd8441613b4efb595800b851c46734f67d27b9cbe84f3fed3aa043",
+              "text": "Qortrola30",
+              "conf": 99.936,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550877416900400.png",
+              "ts_ns": 1783550877416900400,
+              "sha256": "9c97e8f183375acd0548b0b50df257b990bea95c05be3c975e47be4c043b0e76",
+              "text": "Qortrola30",
+              "conf": 99.893,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550878293965100.png",
+              "ts_ns": 1783550878293965100,
+              "sha256": "9c97e8f183375acd0548b0b50df257b990bea95c05be3c975e47be4c043b0e76",
+              "text": "Qortrola30",
+              "conf": 99.893,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550879700352400.png",
+              "ts_ns": 1783550879700352400,
+              "sha256": "e5c25666594f5a5dbc64383e843e99a4aaad8e65f743847bc6adba49562dce40",
+              "text": "Qortrola30",
+              "conf": 99.85000000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550879708708100.png",
+              "ts_ns": 1783550879708708100,
+              "sha256": "e5c25666594f5a5dbc64383e843e99a4aaad8e65f743847bc6adba49562dce40",
+              "text": "Qortrola30",
+              "conf": 99.85000000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550880511938300.png",
+              "ts_ns": 1783550880511938300,
+              "sha256": "e5c25666594f5a5dbc64383e843e99a4aaad8e65f743847bc6adba49562dce40",
+              "text": "Qortrola30",
+              "conf": 99.85000000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550881726281300.png",
+              "ts_ns": 1783550881726281300,
+              "sha256": "823307b50b6267c2850bd4e97ec9e6ad197cb11b625b91aef4c50985864cd3f3",
+              "text": "Qortrola30",
+              "conf": 96.798,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550884632430000.png",
+              "ts_ns": 1783550884632430000,
+              "sha256": "50acb3e12d8b9ed97d66fe450c83c171d0d311d0d560855f7bcc5ce03980a68e",
+              "text": "Qortrola30",
+              "conf": 99.933,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 2,
+          "span_ms": 1845.4,
+          "texts": [
+            "Qortrola30",
+            " Qortrola30 wi"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550895379845700.png",
+              "ts_ns": 1783550895379845700,
+              "sha256": "438e990e956c2e7e08b7f843ada0a8a4968d206e0a4779b9fae93e38847a6f63",
+              "text": "Qortrola30",
+              "conf": 99.83,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550897225283000.png",
+              "ts_ns": 1783550897225283000,
+              "sha256": "f4296c9698f41a1d732ac29cc78d3bf2c8d12e1483e0c221b0b36a02886fe6cf",
+              "text": " Qortrola30 wi",
+              "conf": 90.228,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 9,
+          "span_ms": 3471.9,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30de",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550914547814600.png",
+              "ts_ns": 1783550914547814600,
+              "sha256": "985787de9247b4176e3ebfbdcc17466a64955d1b7bb6f65159a5b5e25bdc8399",
+              "text": "Qortrola30",
+              "conf": 99.894,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550915389228700.png",
+              "ts_ns": 1783550915389228700,
+              "sha256": "1fe17d53122b4b5a1441e24026876f6888d3f0bb95e8ea0a27f2472c854cc566",
+              "text": "Qortrola30",
+              "conf": 99.82600000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550916176156200.png",
+              "ts_ns": 1783550916176156200,
+              "sha256": "1fe17d53122b4b5a1441e24026876f6888d3f0bb95e8ea0a27f2472c854cc566",
+              "text": "Qortrola30",
+              "conf": 99.82600000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550916445963100.png",
+              "ts_ns": 1783550916445963100,
+              "sha256": "7eacb57b26a4e9fea03a68e568fe492bf4138b6ad01568644f5e1f8def2bde49",
+              "text": "Qortrola30",
+              "conf": 99.895,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550916687064200.png",
+              "ts_ns": 1783550916687064200,
+              "sha256": "559d77d80e47784fe3e6f4aec4a820df19f332811c0dbfafea0e73ae49b928c4",
+              "text": "Qortrola30",
+              "conf": 99.945,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550916782954600.png",
+              "ts_ns": 1783550916782954600,
+              "sha256": "559d77d80e47784fe3e6f4aec4a820df19f332811c0dbfafea0e73ae49b928c4",
+              "text": "Qortrola30",
+              "conf": 99.945,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550917338242100.png",
+              "ts_ns": 1783550917338242100,
+              "sha256": "7eacb57b26a4e9fea03a68e568fe492bf4138b6ad01568644f5e1f8def2bde49",
+              "text": "Qortrola30",
+              "conf": 99.895,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550917754689600.png",
+              "ts_ns": 1783550917754689600,
+              "sha256": "f0cfca49c975ad0c68dddcab8ce88e8970a2f13d91f14b2c27a3236664c9961a",
+              "text": "Qortrola30de",
+              "conf": 88.458,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550918019700000.png",
+              "ts_ns": 1783550918019700000,
+              "sha256": "f2ecaaa80703101c060f5aa4e1f5fd73e3def974605bab8af0e6eb3134e91c57",
+              "text": "Qortrola30",
+              "conf": 99.819,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 16,
+          "span_ms": 19844.7,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30de",
+            "Qortrola30de",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30S",
+            "Qortrola30S",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola305"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550924526195300.png",
+              "ts_ns": 1783550924526195300,
+              "sha256": "efe4d3788d489c3c9f2938dc9209b5376f6c1203c5e1d29202e2df2acb10d043",
+              "text": "Qortrola30",
+              "conf": 99.863,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550925492904700.png",
+              "ts_ns": 1783550925492904700,
+              "sha256": "58f4e550819e4779cc91624fa0316927c35ed5eddce8098a7616adc7aadc60f1",
+              "text": "Qortrola30de",
+              "conf": 98.80600000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550926473493100.png",
+              "ts_ns": 1783550926473493100,
+              "sha256": "58f4e550819e4779cc91624fa0316927c35ed5eddce8098a7616adc7aadc60f1",
+              "text": "Qortrola30de",
+              "conf": 98.80600000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550927045383300.png",
+              "ts_ns": 1783550927045383300,
+              "sha256": "7021d31ec80a8e4cbdbe556e099d86d467359920783b802f3773f3353e405cfd",
+              "text": "Qortrola30",
+              "conf": 99.921,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550927292021300.png",
+              "ts_ns": 1783550927292021300,
+              "sha256": "23aa8a34ac947a76ecc72c79045399c80eb3bb86bdd4653ac3fe9e886186a5df",
+              "text": "Qortrola30",
+              "conf": 99.71,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550928053538000.png",
+              "ts_ns": 1783550928053538000,
+              "sha256": "23aa8a34ac947a76ecc72c79045399c80eb3bb86bdd4653ac3fe9e886186a5df",
+              "text": "Qortrola30",
+              "conf": 99.71,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550930744499100.png",
+              "ts_ns": 1783550930744499100,
+              "sha256": "f492c6a9374b812329104d91f2f86121fae809cdc654a042b3d78bc114f13249",
+              "text": "Qortrola30",
+              "conf": 99.546,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550933827029500.png",
+              "ts_ns": 1783550933827029500,
+              "sha256": "cd1069f77a0bec34a1fbba4171b550261e9b3ded89fd7017f08a440bbd76f872",
+              "text": "Qortrola30",
+              "conf": 95.80300000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550936254362600.png",
+              "ts_ns": 1783550936254362600,
+              "sha256": "1be0cdb24119df61e76a468daa2d01b7cb16e40673f61d0239c78b8e4ee2a1b5",
+              "text": "Qortrola30",
+              "conf": 99.837,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550937064482500.png",
+              "ts_ns": 1783550937064482500,
+              "sha256": "1be0cdb24119df61e76a468daa2d01b7cb16e40673f61d0239c78b8e4ee2a1b5",
+              "text": "Qortrola30",
+              "conf": 99.837,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550939225032200.png",
+              "ts_ns": 1783550939225032200,
+              "sha256": "e367b0ef55fa3da8471055e2e17487b432b62cba79c8234f663d701ebf1a4c83",
+              "text": "Qortrola30",
+              "conf": 99.892,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550939477874000.png",
+              "ts_ns": 1783550939477874000,
+              "sha256": "d95f53a9d7db08f7efedeee85063c783c4d5f6bdfa3d939631f3d8d3114d566b",
+              "text": "Qortrola30S",
+              "conf": 96.52,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550940406591000.png",
+              "ts_ns": 1783550940406591000,
+              "sha256": "d95f53a9d7db08f7efedeee85063c783c4d5f6bdfa3d939631f3d8d3114d566b",
+              "text": "Qortrola30S",
+              "conf": 96.52,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550941723413500.png",
+              "ts_ns": 1783550941723413500,
+              "sha256": "9fdb416d9801c259a3d91aeebb6962c4c1ae512c5c5425534d78aa26c686671d",
+              "text": "Qortrola30",
+              "conf": 99.488,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550942559032900.png",
+              "ts_ns": 1783550942559032900,
+              "sha256": "2c241c57bd4c7abf3ea687c0cbea0a2fcae071c8574cfcc4c2115db334032266",
+              "text": "Qortrola30",
+              "conf": 97.52499999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550944370854700.png",
+              "ts_ns": 1783550944370854700,
+              "sha256": "57f44110d3cd8446cb6d8c34fab6669f53126b7ae01d5a3aacc58e7c80252438",
+              "text": "Qortrola305",
+              "conf": 98.667,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 16,
+          "span_ms": 17176.6,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30X",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550951055677900.png",
+              "ts_ns": 1783550951055677900,
+              "sha256": "eca6508e6dc0cf5a3be615376f4b8faf51fc26cc9551e7f1bf18397bb192733f",
+              "text": "Qortrola30",
+              "conf": 98.69,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550953040666100.png",
+              "ts_ns": 1783550953040666100,
+              "sha256": "3fa2ea7d996d4ff8d4720218abbfb08b02b32a3b5dcd04bb2416f57048b5eb36",
+              "text": "Qortrola30",
+              "conf": 99.836,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550955488080400.png",
+              "ts_ns": 1783550955488080400,
+              "sha256": "537dafc43ec26f78623ddd9ab05c3174b8e289055b21e0015be641a90d896fe1",
+              "text": "Qortrola30",
+              "conf": 99.471,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550955760679100.png",
+              "ts_ns": 1783550955760679100,
+              "sha256": "ff3445f165845c28749421ad0916d198a96d7d971a9d82baecdb4c9be2083e9c",
+              "text": "Qortrola30",
+              "conf": 99.812,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550956306863500.png",
+              "ts_ns": 1783550956306863500,
+              "sha256": "537dafc43ec26f78623ddd9ab05c3174b8e289055b21e0015be641a90d896fe1",
+              "text": "Qortrola30",
+              "conf": 99.471,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550957586767900.png",
+              "ts_ns": 1783550957586767900,
+              "sha256": "8e6438767b6ac29f2ec273a6d5d310b6b64eaefab4e71202aab19f12adde9412",
+              "text": "Qortrola30",
+              "conf": 99.924,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550958170662200.png",
+              "ts_ns": 1783550958170662200,
+              "sha256": "b3514c26d79cf0b252ffb5b845482d54b912f206758b28aa0dc16f77977a8f2f",
+              "text": "Qortrola30",
+              "conf": 93.583,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550958451591100.png",
+              "ts_ns": 1783550958451591100,
+              "sha256": "04389cd1f4fca00f42dd04391c966f16de52c8797adb35d5239100da4a2832d0",
+              "text": "Qortrola30",
+              "conf": 99.888,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550959225353300.png",
+              "ts_ns": 1783550959225353300,
+              "sha256": "04389cd1f4fca00f42dd04391c966f16de52c8797adb35d5239100da4a2832d0",
+              "text": "Qortrola30",
+              "conf": 99.888,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550962330695800.png",
+              "ts_ns": 1783550962330695800,
+              "sha256": "dc78725b7fba36af1cbe6d5e74bbc9efeaa669a3ae9e795ab9fa7c404ddd4abe",
+              "text": "Qortrola30",
+              "conf": 99.52600000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550962833064100.png",
+              "ts_ns": 1783550962833064100,
+              "sha256": "6611cfda50ab4d53a0cad62ede105e5c96c46b20951e8e79b1396d6d17ffc578",
+              "text": "Qortrola30",
+              "conf": 99.632,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550963849142900.png",
+              "ts_ns": 1783550963849142900,
+              "sha256": "6611cfda50ab4d53a0cad62ede105e5c96c46b20951e8e79b1396d6d17ffc578",
+              "text": "Qortrola30",
+              "conf": 99.632,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550964144443500.png",
+              "ts_ns": 1783550964144443500,
+              "sha256": "b179efa3000f82ea712bddf7969fb53445b1bc8e10c48c78526115b562339645",
+              "text": "Qortrola30",
+              "conf": 99.40299999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550966001107500.png",
+              "ts_ns": 1783550966001107500,
+              "sha256": "4cdb274650dee21ec85d21584d3c50aa35432010dde4761d25f273588cfa2db9",
+              "text": "Qortrola30X",
+              "conf": 94.947,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550966600840700.png",
+              "ts_ns": 1783550966600840700,
+              "sha256": "50185177ddd52f4f1296f432c971df8a6ee7c21febd4f7dd90758baa54aafe73",
+              "text": "Qortrola30",
+              "conf": 99.908,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550968232301900.png",
+              "ts_ns": 1783550968232301900,
+              "sha256": "23e413ac1bbd54fb261035bae9f544c7dc7533d30d98e32a2e23a2a0bf92fb01",
+              "text": "Qortrola30",
+              "conf": 99.825,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 2,
+          "span_ms": 755.6,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783550980607695800.png",
+              "ts_ns": 1783550980607695800,
+              "sha256": "89562d33fa40d5f8fea8941659562e647ce31e3bce7502965f36511532ec7dec",
+              "text": "Qortrola30",
+              "conf": 99.572,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783550981363257300.png",
+              "ts_ns": 1783550981363257300,
+              "sha256": "89562d33fa40d5f8fea8941659562e647ce31e3bce7502965f36511532ec7dec",
+              "text": "Qortrola30",
+              "conf": 99.572,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 2,
+          "span_ms": 841.2,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551003476717600.png",
+              "ts_ns": 1783551003476717600,
+              "sha256": "1d7cf843d6eef94a69ddd8ec45ef2f070743a64c7116a3783c9d59843a2d1a84",
+              "text": "Qortrola30",
+              "conf": 99.952,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551004317908600.png",
+              "ts_ns": 1783551004317908600,
+              "sha256": "6cd691d83371ada3a599856a1b16f0f4bc73d1a8459c53bc10fba41eb7243c1b",
+              "text": "Qortrola30",
+              "conf": 99.944,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 13,
+          "span_ms": 8058.1,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30  yo",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30  Tr",
+            "Qortrola30  yo",
+            " Qortrola30",
+            "Qortrola30 yo",
+            " Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551014363154500.png",
+              "ts_ns": 1783551014363154500,
+              "sha256": "8a2668a2f9101c381359382b9c589d439b937c6fd4dd6a41d9f6eb43a7a862bb",
+              "text": "Qortrola30",
+              "conf": 99.905,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551015110564200.png",
+              "ts_ns": 1783551015110564200,
+              "sha256": "9bf802742d71808b5986cf3b8e2e9baddbf6150dd922c5cab8f3d63f93a9fd02",
+              "text": "Qortrola30",
+              "conf": 99.941,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551015363360200.png",
+              "ts_ns": 1783551015363360200,
+              "sha256": "675ddd72adf3755006c6137bebef3193f351b5ca405ffa4cef1eda774be9f0d5",
+              "text": "Qortrola30  yo",
+              "conf": 91.931,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551015539162100.png",
+              "ts_ns": 1783551015539162100,
+              "sha256": "974b094e492a49542207ff954a37e98337d2ff95fe7a3941ccb4eef0f1377a95",
+              "text": "Qortrola30",
+              "conf": 99.75500000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551015621108300.png",
+              "ts_ns": 1783551015621108300,
+              "sha256": "974b094e492a49542207ff954a37e98337d2ff95fe7a3941ccb4eef0f1377a95",
+              "text": "Qortrola30",
+              "conf": 99.75500000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551015870171500.png",
+              "ts_ns": 1783551015870171500,
+              "sha256": "b605fc525ea127f6869c29f90a82050e1795b5662dc31f27105d830fa34b4362",
+              "text": "Qortrola30  Tr",
+              "conf": 92.996,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551016023496900.png",
+              "ts_ns": 1783551016023496900,
+              "sha256": "675ddd72adf3755006c6137bebef3193f351b5ca405ffa4cef1eda774be9f0d5",
+              "text": "Qortrola30  yo",
+              "conf": 91.931,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551017097857800.png",
+              "ts_ns": 1783551017097857800,
+              "sha256": "3e88224d467ea137592abb592ad3f2c87b26c617da2709c65e10188f2e506ad0",
+              "text": " Qortrola30",
+              "conf": 95.446,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551017630007100.png",
+              "ts_ns": 1783551017630007100,
+              "sha256": "bbe73b85793f6ae655279522820de3fa6f1fbfe0c07370642dd93ba577084992",
+              "text": "Qortrola30 yo",
+              "conf": 93.565,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551017977209000.png",
+              "ts_ns": 1783551017977209000,
+              "sha256": "3e88224d467ea137592abb592ad3f2c87b26c617da2709c65e10188f2e506ad0",
+              "text": " Qortrola30",
+              "conf": 95.446,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551020393275600.png",
+              "ts_ns": 1783551020393275600,
+              "sha256": "c48464bdcdb6cff8ce6d82c59728ff64ce693b4f0dcd6a5d045543e0dafa2c0a",
+              "text": "Qortrola30",
+              "conf": 99.889,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551020915544800.png",
+              "ts_ns": 1783551020915544800,
+              "sha256": "226a4d4ad57f7a98323c23d3df0c316bf49ef753acc518755fdf7cbdc6d4b803",
+              "text": "Qortrola30",
+              "conf": 99.889,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551022421246500.png",
+              "ts_ns": 1783551022421246500,
+              "sha256": "294c39960ab7d5ad013cc2530651cb94182727cea11e2d7d7f8a3c3cdf4820fa",
+              "text": "Qortrola30",
+              "conf": 99.966,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 2,
+          "span_ms": 3298.7,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551031788567900.png",
+              "ts_ns": 1783551031788567900,
+              "sha256": "193111a750d2714f2243430e0c4e36183cd347cefecfa8698ff0975cf2b0c71b",
+              "text": "Qortrola30",
+              "conf": 97.515,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551035087310400.png",
+              "ts_ns": 1783551035087310400,
+              "sha256": "252ac76f1460f6c2f7cba456d2a1c649879f340a69f2cd37478c1222bb630653",
+              "text": "Qortrola30",
+              "conf": 98.402,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 5,
+          "span_ms": 9222.2,
+          "texts": [
+            "Qortrola30wf",
+            "Qortrola30wf",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551040263337200.png",
+              "ts_ns": 1783551040263337200,
+              "sha256": "04731784691ab162f803a48c7bec31888be80cc86d67e2007dac3bc333233acc",
+              "text": "Qortrola30wf",
+              "conf": 90.158,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551041108848100.png",
+              "ts_ns": 1783551041108848100,
+              "sha256": "04731784691ab162f803a48c7bec31888be80cc86d67e2007dac3bc333233acc",
+              "text": "Qortrola30wf",
+              "conf": 90.158,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551043107456800.png",
+              "ts_ns": 1783551043107456800,
+              "sha256": "ea526b1707388a4322551c0c3f50cfd05aa44b3724311e1eee344560a3518869",
+              "text": "Qortrola30",
+              "conf": 99.685,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551046882763700.png",
+              "ts_ns": 1783551046882763700,
+              "sha256": "6d855b148045f4ae7369d49901b75f35fe70af907fd7e099b1a952b8389d016e",
+              "text": "Qortrola30",
+              "conf": 99.94,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551049485529000.png",
+              "ts_ns": 1783551049485529000,
+              "sha256": "5f6820da9751fc379c322c32fe7a110b0b56467d89ba74ad9c983067c7ec703e",
+              "text": "Qortrola30",
+              "conf": 99.705,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 14,
+          "span_ms": 8546.5,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551076279189900.png",
+              "ts_ns": 1783551076279189900,
+              "sha256": "48821637aa6f436a8ee30f8cd7cbb2ce9a52ce858f6f0e6dd6bdb562d9688ac1",
+              "text": "Qortrola30",
+              "conf": 99.90400000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551077325481900.png",
+              "ts_ns": 1783551077325481900,
+              "sha256": "8101788c6f3a35e69ad098021199a1277a439d74e2d9439c2beaed36b1682d81",
+              "text": "Qortrola30",
+              "conf": 99.756,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551079590755400.png",
+              "ts_ns": 1783551079590755400,
+              "sha256": "f60c3ac260ad2aed62f5c879daaf46788ccf9c57f236843c28fa547084ba9061",
+              "text": "Qortrola30",
+              "conf": 98.55000000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551080481558400.png",
+              "ts_ns": 1783551080481558400,
+              "sha256": "f60c3ac260ad2aed62f5c879daaf46788ccf9c57f236843c28fa547084ba9061",
+              "text": "Qortrola30",
+              "conf": 98.55000000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551081185595900.png",
+              "ts_ns": 1783551081185595900,
+              "sha256": "286d8dfe2c539d7cf3478b086e4f8126d83cc395232a944d3aeaf1e4176d9de3",
+              "text": "Qortrola30",
+              "conf": 99.935,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551081227520700.png",
+              "ts_ns": 1783551081227520700,
+              "sha256": "286d8dfe2c539d7cf3478b086e4f8126d83cc395232a944d3aeaf1e4176d9de3",
+              "text": "Qortrola30",
+              "conf": 99.935,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551081752485300.png",
+              "ts_ns": 1783551081752485300,
+              "sha256": "e5d83fd705a4873d222bdc8e0d1f22ec401d79ed5200c93cd3ca8947bdb0b65c",
+              "text": "Qortrola30",
+              "conf": 99.96199999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551083201541600.png",
+              "ts_ns": 1783551083201541600,
+              "sha256": "45bd5714a2e424237657a20cc3360b70a04a11c219a74eca348ec57a38d6f35c",
+              "text": "Qortrola30",
+              "conf": 99.965,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551083575351300.png",
+              "ts_ns": 1783551083575351300,
+              "sha256": "355b5907731f984c98bcf29c96dc29fd69b98a15bb95c0b1b19da6415f1a9164",
+              "text": "Qortrola30",
+              "conf": 99.938,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551083599434600.png",
+              "ts_ns": 1783551083599434600,
+              "sha256": "355b5907731f984c98bcf29c96dc29fd69b98a15bb95c0b1b19da6415f1a9164",
+              "text": "Qortrola30",
+              "conf": 99.938,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551083988970100.png",
+              "ts_ns": 1783551083988970100,
+              "sha256": "c2bf898d256c512f29164a02117ac06e82579549d07137225efbe3cbaa8d3c8f",
+              "text": "Qortrola30",
+              "conf": 99.944,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551084081178600.png",
+              "ts_ns": 1783551084081178600,
+              "sha256": "45bd5714a2e424237657a20cc3360b70a04a11c219a74eca348ec57a38d6f35c",
+              "text": "Qortrola30",
+              "conf": 99.965,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551084548535600.png",
+              "ts_ns": 1783551084548535600,
+              "sha256": "d4334ab2a8d8310cccac19c677fb88dccafb2c7b3d201ecabc30aad115b4ce08",
+              "text": "Qortrola30",
+              "conf": 99.952,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551084825684700.png",
+              "ts_ns": 1783551084825684700,
+              "sha256": "ccf0315f3f1343a0b09665b30713c245c9230b55aa363006319abd62253987d4",
+              "text": "Qortrola30",
+              "conf": 99.864,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 4,
+          "span_ms": 3067.6,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30Ec"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551092780273100.png",
+              "ts_ns": 1783551092780273100,
+              "sha256": "b29178d3d752e6443d26382f5dfb9dae6b859a2b59240b254f9e1f11375742bf",
+              "text": "Qortrola30",
+              "conf": 99.863,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551092789735300.png",
+              "ts_ns": 1783551092789735300,
+              "sha256": "b29178d3d752e6443d26382f5dfb9dae6b859a2b59240b254f9e1f11375742bf",
+              "text": "Qortrola30",
+              "conf": 99.863,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551093690983400.png",
+              "ts_ns": 1783551093690983400,
+              "sha256": "cde7ef129ed6f729129701fe7c9a07c6bfc5556f384ad0c8e4c7207c297fc9f9",
+              "text": "Qortrola30",
+              "conf": 99.691,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551095847887000.png",
+              "ts_ns": 1783551095847887000,
+              "sha256": "504d2ded955611c954489b9d80ac1c690957d41b65d4a005ad057e1efdd7ed84",
+              "text": "Qortrola30Ec",
+              "conf": 96.677,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 3,
+          "span_ms": 369.0,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551154979132800.png",
+              "ts_ns": 1783551154979132800,
+              "sha256": "c7d93079ed5c3c01c7133fb62c628010c71480405c74b7ae0f8a0ca1ea470a3e",
+              "text": "Qortrola30",
+              "conf": 96.87400000000001,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551155335525500.png",
+              "ts_ns": 1783551155335525500,
+              "sha256": "c6f093315757451b4a84bd3c7e486085f80a0d452a0643bf3dcbf6699dfc0f6a",
+              "text": "Qortrola30",
+              "conf": 97.38799999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551155348156300.png",
+              "ts_ns": 1783551155348156300,
+              "sha256": "c6f093315757451b4a84bd3c7e486085f80a0d452a0643bf3dcbf6699dfc0f6a",
+              "text": "Qortrola30",
+              "conf": 97.38799999999999,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30  Go"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551223548185700.png",
+              "ts_ns": 1783551223548185700,
+              "sha256": "2e1de7b88769b28018aaa3ee9e1010f4109c124620135a02a1f337086809da62",
+              "text": "Qortrola30  Go",
+              "conf": 95.75,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 12,
+          "span_ms": 10285.8,
+          "texts": [
+            " Qortrola30 ",
+            "Qortrola30",
+            "Qortrola30SK",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30",
+            "Qortrola30 Sk",
+            "Qortrola30Sk",
+            "Qortrola30",
+            "Qortrola30Sk",
+            "Qortrola305]",
+            "Qortrola305k"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551304581501800.png",
+              "ts_ns": 1783551304581501800,
+              "sha256": "c6d27c8396b20c2486ddc390a8a21b987374245aae22596cb79966f95ed9296c",
+              "text": " Qortrola30 ",
+              "conf": 91.95,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551305317689500.png",
+              "ts_ns": 1783551305317689500,
+              "sha256": "3052722a5bd4f7edf549e45802ed4804a7d87d25d86928271cd5023ef063e323",
+              "text": "Qortrola30",
+              "conf": 99.834,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551305713680700.png",
+              "ts_ns": 1783551305713680700,
+              "sha256": "a2ce15f062a4f35cc16f6f7fd1f71c6bdd38ff9b7cfca14672571671d234fb10",
+              "text": "Qortrola30SK",
+              "conf": 94.856,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551305848584200.png",
+              "ts_ns": 1783551305848584200,
+              "sha256": "be7b87ee146383d64657b400207bb15ef1b8660057c36ffbd7cb9af930ff5853",
+              "text": "Qortrola30",
+              "conf": 99.849,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551306525453400.png",
+              "ts_ns": 1783551306525453400,
+              "sha256": "be7b87ee146383d64657b400207bb15ef1b8660057c36ffbd7cb9af930ff5853",
+              "text": "Qortrola30",
+              "conf": 99.849,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551306807640000.png",
+              "ts_ns": 1783551306807640000,
+              "sha256": "1479a2c0b1491fc846293f96c556b76a83a32152658811aaf5d27a85fcb75f38",
+              "text": "Qortrola30",
+              "conf": 99.00999999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551307662155100.png",
+              "ts_ns": 1783551307662155100,
+              "sha256": "bc180582a2cf02bda086b01a6abb146a8a2a794d41120f4bb12db225ffe2610e",
+              "text": "Qortrola30 Sk",
+              "conf": 91.411,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551307917602600.png",
+              "ts_ns": 1783551307917602600,
+              "sha256": "0ec9bbdaba7c5baa8c0affbf5d9fdc0650d1988f6ee0c4ac9f64bf78239c3af6",
+              "text": "Qortrola30Sk",
+              "conf": 91.703,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551308668114700.png",
+              "ts_ns": 1783551308668114700,
+              "sha256": "76a28681bd3fe829fb9a9826468abb6dead30509da5e9177f53dea9b1e9d1c5c",
+              "text": "Qortrola30",
+              "conf": 99.83999999999999,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551308832953800.png",
+              "ts_ns": 1783551308832953800,
+              "sha256": "0ec9bbdaba7c5baa8c0affbf5d9fdc0650d1988f6ee0c4ac9f64bf78239c3af6",
+              "text": "Qortrola30Sk",
+              "conf": 91.703,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551312688412300.png",
+              "ts_ns": 1783551312688412300,
+              "sha256": "f0eea99df191b94e467b82d3c642cd40080692f723b025a2f39b5ced6d99dcf2",
+              "text": "Qortrola305]",
+              "conf": 95.206,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551314867252400.png",
+              "ts_ns": 1783551314867252400,
+              "sha256": "1994b80e506b0ae176f0e87576947886e0c97ea33eacdfaa448889ccb4ce334f",
+              "text": "Qortrola305k",
+              "conf": 91.5,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 2,
+          "span_ms": 2040.0,
+          "texts": [
+            "Qortrola30",
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551321440205500.png",
+              "ts_ns": 1783551321440205500,
+              "sha256": "24d5ab16bed2edcdbf5af2464e3a641fcb411cad1c249bc3814d92e4031de061",
+              "text": "Qortrola30",
+              "conf": 99.854,
+              "slot": "killer"
+            },
+            {
+              "file": "panel_1783551323480204200.png",
+              "ts_ns": 1783551323480204200,
+              "sha256": "de921cbb8cd65c1df36546730ab04d47463e06222150a36b26239a898d942022",
+              "text": "Qortrola30",
+              "conf": 99.744,
+              "slot": "killer"
+            }
+          ]
+        },
+        {
+          "size": 1,
+          "span_ms": 0.0,
+          "texts": [
+            "Qortrola30"
+          ],
+          "reads": [
+            {
+              "file": "panel_1783551374247726400.png",
+              "ts_ns": 1783551374247726400,
+              "sha256": "33297d8ecd2feb37dc0f3e36b9eae5164a63df8dc3af75eceb9a330f420d1a42",
+              "text": "Qortrola30",
+              "conf": 99.75500000000001,
+              "slot": "killer"
+            }
+          ]
+        }
+      ],
+      "n_clusters": 28,
+      "suspect_reads": [],
+      "matched_texts": [
+        "Qortrola30  20",
+        "Qortrola30  20",
+        "Qortrola30  20",
+        "Qortrola30 ",
+        "Qortrola30 ",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30-",
+        "Qortrola30",
+        "Qortrola30 ",
+        "Qortrola30 ",
+        "Qortrola30 -",
+        "Qortrola30 -r",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        " Qortrola30",
+        " Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30a",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30rar",
+        "Qortrola30",
+        "Qortrola30rar",
+        "Qortrola30Na",
+        "Qortrola30e",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30a",
+        " Qortrola30",
+        "Qortrola30",
+        "Qortrola30rar",
+        "Qortrola30rar",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30 ",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30 ",
+        "Qortrola30 ",
+        "Qortrola305",
+        "Qortrola305",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30[S]",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30Sm",
+        "Qortrola30Sm",
+        "Qortrola30",
+        "Qortrola30 Sm",
+        "Qortrola30 Sm",
+        "Qortrola30",
+        "Qortrola305",
+        "1 Qortrola30Sm",
+        "Qortrola30Sn",
+        "Qortrola30Sm",
+        "Qortrola30Sm",
+        "Qortrola30Sm",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30 r",
+        "Qortrola30Cu",
+        "Qortrola30r",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        " Qortrola30 wi",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30de",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30de",
+        "Qortrola30de",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30S",
+        "Qortrola30S",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola305",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30X",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30  yo",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30  Tr",
+        "Qortrola30  yo",
+        " Qortrola30",
+        "Qortrola30 yo",
+        " Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30wf",
+        "Qortrola30wf",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30Ec",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30  Go",
+        " Qortrola30 ",
+        "Qortrola30",
+        "Qortrola30SK",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30 Sk",
+        "Qortrola30Sk",
+        "Qortrola30",
+        "Qortrola30Sk",
+        "Qortrola305]",
+        "Qortrola305k",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "matched_slots": [
+        "killer"
+      ],
+      "elapsed_s": 888.2,
+      "ms_per_crop": 978.0,
+      "engine": "v6-only (ENGINE_V6) -- same as live bootstrap",
+      "cluster_window_ms": 5000.0
+    }
+  ]
+}

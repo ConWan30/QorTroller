@@ -1,0 +1,106 @@
+{
+  "session_label": "match17_rp_fixb3",
+  "handle": "QorTrola30",
+  "verdict": "AUTHORED_SESSION",
+  "authored_kills": 17,
+  "authored_scores": [
+    0.8264,
+    0.8888,
+    0.8851,
+    0.8905,
+    0.8115,
+    0.8932,
+    0.7948,
+    0.8843,
+    0.8907,
+    0.8599,
+    0.7881,
+    0.7763,
+    0.8798,
+    0.825,
+    0.8567,
+    0.6837,
+    0.9007
+  ],
+  "anchor_tags": [
+    "session_20260708_174044@0.66"
+  ],
+  "windows_total": 31,
+  "composites_total": 31,
+  "own_deaths": 1,
+  "event_trail": [
+    {
+      "ts": "2026-07-08 17:44:08",
+      "event": "candidate_cut",
+      "regime": "CANDIDATE",
+      "sha": "6167582f08263d81",
+      "engine": "rapidocr_ppocrv6_small",
+      "match_kind": "exact",
+      "raw_read": "Qortrola30"
+    },
+    {
+      "ts": "2026-07-08 17:45:02",
+      "event": "promoted",
+      "regime": "PROMOTED",
+      "sha": "6167582f08263d81"
+    }
+  ],
+  "coupling_corroboration": {
+    "th2_coupled_true_ticks": 36,
+    "inline_classifications": 195,
+    "inline_composite_windows": 33
+  },
+  "hygiene": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "timespan"
+  },
+  "span_ms": [
+    1783550551580.1,
+    1783551308380.8
+  ],
+  "min_kills": 2,
+  "notes": [],
+  "events_root": "441585a63228ca1ceb7b7fd93b13e969e6c581df22411624e9920e024b3d5f4f",
+  "events_root_scheme": "sha256_v1",
+  "events_root_lobes": [
+    "screen",
+    "hid"
+  ],
+  "kas_domain_tag": "QORTROLLER-KAS-v0",
+  "commitment": "4b453dd87ed7b1e4469eb5c0ac70f00edcea74e53aab5f3460e3e86a07b9b170",
+  "cross_lobe_coherence": {
+    "schema": "vapi-retina-causal-coherence-v1",
+    "calibration": "UNCALIBRATED",
+    "verdict": "COHERENT",
+    "coherence_ratio": 1.0,
+    "n_outcomes_required": 19,
+    "n_matched": 19,
+    "n_orphan_outcomes": 0,
+    "n_inputs": 58,
+    "nearest_preceding_latency_s": [
+      0.1627,
+      0.1627,
+      1.0469,
+      2.5316,
+      1.0917,
+      2.1132,
+      1.8281,
+      1.6647,
+      1.7036,
+      0.3549,
+      2.2648,
+      0.9389,
+      1.9555,
+      1.9734,
+      1.3785,
+      3.3478,
+      1.8071,
+      2.5489,
+      2.5489
+    ],
+    "n_hid_inputs": 58
+  },
+  "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+  "session_display": "match17_rp_fixb3_1783550435"
+}
