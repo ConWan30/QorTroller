@@ -160,6 +160,18 @@ the way arcs keep their findings.
   sealed BCC lane (corpus growth for the population studies gating the biometric roadmap);
   DA witness + deferred replay pipeline confirmed already-active on the match path.
 
+## SESSION-REPORT capstone + A3-b (built 2026-07-08, offline continuation)
+
+| Item | State |
+|------|-------|
+| A3-b beacon-bind | **WIRED** — PoSP gains additive-optional `temporal_beacon` field (advisory recency REFERENCE, not PoSR §1.2 commitment math — labeled inline); daemon `_fetch_latest_beacon()` view-call (zero IOTX, fail-open). **KC-A3b-1:** live read returned block 45,026,880 — the keeper's LAST run; beacon freshness = keeper cadence; when recency matters, a pre-match keeper single-shot (~0.005 IOTX) is the operational answer |
+| Per-match slicing | **BUILT** — `slice_scan_by_spans` (pure, in kas_deferred): multi-match sessions slice into per-match deferred records; outside-match clusters honestly bucketed, never dropped. Cores unchanged — composition only |
+| Session-close report | **BUILT + VALIDATED on M14** — `scripts/session_close_report.py`: one command -> PoSP 7/7 + match timeline + session & per-match deferred attestation + perception-root recompute (matched the anchored `4f335588…`) + beacon ref + honest GAP list. The casual-product "personal integrity certificate" seed, running today. `audits/session_report_match14_*.md` |
+
+Next `--kas` session now mints: both named roots + beacon ref + auto-reportable in one
+command. Remaining offline: A1-b (BCC match-lane, own design pass), F-LUMEN-1 threshold
+study, LUMEN-3/N5 study, RP-6 harness prep.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
