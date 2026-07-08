@@ -194,6 +194,7 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     # DB_PATH may be set in bridge/.env (e.g. presence_lean.db) but not in the daemon process
     # environment. Fall back to bridge/.env so _issue_posp() finds the same DB the bridge wrote to.
     fusion_rows: list = []
+    db_path = None
     try:
         _db_path_from_env = os.environ.get("DB_PATH")
         if not _db_path_from_env:
@@ -229,15 +230,34 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     except Exception as e:  # noqa: BLE001
         print(f"[daemon] PoSP: manifest read failed (non-fatal): {e!r}")
 
-    # retina_perception_root is the Trio-Retina perception events_root (Phase 3c DA witness path);
-    # the KAS events_root is the KAS dual-lobe root (§2.3 — two named, parallel roots).
+    # retina_perception_root is the Trio-Retina perception events_root (§2.3 — two named,
+    # parallel roots; the KAS events_root is the KAS dual-lobe root). LUMEN-4b (2026-07-07):
+    # rolled AT ISSUANCE from the session's live-captured retina_event_log rows via the
+    # SHARED ENGINE (lumen4a_perception_root.roll_perception_root — same computation that
+    # produced the M14 candidate 4f335588...). FAIL-OPEN: a session whose perception
+    # pipeline didn't run keeps its honest null root — never fabricated.
+    retina_root = None
+    try:
+        from lumen4a_perception_root import roll_perception_root
+        _start_s = float(stamp) - 120.0
+        _end_s = time.time() + 120.0
+        retina_root, _p_stats = roll_perception_root(db_path, _start_s, _end_s)
+        if retina_root:
+            print(f"[daemon] PoSP: retina_perception_root rolled from "
+                  f"{_p_stats['n_rows']} live perception rows "
+                  f"({_p_stats['n_events']} events) -> {retina_root[:16]}...")
+        elif _p_stats.get("error"):
+            print(f"[daemon] PoSP: perception root unavailable (non-fatal): {_p_stats['error']}")
+    except Exception as e:  # noqa: BLE001 — perception root must never block PoSP issuance
+        print(f"[daemon] PoSP: perception-root roll failed (non-fatal): {e!r}")
+
     rec = build_posp(
         session_id=sid,
         session_display=kas_rec.get("session_display"),
         kas_record=kas_rec,
         fusion_rows=fusion_rows or None,
         archive_manifest=archive_manifest,
-        retina_perception_root=None,   # Phase 3c: perception root from retina_controller_embedder path
+        retina_perception_root=retina_root,
     )
     out = _REPO / "audits" / f"posp_record_{label}_{date.today().isoformat()}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
