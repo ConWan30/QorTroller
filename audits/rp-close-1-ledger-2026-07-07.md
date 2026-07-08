@@ -125,6 +125,40 @@ Design + first probe: `docs/edge-sense-controller-as-perception-2026-07-07.md`.
 | ES-P4 | Three-lobe alignment (echo x screen x HID on session_id) — IS LUMEN-3's third channel | QUEUED | ES-P3 (merges with LUMEN track) |
 | ES-W | Advisory oracle wiring (EchoEvent -> NQPV active_oracles, default-OFF) | GATED on P0–P4 green | ES-P4 |
 
+## ACT-1 — IoTeX Activation Ladder (opened 2026-07-08)
+
+The workflow: dormant IoTeX-connected machinery gets pointed at the evidence the RP/LUMEN
+arcs now produce — one rung at a time, each rung carrying its BRAINSTORM LOG
+(hypothesis -> kill-check -> flip -> observed impact), so activations keep their reasoning
+the way arcs keep their findings.
+
+| Rung | What | State |
+|------|------|-------|
+| A1 | Flag activations (DA witness / BCC / replay pipeline) | **CLOSED 2026-07-08** — see brainstorm log |
+| A2 | Rig match (validates Fix B + ES-P0/P2 + live match-state + first dual-rooted PoSP + now BCC-witness/DA exercise) | RIG-GATED, operator-announced |
+| A3 | Scoped-override chain session: anchor M14 PoSP commitment + beacon-bind next session (~0.5 IOTX; wallet live-verified 29.670671 IOTX 2026-07-08) | QUEUED behind A2; explicit GO at fire time |
+| A4 | Arc 5 VHR trusted-setup ceremony (operator-interactive ~1h; then inner verifier deploy joins A3-class session) | QUEUED, any quiet hour |
+| A5 | Sentry/Curator autonomous O3 (two-key: per-agent flag AND kill-switch; 0.05 IOTX/day caps) | PARKED until A3-class anchoring is routine |
+
+### A1 brainstorm log (the kill-checks that reshaped the rung)
+
+- **KC-1:** "flip three flags" -> verified names in code first. Two are real env bools
+  (`RETINA_DA_WITNESS_ENABLED` config:2041, `REPLAY_PROOF_PIPELINE_ENABLED` config:2264);
+  **BCC had NO env wire** — `enabled=False` was a dataclass-only default (F-ACT-1).
+- **KC-2:** BCC's host is the **Witness lane** (`witness_agent.py`), NOT the match flow —
+  "every match harvests" was wrong. Witness-lane activation is real but narrow; the
+  match-lane harvest adapter (nqpv/session-close -> BCC) is queued as **A1-b** follow-up.
+- **KC-3 (the good surprise):** `.env` already had BOTH real flags set `true` — and M14's
+  329 `retina_da_witness_log` rows prove the DA witness RAN during the match. Two thirds
+  of the "activation" was already live; the menu met reality and shrank to one honest wire.
+- **Flip executed:** `WitnessConfig` gains `BCC_ENABLED`/`BCC_SUBLANE_B_ENABLED` env reads
+  (code default stays OFF; env only opts in; sublane B independent) + `BCC_ENABLED=true`
+  appended to `bridge/.env` (gitignored — config change, not a commit). 4 new tests;
+  witness+bcc regression 30/30; PV-CI 182 PASS.
+- **Impact now live:** any Witness-processed PRESENT+reliable session harvests into the
+  sealed BCC lane (corpus growth for the population studies gating the biometric roadmap);
+  DA witness + deferred replay pipeline confirmed already-active on the match path.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
