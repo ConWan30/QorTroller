@@ -191,3 +191,26 @@ def test_verifier_round_trip(tmp_path):
     (tmp_path / "a1.png").write_bytes(b"tampered bytes")
     v2 = verify_deferred_record(rec.to_dict(), man, str(tmp_path))
     assert not v2["ok"]
+
+
+def test_slice_scan_by_spans():
+    """LUMEN-2 x RP-2d composition: clusters split by match span; outsiders honest."""
+    from l9_presence.kas_deferred import slice_scan_by_spans
+    cl_m1 = _cluster(10_000.0, 3, "m1")            # midpoint ~11s
+    cl_m2 = _cluster(500_000.0, 3, "m2")           # midpoint ~501s
+    cl_out = _cluster(900_000.0, 1, "px")          # post-match sighting
+    scan = _scan([cl_m1, cl_m2, cl_out])
+    parts = slice_scan_by_spans(scan, [(0.0, 100_000.0), (400_000.0, 600_000.0)])
+    assert len(parts) == 3
+    assert parts[0]["scan"]["clusters"] == [cl_m1]
+    assert parts[1]["scan"]["clusters"] == [cl_m2]
+    assert parts[2]["span_ms"] is None and parts[2]["scan"]["clusters"] == [cl_out]
+    assert parts[0]["scan"]["scan_version"] == "rp-ocr-precision-v2"
+
+
+def test_slice_empty_spans_all_unassigned():
+    from l9_presence.kas_deferred import slice_scan_by_spans
+    scan = _scan([_cluster(10_000.0, 3)])
+    parts = slice_scan_by_spans(scan, [])
+    assert len(parts) == 1 and parts[0]["span_ms"] is None
+    assert len(parts[0]["scan"]["clusters"]) == 1

@@ -241,6 +241,40 @@ def build_deferred_record(*, scan: dict, manifest: dict, windows,
         hygiene_inherited=hygiene, manifest_count=manifest.get("count"), notes=notes)
 
 
+def slice_scan_by_spans(scan: dict, spans_ms) -> list:
+    """Per-match evidence slicing (LUMEN-2 x RP-2d composition): split a v2 scan's
+    clusters by match spans (from the match-state timeline) into per-match scan dicts,
+    each feedable to build_deferred_record unchanged. A cluster belongs to the span its
+    midpoint falls in; clusters outside every span are returned under the final
+    "unassigned" entry (honest — post-match sightings etc. are never silently dropped).
+    Returns [{"span_ms": [a,b], "scan": <scan-shaped dict>}, ...,
+             {"span_ms": None, "scan": <unassigned>}]. Cores stay pure: this is
+    composition, not a new verdict path."""
+    spans = [(float(a), float(b)) for a, b in (spans_ms or [])]
+    buckets = [[] for _ in spans]
+    unassigned: list = []
+    for c in (scan or {}).get("clusters") or []:
+        ts = [r.get("ts_ns") for r in (c.get("reads") or []) if r.get("ts_ns")]
+        if not ts:
+            unassigned.append(c)
+            continue
+        mid = (min(ts) + max(ts)) / 2 / 1e6
+        for i, (a, b) in enumerate(spans):
+            if a <= mid <= b:
+                buckets[i].append(c)
+                break
+        else:
+            unassigned.append(c)
+
+    def _sub(clusters):
+        return {"scan_version": scan.get("scan_version"), "archive": scan.get("archive"),
+                "engine": scan.get("engine"), "clusters": clusters}
+
+    out = [{"span_ms": [a, b], "scan": _sub(cl)} for (a, b), cl in zip(spans, buckets)]
+    out.append({"span_ms": None, "scan": _sub(unassigned)})
+    return out
+
+
 def verify_deferred_record(record: dict, manifest: dict, archive_dir: str) -> dict:
     """Offline verifier mirror: re-hash every referenced crop against BOTH the manifest
     and the record; re-check verdict arithmetic. Returns {ok, checks: [...]}."""

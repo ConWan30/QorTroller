@@ -173,6 +173,36 @@ def cmd_status(a) -> int:
     return 0
 
 
+def _fetch_latest_beacon() -> dict | None:
+    """A3-b: read VAPITemporalBeaconRegistry.latestBeacon() (view call — zero IOTX, no
+    kill-switch involvement). Registry address from env or bridge/.env. Returns
+    {block_number, block_hash, registry, fetched_at} or None (fail-open)."""
+    addr = os.environ.get("TEMPORAL_BEACON_REGISTRY_ADDRESS", "")
+    if not addr:
+        _dot_env = _REPO / "bridge" / ".env"
+        if _dot_env.exists():
+            for _line in _dot_env.read_text(encoding="utf-8").splitlines():
+                _line = _line.strip()
+                if _line.startswith("TEMPORAL_BEACON_REGISTRY_ADDRESS="):
+                    addr = _line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if not addr:
+        return None
+    from web3 import Web3
+    w3 = Web3(Web3.HTTPProvider("https://babel-api.testnet.iotex.io", request_kwargs={
+        "timeout": 15, "headers": {"User-Agent": "Mozilla/5.0",
+                                   "Content-Type": "application/json"}}))
+    abi = [{"name": "latestBeacon", "type": "function", "stateMutability": "view",
+            "inputs": [], "outputs": [{"name": "blockNumber", "type": "uint256"},
+                                      {"name": "blockHash", "type": "bytes32"}]}]
+    reg = w3.eth.contract(address=Web3.to_checksum_address(addr), abi=abi)
+    block_number, block_hash = reg.functions.latestBeacon().call()
+    if not block_number:
+        return None                                # registry live but nothing anchored yet
+    return {"block_number": int(block_number), "block_hash": "0x" + bytes(block_hash).hex(),
+            "registry": addr, "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+
+
 def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     """U2b: issue the PoSP reference-and-bind record at session close, after KAS issuance.
 
@@ -251,6 +281,18 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     except Exception as e:  # noqa: BLE001 — perception root must never block PoSP issuance
         print(f"[daemon] PoSP: perception-root roll failed (non-fatal): {e!r}")
 
+    # A3-b (2026-07-08): advisory recency reference — the latest keeper-anchored temporal
+    # beacon (Arc 6 registry; the keeper pays the anchoring, we only READ). Fail-open:
+    # registry unset / RPC error -> None, never blocks issuance, never fabricated.
+    beacon_ref = None
+    try:
+        beacon_ref = _fetch_latest_beacon()
+        if beacon_ref:
+            print(f"[daemon] PoSP: temporal beacon ref block={beacon_ref['block_number']} "
+                  f"hash={str(beacon_ref['block_hash'])[:16]}...")
+    except Exception as e:  # noqa: BLE001
+        print(f"[daemon] PoSP: beacon fetch failed (non-fatal): {e!r}")
+
     rec = build_posp(
         session_id=sid,
         session_display=kas_rec.get("session_display"),
@@ -258,6 +300,7 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
         fusion_rows=fusion_rows or None,
         archive_manifest=archive_manifest,
         retina_perception_root=retina_root,
+        temporal_beacon=beacon_ref,
     )
     out = _REPO / "audits" / f"posp_record_{label}_{date.today().isoformat()}.json"
     out.parent.mkdir(parents=True, exist_ok=True)

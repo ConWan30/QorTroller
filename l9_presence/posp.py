@@ -57,12 +57,19 @@ class PoSPRecord:
     events_roots: dict = field(default_factory=dict)   # {kas_session_root, retina_perception_root} — NAMED
     archive: Optional[dict] = None           # {manifest_schema, count, dir, id_verified}
     notes: list = field(default_factory=list)
+    # A3-b (2026-07-08, additive-optional on the v0 CANDIDATE schema): an ADVISORY reference
+    # to the latest keeper-anchored temporal beacon at issuance — {block_number, block_hash,
+    # registry, fetched_at}. This is a recency REFERENCE (the beacon is independently anchored
+    # on-chain by the Arc 6 keeper), NOT the PoSR §1.2 open/close commitment math (that is the
+    # v2 circuit path). None = beacon unavailable at issuance (fail-open, honest).
+    temporal_beacon: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {"schema": self.schema, "verdict": self.verdict, "session_id": self.session_id,
                 "session_display": self.session_display, "device_id": self.device_id,
                 "span_ms": self.span_ms, "kas": self.kas, "fusion": self.fusion,
-                "events_roots": self.events_roots, "archive": self.archive, "notes": self.notes}
+                "events_roots": self.events_roots, "archive": self.archive, "notes": self.notes,
+                "temporal_beacon": self.temporal_beacon}
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2, sort_keys=True)
@@ -84,7 +91,8 @@ def build_posp(*, session_id: Optional[str], session_display: Optional[str] = No
                kas_record: Optional[dict] = None,
                fusion_rows: Optional[list] = None,
                archive_manifest: Optional[dict] = None,
-               retina_perception_root: Optional[str] = None) -> PoSPRecord:
+               retina_perception_root: Optional[str] = None,
+               temporal_beacon: Optional[dict] = None) -> PoSPRecord:
     """Bind one session's surfaces. `kas_record` is a KAS to_dict; `fusion_rows` are nqpv_cocapture_log
     rows; `archive_manifest` is the tier-1 manifest.json dict. FAIL-CLOSED: no session_id or nothing to
     bind -> UNVERIFIABLE; any id mismatch -> UNVERIFIABLE (never assert an unverifiable join)."""
@@ -153,4 +161,4 @@ def build_posp(*, session_id: Optional[str], session_display: Optional[str] = No
                       kas=kas, fusion=fusion,
                       events_roots={"kas_session_root": (kas_record or {}).get("events_root"),
                                     "retina_perception_root": retina_perception_root},
-                      archive=archive, notes=notes)
+                      archive=archive, notes=notes, temporal_beacon=temporal_beacon)
