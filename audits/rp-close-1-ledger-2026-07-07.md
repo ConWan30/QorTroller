@@ -11,8 +11,8 @@ half of QorTroller is RP-proven; the authorship/PoSP half is HDMI-proven and RP-
 | Gate | Title | State | Evidence |
 |------|-------|-------|----------|
 | RP-1 | Capture-topology decision | **CLOSED 2026-07-07 — D-RP-1: B-then-A** (operator) | `docs/rp-close-1-topology-decision-2026-07-07.md` |
-| RP-2 | Match 14 under actual RP (AUTHORED + SYNCHRONIZED) | **READY — awaiting rig** (Option B; Match 15 = Option A rerun after capture-card acquisition) | Runbook: `docs/rp-close-1-match14-runbook.md` |
-| RP-3 | OCR precision on RP-encoded frames | **CLOSED (precision half) 2026-07-07** — bar HELD 0 FP/151 RP-era crops; recall rate deferred to RP-2's archive | `audits/rp-ocr-precision-scan-report-2026-07-07.md` |
+| RP-2 | Match 14 under actual RP (AUTHORED + SYNCHRONIZED) | **CLOSED TIER-2 2026-07-07** — PoSP SYNCHRONIZED under RP (FIRST EVER, Arc A VERIFIED 7/7); KAS authored 0/11 at K=3 (F-RP2-1: RP thins crops-per-kill; density is the binding constraint); 38.6fps validates the M12 remediation | `audits/rp-close-1-match14-report-2026-07-07.md` |
+| RP-3 | OCR precision on RP-encoded frames | **CLOSED (both halves) 2026-07-07** — precision 0 FP/564 RP-era crops; readability CLOSED by M14's dense archive (29 reads/15 clusters over 11 kills — codec is not the constraint) | `audits/rp-ocr-precision-scan-report-2026-07-07.md` + M14 report |
 | RP-4 | Cross-lobe latency calibration (USB-direct, then RP delta) | **RIG-GATED** | Feeds fusion window + recoil-precognition band (human Δ∈[+80,+280]ms vs macro Δ≤0) |
 | RP-5 | Match preflight gate (contention hygiene) | **CLOSED 2026-07-07** | `l9_presence/match_preflight.py` + `scripts/match_preflight.py`, 11/11 tests; first live run surfaced F-RP5-1 |
 | RP-6 | Adversarial pairing vs RP-encoded replays | **RIG-GATED** (corpus capture) | B2 anti-GCAP property to be validated vs real RP replay, not synthetic only |
@@ -36,6 +36,22 @@ half of QorTroller is RP-proven; the authorship/PoSP half is HDMI-proven and RP-
   reproducing the prior ad-hoc M11 fast scan with a committed re-runnable script.
   The "v6 hallucinates on RP macroblocking" risk did not materialize.
 
+- **F-RP2-1 (2026-07-07, Match 14):** Remote Play's tax is **crops-per-kill, not
+  readability, not contention, not code**. Reads-per-cluster 1.93 (M14 RP) vs 2.85
+  (M13 HDMI) at identical engine/thresholds → only 4/15 clusters reach K=3 → live
+  authored 0/11 despite 2 live reads, 45 classifications, 7 R2 windows, 38.6fps.
+  Archive ceilings: K=3 36%, K=2 64%. The Option A sidecar buys exactly this density
+  — the B/A delta is now measured, not hypothesized.
+
+- **D-RP-2 (parked, NOT taken):** lowering live K under RP. K=2 would attest ~7/11
+  but any K change on a certificate path needs its own adversarial re-pairing first
+  (splice-FAR at K=2 unmeasured — C1/B8 discipline). Option A preferred.
+
+- **Topology learnings (baked into runbook):** the daemon SPAWNS its own lean bridge —
+  daemon-only launch IS the stack (a separately-started bridge = port bind failure +
+  shared-HID contention); `--kas` is a stop flag; DB_PATH must live in the daemon
+  shell's env (spawned bridge + stop-time PoSP issuance both read it).
+
 ## Session log
 
 - **2026-07-07 (session 1):** Ledger opened. RP-5 built+tested+closed (11 tests; live
@@ -48,12 +64,41 @@ half of QorTroller is RP-proven; the authorship/PoSP half is HDMI-proven and RP-
   NQPV_COCAPTURE_ENABLED lean-mode gotcha (fusion surface needs it or SYNCHRONIZED is
   unreachable). Match 15 (Option A) queued behind capture-card acquisition.
 
+- **2026-07-07 (session 1, cont.) — MATCH 14 RAN LIVE.** Stack launched by Claude at
+  operator command (preflight GO_WITH_WARNINGS, two-bridge contention caught+fixed
+  live, daemon-solo relaunch). Result: **PoSP SYNCHRONIZED under Remote Play — first
+  ever** — Arc A VERIFIED 7/7; KAS INSUFFICIENT_KILLS 0/11 at K=3 (tier-2; F-RP2-1);
+  precision bar held 0/413; 38.6fps validates the M12 remediation chain. RP-2 CLOSED
+  TIER-2; RP-3 fully closed; LUMEN-1 unblocked. Report:
+  `audits/rp-close-1-match14-report-2026-07-07.md`.
+
 ## Next-cheapest open gate
 
-**RP-2** (Match 14, Option B) — everything code-side is ready; needs only the operator
-at the rig. Protocol per the runbook: preflight GO, fresh DB_PATH, VPN off, lean bridge
-with NQPV co-capture ON — and never launched unannounced. After Match 14: rerun the
-precision scan on its archive (closes RP-3's readability half), then Match 15 = Option A.
+**LUMEN-1** (game-state buffer vs archives) — offline, zero rig, corpus in hand
+(M13 + M14 + coupling campaign). In parallel: **OA-RP-1** (capture card) unblocks
+RP-2b / Match 15 (Option A) for the full-density RP authorship figure that F-RP2-1
+priced. RP-4/RP-6 remain rig-gated.
+
+## LUMEN track — meaning-plane gates (opened 2026-07-07, per D-RP-1 follow-through)
+
+Second track under the same closure discipline. Design basis:
+`docs/trio-retina-lumen-qortroller-alignment-2026-07-07.md`. Rails inherited unchanged:
+observation may suggest, only assertion may claim, meaning belongs to the gamer;
+everything advisory + default-OFF until calibrated; no perception output touches
+`presence_score`, classification windows (R2∧B2), or the PoAC/PoSP boundary.
+
+| Gate | Title | State | Unblocked by |
+|------|-------|-------|--------------|
+| LUMEN-1 | Game-state buffer vs archives (ROI persistence + temporal event clusters; offline, advisory, no flags) | **UNBLOCKED 2026-07-07** (Match 14 done; corpus now M13 524 + M14 413 crops + 92 diag samples) | RP-2 ✓ |
+| LUMEN-2 | Structured scene stream + session_id join (scene events emitted from archive replays, commitment-referenced, joined against real KAS/PoSP records) | QUEUED | LUMEN-1 |
+| LUMEN-3 | Predictive-coupling study offline (N5: expected-screen-response-given-input vs observed — the anti-GCAP oracle measurement; synthetic -> archive first) | QUEUED | LUMEN-1 (parallel-safe with LUMEN-2) |
+| LUMEN-4 | Live perception on the sidecar node (retina perception ON in the witness box; first real `retina_perception_root` in a PoSP record; ioID registration scoped) | HARDWARE-GATED | RP-2b / OA-RP-1 (capture card) |
+| LUMEN-5 | Meaning-plane sovereignty (consent-category registration + φ-class sanitization for derived session intelligence, BEFORE anything external) | QUEUED | LUMEN-2 |
+
+Honest scale note: LUMEN-1..3 are session-scale offline builds against existing corpora
+(M13's 524 crops + Match 14's archive + the coupling-campaign corpus). The general
+world model beyond the narrow game-state model is a roadmap, not a gate — it earns
+entry only after LUMEN-1..3 produce calibrated keep.
 
 ## OPERATOR-ACTION box
 
