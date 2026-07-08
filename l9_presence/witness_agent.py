@@ -71,8 +71,13 @@ class WitnessConfig:
     zkba_enabled: bool = False
     # BCC sealed-lane harvest — default OFF (dormant). Sub-lane A only accumulates PRESENT
     # (causally-verified) reliable sessions; writes only to bcc_out_dir; touches no proven number.
-    bcc_enabled: bool = False
-    bcc_sublane_b_enabled: bool = False
+    # ACT-1 A1 (2026-07-08): env-flippable via BCC_ENABLED / BCC_SUBLANE_B_ENABLED so activation
+    # is a config line, not a code edit (F-ACT-1: the flag was a dataclass-only default before).
+    # Code default stays OFF; the env read only opts IN.
+    bcc_enabled: bool = field(default_factory=lambda: (
+        os.environ.get("BCC_ENABLED", "").lower() in ("1", "true")))
+    bcc_sublane_b_enabled: bool = field(default_factory=lambda: (
+        os.environ.get("BCC_SUBLANE_B_ENABLED", "").lower() in ("1", "true")))
     bcc_out_dir: str = "bcc_l9"
 
 
