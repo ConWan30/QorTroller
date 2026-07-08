@@ -41,6 +41,53 @@ from bridge.vapi_bridge.retina_state_commitment import (   # noqa: E402
 _SPAN_PAD_S = 120.0
 
 
+def roll_perception_root(db_path: str, start_s: float, end_s: float):
+    """SHARED ENGINE (dual-consumer contract): roll a session's live-captured perception
+    events (retina_event_log rows in [start_s, end_s]) into the session
+    retina_perception_root via the EXISTING sha256_v1 compute_events_root.
+
+    Consumers: this offline runner (LUMEN-4a) AND the daemon's stop-time PoSP issuance
+    (LUMEN-4b, scripts/retina_capture_daemon.py _issue_posp). Behavior changes require
+    both consumers' checks green — the M14 root 4f335588... is the regression anchor.
+
+    Returns (root_hex | None, stats dict). FAIL-OPEN: missing DB / no rows / any error
+    -> (None, stats) — a session without perception data keeps its honest null root,
+    NEVER a fabricated one (the root of an empty event set is deliberately not emitted)."""
+    stats = {"n_rows": 0, "n_events": 0, "event_types": {}, "record_hash_bindings": 0,
+             "error": None}
+    try:
+        if not db_path or not os.path.isfile(db_path):
+            stats["error"] = f"db not found: {db_path!r}"
+            return None, stats
+        con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=10)
+        try:
+            rows = con.execute(
+                "SELECT events_json, record_hash_hex FROM retina_event_log "
+                "WHERE created_at BETWEEN ? AND ? ORDER BY id",
+                (float(start_s), float(end_s))).fetchall()
+        finally:
+            con.close()
+        events, kinds, rec_hashes = [], Counter(), set()
+        for ev_json, rec_hash in rows:
+            try:
+                for e in json.loads(ev_json) or []:
+                    events.append(e)
+                    kinds[str(e.get("type", "?"))] += 1
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if rec_hash:
+                rec_hashes.add(rec_hash)
+        stats.update(n_rows=len(rows), n_events=len(events), event_types=dict(kinds),
+                     record_hash_bindings=len(rec_hashes),
+                     record_hashes=sorted(rec_hashes))
+        if not rows or not events:
+            return None, stats
+        return compute_events_root(events).hex(), stats
+    except Exception as exc:  # noqa: BLE001 — fail-open, never break a caller
+        stats["error"] = repr(exc)
+        return None, stats
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="LUMEN-4a perception-root candidate")
     ap.add_argument("--db", required=True, help="session bridge DB (retina_event_log)")
@@ -64,33 +111,21 @@ def main() -> int:
         except ValueError:
             pass
 
-    con = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=10)
-    rows = con.execute(
-        "SELECT events_json, record_hash_hex, state_commitment_hex, anomaly_count, "
-        "created_at, source FROM retina_event_log "
-        "WHERE created_at BETWEEN ? AND ? ORDER BY id", (start_s, end_s)).fetchall()
-    con.close()
-
-    events, kinds, rec_hashes = [], Counter(), set()
-    n_commitments = 0
-    for ev_json, rec_hash, state_c, _anom, _ts, _src in rows:
-        try:
-            for e in json.loads(ev_json) or []:
-                events.append(e)
-                kinds[str(e.get("type", "?"))] += 1
-        except json.JSONDecodeError:
-            continue
-        if rec_hash:
-            rec_hashes.add(rec_hash)
-        if state_c:
-            n_commitments += 1
-
-    if not rows:
+    root_hex, stats = roll_perception_root(args.db, start_s, end_s)
+    if root_hex is None:
         print("No retina_event_log rows in the session span -- nothing to roll. "
-              "(Honest: the perception pipeline did not run for this session/DB.)")
+              "(Honest: the perception pipeline did not run for this session/DB.)"
+              + (f" [{stats['error']}]" if stats.get("error") else ""))
         return 1
+    rows_n, kinds = stats["n_rows"], stats["event_types"]
+    rec_hashes = set(stats.get("record_hashes") or [])
 
-    root_hex = compute_events_root(events).hex()
+    # per-row state commitments (artifact detail only; not part of the shared engine)
+    con = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=10)
+    n_commitments = con.execute(
+        "SELECT COUNT(*) FROM retina_event_log WHERE created_at BETWEEN ? AND ? "
+        "AND state_commitment_hex IS NOT NULL", (start_s, end_s)).fetchone()[0]
+    con.close()
 
     # Join strength: how many perception rows bind (via record_hash_hex) into the SAME
     # PoAC stream the issued PoSP's fusion surface references (capped ref list).
@@ -120,8 +155,8 @@ def main() -> int:
         "session_display": manifest.get("session_display"),
         "retina_perception_root": root_hex,
         "events_root_scheme": str(EVENTS_ROOT_SCHEME_SHA256_V1),
-        "n_perception_rows": len(rows),
-        "n_events": len(events),
+        "n_perception_rows": rows_n,
+        "n_events": stats["n_events"],
         "n_per_row_state_commitments": n_commitments,
         "event_types": dict(kinds),
         "distinct_record_hash_bindings": len(rec_hashes),
@@ -136,7 +171,7 @@ def main() -> int:
     print(f"\n{sep}\n  Perception-root candidate -- {doc['session_display']}\n{sep}")
     print(f"  root       : {root_hex}")
     print(f"  scheme     : {doc['events_root_scheme']}")
-    print(f"  rows/events: {len(rows)} rows -> {len(events)} events "
+    print(f"  rows/events: {rows_n} rows -> {stats['n_events']} events "
           f"({n_commitments} per-row state commitments)")
     print(f"  types      : {dict(kinds)}")
     print(f"  bindings   : {len(rec_hashes)} distinct PoAC record hashes")
