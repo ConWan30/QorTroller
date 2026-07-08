@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -36,6 +37,14 @@ _CLUSTER_WINDOW_MS = 5000.0        # same 5s chaining window as the C-3.3 scan
 _OWN_HANDLE_SUBSTR = "qortrola30"  # plain-substring audit flag (canon matching already ran)
 
 
+def _sha256_file(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def scan_archive(archive_dir: str) -> dict:
     import cv2
     from l9_presence import killfeed_ocr_bootstrap as ob
@@ -47,7 +56,7 @@ def scan_archive(archive_dir: str) -> dict:
             files.append((int(m.group(1)), os.path.join(archive_dir, name)))
     files.sort()
 
-    matched = []          # (ts_ns, text, conf, slot, engine)
+    matched = []          # dicts: {ts_ns, file, sha256, text, conf, slot, engine}
     abstained = 0
     read_errors = 0
     t0 = time.time()
@@ -59,7 +68,11 @@ def scan_archive(archive_dir: str) -> dict:
             continue
         r = ob.tight_row_ocr(bgr, engine_ids=(ob.ENGINE_V6,))
         if r.matched:
-            matched.append((ts_ns, r.text, r.conf, r.slot, r.engine))
+            # v2 (RP-2d): per-read provenance — file/ts/sha so the deferred-attestation
+            # tier can join clusters against live R2 windows + the archive manifest.
+            matched.append({"ts_ns": ts_ns, "file": os.path.basename(path),
+                            "sha256": _sha256_file(path), "text": r.text,
+                            "conf": r.conf, "slot": r.slot, "engine": r.engine})
         else:
             abstained += 1
         if (i + 1) % 25 == 0:
@@ -70,24 +83,29 @@ def scan_archive(archive_dir: str) -> dict:
 
     # 5s-window clustering, identical to the C-3.3 methodology
     clusters = []
-    for ts_ns, text, conf, slot, engine in matched:
+    for m in matched:
+        ts_ns = m["ts_ns"]
+        read = {"file": m["file"], "ts_ns": ts_ns, "sha256": m["sha256"],
+                "text": m["text"], "conf": m["conf"], "slot": m["slot"]}
         if clusters and (ts_ns - clusters[-1]["_last_ts"]) / 1e6 <= _CLUSTER_WINDOW_MS:
             c = clusters[-1]
             c["size"] += 1
             c["span_ms"] = round((ts_ns - c["_first_ts"]) / 1e6, 1)
-            c["texts"].append(text)
+            c["texts"].append(m["text"])
+            c["reads"].append(read)
             c["_last_ts"] = ts_ns
         else:
-            clusters.append({"size": 1, "span_ms": 0.0, "texts": [text],
-                             "_first_ts": ts_ns, "_last_ts": ts_ns})
+            clusters.append({"size": 1, "span_ms": 0.0, "texts": [m["text"]],
+                             "reads": [read], "_first_ts": ts_ns, "_last_ts": ts_ns})
     for c in clusters:
         c.pop("_first_ts"), c.pop("_last_ts")
 
     # audit flag: canon-matched reads whose raw text lacks the plain own-handle substring
     # (candidates for manual adjudication, like C-3.3's single "krfn88Qortrola30" case)
-    suspect = [t for _, t, _, _, _ in matched if _OWN_HANDLE_SUBSTR not in t.lower()]
+    suspect = [m["text"] for m in matched if _OWN_HANDLE_SUBSTR not in m["text"].lower()]
 
     return {
+        "scan_version": "rp-ocr-precision-v2",   # v2: per-read file/ts_ns/sha256 provenance
         "archive": archive_dir,
         "total_crops": len(files),
         "read_errors": read_errors,
@@ -96,8 +114,8 @@ def scan_archive(archive_dir: str) -> dict:
         "clusters": clusters,
         "n_clusters": len(clusters),
         "suspect_reads": suspect,      # texts needing manual adjudication; [] = bar held clean
-        "matched_texts": [t for _, t, _, _, _ in matched],
-        "matched_slots": sorted({s for _, _, _, s, _ in matched}),
+        "matched_texts": [m["text"] for m in matched],
+        "matched_slots": sorted({m["slot"] for m in matched}),
         "elapsed_s": round(elapsed, 1),
         "ms_per_crop": round(elapsed * 1000 / max(1, len(files)), 0),
         "engine": "v6-only (ENGINE_V6) -- same as live bootstrap",
@@ -124,7 +142,7 @@ def main() -> int:
               f"{res['n_clusters']} clusters, {len(res['suspect_reads'])} suspect, "
               f"{res['elapsed_s']}s")
 
-    out = {"scan": "rp-ocr-precision-v1", "results": results}
+    out = {"scan": "rp-ocr-precision-v2", "results": results}
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=2)

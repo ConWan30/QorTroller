@@ -305,6 +305,19 @@ def convert_for_channels(buf_small, lum_scale, *, b2_frac: float = 0.30,
     return gray_full, roi_bgr, lum_scale
 
 
+def _stash_every(base_every: int, burst_every: int, now_ms: float,
+                 dense_until_ms: float) -> int:
+    """RP-2c Fix B cadence choice (PURE — pinned by test): the burst cadence applies ONLY
+    while now_ms is inside the R2-propagated dense window (dense_until_ms, set exclusively
+    by mark_r2_onset). burst_every=0 = feature OFF = base cadence always. Screen content
+    can never reach this decision — only live input opens density (the anti-splice rail).
+    dense_until_ms=0.0 is the NEVER-ARMED sentinel and must not match now_ms=0.0 — the
+    pinned rail test caught exactly this boundary on first run."""
+    if burst_every > 0 and 0.0 < float(dense_until_ms) and float(now_ms) <= float(dense_until_ms):
+        return max(1, int(burst_every))
+    return max(1, int(base_every))
+
+
 def _parse_roi(s: str):
     """Parse 'fx,fy,fw,fh' (0..1 fractions) -> tuple or None (kill-feed ROI; Warzone feed is top-right)."""
     try:
@@ -386,6 +399,12 @@ class WgcFrameSource:
         self._b2_trace_path = os.environ.get("RETINA_B2_TRACE_PATH", "retina_b2_trace.jsonl")
         self._panel_bgr = None                          # latest panel ROI (contiguous BGR) for the crop saver
         self._panel_ts = None                           # D-TRIO-1: frame-capture ts of _panel_bgr (WGC wall ms)
+        # RP-2c Fix B (F-RP2-1 densification): inside a live R2 window, stash the panel every
+        # RETINA_KF_EVERY_BURST frames instead of _kf_every (default 0 = OFF, byte-identical
+        # behavior). _burst_dense_until_ms is set ONLY by mark_r2_onset (input-side) — screen
+        # content never opens density. Same env-local pattern as the B2 trace above.
+        self._kf_burst_every = max(0, int(os.environ.get("RETINA_KF_EVERY_BURST", "0") or 0))
+        self._burst_dense_until_ms = 0.0
 
     def start(self) -> bool:
         try:
@@ -461,7 +480,9 @@ class WgcFrameSource:
                     # (cheap); the OCR itself runs on the throttled tune() tick, never on this frame callback.
                     if self._kf_roi is not None or self._panel_roi is not None:
                         self._kf_frame_n += 1
-                        if self._kf_frame_n % self._kf_every == 0:
+                        if self._kf_frame_n % _stash_every(
+                                self._kf_every, self._kf_burst_every,
+                                screen_ts, self._burst_dense_until_ms) == 0:
                             try:
                                 if self._kf_roi is not None:
                                     _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
@@ -598,6 +619,7 @@ class RetinaGameCapture:
         self._capture_max = int(capture_max)
         self._capture_n = 0
         self._capture_logged = False
+        self._last_burst_flush_ts = None     # RP-2c Fix B: de-dup key for window-gated flushes
         self.started = False
         # Trigger-gated INLINE authorship (advisory; default-off). PURE monitor holds the R2-window +
         # single-flight decision; the anchor + classify + persist happen off the event loop (see
@@ -794,6 +816,30 @@ class RetinaGameCapture:
         except Exception:  # noqa: BLE001 — capture must never break the loop
             return None
 
+    def maybe_flush_burst_crop(self, now_ms: float) -> None:
+        """RP-2c Fix B (F-RP2-1): flush the ring INSIDE live R2 windows at burst-thread cadence
+        instead of only the ~1Hz tune() tick. M14 measured 0.93 crops/s (the tune ceiling) —
+        the archive's crops-per-kill is what both K=3 live promotion and the RP-2d deferred
+        tier feed on. Gates (all must hold): feature ON (RETINA_KF_EVERY_BURST > 0) + capture
+        enabled + monitor.in_window(now) (the SAME window predicate as classification — screen
+        content never opens density) + a NEW panel stash since the last flush (no duplicate
+        crops; the stash ts is the de-dup key). Runs on the burst thread — file I/O never
+        touches the WGC callback or the event loop. Fail-open: any error is a no-op."""
+        try:
+            src = self._source
+            if getattr(src, "_kf_burst_every", 0) <= 0 or not self._capture_enabled:
+                return
+            mon = self._inline_monitor
+            if mon is None or not mon.in_window(float(now_ms)):
+                return
+            ts = getattr(src, "_panel_ts", None)
+            if ts is None or ts == self._last_burst_flush_ts:
+                return
+            self._last_burst_flush_ts = ts
+            self.save_capture_crops()
+        except Exception:  # noqa: BLE001 — densification must never break the burst thread
+            pass
+
     # --- Trigger-gated INLINE authorship classification (consumption side; off the event loop) ----------
     def mark_r2_onset(self, now_ms: float) -> None:
         """R2 fire onset from the per-record consumption loop: open/extend the classification window. Cheap
@@ -802,6 +848,12 @@ class RetinaGameCapture:
         if self._inline_monitor is None:
             return
         composite = self._inline_monitor.mark_onset(float(now_ms))
+        # RP-2c Fix B: propagate the (possibly extended) window end to the frame source so
+        # the stash cadence densifies INSIDE this R2 window only. Input-side trigger by
+        # construction — this is the sole writer of _burst_dense_until_ms.
+        if getattr(self._source, "_kf_burst_every", 0) > 0:
+            self._source._burst_dense_until_ms = float(
+                getattr(self._inline_monitor, "_window_end_ms", 0.0))
         self._log_composite(composite)
 
     def _log_composite(self, composite: Optional[dict]) -> None:
@@ -873,6 +925,7 @@ class RetinaGameCapture:
         and min-gap semantics are unchanged (the monitor decides, same as always)."""
         if self._inline_monitor is None or self._anchor is None:
             return
+        self.maybe_flush_burst_crop(float(now_ms))   # RP-2c Fix B: window-gated ring flush
         bgr = getattr(self._source, "_panel_bgr", None)
         if bgr is None:
             return
