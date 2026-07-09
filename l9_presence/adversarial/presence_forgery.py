@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from ..bcc_match import passes_match_admission
 from ..event_bind import HidOnset, ScreenOutcome, bind_events
+from ..event_bind_recency import ReplayResistance, replay_resistance
 from ..kas_deferred import build_deferred_record
 from ..port_cert import build_match_certificate, verify_match_certificate
 from ..posp_verifier import verify_posp_record
@@ -159,12 +160,23 @@ def atk_event_splice() -> AttackResult:
                         f"crypto={r.n_crypto} temporal={r.n_temporal}")
 
 
+# ------------------------------------------------------------------- event_bind_recency (inc 3)
+def atk_stale_replay() -> AttackResult:
+    """A faithful full-session REPLAY: the crypto binding still passes (replayed OLD anchors are
+    self-consistent), so EVENT-BIND alone can't catch it — but the session's beacon is STALE, so the
+    PoSR recency compose refuses the REPLAY_RESISTANT claim (downgrades to SPLICE_PROOF_ONLY)."""
+    rep = bind_events([ScreenOutcome(1000.0, "a" * 64)], [HidOnset(1080.0, "a" * 64)])   # splice-proof
+    rr = replay_resistance(rep, {"block_number": 1000}, 1000 + 5000)      # reference 5000 blocks ahead
+    return AttackResult("stale_replay", "event_bind_recency", "PoSR recency (stale beacon)",
+                        rr.verdict != ReplayResistance.REPLAY_RESISTANT, f"verdict={rr.verdict.value}")
+
+
 ATTACKS = (
     atk_posp_forged_synchronized,
     atk_deferred_replayed_crop, atk_deferred_session_splice,
     atk_bcc_coherence_gaming, atk_bcc_hygiene_bypass, atk_bcc_partial_posp, atk_bcc_session_mismatch,
     atk_cert_digest_tamper, atk_cert_zk_false, atk_cert_session_splice,
-    atk_event_splice,
+    atk_event_splice, atk_stale_replay,
 )
 
 

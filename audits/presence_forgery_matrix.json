@@ -76,10 +76,17 @@
       "rail": "record_hash cryptographic join",
       "rejected": true,
       "target": "event_bind"
+    },
+    {
+      "detail": "verdict=SPLICE_PROOF_ONLY",
+      "name": "stale_replay",
+      "rail": "PoSR recency (stale beacon)",
+      "rejected": true,
+      "target": "event_bind_recency"
     }
   ],
   "holds": true,
-  "n_attacks": 11,
-  "n_rejected": 11,
+  "n_attacks": 12,
+  "n_rejected": 12,
   "schema": "qortroller-forgery-matrix-v0"
 }
