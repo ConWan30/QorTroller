@@ -322,6 +322,33 @@ operator commit.
   `record_hash` stream + surfacing each kill's `binding_mode` on the KAS record (a KAS-commitment change)
   — field-validated at a rig session (pairs with RP-6). Then increment 3: PoSR beacon compose (replay).
 
+## Offline continuation 6 (2026-07-09): PORT-CERT + ADVERSARY-EXPAND (two novelty arcs)
+
+**PORT-CERT — portable, independently re-verifiable Match Certificate** (`docs/port-cert-design-2026-07-09.md`).
+Composes a session's proofs (PoSP + KAS/deferred + VHR ZK proof + on-chain anchor + consent) into ONE
+bundle (`qortroller-match-certificate-v0`, reference-and-bind — no new primitive) whose cryptographic
+claims a THIRD PARTY re-verifies against PUBLIC parameters, without the rig or raw data. `l9_presence/
+port_cert.py` (pure builder + verifier; snarkjs + chain RPC are INJECTED callables — the module never
+shells/reads); off-rig checks: session-join (anti-splice) · PoSP SYNCHRONIZED · **anchor-digest match**
+(published PoSP file SHA-256 == the on-chain-anchored digest) · VHR Groth16 (C5) · on-chain anchor (C6).
+**Honest overall:** VERIFIED needs C5+C6 (a forger can fabricate an anchor ref — only reading the chain
+disproves it); missing snarkjs/RPC → PARTIAL, never a false VERIFIED. **Demonstrated on REAL M17**
+(`audits/match_certificate_m17.json`, 2068 B, no raw data): all offline checks green incl. anchor-digest
+== `545f9d44…` anchored at block 45447322; ZK/chain UNCHECKED this shell → honest PARTIAL. `test_port_cert.py`
+14/14. **Scope:** cross-trust-boundary RE-verifiability of the PROOFS, NOT capture trust
+(verifier_independence=False inherited). `scripts/match_certificate.py` build/verify.
+
+**ADVERSARY-EXPAND — presence-forgery attack → rail matrix** (`l9_presence/adversarial/presence_forgery.py`).
+Turns "we assert fail-closed" into "we DEMONSTRATE it": **11 forgeries across 5 verifiers, all REJECTED
+by a named rail** (`audits/presence_forgery_matrix.json`, `holds=True`) — posp forged-SYNCHRONIZED→S6;
+deferred replayed-crop→sha-poison + session-splice→anti-assertion; bcc coherence-gaming→G4, hygiene-bypass→G6,
+partial-posp→G2, session-mismatch→G6; cert digest-tamper→C4, zk-false→C5, session-splice→C2; event-splice→
+record_hash crypto-join. A single un-rejected attack fails the suite loudly. `test_presence_forgery.py` 5/5;
+`scripts/run_forgery_matrix.py`.
+
+- **Verify:** l9 **655 passed** (2 pre-existing cocapture env failures); PV-CI **182 PASS**; 0 IOTX; no
+  228B PoAC contact / FROZEN-v1 / domain tag / chain write. Staged for operator commit.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
