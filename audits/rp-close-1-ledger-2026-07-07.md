@@ -86,6 +86,18 @@ priced. RP-4/RP-6 remain rig-gated.
 | RP-2d deferred-attestation tier | **CLOSED 2026-07-07** — M14 **DEFERRED_AUTHORED_SESSION 3/11** (conjunction-preserving; +1 OBSERVED); M13 cross-check PASSED (deferred 9 ⊇ live 8); verifiers OK (20+59 checks); 12 tests | `audits/rp-close-1-rp2d-report.md` |
 | RP-2c window-gated densification | **CLOSED 2026-07-08 (M17)** — Fix B VALIDATED live: 2.08/s in-window vs 0.53 outside (3.9×), 7.5 reads/cluster (bar was ≥2.5) → live authored 17/18. **F-FIXB-1 FIXED same day**: dedicated 0.15s flush thread unbinds the flush from the ~1s classify worker (spawns only when armed+capture; NO flush after stop() — the lifecycle test caught the shutdown race on first run, fixed); next match should approach the ~5-6/s stash-limited ceiling | M17 report + 2 lifecycle tests |
 
+## VHR-PROOF-1 CLOSED (2026-07-08) — first real Groth16 replay proof
+
+The last dormant arc (Arc 5, 2026-05-29) awoke: `Groth16Prover.prove()` ran real for the
+first time — token `0x22f3c60d…`, 256 proof bytes, `deferred_reason=None` — and
+`snarkjs groth16 verify` returned **OK!** against the ceremony VK. Both rails held
+(humanity 0.92 mints + verifies; 0.50 → deferred, no proof producible). KC-VHR-1: the
+whole prover + 5 artifacts were already populated (another verify-before-building find);
+the deliverable was EXECUTING the first proof, not writing the helper. Honest scope: an
+8-tick synthetic matrix (M17-labeled) — a full M17-matrix proof (VHR-PROOF-2) needs the
+pre-processor over `bridge_match17.db`. 0 IOTX; verifiers already on-chain (A4);
+submission is operator-gated. `audits/vhr-proof-1-first-real-proof-2026-07-08.md`.
+
 ## A3 second anchor (2026-07-08, operator GO)
 
 **Match 17's PoSP anchored:** tx `da3a8547db86a95bb5057c0e85ef45d436a865231241bdca6b596742aef6959c`,
