@@ -223,6 +223,39 @@ command.
 - Remaining offline: LUMEN-3/N5 predictive study (next deep arc), A1-b sub-lane design
   session, RP-6 harness prep.
 
+## Offline continuation 3 (2026-07-08): A1-b BCC Match-Lane v0 BUILT (design audited)
+
+grok authored the A1-b design (`docs/a1b-bcc-match-lane-design-2026-07-08.md`); Claude
+audited it against the code before implementation, then built v0 on operator GO.
+
+- **Audit (F-A1b-AUDIT-1):** 4/5 "Code truth" citations byte-exact; the 5th (§2.4 L4
+  13-key list) matched **no** real bridge constant (`behavioral_archaeologist.FEATURE_KEYS`
+  is 9 keys in a different order; `continuity_prover`/`pitl_prover` differ again). Since L4
+  attach was already optional, resolution = **ship v0 NONE-only** (assertion-plane only,
+  zero controller-internal biometrics; L4 → `artifact-v1` pinned to a real `FEATURE_KEYS`).
+  Rubric 10/10; rails clean. Audit-resolution block + inline markers added to the design doc.
+- **A1-b v0 BUILT** — `l9_presence/bcc_match.py` (new, pure stdlib): separate sealed lane
+  `bcc_match/` (D-A1b-2 — own genesis `QORTROLLER-BCC-MATCH-GENESIS-v0` **candidate tag, NOT
+  registered**, formula-twin of BCC v0 so tooling reuses but chains can't concatenate);
+  `MatchPresenceArtifact` typed payload (`qortroller-bcc-match-artifact-v0`); fail-closed
+  admission G1–G6 (**PoSP SYNCHRONIZED-only** + authorship non-empty + **coherence ≥ 0.50**
+  pre-registered + no inherited HYGIENE_FAIL + session-id anti-assertion); NOMINAL-only
+  writes; `record()` refuses (LOUD) any non-NONE contract or L9 payload (poison rail).
+- **Isolation-as-architecture:** parallel `BCCMatchStore` (never imports tournament writers);
+  writes only to `out_dir`; `advisory=true` / `cert_scope=developer_self` /
+  `population_certified=false` on every row. `.gitignore bcc_match/`.
+- **Host:** standalone runner `scripts/bcc_match_harvest.py` (fail-OPEN — harvest error never
+  breaks anything); session-close auto-hook deferred (minimize touch, reversible).
+- **VALIDATED on real M14 (the honest RP card-free path):** live KAS `INSUFFICIENT_KILLS`
+  (0/11 live under RP — F-RP2-1 starvation) would fail live-only, but the **deferred tier
+  carries admission** — `DEFERRED_AUTHORED_SESSION`, authored 3 / eligible 4 → **coherence
+  0.75 ≥ 0.50** → tier=DEFERRED, BUILT, NONE-only. Exactly the §6.2 design rationale, on
+  real data. Enabled write-path proven into a temp lane (chain_intact=true).
+- **Verify:** `test_bcc_match.py` **29/29** green (poison / M15 / M16 / M17 / PARTIAL /
+  isolation / honesty / reference / chain-monotonic / NONE-only); 608 other l9 tests green
+  (2 pre-existing `test_cocapture` failures = env `controller` import, unrelated); **PV-CI
+  182 PASS**. 0 IOTX, no FROZEN-v1 / no 228B PoAC / no chain write. Staged for operator commit.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
