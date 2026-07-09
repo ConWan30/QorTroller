@@ -305,9 +305,22 @@ authorship is a cryptographic join, not clock proximity.
 - **Verify:** `test_event_bind.py` **12/12**; l9 **625 passed** (2 pre-existing cocapture env failures
   unrelated); PV-CI **182 PASS**; 0 IOTX, no 228B PoAC contact (references `record_hash`, never alters
   the wire), no FROZEN-v1 / domain tag / chain write. Staged for operator commit.
-- **Increments 2-3 (deferred):** (2) capture-path stamping of the live `record_hash` into
-  `hid_onset_event` + `authored_screen_event` (flagged default-OFF; buildable offline, field-validated
-  at rig — pairs with RP-6); (3) PoSR beacon compose for replay resistance (design-only until 2 lands).
+- **Increment 1 committed `2ef36e33`.**
+
+**EVENT-BIND increment 2 (2026-07-09) — capture-path stamping SUPPORT (offline core):** the events can
+now carry the shared anchor, additive + backward-compat. `hid_onset_event` + `authored_screen_event`
+accept an optional `record_hash`, stamped **key-only-when-present** → unstamped events byte-identical,
+existing captures' `events_root` UNCHANGED (verified); a stamped session folds the anchor INTO the
+events_root/KAS commitment. `HidOnsetDetector.set_record_hash()` stamps live onsets (default None =
+byte-identical); `session_hid_events` preserves it; `event_bind.bind_session_events` + row adapters +
+`stamp_enabled()` env gate (`EVENT_BIND_STAMP_ENABLED` default OFF). Tested end-to-end (stamped →
+RECORD_HASH_PRODUCTION, unstamped → TEMPORAL_PROTOTYPE). **Verify:** `test_event_bind.py` **23/23**
+(12 inc1 + 11 inc2); l9 **636 passed** (2 pre-existing cocapture env failures); PV-CI **182 PASS**;
+no PV-CI pin on the event shapes; 0 IOTX; no 228B PoAC contact / FROZEN-v1 / chain write. Staged for
+operator commit.
+- **Remaining (rig / next):** the daemon call-site calling `set_record_hash` with the live PoAC
+  `record_hash` stream + surfacing each kill's `binding_mode` on the KAS record (a KAS-commitment change)
+  — field-validated at a rig session (pairs with RP-6). Then increment 3: PoSR beacon compose (replay).
 
 ## OPERATOR-ACTION box
 

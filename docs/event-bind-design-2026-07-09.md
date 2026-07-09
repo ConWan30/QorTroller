@@ -75,11 +75,18 @@ whereas a genuine co-capture (shared anchor) yields `RECORD_HASH_PRODUCTION`. Pi
 1. **BUILT (2026-07-09) — offline core:** `event_bind.py` (binder + modes + report) + the adversarial
    splice demonstration + tests. Consumes optionally-present `record_hash`; works today (fails open to
    temporal when stamping isn't live). **No capture-path change, no KAS record change.**
-2. **Capture-path stamping (flagged, default-OFF; buildable offline, field-validated at rig):** stamp
-   the live PoAC `record_hash` into `hid_onset_event` + `authored_screen_event`; surface each authored
-   kill's `binding_mode` on the KAS record. Live validation is a rig session (pairs with RP-6).
+2. **BUILT (2026-07-09) — capture-path stamping support (offline, additive, backward-compat):**
+   `hid_onset_event` + `authored_screen_event` accept an optional `record_hash`, stamped
+   **key-only-when-present** so unstamped events are byte-identical and the `events_root` of existing
+   captures is UNCHANGED; `HidOnsetDetector.set_record_hash()` lets the daemon stamp the live anchor
+   into onsets; `session_hid_events` preserves it on re-canonicalization; `event_bind.bind_session_events`
+   + row adapters map canonical events → the binder; `stamp_enabled()` env gate (`EVENT_BIND_STAMP_ENABLED`
+   default OFF). Tested end-to-end (stamped → RECORD_HASH_PRODUCTION, unstamped → TEMPORAL_PROTOTYPE).
+   **Remaining (rig / next):** the daemon call-site calling `set_record_hash` with the live PoAC
+   `record_hash` stream + surfacing each kill's `binding_mode` on the KAS record (a KAS-commitment
+   change) — field-validated at a rig session (pairs with RP-6).
 3. **PoSR compose (later):** require the anchor to chain from a fresh `temporal_beacon` → replay
-   resistance. Design-only until 2 lands.
+   resistance. Design-only until 2 is wired live.
 
 ## 5. Rails
 

@@ -31,11 +31,17 @@ COHERENCE_INPUT_TYPE = "controller.trigger.onset"
 
 
 def hid_onset_event(*, t_ms: float, device_ts: Optional[int] = None, wall_ms: Optional[float] = None,
-                    l2: Optional[int] = None) -> dict:
+                    l2: Optional[int] = None, record_hash: Optional[str] = None) -> dict:
     """One R2 rising-edge -> canonical HID-lobe event mapping (feeds the unified events_root). t_ms is the
     DEVICE-clock wall-corrected ms (the alignment clock); device_ts (raw uint32) + wall_ms (reader wall clock)
-    ride alongside so the device->wall anchor offset stays auditable against the screen lobe's WGC anchor."""
-    return {
+    ride alongside so the device->wall anchor offset stays auditable against the screen lobe's WGC anchor.
+
+    EVENT-BIND increment 2 (docs/event-bind-design-2026-07-09.md): `record_hash` is the live PoAC anchor
+    stamped at capture time so this INPUT and its co-detected screen OUTCOME share a cryptographic bind
+    (splice-proof), not clock proximity. KEY-ONLY-WHEN-STAMPED: absent record_hash -> the dict is
+    byte-identical to pre-EVENT-BIND, so an unstamped session's events_root is UNCHANGED; a stamped
+    session folds the anchor INTO the events_root/KAS commitment. Default None = stamping off."""
+    ev = {
         "type": HID_EVENT_R2_ONSET,
         "t_ms": round(float(t_ms), 3),
         "device_ts": (int(device_ts) if device_ts is not None else None),   # raw uint32 (anchor audit)
@@ -44,6 +50,9 @@ def hid_onset_event(*, t_ms: float, device_ts: Optional[int] = None, wall_ms: Op
         # an r2_onset is the INPUT CAUSE, not an outcome that must itself be explained (see docstring)
         "input_caused": False,
     }
+    if record_hash is not None:
+        ev["record_hash"] = str(record_hash)   # the shared PoAC anchor (key-only-when-stamped)
+    return ev
 
 
 class HidOnsetDetector:
@@ -59,6 +68,13 @@ class HidOnsetDetector:
         self._events: list[dict] = []
         self._maxlen = int(maxlen)
         self._onsets = 0
+        self._record_hash: Optional[str] = None   # EVENT-BIND increment 2: current live PoAC anchor (or None)
+
+    def set_record_hash(self, record_hash: Optional[str]) -> None:
+        """EVENT-BIND increment 2: the daemon calls this when a new PoAC record is produced, so the NEXT
+        r2_onset stamps that live record_hash (the shared anchor with the screen lobe). Default None =
+        stamping off -> onsets are byte-identical to pre-EVENT-BIND. GIL-safe single scalar assignment."""
+        self._record_hash = str(record_hash) if record_hash else None
 
     def push(self, wall_ms: float, ts_u32: int, l2: int) -> None:
         """Ingest one raw report (wall_ms, sensor_ts uint32, L2). Feeds the device-clock source, then folds
@@ -69,7 +85,8 @@ class HidOnsetDetector:
                 if self._prev_l2 is not None and self._prev_l2 < self._threshold <= cur:
                     # rising edge across the threshold -> R2 onset at the device-precise wall-corrected ms
                     self._events.append(hid_onset_event(t_ms=wall_corrected, device_ts=int(ts_u32) & 0xFFFFFFFF,
-                                                         wall_ms=wall_ms, l2=cur))
+                                                         wall_ms=wall_ms, l2=cur,
+                                                         record_hash=self._record_hash))
                     self._onsets += 1
                     if len(self._events) > self._maxlen:      # bound memory (drained periodically anyway)
                         self._events = self._events[-self._maxlen:]
@@ -108,7 +125,7 @@ def session_hid_events(raw_onsets, *, span_ms: Optional[tuple] = None) -> list[d
         if lo is not None and not (lo <= t <= hi):
             continue
         out.append(hid_onset_event(t_ms=t, device_ts=r.get("device_ts"), wall_ms=r.get("wall_ms"),
-                                   l2=r.get("l2")))
+                                   l2=r.get("l2"), record_hash=r.get("record_hash")))
     return out
 
 
