@@ -86,6 +86,15 @@ priced. RP-4/RP-6 remain rig-gated.
 | RP-2d deferred-attestation tier | **CLOSED 2026-07-07** — M14 **DEFERRED_AUTHORED_SESSION 3/11** (conjunction-preserving; +1 OBSERVED); M13 cross-check PASSED (deferred 9 ⊇ live 8); verifiers OK (20+59 checks); 12 tests | `audits/rp-close-1-rp2d-report.md` |
 | RP-2c window-gated densification | **CLOSED 2026-07-08 (M17)** — Fix B VALIDATED live: 2.08/s in-window vs 0.53 outside (3.9×), 7.5 reads/cluster (bar was ≥2.5) → live authored 17/18. **F-FIXB-1 FIXED same day**: dedicated 0.15s flush thread unbinds the flush from the ~1s classify worker (spawns only when armed+capture; NO flush after stop() — the lifecycle test caught the shutdown race on first run, fixed); next match should approach the ~5-6/s stash-limited ceiling | M17 report + 2 lifecycle tests |
 
+## A3 second anchor (2026-07-08, operator GO)
+
+**Match 17's PoSP anchored:** tx `da3a8547db86a95bb5057c0e85ef45d436a865231241bdca6b596742aef6959c`,
+block **45447322**, status 1, gasUsed 126015 (estimate exact), ~0.126 IOTX (wallet
+29.527556 → 29.401541 live-verified). Payload = SHA-256(record file) `545f9d44…`.
+Kill-switch line verified UNCHANGED. Both flagship sessions (M14 SYNCHRONIZED-first +
+M17 17/18-live-authorship) are now permanent public records — record file → verifier
+7/7 → digest → chain, no trust required anywhere in the walk.
+
 ## LUMEN track — meaning-plane gates (opened 2026-07-07, per D-RP-1 follow-through)
 
 Second track under the same closure discipline. Design basis:
