@@ -753,6 +753,16 @@ class RetinaGameCapture:
                 self._hid_onset = HidOnsetDetector(threshold=self._r2_threshold)
             except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
                 self._hid_onset = None
+        # EVENT-BIND increment 2b: the shared PoAC record_hash anchor (event_bind.py). The transport
+        # calls set_record_hash() per record; the OUTCOME (authored composite) and INPUT (r2_onset)
+        # lobes then carry it so a post-session bind reports RECORD_HASH_PRODUCTION. Default-OFF
+        # (env EVENT_BIND_STAMP_ENABLED) -> byte-identical: no stamping, no record_hash keys.
+        self._current_record_hash: Optional[str] = None
+        try:
+            from l9_presence.event_bind import stamp_enabled
+            self._event_bind_stamp = stamp_enabled()
+        except Exception:  # noqa: BLE001
+            self._event_bind_stamp = False
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
         from l9_presence.adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
@@ -884,6 +894,10 @@ class RetinaGameCapture:
     def _log_composite(self, composite: Optional[dict]) -> None:
         if composite is None:
             return
+        # EVENT-BIND inc 2b (OUTCOME lobe): stamp the live PoAC anchor into the composite so
+        # authored_screen_event carries record_hash. Default-OFF -> no key added (byte-identical).
+        if self._event_bind_stamp and self._current_record_hash and "record_hash" not in composite:
+            composite["record_hash"] = self._current_record_hash
         from l9_presence.killfeed_inline import append_near_boundary_jsonl
         append_near_boundary_jsonl(self._composite_log_path, composite)
         if composite.get("verdict") == "AUTHORED_PRESENT":
@@ -1198,6 +1212,15 @@ class RetinaGameCapture:
         if self._device_clock_l2 is not None:
             self._device_clock_l2.push_raw(wall_ms, ts_u32, l2)
             self._last_raw_l2 = int(l2)
+
+    def set_record_hash(self, record_hash_hex: Optional[str]) -> None:
+        """EVENT-BIND increment 2b: the transport calls this per PoAC record with the live record_hash.
+        Stores it as the current session anchor and, when stamping is enabled, forwards it to the HID
+        onset detector so the NEXT r2_onset carries it (the OUTCOME lobe is stamped in _log_composite).
+        Default-OFF -> stores nothing downstream, output byte-identical."""
+        self._current_record_hash = record_hash_hex or None
+        if self._event_bind_stamp and self._hid_onset is not None:
+            self._hid_onset.set_record_hash(self._current_record_hash)
 
     def push_r2_raw(self, wall_ms: float, ts_u32: int, r2: int) -> None:
         """Called by the RAW hidapi reader with the DEVICE sensor timestamp (offset 28) + R2 (raw offset 6).

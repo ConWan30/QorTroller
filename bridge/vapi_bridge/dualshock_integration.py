@@ -2397,6 +2397,12 @@ class DualShockTransport:
                 except Exception:
                     pass
 
+                # EVENT-BIND inc 2b: thread the live PoAC record_hash to the retina capture so the
+                # OUTCOME (composite) + INPUT (r2_onset) lobes share it. No-op unless stamping is on
+                # (set_record_hash internally gates) -> output byte-identical by default.
+                if _record_hash_hex and self._retina_game_capture is not None:
+                    self._retina_game_capture.set_record_hash(_record_hash_hex)
+
                 if self._retina_perception_active():
                     await self._run_retina_perception_hook(_record_hash_hex)
 

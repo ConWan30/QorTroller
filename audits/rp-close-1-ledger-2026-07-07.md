@@ -391,6 +391,25 @@ publicInputs[6])`, which re-ran the pairing check on-chain and emitted `ReplayPr
   leg** — the PORT-CERT stack is now publicly checkable end-to-end (a third party confirms the ZK
   claim against this on-chain event). Decision #1 from the chain/IOTX board: DONE.
 
+## Rig prep (2026-07-09): EVENT-BIND increment 2b — daemon stamping wired (Session 1, awaiting rig)
+
+The offline half of inc 2b: the retina capture now threads the live PoAC record_hash into BOTH lobes so
+a post-session bind reports RECORD_HASH_PRODUCTION. All flag-gated `EVENT_BIND_STAMP_ENABLED` (default
+OFF -> byte-identical; the flag propagates shell -> daemon -> bridge child via `env = dict(os.environ)`).
+
+- **INPUT lobe:** `dualshock_integration` consumption loop (where `_record_hash_hex` is already computed)
+  → one guarded `self._retina_game_capture.set_record_hash(_record_hash_hex)`.
+- **RetinaGameCapture.set_record_hash():** stores `_current_record_hash`; when stamping on, forwards to
+  `_hid_onset.set_record_hash()` so the next r2_onset carries it.
+- **OUTCOME lobe:** `_log_composite` stamps `_current_record_hash` into the authored composite
+  (`session_screen_events` already forwards `composite.record_hash`).
+- **Validation readout:** `scripts/event_bind_session_check.py` reads the session's composite + hid JSONL,
+  runs `bind_session_events`, reports crypto vs temporal. Touches NO KAS record/commitment (read-only).
+- **Verify:** both bridge files compile; event_bind 35/35; PV-CI **182 PASS**; flag-off byte-identical.
+  Runbook handed to operator; live validation is the Session-1 rig run (success bar: crypto-bound > 0).
+  0 IOTX, no 228B PoAC / FROZEN-v1 / chain contact. Remaining inc 2b: KAS `binding_mode` surfacing
+  (deferred — would touch the KAS record; kept out of the commitment for now).
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
