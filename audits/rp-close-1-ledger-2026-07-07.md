@@ -281,6 +281,34 @@ audited it against the code before implementation, then built v0 on operator GO.
 - **Verify:** `test_bcc_match.py` **35/35** (29 v0 + 6 artifact-v1); PV-CI **182 PASS**; 0 IOTX,
   no FROZEN-v1 / no 228B PoAC / no chain write. Staged for operator commit.
 
+## Offline continuation 5 (2026-07-09): EVENT-BIND arc opened — cryptographic per-event authorship (increment 1)
+
+New novelty arc (operator-chosen over PORT-CERT / ADVERSARY-EXPAND). The gap the code itself names
+(`cocapture_binding`): **presence binds by identifier (session_id); authorship binds by clock.** KAS
+today authors a kill by a **temporal ∩** ("composite resolves only inside an R2 window"). EVENT-BIND
+gives the on-screen OUTCOME and its causing HID-onset INPUT a **shared PoAC `record_hash` anchor** so
+authorship is a cryptographic join, not clock proximity.
+
+- **Honest scope (pinned, `docs/event-bind-design-2026-07-09.md` §2):** CLOSES cross-source **SPLICE**
+  (a temporal ∩ provably cannot); **composes** with PoSR recency (Arc 6 beacon) for **replay**
+  resistance (not closed alone — a faithful replay carries self-consistent old anchors); does **NOT**
+  close a compromised host (verifier_independence=False inherited). No overclaim.
+- **Increment 1 BUILT (offline):** `l9_presence/event_bind.py` (pure stdlib, generalizes
+  `cocapture_binding`) — `EventBindMode` {RECORD_HASH_PRODUCTION / TEMPORAL_PROTOTYPE / UNBOUND},
+  crypto-preferred-over-temporal, per-kill mode + `binding_is_cryptographic` all-or-nothing claim,
+  honest banner (the temporal-prototype caveat verbatim). Consumes optionally-present `record_hash`,
+  fails open to temporal today.
+- **The demonstration (the arc's result):** `scripts/event_bind_splice_demo.py` + a pinned test —
+  two corpora with **identical timing** (both 100% temporally bound, same 80 ms offsets); the genuine
+  co-capture (shared anchor) is crypto-bound/**splice-proof**, the splice (outcome anchor A + onset
+  anchor B) degrades to TEMPORAL_PROTOTYPE. "Separates genuine from splice on the ANCHOR, not the clock."
+- **Verify:** `test_event_bind.py` **12/12**; l9 **625 passed** (2 pre-existing cocapture env failures
+  unrelated); PV-CI **182 PASS**; 0 IOTX, no 228B PoAC contact (references `record_hash`, never alters
+  the wire), no FROZEN-v1 / domain tag / chain write. Staged for operator commit.
+- **Increments 2-3 (deferred):** (2) capture-path stamping of the live `record_hash` into
+  `hid_onset_event` + `authored_screen_event` (flagged default-OFF; buildable offline, field-validated
+  at rig — pairs with RP-6); (3) PoSR beacon compose for replay resistance (design-only until 2 lands).
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
