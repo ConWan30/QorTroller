@@ -373,6 +373,24 @@ Reference block INJECTED (no RPC); default bar 256 blocks (4× ANCHOR_CADENCE �
   / domain tag / chain write. Staged for operator commit. EVENT-BIND offline arc (inc 1/2/3) COMPLETE;
   only inc 2b (daemon live wiring) is rig-gated.
 
+## On-chain continuation (2026-07-09): VHR-PROOF-2 SUBMITTED ON-CHAIN (the capstone)
+
+The M17 real Groth16 replay proof — verified locally at VHR-PROOF-2 — is now **witnessed on IoTeX**.
+`scripts/submit_vhr_proof.py` called `VAPIReplayProofVerifier` v1 `0x5182372d…` `verify(a,b,c,
+publicInputs[6])`, which re-ran the pairing check on-chain and emitted `ReplayProofVerified`.
+
+- **tx** `0db5fafff622d8510786f38e03d950f1fbe5f27a52173a1a50b520c5801445f9` · **status 1** · block
+  **45479067** · gasUsed 283,279 · cost **0.2833 IOTX** (29.401541 → 29.118262).
+- **De-risked before spend:** a `verifyView` eth_call (0 IOTX) confirmed the chain ACCEPTS the exact
+  calldata FIRST; snarkjs→Solidity calldata done in pure Python (no snarkjs dep). Triple-gated
+  (CHAIN_SUBMISSION_PAUSED=false process-scoped + VHR_SUBMIT_AUTHORIZED=true + --confirm), 1.0 IOTX
+  hard cap, estimate_gas×1.25. `bridge/.env` kill-switch stays `=true` (process-scoped override only).
+- **Zero-knowledge preserved:** only the 6 public inputs crossed the wire (replayProofToken
+  `0xe675e6ae…`, humanityThreshold 700); the sanitized matrix never left the rig.
+- Manifest `audits/vhr_proof2_m17/vhr_onchain_submission.json`. **This closes the VHR arc's on-chain
+  leg** — the PORT-CERT stack is now publicly checkable end-to-end (a third party confirms the ZK
+  claim against this on-chain event). Decision #1 from the chain/IOTX board: DONE.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
