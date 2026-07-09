@@ -86,6 +86,18 @@ priced. RP-4/RP-6 remain rig-gated.
 | RP-2d deferred-attestation tier | **CLOSED 2026-07-07** — M14 **DEFERRED_AUTHORED_SESSION 3/11** (conjunction-preserving; +1 OBSERVED); M13 cross-check PASSED (deferred 9 ⊇ live 8); verifiers OK (20+59 checks); 12 tests | `audits/rp-close-1-rp2d-report.md` |
 | RP-2c window-gated densification | **CLOSED 2026-07-08 (M17)** — Fix B VALIDATED live: 2.08/s in-window vs 0.53 outside (3.9×), 7.5 reads/cluster (bar was ≥2.5) → live authored 17/18. **F-FIXB-1 FIXED same day**: dedicated 0.15s flush thread unbinds the flush from the ~1s classify worker (spawns only when armed+capture; NO flush after stop() — the lifecycle test caught the shutdown race on first run, fixed); next match should approach the ~5-6/s stash-limited ceiling | M17 report + 2 lifecycle tests |
 
+## VHR-PROOF-2 CLOSED (2026-07-08) — real proof over M17's ACTUAL matrix
+
+The VHR arc is now complete end-to-end on real data: 27,672 real M17 HID frames → φ →
+**1,730-tick** SanitizedReplayMatrix + real 463-record PoAC chain root → Groth16 proof
+(token `0x0e675e6a…`, 256 bytes) → `snarkjs verify` **OK!**. M17 now carries FIVE proofs
+of one session: SYNCHRONIZED presence + 17/18 live authorship + fully-rooted PoSP +
+on-chain anchor (block 45447322) + this ZK replay proof. Privacy: only the 6-element
+zero-knowledge public.json + proof.json committed; the matrix-bearing private/circuit
+inputs computed locally + deliberately UNCOMMITTED. consentPolicyHash=0 + humanity=0.92
+are demo placeholders (floor math real); 0 IOTX; submission operator-gated.
+`audits/vhr-proof-2-real-m17-matrix-2026-07-08.md`.
+
 ## VHR-PROOF-1 CLOSED (2026-07-08) — first real Groth16 replay proof
 
 The last dormant arc (Arc 5, 2026-05-29) awoke: `Groth16Prover.prove()` ran real for the
