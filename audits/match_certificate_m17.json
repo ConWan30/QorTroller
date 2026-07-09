@@ -1,0 +1,47 @@
+{
+  "advisory": true,
+  "cert_scope": "developer_self",
+  "population_certified": false,
+  "schema": "qortroller-match-certificate-v0",
+  "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+  "surfaces": {
+    "anchor": {
+      "block": 45447322,
+      "digest": "545f9d44aa76ae504dce346809131a6ac0a6d0b0b06c68211e1ff5fcd4bcdf33",
+      "method": "recordAdjudication(deviceIdHash, payload=file_sha256, flagged=false)",
+      "registry": "0x44CF981f46a52ADE56476Ce894255954a7776fb4",
+      "tx": "da3a8547db86a95bb5057c0e85ef45d436a865231241bdca6b596742aef6959c"
+    },
+    "consent": null,
+    "deferred": null,
+    "kas": {
+      "commitment": "4b453dd87ed7b1e4469eb5c0ac70f00edcea74e53aab5f3460e3e86a07b9b170",
+      "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+      "verdict": "AUTHORED_SESSION"
+    },
+    "posp": {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "file_sha256": "545f9d44aa76ae504dce346809131a6ac0a6d0b0b06c68211e1ff5fcd4bcdf33",
+      "record_path": "audits/posp_record_match17_rp_fixb3_2026-07-08.json",
+      "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+      "verdict": "SYNCHRONIZED"
+    },
+    "vhr": {
+      "poac_chain_root": "2883092103662502984058603518811642510659424348956558687207135404755924005222",
+      "proof_ref": "audits/vhr_proof2_m17/proof_m17_real.json",
+      "public_inputs": [
+        "6515016773575232013966083897412198261748471626433814903483487673586777652604",
+        "2001282384424057750069554473104889511003144158405398629700461784410503414425",
+        "2883092103662502984058603518811642510659424348956558687207135404755924005222",
+        "0",
+        "700",
+        "15527980199444165076074238362666146207823810659109643321765112053751694950553"
+      ],
+      "public_ref": "audits/vhr_proof2_m17/public_m17_real.json",
+      "replay_proof_token": "6515016773575232013966083897412198261748471626433814903483487673586777652604",
+      "sanitized_trace_root": "2001282384424057750069554473104889511003144158405398629700461784410503414425",
+      "vkey_ref": "bridge/vapi_bridge/replay_proof_pipeline/zk_artifacts/VAPIReplayProofVerifier_verification_key.json"
+    }
+  },
+  "verifier_independence": false
+}
