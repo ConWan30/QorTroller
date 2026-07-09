@@ -33,6 +33,20 @@ is canonical (a question a design doc must not answer by guessing). **§2.4 and 
 `feature_contract` section are OUT OF SCOPE for v0 — do not implement them; see the inline
 `[v0: NONE — F-A1b-AUDIT-1]` markers.**
 
+**F-A1b-AUDIT-1 UPDATE (2026-07-09, artifact-v1 investigation — corrects my own finding):**
+Tracing the *real* live 13-dim vector: `l9_presence/cocapture.py::compute_l4_features` →
+`controller/tinyml_biometric_fusion.py::BiometricFeatureFrame.to_vector()`. That `to_vector()`
+emits **exactly** §2.4's 13 keys in **exactly** §2.4's order (verified line-by-line). So §2.4's
+*transcription is correct* — grok cited the wrong **file** (`bridge/behavioral_archaeologist` is
+a **9-key SUBSET** used by the separation path, not the fusion vector) but got the 13-key content
+right. **My original "phantom order" framing OVERSTATED the defect** — a real, canonical, single-
+source-of-truth existed all along: `BiometricFeatureFrame`'s dataclass field order. **v0
+NONE-only still stands** on independent merits (corpus purity = assertion-plane only; and
+controller-import isolation — `controller.tinyml_biometric_fusion` needs the controller/hidapi
+env, absent in CI). **artifact-v1 is now BUILT (2026-07-09):** `bcc_match.L4_SESSION_V13_KEYS`
+pinned to the dataclass field order via a guarded test; L4 attaches **additive-optional** on the
+candidate v0 schema (PoSP A3-b precedent), NONE remains the default. See ledger continuation 4.
+
 **Minor notes baked into the v0 build (non-blocking):**
 - **Candidate genesis tag flagged.** `QORTROLLER-BCC-MATCH-GENESIS-v0` is a *new* (candidate,
   unregistered) chain lane tag — within precedent (`bcc.py` docstring calls
@@ -146,11 +160,12 @@ _SEP_FEATURES = ("dominant_coupling", "yaw_pitch_ratio", "yaw_decoupled")
 
 ### 2.4 Match / L4 feature contract (locked for tournament identity path — do not mix)
 
-> **[v0: NONE — F-A1b-AUDIT-1]** The audit found this list does NOT match any real bridge
-> constant: `behavioral_archaeologist.FEATURE_KEYS` is 9 keys in a different order;
-> `continuity_prover`/`pitl_prover` differ again. **This block is OUT OF SCOPE for v0** —
-> v0 ships `feature_contract.name="NONE"`. The list below is illustrative only and must be
-> re-derived from a real `import FEATURE_KEYS` before any `artifact-v1` L4 attachment.
+> **[F-A1b-AUDIT-1 + UPDATE]** v0 ships `feature_contract.name="NONE"` (this block is out of
+> scope for the v0 default). **CORRECTION (2026-07-09):** the 13-key list below IS correct — it
+> matches `controller/tinyml_biometric_fusion.py::BiometricFeatureFrame.to_vector()` exactly;
+> only the *attribution* to `bridge/behavioral_archaeologist` was wrong (that's a 9-key SUBSET).
+> artifact-v1 (BUILT 2026-07-09) pins `bcc_match.L4_SESSION_V13_KEYS` to that dataclass field
+> order via a guarded test; L4 attaches additive-optional (NONE stays the default).
 
 Canonical L4 keys (bridge / behavioral archaeologist, 13-dim live space):
 

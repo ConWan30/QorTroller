@@ -18,6 +18,7 @@ from l9_presence.bcc_match import (
     BCCMatchConfig,
     MatchHarvester,
     BCCMatchStore,
+    L4_SESSION_V13_KEYS,
     MATCH_ARTIFACT_SCHEMA,
     build_match_presence_artifact,
     coherence_fraction,
@@ -203,14 +204,77 @@ def test_poison_l9_payload_rejected_loud():
         assert h.store.load() == []          # chain untouched
 
 
-def test_non_none_feature_contract_rejected_loud():
-    """F-A1b-AUDIT-1 — a smuggled L4 vector (name != NONE) is refused LOUD in v0."""
+def test_malformed_l4_contract_rejected_loud():
+    """An L4_SESSION_V13 name with off-canonical keys (here empty) is refused LOUD (poison rail)."""
     art = _m17_artifact()
     art["feature_contract"] = {"name": "L4_SESSION_V13", "dim": 13, "keys": [], "vector": [0.0] * 13}
     with tempfile.TemporaryDirectory() as d:
         h = MatchHarvester(BCCMatchConfig(enabled=True, out_dir=d))
         with pytest.raises(ValueError):
             h.record(art)
+
+
+def test_unknown_contract_name_rejected_loud():
+    """Any feature_contract name outside {NONE, L4_SESSION_V13} is refused LOUD."""
+    art = _m17_artifact()
+    art["feature_contract"] = {"name": "L4_RANDOM", "dim": 3, "keys": [], "vector": [0.0, 0.0, 0.0]}
+    with tempfile.TemporaryDirectory() as d:
+        h = MatchHarvester(BCCMatchConfig(enabled=True, out_dir=d))
+        with pytest.raises(ValueError):
+            h.record(art)
+
+
+# ------------------------------------------------------------------- artifact-v1 L4 attachment
+def test_l4_attachment_builds_v1():
+    """L4 vector attaches as name=L4_SESSION_V13, dim=13, canonical keys, order preserved."""
+    vec = [float(i) for i in range(13)]
+    art, reasons = build_match_presence_artifact(
+        session_id=_SID, posp=_posp(), kas=_kas(), deferred=_deferred(),
+        authored_clusters=8, eligible_clusters=9, l4_vector=vec)
+    assert reasons == [] and art is not None
+    fc = art["feature_contract"]
+    assert fc["name"] == "L4_SESSION_V13" and fc["dim"] == 13
+    assert tuple(fc["keys"]) == L4_SESSION_V13_KEYS
+    assert fc["vector"] == vec and fc["aggregate"] == "session_mean" and fc["source"] == "cocapture"
+    # honesty rails still hold with L4 attached
+    assert art["population_certified"] is False and art["advisory"] is True
+
+
+def test_l4_attached_artifact_records_and_verifies():
+    vec = [float(i) for i in range(13)]
+    art, _ = build_match_presence_artifact(
+        session_id=_SID, posp=_posp(), kas=_kas(), deferred=_deferred(),
+        authored_clusters=8, eligible_clusters=9, l4_vector=vec, l4_aggregate="session_median")
+    with tempfile.TemporaryDirectory() as d:
+        h = MatchHarvester(BCCMatchConfig(enabled=True, out_dir=d))
+        rec = h.record(art)
+        assert rec is not None and h.store.verify() is True
+
+
+def test_l4_wrong_dim_raises():
+    """A non-13 L4 vector is a shape break — raises at build, never a silent write."""
+    with pytest.raises(ValueError):
+        build_match_presence_artifact(
+            session_id=_SID, posp=_posp(), kas=_kas(), deferred=_deferred(),
+            authored_clusters=8, eligible_clusters=9, l4_vector=[0.0] * 12)
+
+
+def test_l4_bad_aggregate_raises():
+    with pytest.raises(ValueError):
+        build_match_presence_artifact(
+            session_id=_SID, posp=_posp(), kas=_kas(), deferred=_deferred(),
+            authored_clusters=8, eligible_clusters=9, l4_vector=[0.0] * 13,
+            l4_aggregate="mean_of_everything")
+
+
+def test_l4_keys_pinned_to_dataclass_field_order():
+    """The canonical order MUST equal BiometricFeatureFrame's dataclass field order (the single
+    source of truth). Guarded: skipped when controller.tinyml_biometric_fusion isn't importable
+    (no hidapi/controller env) — the pin still holds wherever the module CAN load."""
+    import dataclasses
+    tf = pytest.importorskip("controller.tinyml_biometric_fusion")
+    fields = tuple(f.name for f in dataclasses.fields(tf.BiometricFeatureFrame))
+    assert fields == L4_SESSION_V13_KEYS
 
 
 def test_population_certified_true_rejected_loud():
