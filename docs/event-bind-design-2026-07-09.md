@@ -85,8 +85,17 @@ whereas a genuine co-capture (shared anchor) yields `RECORD_HASH_PRODUCTION`. Pi
    **Remaining (rig / next):** the daemon call-site calling `set_record_hash` with the live PoAC
    `record_hash` stream + surfacing each kill's `binding_mode` on the KAS record (a KAS-commitment
    change) — field-validated at a rig session (pairs with RP-6).
-3. **PoSR compose (later):** require the anchor to chain from a fresh `temporal_beacon` → replay
-   resistance. Design-only until 2 is wired live.
+3. **BUILT (2026-07-09) — PoSR recency compose (replay resistance):** `l9_presence/event_bind_recency.py`
+   — `replay_resistance(bind_report, temporal_beacon, reference_block)` → **REPLAY_RESISTANT** (crypto ∧
+   FRESH beacon) / **SPLICE_PROOF_ONLY** (crypto ∧ stale/no-beacon — the naive-replay downgrade) /
+   TEMPORAL_ONLY / UNVERIFIABLE (incl. a future-block anti-forgery rail). Beacon freshness is judged
+   against an INJECTED reference block (no RPC); default bar 4× the PoSR ANCHOR_CADENCE (256 blocks ≈
+   11 min). Demonstrated (`scripts/event_bind_recency_demo.py`): two FULLY splice-proof sessions
+   separated by beacon freshness alone — live → REPLAY_RESISTANT, replayed → SPLICE_PROOF_ONLY. Added
+   to the forgery matrix as the `stale_replay` attack (12th, holds). **Honest limits:** closes the
+   naive/stale replay; NOT a compromised host that re-stamps a fresh beacon; per-record beacon binding
+   is impossible (228B PoAC body FROZEN) so recency is a SESSION-scoped bar. `test_event_bind_recency.py`
+   12/12. The remaining rig work stays increment 2b (daemon `set_record_hash` + KAS `binding_mode`).
 
 ## 5. Rails
 

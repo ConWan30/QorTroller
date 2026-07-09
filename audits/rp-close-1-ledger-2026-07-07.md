@@ -349,6 +349,30 @@ record_hash crypto-join. A single un-rejected attack fails the suite loudly. `te
 - **Verify:** l9 **655 passed** (2 pre-existing cocapture env failures); PV-CI **182 PASS**; 0 IOTX; no
   228B PoAC contact / FROZEN-v1 / domain tag / chain write. Staged for operator commit.
 
+## Offline continuation 7 (2026-07-09): EVENT-BIND increment 3 — PoSR recency compose (replay resistance)
+
+EVENT-BIND alone closes cross-source SPLICE; a faithful full-session REPLAY reproduces self-consistent
+OLD anchors, so the crypto join still passes. Increment 3 composes the binding with the Arc 6 PoSR
+temporal beacon (the on-chain block hash the PoSP A3-b field already carries): `l9_presence/
+event_bind_recency.py` — `replay_resistance(bind_report, temporal_beacon, reference_block)` →
+**REPLAY_RESISTANT** (crypto ∧ FRESH) / **SPLICE_PROOF_ONLY** (crypto ∧ stale/no-beacon — the naive
+replay, downgraded honestly) / TEMPORAL_ONLY / UNVERIFIABLE (with a future-block anti-forgery rail).
+Reference block INJECTED (no RPC); default bar 256 blocks (4× ANCHOR_CADENCE ≈ 11 min).
+
+- **Demonstrated** (`scripts/event_bind_recency_demo.py`): two FULLY splice-proof sessions separated by
+  beacon freshness ALONE — the live one REPLAY_RESISTANT, the replayed one (stale beacon, 60k blocks
+  behind) SPLICE_PROOF_ONLY. Recency catches the replay the crypto join cannot.
+- **Forgery matrix extended to 12 attacks / 6 verifiers** (`audits/presence_forgery_matrix.json`,
+  `holds=True`): the new `stale_replay` attack → `event_bind_recency` rail (crypto-bound but stale →
+  not REPLAY_RESISTANT).
+- **Honest limits:** closes the naive/stale replay; NOT a compromised host re-stamping a fresh beacon
+  (witness independence); per-record beacon binding impossible (228B PoAC body FROZEN) → recency is
+  session-scoped.
+- **Verify:** `test_event_bind_recency.py` 12/12 + `test_presence_forgery.py` 5/5; l9 **667 passed**
+  (2 pre-existing cocapture env failures); PV-CI **182 PASS**; 0 IOTX; no 228B PoAC contact / FROZEN-v1
+  / domain tag / chain write. Staged for operator commit. EVENT-BIND offline arc (inc 1/2/3) COMPLETE;
+  only inc 2b (daemon live wiring) is rig-gated.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap

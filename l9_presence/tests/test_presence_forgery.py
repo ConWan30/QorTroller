@@ -12,7 +12,7 @@ def test_matrix_holds_every_attack_rejected():
     r = run_forgery_matrix()
     unrejected = [a.name for a in r.results if not a.rejected]
     assert r.holds is True, f"open rails: {unrejected}"
-    assert len(r.results) == len(ATTACKS) >= 11
+    assert len(r.results) == len(ATTACKS) >= 12
 
 
 def test_every_attack_names_a_rail_and_target():
@@ -21,9 +21,10 @@ def test_every_attack_names_a_rail_and_target():
         assert isinstance(a.rejected, bool)
 
 
-def test_five_verifiers_covered():
+def test_six_verifiers_covered():
     targets = {a.target for a in run_forgery_matrix().results}
-    assert {"posp_verifier", "kas_deferred", "bcc_match", "port_cert", "event_bind"}.issubset(targets)
+    assert {"posp_verifier", "kas_deferred", "bcc_match", "port_cert", "event_bind",
+            "event_bind_recency"}.issubset(targets)
 
 
 def test_markdown_banner_reflects_hold():
