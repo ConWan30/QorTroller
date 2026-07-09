@@ -22,13 +22,19 @@ from what the artifact REFERENCES: the PoSP verdict + commitments, the KAS/defer
 the archive manifest SHA-256s, the NAMED events_roots. The chain digests an ALREADY-BUILT
 artifact; it computes no PoSP/KAS/L4 itself.
 
-v0 SCOPE — NONE-ONLY (F-A1b-AUDIT-1): the L4 13-feature attachment (design §5.2/§5.3) is DEFERRED
-to artifact-v1. The pre-implementation audit found the design's §2.4 key list matched NO real
-bridge FEATURE_KEYS constant (behavioral_archaeologist.FEATURE_KEYS is 9 keys in a different
-order; continuity_prover/pitl_prover differ again), so pinning a 13-key vector now would pin a
-phantom. v0 admits presence rows with feature_contract.name="NONE", dim=0 — ASSERTION-PLANE ONLY,
-zero controller-internal biometrics. This strengthens corpus purity; the L4 attach returns in
-artifact-v1 pinned against a real `import FEATURE_KEYS`. record() REFUSES a non-NONE contract.
+FEATURE CONTRACT — NONE by default, L4 additive-optional (F-A1b-AUDIT-1 + UPDATE): rows DEFAULT
+to feature_contract.name="NONE" (dim=0) — ASSERTION-PLANE ONLY, zero controller-internal
+biometrics, the corpus-purity default. An OPTIONAL session-scoped 13-dim L4 vector attaches as
+name="L4_SESSION_V13" (artifact-v1, additive on the candidate v0 schema — PoSP A3-b precedent;
+NONE stays the default). The canonical 13-key order (L4_SESSION_V13_KEYS) is the FIELD ORDER of
+controller.tinyml_biometric_fusion.BiometricFeatureFrame.to_vector() (which
+l9_presence.cocapture.compute_l4_features produces); pinned here as a frozen tuple + a guarded
+test so THIS module carries no hard controller/hidapi import. [AUDIT UPDATE 2026-07-09: the design
+§2.4 list was CORRECT — it matches to_vector() exactly; only its attribution to
+bridge/behavioral_archaeologist (a 9-key SUBSET) was wrong. The original 'phantom' framing
+overstated it; v0 NONE-default still stands on corpus-purity + controller-import isolation.]
+record() accepts ONLY name in {NONE, L4_SESSION_V13} with a canonical shape — anything else raises
+(the poison rail).
 
 ADMISSION IS FAIL-CLOSED (design §6, G1..G8): only PoSP SYNCHRONIZED (never PARTIAL/UNVERIFIABLE);
 authorship non-empty (live AUTHORED_SESSION or deferred DEFERRED_AUTHORED_SESSION, authored>=1);
@@ -69,6 +75,25 @@ MATCH_PRESENCE = 0x01     # sub-lane (match-local): a full MatchPresenceArtifact
 
 _Q_NOMINAL = 0x01
 _Q_DEGRADED = 0x10        # forward-compat only; v0 rejects rather than writes DEGRADED (§6.3)
+
+# feature_contract names (§5.2). NONE = v0 default (assertion-plane only). L4_SESSION_V13 =
+# artifact-v1 additive-optional attachment of one SESSION-SCOPED 13-dim controller-biometric vector.
+L4_CONTRACT_NAME = "L4_SESSION_V13"
+L4_DIM = 13
+# Canonical live 13-dim L4 order — SINGLE SOURCE OF TRUTH is the field order of
+# controller.tinyml_biometric_fusion.BiometricFeatureFrame.to_vector() (which
+# l9_presence.cocapture.compute_l4_features produces). Pinned here as a frozen tuple so this
+# module carries NO hard controller/hidapi import; test_bcc_match asserts this equals the
+# dataclass field order whenever the controller module is importable (F-A1b-AUDIT-1 UPDATE
+# 2026-07-09 — the design §2.4 list was correct; only its bridge/behavioral_archaeologist
+# attribution was wrong).
+L4_SESSION_V13_KEYS = (
+    "trigger_resistance_change_rate", "trigger_onset_velocity_l2", "trigger_onset_velocity_r2",
+    "micro_tremor_accel_variance", "grip_asymmetry", "stick_autocorr_lag1", "stick_autocorr_lag5",
+    "tremor_peak_hz", "tremor_band_power", "accel_magnitude_spectral_entropy",
+    "touch_position_variance", "press_timing_jitter_variance", "touchpad_spatial_entropy",
+)
+_L4_AGGREGATES = ("session_mean", "session_median", "last_nominal")
 
 DEFAULT_COHERENCE_FLOOR = 0.50    # pre-registered (§6.2) — do NOT retune inside a harvest PR
 DEFAULT_K_FLOOR = 3               # mirrors kas_deferred.DEFAULT_K_FLOOR
@@ -194,6 +219,21 @@ def _authorship_tier(kas: Optional[dict], deferred: Optional[dict]) -> str:
     return "NONE"          # unreachable once admission (G5) has passed — defensive
 
 
+def _build_feature_contract(l4_vector, l4_aggregate: str, l4_source: str) -> dict:
+    """v0 default NONE; artifact-v1 additive L4 attachment when a session-scoped 13-vector is
+    supplied. Raises (never a silent shape break) on a malformed L4 vector / aggregate."""
+    if l4_vector is None:
+        return {"name": "NONE", "dim": 0, "keys": [], "vector": [],
+                "aggregate": None, "source": "unavailable"}
+    vec = [float(x) for x in l4_vector]
+    if len(vec) != L4_DIM:
+        raise ValueError(f"L4 vector must be {L4_DIM}-dim (canonical to_vector order); got {len(vec)}")
+    if l4_aggregate not in _L4_AGGREGATES:
+        raise ValueError(f"l4_aggregate must be one of {_L4_AGGREGATES}; got {l4_aggregate!r}")
+    return {"name": L4_CONTRACT_NAME, "dim": L4_DIM, "keys": list(L4_SESSION_V13_KEYS),
+            "vector": vec, "aggregate": l4_aggregate, "source": l4_source}
+
+
 def _posp_commitment_refs(posp: Optional[dict]) -> dict:
     """Pull the reference (not the evidence) commitments out of the PoSP record."""
     refs: dict = {}
@@ -266,9 +306,15 @@ def build_match_presence_artifact(*, session_id: Optional[str], session_display:
                                   eligible_clusters: int, match_context: Optional[dict] = None,
                                   transport: Optional[str] = None,
                                   coherence_floor: float = DEFAULT_COHERENCE_FLOOR,
-                                  advisory: bool = True) -> tuple:
+                                  advisory: bool = True, l4_vector=None,
+                                  l4_aggregate: str = "session_mean",
+                                  l4_source: str = "cocapture") -> tuple:
     """Pure builder. Returns (artifact_dict, []) if admission passes, else (None, reasons).
-    NEVER a partial write. v0 emits feature_contract.name="NONE" unconditionally (F-A1b-AUDIT-1)."""
+    NEVER a partial write. feature_contract defaults to NONE (v0); pass l4_vector (a session-scoped
+    13-dim vector in canonical L4_SESSION_V13_KEYS order) to attach the artifact-v1 L4 contract.
+    A malformed l4_vector raises (shape break is never silent)."""
+    # build the feature contract FIRST so a malformed L4 vector raises before admission side effects
+    feature_contract = _build_feature_contract(l4_vector, l4_aggregate, l4_source)
     ok, reasons = passes_match_admission(
         session_id=session_id, posp=posp, kas=kas, deferred=deferred,
         authored_clusters=authored_clusters, eligible_clusters=eligible_clusters,
@@ -313,10 +359,9 @@ def build_match_presence_artifact(*, session_id: Optional[str], session_display:
         },
         "match_context": match_context or {"n_matches": None, "in_match_spans": [],
                                            "transport": transport},
-        # v0 NONE-ONLY (F-A1b-AUDIT-1): assertion-plane only, zero controller-internal biometrics.
-        # L4 attachment (design §5.2/§5.3) returns in artifact-v1, pinned to a real FEATURE_KEYS.
-        "feature_contract": {"name": "NONE", "dim": 0, "keys": [], "vector": [],
-                             "aggregate": None, "source": "unavailable"},
+        # NONE by default (assertion-plane only); L4_SESSION_V13 when a session vector was passed
+        # (artifact-v1, additive). Canonical order pinned to BiometricFeatureFrame.to_vector().
+        "feature_contract": feature_contract,
     }
     return artifact, []
 
@@ -339,10 +384,22 @@ class MatchHarvester:
                 or artifact.get("schema") != MATCH_ARTIFACT_SCHEMA:
             raise ValueError("MatchHarvester.record: not a qortroller-bcc-match-artifact-v0 "
                              f"{ARTIFACT_TYPE} artifact")
-        # v0 invariants: NONE-only feature contract; population_certified must be False
+        # feature_contract: accept ONLY NONE (dim 0) or a CANONICAL L4_SESSION_V13; any other
+        # name/shape fails LOUD (the poison rail — an L9 3-float or a smuggled off-order vector
+        # can never enter the match chain silently)
         fc = artifact.get("feature_contract") or {}
-        if fc.get("name") != "NONE" or fc.get("dim") != 0:
-            raise ValueError("v0 is NONE-only (F-A1b-AUDIT-1): feature_contract must be NONE/dim=0")
+        name, dim = fc.get("name"), fc.get("dim")
+        if name == "NONE":
+            if dim != 0:
+                raise ValueError("NONE contract must have dim=0")
+        elif name == L4_CONTRACT_NAME:
+            if dim != L4_DIM or len(fc.get("vector") or []) != L4_DIM \
+                    or tuple(fc.get("keys") or ()) != L4_SESSION_V13_KEYS:
+                raise ValueError("L4_SESSION_V13 malformed: dim/vector/keys must be the "
+                                 "canonical 13 (BiometricFeatureFrame.to_vector order)")
+        else:
+            raise ValueError(f"unknown feature_contract name {name!r} "
+                             f"(expected NONE or {L4_CONTRACT_NAME})")
         if artifact.get("population_certified") is not False:
             raise ValueError("v0 invariant: population_certified must be False")
         q = int((artifact.get("admission") or {}).get("quality_code", _Q_NOMINAL))

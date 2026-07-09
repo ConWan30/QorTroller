@@ -254,7 +254,32 @@ audited it against the code before implementation, then built v0 on operator GO.
 - **Verify:** `test_bcc_match.py` **29/29** green (poison / M15 / M16 / M17 / PARTIAL /
   isolation / honesty / reference / chain-monotonic / NONE-only); 608 other l9 tests green
   (2 pre-existing `test_cocapture` failures = env `controller` import, unrelated); **PV-CI
-  182 PASS**. 0 IOTX, no FROZEN-v1 / no 228B PoAC / no chain write. Staged for operator commit.
+  182 PASS**. 0 IOTX, no FROZEN-v1 / no 228B PoAC / no chain write. Committed `3c694c47`.
+
+## Offline continuation 4 (2026-07-09): A1-b artifact-v1 L4 attachment + audit self-correction
+
+- **F-A1b-AUDIT-1 SELF-CORRECTED (honesty):** the artifact-v1 investigation traced the real
+  live 13-dim vector — `l9_presence/cocapture.py::compute_l4_features` →
+  `controller/tinyml_biometric_fusion.py::BiometricFeatureFrame.to_vector()` — and found the
+  design's §2.4 13-key list is **CORRECT** (matches `to_vector()` exactly, line-by-line). Only
+  the *attribution* to `bridge/behavioral_archaeologist` (a 9-key SUBSET) was wrong. My original
+  "phantom order" framing **overstated** the defect; corrected in the design doc's AUDIT
+  RESOLUTION + inline §2.4 marker. **v0 NONE-default still stands** (corpus purity +
+  controller-import isolation), so nothing shipped was wrong — the finding's *conclusion* held,
+  its *reason* is now accurate.
+- **artifact-v1 BUILT** (unblocked by the confirmed source): `bcc_match.L4_SESSION_V13_KEYS`
+  frozen tuple = `BiometricFeatureFrame` field order, **pinned by a guarded test**
+  (`test_l4_keys_pinned_to_dataclass_field_order` — imports the dataclass and asserts equality;
+  RAN + PASSED live where the module loads, skips cleanly in CI-without-controller). L4 attaches
+  **additive-optional** on the candidate v0 schema (PoSP A3-b precedent): pass a session-scoped
+  13-vector → `feature_contract.name="L4_SESSION_V13"`, dim=13, canonical keys, order preserved;
+  omit it → NONE (byte-identical v0 default). `record()` guard loosened to accept ONLY
+  {NONE, canonical L4_SESSION_V13}; any off-order/garbage contract still raises (poison rail).
+- **Runner:** `--l4-npz <cocapture.npz>` reads a stored `l4_vec` and attaches it (no controller
+  import — reads the persisted vector). Smoke: M14 PoSP+deferred + synthetic l4 npz →
+  `L4_SESSION_V13`, built, dormant (default-OFF).
+- **Verify:** `test_bcc_match.py` **35/35** (29 v0 + 6 artifact-v1); PV-CI **182 PASS**; 0 IOTX,
+  no FROZEN-v1 / no 228B PoAC / no chain write. Staged for operator commit.
 
 ## OPERATOR-ACTION box
 

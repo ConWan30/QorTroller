@@ -59,6 +59,9 @@ def main() -> int:
     ap.add_argument("--kas", default=None, help="live KAS record JSON (optional; else PoSP-embedded)")
     ap.add_argument("--archive", default=None, help="archive dir to record as archive_manifest_dir")
     ap.add_argument("--transport", default=None, choices=["USB", "RP", "UNKNOWN"])
+    ap.add_argument("--l4-npz", default=None,
+                    help="cocapture .npz to read a pre-computed 13-dim l4_vec from (artifact-v1 "
+                         "L4 attach; reads the stored vector — no controller/hidapi import needed)")
     ap.add_argument("--authored", type=int, default=None, help="authored clusters (if no --deferred)")
     ap.add_argument("--eligible", type=int, default=None, help="eligible clusters (if no --deferred)")
     ap.add_argument("--out-dir", default=os.environ.get("BCC_MATCH_OUT_DIR", "bcc_match"))
@@ -105,13 +108,29 @@ def main() -> int:
         posp.setdefault("archive", {})
         posp["archive"]["dir"] = a.archive
 
+    # optional artifact-v1 L4 attach: read a stored session l4_vec (no controller import needed)
+    l4_vector = None
+    if a.l4_npz:
+        try:
+            import numpy as np
+            d = np.load(a.l4_npz, allow_pickle=True)
+            v = d["l4_vec"] if "l4_vec" in d.files else None
+            if v is None or len(v) != 13:
+                print(f"ERROR: {a.l4_npz!r} has no 13-dim l4_vec "
+                      f"(got {None if v is None else len(v)})", file=sys.stderr)
+                return 2
+            l4_vector = [float(x) for x in v]
+        except Exception as e:                   # noqa: BLE001 — I/O boundary, exit 2
+            print(f"ERROR: cannot read l4_vec from {a.l4_npz!r}: {e}", file=sys.stderr)
+            return 2
+
     floor = float(os.environ.get("BCC_MATCH_COHERENCE_FLOOR", DEFAULT_COHERENCE_FLOOR))
     artifact, reasons = build_match_presence_artifact(
         session_id=posp.get("session_id"), session_display=posp.get("session_display"),
         device_id=posp.get("device_id"), span_ms=posp.get("span_ms"),
         posp=posp, kas=kas, deferred=deferred,
         authored_clusters=authored, eligible_clusters=eligible,
-        transport=a.transport, coherence_floor=floor)
+        transport=a.transport, coherence_floor=floor, l4_vector=l4_vector)
 
     if artifact is None:
         print(json.dumps({"built": False, "admission_rejected": True, "reasons": reasons}, indent=2))
