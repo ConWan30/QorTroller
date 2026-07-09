@@ -14,7 +14,13 @@ from l9_presence.event_bind import (
     HidOnset,
     ScreenOutcome,
     bind_events,
+    bind_session_events,
+    hid_onset_from_event,
+    screen_outcome_from_event,
+    stamp_enabled,
 )
+from l9_presence import killfeed_hid_event as he
+from l9_presence.killfeed_screen_event import authored_screen_event
 
 _A = "a" * 64          # capture-A PoAC record_hash
 _B = "b" * 64          # capture-B PoAC record_hash (a DIFFERENT session/record)
@@ -142,3 +148,88 @@ def test_crypto_prefers_shared_anchor_over_nearer_temporal():
     p = r.pairs[0]
     assert p.mode == EventBindMode.RECORD_HASH_PRODUCTION
     assert p.onset.t_ms == 1900.0 and p.anchor_record_hash == _A
+
+
+# =================================================================== increment 2: capture-path stamping
+def test_hid_onset_event_unstamped_is_byte_identical():
+    """Backward-compat rail: no record_hash -> the dict has NO record_hash key (events_root unchanged)."""
+    ev = he.hid_onset_event(t_ms=1010.0, device_ts=30000, wall_ms=1010.5, l2=200)
+    assert "record_hash" not in ev
+
+
+def test_hid_onset_event_stamped_carries_anchor():
+    ev = he.hid_onset_event(t_ms=1010.0, l2=200, record_hash=_A)
+    assert ev["record_hash"] == _A
+
+
+def test_screen_event_unstamped_is_byte_identical():
+    comp = {"verdict": "AUTHORED_PRESENT", "killer_first_ms": 1000.0}
+    assert "record_hash" not in authored_screen_event(comp)
+
+
+def test_screen_event_stamps_from_arg_and_from_composite():
+    comp = {"verdict": "AUTHORED_PRESENT", "killer_first_ms": 1000.0}
+    assert authored_screen_event(comp, record_hash=_A)["record_hash"] == _A
+    # a stamped composite's own record_hash is picked up when no arg is passed
+    comp2 = {"verdict": "AUTHORED_PRESENT", "killer_first_ms": 1000.0, "record_hash": _B}
+    assert authored_screen_event(comp2)["record_hash"] == _B
+
+
+def test_detector_stamps_onsets_when_record_hash_set():
+    """The detector stamps the CURRENT record_hash into onsets; unset -> no key (byte-identical)."""
+    det = he.HidOnsetDetector(threshold=40)
+    det.push(1000.0, 0, 0)                      # anchor low (no onset)
+    det.set_record_hash(_A)
+    det.push(1010.0, 30000, 200)                # rising edge -> onset #1, stamped _A
+    det.set_record_hash(_B)                     # a new PoAC record went live
+    det.push(1020.0, 60000, 0)                  # release
+    det.push(1030.0, 90000, 200)                # rising edge -> onset #2, stamped _B
+    evs = det.drain_events()
+    assert [e.get("record_hash") for e in evs] == [_A, _B]
+
+
+def test_detector_unset_record_hash_is_byte_identical():
+    det = he.HidOnsetDetector(threshold=40)
+    det.push(1000.0, 0, 0)
+    det.push(1010.0, 30000, 200)                # onset, no record_hash set
+    assert "record_hash" not in det.drain_events()[0]
+
+
+def test_session_hid_events_preserves_stamped_anchor():
+    raw = [{"t_ms": 1010.0, "device_ts": 30000, "record_hash": _A}]
+    assert he.session_hid_events(raw)[0]["record_hash"] == _A
+
+
+# --- adapter + end-to-end ---
+def test_adapters_map_events_to_rows():
+    so = screen_outcome_from_event(
+        {"type": "kill_authored", "t_ms": 1000.0, "record_hash": _A, "window_gate_ms": 555.0})
+    assert so.t_ms == 1000.0 and so.record_hash == _A and so.window_gate_ms == 555.0
+    ho = hid_onset_from_event({"type": "r2_onset", "t_ms": 1080.0, "record_hash": _A, "device_ts": 9})
+    assert ho.t_ms == 1080.0 and ho.record_hash == _A and ho.device_ts == 9
+    assert screen_outcome_from_event({"t_ms": None}) is None      # fail-open on no numeric t_ms
+    assert hid_onset_from_event("nope") is None
+
+
+def test_bind_session_events_stamped_is_cryptographic():
+    """End-to-end: stamped canonical events -> RECORD_HASH_PRODUCTION with no code change."""
+    screen = [authored_screen_event({"verdict": "AUTHORED_PRESENT", "killer_first_ms": 1000.0}, record_hash=_A)]
+    hid = [he.hid_onset_event(t_ms=1080.0, record_hash=_A)]
+    r = bind_session_events(screen, hid)
+    assert r.binding_is_cryptographic is True and r.n_crypto == 1
+
+
+def test_bind_session_events_unstamped_is_temporal():
+    """Real sessions today (pre-stamping) bind temporal-only, honestly labeled."""
+    screen = [authored_screen_event({"verdict": "AUTHORED_PRESENT", "killer_first_ms": 1000.0})]
+    hid = [he.hid_onset_event(t_ms=1080.0)]
+    r = bind_session_events(screen, hid)
+    assert r.n_bound == 1 and r.n_crypto == 0
+    assert r.pairs[0].mode == EventBindMode.TEMPORAL_PROTOTYPE
+
+
+def test_stamp_enabled_env_gate(monkeypatch):
+    monkeypatch.delenv("EVENT_BIND_STAMP_ENABLED", raising=False)
+    assert stamp_enabled() is False
+    monkeypatch.setenv("EVENT_BIND_STAMP_ENABLED", "1")
+    assert stamp_enabled() is True

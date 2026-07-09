@@ -31,6 +31,7 @@ never touches the 228-byte wire. PURE stdlib — no bridge/cv2/DB import (the ca
 from __future__ import annotations
 
 import html
+import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -175,6 +176,46 @@ class EventBindReport:
             lines.append(f"| {p.outcome.t_ms} | {p.mode.value} "
                          f"| {'yes' if p.cryptographically_bound else 'no'} | {dt} | {anchor_s} |")
         return "\n".join(lines)
+
+
+def stamp_enabled() -> bool:
+    """EVENT-BIND increment 2 daemon gate: whether the capture path stamps the live record_hash into
+    events. Default OFF (env EVENT_BIND_STAMP_ENABLED unset) -> events byte-identical to pre-EVENT-BIND.
+    The schema always ACCEPTS a record_hash; this only gates whether the daemon SUPPLIES one."""
+    return os.environ.get("EVENT_BIND_STAMP_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def screen_outcome_from_event(ev) -> Optional[ScreenOutcome]:
+    """authored_screen_event dict -> ScreenOutcome row (or None if no numeric t_ms). Fail-open."""
+    if not isinstance(ev, dict):
+        return None
+    t = ev.get("t_ms")
+    if not isinstance(t, (int, float)):
+        return None
+    return ScreenOutcome(t_ms=float(t), record_hash=ev.get("record_hash"),
+                         kill_id=(str(ev["window_gate_ms"]) if ev.get("window_gate_ms") is not None else None),
+                         window_gate_ms=ev.get("window_gate_ms"))
+
+
+def hid_onset_from_event(ev) -> Optional[HidOnset]:
+    """hid_onset_event dict -> HidOnset row (or None if no numeric t_ms). Fail-open."""
+    if not isinstance(ev, dict):
+        return None
+    t = ev.get("t_ms")
+    if not isinstance(t, (int, float)):
+        return None
+    return HidOnset(t_ms=float(t), record_hash=ev.get("record_hash"), device_ts=ev.get("device_ts"))
+
+
+def bind_session_events(screen_events, hid_events, *,
+                        window_ms: float = DEFAULT_BIND_WINDOW_MS) -> EventBindReport:
+    """Convenience: adapt canonical session event dicts (authored_screen_event / hid_onset_event, e.g. from
+    session_screen_events / session_hid_events or the archived JSONL) into binder rows and bind. Rows with no
+    numeric t_ms are dropped (fail-open). Today (pre-stamping) this reports TEMPORAL_PROTOTYPE on real
+    sessions; once the daemon stamps record_hash it upgrades to RECORD_HASH_PRODUCTION with no code change."""
+    outcomes = [o for o in (screen_outcome_from_event(e) for e in (screen_events or [])) if o is not None]
+    onsets = [o for o in (hid_onset_from_event(e) for e in (hid_events or [])) if o is not None]
+    return bind_events(outcomes, onsets, window_ms=window_ms)
 
 
 def _crypto_match(outcome: ScreenOutcome, onsets: list) -> Optional[HidOnset]:
