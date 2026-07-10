@@ -89,3 +89,32 @@ def test_ring_is_bounded():
             pass
     assert len(lt._attribution_ring) == lt._ATTRIBUTION_RING_MAX   # bounded deque, no unbounded growth
     _reset()
+
+
+# --- D1.1 loop-thread tid filter ----------------------------------------------------------------
+def test_loop_tid_set_and_get():
+    lt.set_loop_tid(None)
+    assert lt.loop_tid() is None
+    lt.set_loop_tid(12345)
+    assert lt.loop_tid() == 12345
+    lt.set_loop_tid(None)
+
+
+def test_top_blocks_loop_tid_filter_excludes_worker_tid():
+    """D1.1: a big worker-thread block (different tid) is dropped when loop_tid_only is set, so it
+    cannot mask the real loop-thread offender — the whole point of the filter."""
+    _reset()
+    lt._attribution_ring.append({"label": "worker_big", "dur_s": 9.0, "tid": 999, "wall_ns": 1000})
+    lt._attribution_ring.append({"label": "loop_small", "dur_s": 0.1, "tid": 42, "wall_ns": 2000})
+    assert [b["label"] for b in lt.top_blocks(k=5, loop_tid_only=42)] == ["loop_small"]  # worker excluded
+    assert lt.top_blocks(k=1)[0]["label"] == "worker_big"          # unfiltered, the worker dominates
+    _reset()
+
+
+def test_recent_blocks_loop_tid_filter():
+    _reset()
+    lt._attribution_ring.append({"label": "a", "dur_s": 1.0, "tid": 7, "wall_ns": 1000})
+    lt._attribution_ring.append({"label": "b", "dur_s": 1.0, "tid": 8, "wall_ns": 1000})
+    assert {b["label"] for b in lt.recent_blocks(loop_tid_only=7)} == {"a"}
+    assert len(lt.recent_blocks()) == 2                            # unfiltered sees both
+    _reset()

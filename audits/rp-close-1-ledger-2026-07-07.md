@@ -697,6 +697,36 @@ One RP match with `LOOP_STARVATION_ATTRIBUTION_ENABLED=1 RETINA_MATCH_STATE_ENAB
   → **F2** offloads it. Reframe: authored=14 landed *despite* this lag, so F2 is now density/precision + bridge-health,
   not the authorship blocker. Task #45 updated.
 
+## F-ARCB-1 + D1.1 BUILD — grok design → Claude audit+build (2026-07-10) — staged for operator commit
+
+Both from the `lag_attr_validate` findings. Hard audit gate (claim ⊆ reality vs live code) run before each build.
+
+**F-ARCB-1 — force MATCH_ENDED on session close** (`l9_presence/match_state_live.py`). Live stop left `n_ended=0`
+while `match_state=IN_MATCH`: `close_session` only emitted for IN_MATCH spans `detect_match_state` re-found at close,
+and it returned nothing. AUDIT correction: grok's stated "clock mismatch" root cause is **not** it — the live
+MATCH_STARTED ts (1783721835082) is a wall-clock ms, the *same* clock `close_session(time.time()*1000)` uses. Why
+detect returned nothing is unpinned, but the fix is deliberately **detect- and clock-independent**: after path (A),
+if `_open_match_start_ms` is still set (STARTED reliably sets it), force ONE `(MATCH_ENDED, "session_close")`
+timestamped at last activity / detected at stop. Single-shot; advisory; never gates. 3 new tests (spy detect→empty
+reproduces the live failure + single-shot dedup + detect-path-no-double); 10 pure-core + 9 wiring green.
+
+**D1.1 — instrument the lean-residual loop-thread sync** (`loop_timing.py` + `loop_health_monitor.py` +
+`dualshock_integration.py`). AUDIT confirmed the premise: `_session_loop` is `async` on the event-loop thread, and
+**lean mode runs ONLY `loop_health_monitor` + that session loop** (main.py L1252-59), so the residual loop blocker is
+definitively inside it; the frontend-polled endpoints already `to_thread` every store read (ruled out). CORRECTION:
+grok's `warn_s=0.005` would spam WARNINGs on 5.4GB-DB calls when attribution is OFF (breaks byte-identical-off) — used
+`warn_s=999` (never-warn; the ring records every exit when attribution is ON regardless of `warn_s`). Wraps 7 inline
+loop-thread sync sites via a `_timed_loop_store` helper (get_detection_policy, cognitive read/write, frame_checkpoint,
+pitl_proof, retina flush_stale + tick_match_state) + a **loop-tid filter** (monitor records the loop thread's tid; the
+dump drops worker-tid blocks so qt-dense-cand/classify/HID can't mask the real offender). Default-OFF byte-identical.
+3 new tests (loop-tid get/set, worker-tid excluded, recent_blocks filter); 10 attribution tests green.
+
+**Verify:** PV-CI **182**; compile-OK ×4 modules; 29 targeted (arc-B + attribution) green; the 5 stability_9
+stage4/5/7 failures proven PRE-EXISTING (stash-verified: 1 fails identically at HEAD — ChainReconciler spec-interval
+order-pollution in the untouched `operator_steward_absorbed_agents.py`; other 4 pass in isolation). Zero regression.
+0 IOTX; no FROZEN/chain/228B-PoAC contact. **Next:** operator commits (D-ARCB-4 / D-D11-4) → one lean capture with
+`LOOP_STARVATION_ATTRIBUTION_ENABLED=1` NAMES the offender → grok designs F2 (`to_thread` that one site).
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
