@@ -472,6 +472,30 @@ optional v3 (operator GO). v1 raw-pool **INCONCLUSIVE** stays the permanent hone
   passed (2 pre-existing cocapture env failures); PV-CI **182**; 0 IOTX; harness offline (zero
   capture-path, T9). grok v2.1 design rev + Claude harness aligned.
 
+## AI-loop cycle 3 (2026-07-10): lane 1 — P1 anomaly diagnostic (F-P0A-V2-1 classified)
+
+grok designed the diagnostic (`docs/p1-anomaly-diagnostic-design-2026-07-10.md`); Claude audited
+(grok's designer kill-check **recomputed EXACT** against the real `.npz` — grounded, not confabulated)
++ built + ran (`l9_presence/p1_anomaly_diagnostic.py` + runner + `test_p1_anomaly_diagnostic.py` 9/9).
+
+**Result (`audits/p1-anomaly-diagnostic-2026-07-10.{json,md}`, schema `p1-anomaly-diagnostic-v0`):
+PRIMARY = MARGINAL_AIM, secondary HIGH_RESIDUAL, `p0a_v2_separated_unchanged: True`.** The honest
+read — **P1 is a low-aim player, not a bad coupler:** P1 med aim **14.8** vs peers ~50, so its low
+coupling (0.09) is mostly *insufficient aim energy* (T-H1), with high residual (T-H2) secondary; NOT a
+lag regime (T-H3: |217−183|=34 < 100ms) or protocol skew (T-H5). P1 is a labeled human — low coupling
+≠ automation (pinned by test T4: never emits SEPARATED).
+
+**Two CODE-TRUTH findings (audit gate; grok design tolerated, now noted):** (a) **no
+`backend`/`region`/`protocol` field exists** — `capture_governor` is a bare ndarray, `hud_json`
+non-uniform; T-H5 runs only on `label`/`duration_bin` (both uniform → didn't fire), reported as
+`protocol_fields_available`. (b) **T-H4 GENUINE_LOW_COUPLING is UNTESTABLE** — P1's aim band [11.8,17.7]
+has **0 peer sessions** (P1 aim doesn't overlap peers), so genuine-vs-style is honest `None`, not
+forced. **v3 implication:** a uniform-across-players claim isn't cleanly establishable on this corpus
+(P1 needs real-aim sessions, or the gate would have to exclude P1's marginal-aim = outcome-tuning).
+
+- `test_p1_anomaly_diagnostic.py` **9/9**; l9 study+diagnostic 27/27; PV-CI **182**; 0 IOTX; offline
+  (zero capture-path). P0-A v2 SEPARATED untouched. Loop lane 2 (P0-B wedge thesis) is grok's next.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
