@@ -26,11 +26,44 @@ Discipline:
 """
 from __future__ import annotations
 
+import collections
 import contextlib
 import logging
+import os
 import threading
 import time
 from typing import Iterator, Optional
+
+
+# ---- D1 loop-starvation attribution ring (LOOP_STARVATION_ATTRIBUTION_ENABLED, default OFF) ----------
+# timed_block appends each exit {label, dur_s, tid, wall_ns} to a bounded ring; run_loop_health_monitor
+# dumps the top-K by dur_s on a starvation event to NAME the loop-blocking sync sources (D1). Default OFF
+# => one bool check per timed_block exit (no ring append), byte-identical. O(1) deque append when on.
+_ATTRIBUTION_RING_MAX = 256
+_attribution_ring = collections.deque(maxlen=_ATTRIBUTION_RING_MAX)
+_attribution_enabled = str(os.environ.get("LOOP_STARVATION_ATTRIBUTION_ENABLED", "0")).strip().lower() \
+    in ("1", "true", "yes", "on")
+
+
+def set_attribution_enabled(on: bool) -> None:
+    """Toggle the D1 attribution ring at runtime (also read from the env flag at import)."""
+    global _attribution_enabled
+    _attribution_enabled = bool(on)
+
+
+def attribution_enabled() -> bool:
+    return _attribution_enabled
+
+
+def recent_blocks(since_wall_ns: Optional[int] = None) -> list:
+    """Snapshot of ring entries (optionally only those with wall_ns >= since_wall_ns)."""
+    src = list(_attribution_ring)
+    return src if since_wall_ns is None else [b for b in src if b["wall_ns"] >= since_wall_ns]
+
+
+def top_blocks(k: int = 5, since_wall_ns: Optional[int] = None) -> list:
+    """Top-K ring entries by duration -- the starvation-window offenders."""
+    return sorted(recent_blocks(since_wall_ns), key=lambda b: b["dur_s"], reverse=True)[:k]
 
 
 @contextlib.contextmanager
@@ -78,6 +111,9 @@ def timed_block(
         yield
     finally:
         dur_s = time.monotonic() - t_start
+        if _attribution_enabled:                           # D1: name-the-offender ring (O(1) append)
+            _attribution_ring.append({"label": label, "dur_s": round(dur_s, 4),
+                                      "tid": tid, "wall_ns": wall_ns})
         try:
             if dur_s > warn_s:
                 _hint = f" — {hint}" if hint else ""

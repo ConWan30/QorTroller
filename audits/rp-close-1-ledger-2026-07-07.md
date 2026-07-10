@@ -648,6 +648,30 @@ pre-existing**, arc B zero-regression); 0 IOTX; no FROZEN/chain/PoAC. **B2 (note
 auto-segmentation via `kas_deferred.slice_scan_by_spans`. **Live "see it while playing" validation** = next session with
 `RETINA_MATCH_STATE_ENABLED=1` (MATCH_STARTED in the daemon log after real play + diag flips LOBBY↔IN_MATCH).
 
+### Bridge capture-lag fix — D1 attribution SHIPPED (2026-07-10, grok design · Claude audit+build · operator commit)
+
+**The lag is the last wall for LIVE `authored>0`** — the dense-candidate mechanism works, but at 13fps the anchor
+bootstraps too late to promote in-match. Root (memory `[[project_retina_phase0_live_starvation_finding]]`): agent-fleet
+inline DB + 5.4GB DB starve the event loop; retina is the victim. grok's design is **diagnostic-first, no big-bang** —
+build **D1 (attribution) ONLY**, capture with it on to NAME the real top offenders, THEN F2 (surgical to_thread offload)
+/ F1 (reversible capture-priority deferral), DB prune as a separate follow-on.
+
+**D1 (this commit) — pure diagnostic, zero fleet/data/loop risk:** `loop_timing.timed_block` now appends each exit
+`{label, dur_s, tid, wall_ns}` to a bounded 256-entry ring (`LOOP_STARVATION_ATTRIBUTION_ENABLED`, **default-OFF → one
+bool check per exit, byte-identical**); on a LOOP STARVATION event `run_loop_health_monitor` dumps the **top-5
+timed_block sites by dur in the window + the lean-mode posture** (D2) — so the operator NAMES the loop-blocking sync
+sources instead of guessing. Un-instrumented blockers are flagged as a finding (need a new timed_block site). Claude
+audit found **NO corrections** — `timed_block` verified already wrapping the cited SLOW sites (calibration_monitor /
+curator / protocol_intelligence / stewards / chain_reconciler); `records` already indexed (so F2 is an offload, not an
+index-add). Optional RGC-fps-on-line deferred to D1.1 (monitor gets only `cfg`).
+
+`bridge/vapi_bridge/loop_timing.py` (ring + `top_blocks`/`recent_blocks`/`attribution_enabled`) +
+`bridge/vapi_bridge/loop_health_monitor.py` (starvation dump) + `bridge/tests/test_loop_starvation_attribution.py`
+(7 tests: off no-append byte-identical, on records, top_blocks names offender, since-window filter, off-warning-still-
+fires, ring bounded, toggle). PV-CI **182**; 34-test loop-timing/stability regression green; 0 IOTX; no FROZEN/chain/PoAC.
+**Next (rig-gated):** one capture with `LOOP_STARVATION_ATTRIBUTION_ENABLED=1` (+ `PRESENCE_LEAN_MODE=true`) names the
+top 2-3 offenders → then F2/F1 (grok loop). Design `docs/bridge-capture-lag-fix-2026-07-10.md`.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
