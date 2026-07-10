@@ -1,0 +1,61 @@
+{
+  "advisory": true,
+  "cert_scope": "developer_self",
+  "constants": {
+    "GAP_MIN": 0.15,
+    "N_MIN_NEG": 24,
+    "N_MIN_POS": 8,
+    "TAU_AUTO": 0.1,
+    "TAU_HUMAN": 0.2,
+    "TAU_NC": 0.1
+  },
+  "diagnostics": {
+    "auto_mean": 0.0837,
+    "auto_p25_p75": [
+      0.0545,
+      0.0918
+    ],
+    "human_mean": 0.2646,
+    "human_p25_p75": [
+      0.0905,
+      0.4231
+    ],
+    "per_mode_auto_median": {
+      "snap": 0.0637,
+      "static": 0.0643,
+      "track": 0.094
+    },
+    "separation_ratio": 2.834
+  },
+  "excluded_labels": {},
+  "gap": 0.1261,
+  "gates": {
+    "M1_n_pos": true,
+    "M2_n_neg": true,
+    "M3_human_floor": false,
+    "M4_auto_ceiling": true,
+    "M5_gap": false,
+    "M6_causality": true
+  },
+  "medians": {
+    "auto": 0.0688,
+    "human": 0.1949,
+    "neg_control_margin": 0.1651,
+    "negative_control": 0.0252
+  },
+  "n": {
+    "n_auto_scored": 132,
+    "n_human_available": 59,
+    "n_human_scored": 44,
+    "n_human_skipped": 15
+  },
+  "player_histogram": {
+    "human": 44
+  },
+  "population_certified": false,
+  "positive_glob": "sessions_l9/*.npz",
+  "reason": "N met, causality held, but failed ['M3_human_floor', 'M5_gap']",
+  "schema": "p0a-presence-op-v1",
+  "seed": 0,
+  "verdict": "INCONCLUSIVE"
+}
