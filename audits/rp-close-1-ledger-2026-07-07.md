@@ -523,6 +523,38 @@ correct — must not drift to "validated live."
   = **held** (operator-optional; and premature until the two §5.3 competitive claims are source-verified).
   Next in sequence: operator's call — **RP-4 (rig)** or DePIN/consent prose, or pause.
 
+### Loop offline lane 3 — DePIN / consent LEGITIMACY thesis (2026-07-10, grok design · Claude claim-audit · no code)
+
+Design `docs/depin-consent-legitimacy-lane-2026-07-10.md` — the adoption/legitimacy axis P0-B §7 handed
+off. Claim: **the gamer holds the consent keys** (grant/revoke = gamer's own `msg.sender`; categories gate
+downstream use; FSCA surfaces revoked-but-flowing); that sovereignty is the **opt-in incentive + the
+legitimacy contrast vs invasive kernel AC** — explicitly **not** a token/TGE/live-reward economy, not
+population-certified, not a claim the bridge can move consent.
+
+**Claude claim-audit: PASS — claim ⊆ reality, zero over-claims.** Every "LIVE (testnet)" row confirmed
+against `deployed-addresses.json` with exact status keys: `VAPIConsentRegistry 0xA82dB0eF…`
+(`_phase237_status: deployed`, gamer-`msg.sender`/bridge-read-only per `_phase237_note`) · `VAPIDataMarketplace
+0x15D2Ac6d…` · `…Listings 0x78Df84Cc…` · `VAPIBuyerRegistry 0x3742189e…` (`_status: LIVE (testnet)`).
+The two FSCA rules confirmed in `fleet_signal_coherence_agent.py` (`CONSENT_REVOKED_BUT_DATA_FLOWING` l.489
+HIGH + `CONSENT_REVOKED_LISTING_ACTIVE` l.755 CRITICAL/GDPR-Art.17). **No TGE language anywhere** (§5.1/§5.6
+rigorous). Sovereignty (§5.2) + consent≠omniscient (§5.3) rails match the CLAUDE.md hard rule + Track-1
+privacy lesson.
+
+**The one drift grok flagged for me — `VAPIConsentManifestRegistry 0x5F7c8068…` — is now RESOLVED.**
+Address is present (l.154) but carries **no status key** (unlike its neighbors) and the older
+`data-economy-deploy-hold-and-arc5-readiness.md` marked it DEFERRED. grok handled it honestly (never quoted
+it live; locked it as D-DEPIN-3). **Operator asked for the definitive check: `eth_getCode` on IoTeX 4690
+(read-only, 0 IOTX) returns 3869 bytes → DEPLOYED** (control `VAPIConsentRegistry` = 2247 bytes confirms the
+RPC + the empty-vs-bytecode distinction). So it **IS LIVE (testnet)**; the DEFERRED prose is stale/superseded
+(mirrors the in-file `_reconciliation_2026_05_24` eth_getCode precedent). Doc §4.3 + D-DEPIN-3 upgraded to
+LIVE. Follow-up (unbundled): the stale `deploy-hold` doc could get a one-line supersession note. **Audit
+self-note:** I initially doubted grok's `_phase237_status: deployed` citation (first grep missed it); re-verified
+— **grok was right**, key exists at l.99. Correcting before over-correcting is the audit discipline working.
+
+- **No code** (thesis-only). PV-CI **182** unchanged; 0 IOTX; offline. Optional instruments D-DEPIN-OPT-1
+  (consent-flow reporter) + OPT-2 (flywheel metrics stub) **held** (operator-gated, unbundled). Loop pause
+  after commit remains: **RP-4 (rig)** or stop — no offline code-buildable surface without new captures.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
