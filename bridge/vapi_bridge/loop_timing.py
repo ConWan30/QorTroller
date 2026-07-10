@@ -55,15 +55,38 @@ def attribution_enabled() -> bool:
     return _attribution_enabled
 
 
-def recent_blocks(since_wall_ns: Optional[int] = None) -> list:
-    """Snapshot of ring entries (optionally only those with wall_ns >= since_wall_ns)."""
+# ---- D1.1 loop-thread tid (set by run_loop_health_monitor on the event-loop thread) ------------------
+# Worker threads (qt-dense-cand, classify-burst, HID reader) can call timed_block-wrapped code too, but
+# their blocks do NOT starve the asyncio loop. Recording the loop tid lets the starvation dump filter to
+# loop-thread offenders so worker-thread time never masks the real blocker.
+_loop_tid: Optional[int] = None
+
+
+def set_loop_tid(tid: Optional[int]) -> None:
+    global _loop_tid
+    _loop_tid = tid
+
+
+def loop_tid() -> Optional[int]:
+    return _loop_tid
+
+
+def recent_blocks(since_wall_ns: Optional[int] = None,
+                  loop_tid_only: Optional[int] = None) -> list:
+    """Snapshot of ring entries (optionally wall_ns >= since_wall_ns, and/or tid == loop_tid_only)."""
     src = list(_attribution_ring)
-    return src if since_wall_ns is None else [b for b in src if b["wall_ns"] >= since_wall_ns]
+    if since_wall_ns is not None:
+        src = [b for b in src if b["wall_ns"] >= since_wall_ns]
+    if loop_tid_only is not None:
+        src = [b for b in src if b["tid"] == loop_tid_only]
+    return src
 
 
-def top_blocks(k: int = 5, since_wall_ns: Optional[int] = None) -> list:
-    """Top-K ring entries by duration -- the starvation-window offenders."""
-    return sorted(recent_blocks(since_wall_ns), key=lambda b: b["dur_s"], reverse=True)[:k]
+def top_blocks(k: int = 5, since_wall_ns: Optional[int] = None,
+               loop_tid_only: Optional[int] = None) -> list:
+    """Top-K ring entries by duration -- the starvation-window offenders (optionally loop-tid-filtered)."""
+    return sorted(recent_blocks(since_wall_ns, loop_tid_only),
+                  key=lambda b: b["dur_s"], reverse=True)[:k]
 
 
 @contextlib.contextmanager

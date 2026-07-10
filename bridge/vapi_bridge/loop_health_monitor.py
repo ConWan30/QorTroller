@@ -38,6 +38,7 @@ Operator action with a STARVATION warning in logs:
 
 import asyncio
 import logging
+import threading
 import time
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,15 @@ async def run_loop_health_monitor(*, cfg) -> None:
         "(check=%.1fs, starvation_threshold=%.1fs)",
         check_interval_s, threshold_s,
     )
+
+    # D1.1: record THIS thread (the event-loop thread) so the starvation dump can filter attribution
+    # to loop-thread offenders — worker-thread (qt-dense-cand / classify / HID) blocks don't starve
+    # the asyncio loop. Fail-open: filtering is a diagnostic nicety, never a monitor dependency.
+    try:
+        from .loop_timing import set_loop_tid
+        set_loop_tid(threading.get_ident())
+    except Exception:  # noqa: BLE001
+        pass
 
     # Stats for periodic summary (every 60 heartbeats = ~2 min at default cadence)
     starvation_events = 0
@@ -91,22 +101,35 @@ async def run_loop_health_monitor(*, cfg) -> None:
                 # NAME the top loop-blocking timed_block sites in this starvation window + the lean-mode
                 # posture (D2). Fail-open: attribution must never break the monitor.
                 try:
-                    from .loop_timing import attribution_enabled, top_blocks
+                    from .loop_timing import (attribution_enabled, top_blocks,
+                                              recent_blocks, loop_tid)
                     if attribution_enabled():
                         lean = getattr(cfg, "presence_lean_mode", None)
                         since = time.time_ns() - int((elapsed + 1.0) * 1e9)   # window + 1s boundary margin
-                        offenders = top_blocks(k=5, since_wall_ns=since)
+                        _lt = loop_tid()                                       # D1.1: loop-thread filter
+                        offenders = top_blocks(k=5, since_wall_ns=since, loop_tid_only=_lt)
                         if offenders:
+                            _dropped = (len(recent_blocks(since_wall_ns=since))
+                                        - len(recent_blocks(since_wall_ns=since, loop_tid_only=_lt))) \
+                                if _lt is not None else 0
                             log.warning(
-                                "  LOOP STARVATION attribution (top %d timed_block by dur; lean_mode=%s): %s",
-                                len(offenders), lean,
+                                "  LOOP STARVATION attribution (top %d loop-thread timed_block by dur; "
+                                "lean_mode=%s, loop_tid=%s, n_dropped_worker_tid=%d): %s",
+                                len(offenders), lean, _lt, _dropped,
                                 "; ".join("%s=%.3fs(tid=%d)" % (o["label"], o["dur_s"], o["tid"])
                                           for o in offenders))
+                        elif _lt is not None and recent_blocks(since_wall_ns=since):
+                            log.warning(
+                                "  LOOP STARVATION attribution: no LOOP-THREAD (tid=%s) timed_block "
+                                "entries; %d worker-thread entries dropped (lean_mode=%s) — loop blocker "
+                                "is UN-INSTRUMENTED on the loop thread or non-timed_block sync (SQLite/RPC)",
+                                _lt, len(recent_blocks(since_wall_ns=since)), lean)
                         else:
                             log.warning(
                                 "  LOOP STARVATION attribution: NO timed_block entries in window "
-                                "(lean_mode=%s) — the blocker is UN-INSTRUMENTED (needs a new timed_block "
-                                "site) or non-timed_block sync (SQLite/RPC on the loop thread)", lean)
+                                "(lean_mode=%s, loop_tid=%s) — the blocker is UN-INSTRUMENTED (needs a new "
+                                "timed_block site) or non-timed_block sync (SQLite/RPC on the loop thread)",
+                                lean, _lt)
                 except Exception:  # noqa: BLE001 — attribution must never break the monitor
                     pass
 
