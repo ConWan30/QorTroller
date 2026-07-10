@@ -1,0 +1,90 @@
+{
+  "advisory": true,
+  "aim_gate": {
+    "AIM_ACTIVITY_MIN": 10.2,
+    "enabled": true,
+    "measure": "max(std(sx-med),std(sy-med)) LSB"
+  },
+  "cert_scope": "developer_self",
+  "constants": {
+    "GAP_MIN": 0.15,
+    "N_MIN_NEG": 24,
+    "N_MIN_POS": 8,
+    "TAU_AUTO": 0.1,
+    "TAU_HUMAN": 0.2,
+    "TAU_NC": 0.1
+  },
+  "diagnostics": {
+    "auto_mean": 0.0785,
+    "auto_p25_p75": [
+      0.0439,
+      0.0909
+    ],
+    "human_mean": 0.3084,
+    "human_p25_p75": [
+      0.0917,
+      0.4416
+    ],
+    "per_mode_auto_median": {
+      "snap": 0.0825,
+      "static": 0.0573,
+      "track": 0.0761
+    },
+    "separation_ratio": 5.611
+  },
+  "excluded_labels": {},
+  "gap": 0.3072,
+  "gates": {
+    "M1_n_pos": true,
+    "M2_n_neg": true,
+    "M3_human_floor": true,
+    "M4_auto_ceiling": true,
+    "M5_gap": true,
+    "M6_causality": true
+  },
+  "medians": {
+    "auto": 0.0666,
+    "human": 0.3738,
+    "neg_control_margin": 0.3466,
+    "negative_control": 0.0255
+  },
+  "n": {
+    "n_auto_scored": 99,
+    "n_human_aim_inactive": 26,
+    "n_human_available": 59,
+    "n_human_scored": 33,
+    "n_human_skipped": 0
+  },
+  "player_histogram": {
+    "?": {
+      "median_aim": 31.7,
+      "median_coupling": 0.4128,
+      "n": 6
+    },
+    "P1": {
+      "median_aim": 14.8,
+      "median_coupling": 0.0908,
+      "n": 7
+    },
+    "P2": {
+      "median_aim": 51.2,
+      "median_coupling": 0.593,
+      "n": 8
+    },
+    "P3": {
+      "median_aim": 49.0,
+      "median_coupling": 0.3793,
+      "n": 12
+    }
+  },
+  "player_skew_warning": false,
+  "players_below_tau_human": [
+    "P1"
+  ],
+  "population_certified": false,
+  "positive_glob": "sessions_l9/*.npz",
+  "reason": "M1-M6 all hold under pre-registered constants",
+  "schema": "p0a-presence-op-v2",
+  "seed": 0,
+  "verdict": "SEPARATED"
+}

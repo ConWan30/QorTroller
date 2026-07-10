@@ -25,10 +25,14 @@ import statistics
 from dataclasses import dataclass, field
 from typing import Optional
 
+import numpy as np
+
+from .coupling import MIN_STICK_STD as _MIN_STICK_STD
 from .session_recorder import SessionData, analyze_session_data
 from .synth_adversary import MODES, synthesize
 
-STUDY_SCHEMA = "p0a-presence-op-v1"
+STUDY_SCHEMA = "p0a-presence-op-v1"          # raw-pool (oracle-abstain-only positives) — historical
+STUDY_SCHEMA_V2 = "p0a-presence-op-v2"       # aim-active inclusion gate (§5.1 amendment)
 
 # ---- pre-registered decision constants (§3.3) — FROZEN at this schema version ----
 TAU_HUMAN = 0.20        # = coupling.COUPLING_THRESHOLD; real presence must clear the runtime floor
@@ -40,6 +44,14 @@ N_MIN_NEG = 24          # 8 human seeds x 3 injection modes
 
 AUTO_MODES = tuple(MODES)          # ("static", "snap", "track") — sourced from synth_adversary
 DEFAULT_SEED = 0
+
+# ---- v2 aim-activity inclusion gate (§5.1 amendment; grok design, Claude audit) ----
+# aim_activity_std = max(std(sx-med), std(sy-med)) — same form as the oracle's abstain check.
+# AIM_ACTIVITY_MIN = 4x the oracle abstain gate (MIN_STICK_STD*255) = a FIXED multiple of an existing
+# protocol constant ("aim is a primary activity", ~16x the idle-noise variance scale), NOT an
+# outcome-derived percentile of the coupling split (§5.1 rejected p25=34.2 / median=12.6 / retune).
+AIM_ACTIVITY_MIN = 4.0 * _MIN_STICK_STD * 255.0      # = 10.2 LSB at default MIN_STICK_STD=0.01
+PLAYER_SKEW_THRESHOLD = 0.80                         # >= this fraction one player -> skew warning (D-P0A-10)
 
 # ---- closed-enum verdicts (§6) ----
 SEPARATED = "SEPARATED"
@@ -67,6 +79,16 @@ def _mean(xs):
     return round(statistics.mean(xs), 4) if xs else None
 
 
+def _aim_activity_std(s: SessionData) -> float:
+    """max(std(sx-med), std(sy-med)) LSB — the v2 aim-activity measure (§5.1). Demeaning is a no-op
+    for std but matches the design's stated form; guards the aim-active inclusion gate."""
+    sx = np.asarray(s.in_sx, dtype=float)
+    sy = np.asarray(s.in_sy, dtype=float)
+    if sx.size == 0:
+        return 0.0
+    return float(max(np.std(sx - np.median(sx)), np.std(sy - np.median(sy))))
+
+
 @dataclass
 class _Scored:
     coupling_score: float
@@ -74,6 +96,8 @@ class _Scored:
     neg_control_margin: Optional[float]
     label: str
     mode: Optional[str] = None          # auto mode (static/snap/track); None for human
+    player: str = ""                    # for the v2 per-player histogram (D-P0A-10)
+    aim: Optional[float] = None         # aim_activity_std of the source session
 
 
 def _score(sessions, *, mode: Optional[str] = None):
@@ -90,7 +114,9 @@ def _score(sessions, *, mode: Optional[str] = None):
         scored.append(_Scored(coupling_score=float(r["coupling_score"]),
                               negative_control=r.get("negative_control"),
                               neg_control_margin=r.get("neg_control_margin"),
-                              label=r.get("label", ""), mode=mode))
+                              label=r.get("label", ""), mode=mode,
+                              player=(s.player or "") if mode is None else "",
+                              aim=_aim_activity_std(s) if mode is None else None))
         scored_sessions.append(s)
     return scored, skipped, scored_sessions
 
@@ -143,28 +169,42 @@ class StudyReport:
     diagnostics: dict
     constants: dict
     seed: int
+    schema: str = STUDY_SCHEMA
     player_histogram: dict = field(default_factory=dict)
+    player_skew_warning: bool = False
+    players_below_tau_human: list = field(default_factory=list)
+    aim_gate: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
-            "schema": STUDY_SCHEMA,
+            "schema": self.schema,
             "advisory": True, "cert_scope": "developer_self", "population_certified": False,
             "verdict": self.verdict, "gates": self.gates, "reason": self.reason,
             "n": self.n, "medians": self.medians, "gap": self.gap,
             "diagnostics": self.diagnostics, "constants": self.constants, "seed": self.seed,
             "player_histogram": self.player_histogram,
+            "player_skew_warning": self.player_skew_warning,
+            "players_below_tau_human": self.players_below_tau_human, "aim_gate": self.aim_gate,
         }
 
     def to_markdown(self) -> str:
         d = self.to_dict()
+        ag = d.get("aim_gate", {})
+        scope = "aim-active " if ag.get("enabled") else ""
         lines = [
             "# P0-A Presence-Oracle Separation OP", "",
             f"**VERDICT: {d['verdict']}** — {d['reason']}", "",
-            "*human-vs-**modeled**-automation · developer_self · advisory · "
+            f"*human-vs-**modeled**-automation on {scope}sessions · developer_self · advisory · "
             "population_certified=False · NOT real-cheat / identity / host-trustless (design §7)*", "",
-            f"- schema: `{d['schema']}`  seed: {d['seed']}",
-            f"- N: human_scored={d['n']['n_human_scored']} (skipped {d['n']['n_human_skipped']} of "
-            f"{d['n']['n_human_available']}) · auto_scored={d['n']['n_auto_scored']}",
+            f"- schema: `{d['schema']}`  seed: {d['seed']}"
+            + (f"  ·  aim-gate: `{ag.get('measure')}` >= {ag.get('AIM_ACTIVITY_MIN')} LSB"
+               if ag.get("enabled") else ""),
+            f"- N: human_scored={d['n']['n_human_scored']}"
+            + (f" (aim_inactive excluded {d['n'].get('n_human_aim_inactive')}, "
+               f"skipped {d['n']['n_human_skipped']} of {d['n']['n_human_available']})"
+               if ag.get("enabled") else
+               f" (skipped {d['n']['n_human_skipped']} of {d['n']['n_human_available']})")
+            + f" · auto_scored={d['n']['n_auto_scored']}",
             f"- median coupling: human={d['medians']['human']} · auto={d['medians']['auto']} · "
             f"**gap={d['gap']}** (GAP_MIN={d['constants']['GAP_MIN']})",
             f"- causality: median NC={d['medians']['negative_control']} (<= {d['constants']['TAU_NC']}) · "
@@ -179,15 +219,42 @@ class StudyReport:
                   f"- separation_ratio (diagnostic): {d['diagnostics'].get('separation_ratio')}",
                   f"- human p25/p75={d['diagnostics'].get('human_p25_p75')} · "
                   f"auto p25/p75={d['diagnostics'].get('auto_p25_p75')}"]
+        if d.get("player_histogram"):
+            warn = "  ⚠️ **player_skew_warning**" if d.get("player_skew_warning") else ""
+            below = d.get("players_below_tau_human") or []
+            lines += ["", f"**Per-player (D-P0A-10):**{warn}",
+                      f"- players below TAU_HUMAN (F-P0A-V2-1 heterogeneity): "
+                      f"{below or 'none'} — pooled SEPARATED is carried by the rest", "",
+                      "| player | n | median coupling | median aim |", "|---|---|---|---|"]
+            for p, v in d["player_histogram"].items():
+                flag = " ⚠️" if p in below else ""
+                lines.append(f"| {p}{flag} | {v['n']} | {v['median_coupling']} | {v['median_aim']} |")
         return "\n".join(lines)
 
 
-def run_separation_study(human_sessions, *, seed: int = DEFAULT_SEED) -> StudyReport:
+def run_separation_study(human_sessions, *, seed: int = DEFAULT_SEED,
+                         aim_gate: bool = False) -> StudyReport:
     """Full pipeline (§3-§6). human_sessions: list[SessionData] (real human positives, already loaded).
     Scores positives, derives+scores the paired modeled-automation negatives, computes the median gap +
-    M1-M6, returns a StudyReport. Pure: no I/O, no capture-path (the runner does file loading)."""
+    M1-M6, returns a StudyReport. Pure: no I/O, no capture-path (the runner does file loading).
+
+    aim_gate (v2 §5.1): when True, the positive class is restricted to AIM-ACTIVE sessions
+    (aim_activity_std >= AIM_ACTIVITY_MIN) BEFORE scoring — a pre-registered inclusion criterion, NOT a
+    decision-constant change. Aim-inactive positives are excluded (own bucket), schema -> v2, and a
+    per-player histogram + skew warning are reported (D-P0A-10)."""
     n_available = len(human_sessions)
-    human_scored, human_skipped, scored_human_sessions = _score(human_sessions)
+    schema = STUDY_SCHEMA_V2 if aim_gate else STUDY_SCHEMA
+
+    # v2 aim-activity inclusion gate — exclude aim-inactive positives before scoring (§5.1)
+    aim_inactive = 0
+    included = []
+    for s in human_sessions:
+        if aim_gate and _aim_activity_std(s) < AIM_ACTIVITY_MIN:
+            aim_inactive += 1
+            continue
+        included.append(s)
+
+    human_scored, human_skipped, scored_human_sessions = _score(included)
     # derive negatives ONLY from the sessions that scored (T7: n_auto = n_human_scored x 3 when all score)
     negatives = _derive_negatives(scored_human_sessions, seed)
     auto_scored = []
@@ -211,15 +278,26 @@ def run_separation_study(human_sessions, *, seed: int = DEFAULT_SEED) -> StudyRe
     per_mode = {m: _median([r.coupling_score for r in auto_scored if r.mode == m]) for m in AUTO_MODES}
     sep_ratio = (round(med_human / max(med_auto, 1e-6), 3)
                  if (med_human is not None and med_auto is not None) else None)
-    hist: dict = {}
+    # per-player histogram + skew warning (D-P0A-10): per-player n + median coupling + median aim
+    players: dict = {}
     for r in human_scored:
-        # human label may carry player; count labels (developer_self -> typically one)
-        hist[r.label] = hist.get(r.label, 0) + 1
+        players.setdefault(r.player or "?", []).append(r)
+    player_hist = {p: {"n": len(rs),
+                       "median_coupling": round(_median([x.coupling_score for x in rs]) or 0, 4),
+                       "median_aim": round(_median([x.aim for x in rs]) or 0, 1)}
+                   for p, rs in sorted(players.items())}
+    n_scored = len(human_scored)
+    max_frac = (max((v["n"] for v in player_hist.values()), default=0) / n_scored) if n_scored else 0.0
+    skew = n_scored > 0 and max_frac >= PLAYER_SKEW_THRESHOLD
+    # F-P0A-V2-1 surface (grok D-P0A-10): players whose median coupling sits below the human floor —
+    # makes per-player heterogeneity mechanical, so a pooled SEPARATED can't hide a non-separating player
+    players_below = [p for p, v in player_hist.items() if v["median_coupling"] < TAU_HUMAN]
 
     return StudyReport(
-        verdict=verdict, gates=gates, reason=reason,
-        n={"n_human_available": n_available, "n_human_scored": len(human_scored),
-           "n_human_skipped": human_skipped, "n_auto_scored": len(auto_scored)},
+        verdict=verdict, gates=gates, reason=reason, schema=schema,
+        n={"n_human_available": n_available, "n_human_aim_inactive": aim_inactive,
+           "n_human_scored": len(human_scored), "n_human_skipped": human_skipped,
+           "n_auto_scored": len(auto_scored)},
         medians={"human": round(med_human, 4) if med_human is not None else None,
                  "auto": round(med_auto, 4) if med_auto is not None else None,
                  "negative_control": round(med_nc, 4) if med_nc is not None else None,
@@ -232,4 +310,7 @@ def run_separation_study(human_sessions, *, seed: int = DEFAULT_SEED) -> StudyRe
                      "human_p25_p75": _quartiles(C_human), "auto_p25_p75": _quartiles(C_auto)},
         constants={"TAU_HUMAN": TAU_HUMAN, "TAU_AUTO": TAU_AUTO, "GAP_MIN": GAP_MIN,
                    "TAU_NC": TAU_NC, "N_MIN_POS": N_MIN_POS, "N_MIN_NEG": N_MIN_NEG},
-        seed=seed, player_histogram=hist)
+        seed=seed, player_histogram=player_hist, player_skew_warning=skew,
+        players_below_tau_human=players_below,
+        aim_gate={"enabled": aim_gate, "measure": "max(std(sx-med),std(sy-med)) LSB",
+                  "AIM_ACTIVITY_MIN": round(AIM_ACTIVITY_MIN, 2)})

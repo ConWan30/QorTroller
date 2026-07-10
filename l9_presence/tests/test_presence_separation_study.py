@@ -11,7 +11,9 @@ import sys
 
 import numpy as np
 
+from l9_presence.coupling import MIN_STICK_STD
 from l9_presence.presence_separation_study import (
+    AIM_ACTIVITY_MIN,
     AUTO_MODES,
     GAP_MIN,
     INCONCLUSIVE,
@@ -20,6 +22,7 @@ from l9_presence.presence_separation_study import (
     N_MIN_POS,
     SEPARATED,
     STUDY_SCHEMA,
+    STUDY_SCHEMA_V2,
     TAU_AUTO,
     TAU_HUMAN,
     TAU_NC,
@@ -46,6 +49,16 @@ def _insufficient():
     t = np.linspace(0, 50, 5)
     return SessionData(t, np.full(5, 128.0), np.full(5, 128.0), t,
                        np.zeros(5), np.zeros(5), "human", None, "P1")
+
+
+def _lowaim(seed=0, player="P1"):
+    """Aim-active-below-gate: scores (above oracle abstain 2.55) but stick-std ~7 < AIM_ACTIVITY_MIN
+    (10.2) -> excluded by the v2 aim gate, included in v1."""
+    n = 1200
+    t = np.linspace(0, 10000, n)
+    sx = 128 + 10 * np.sin(2 * np.pi * 0.6 * t / 1000.0 + seed)   # std ~7.07 LSB
+    yaw = np.cumsum(sx - 128.0) * 0.001
+    return SessionData(t, sx, np.full(n, 128.0), t, yaw, np.zeros(n), "human", None, player)
 
 
 # ------------------------------------------------------------------- T3 constants
@@ -155,3 +168,57 @@ def test_golden_fixture_coupled_vs_decoupled():
     decoupled = analyze_session_data(SessionData(t, sx, np.full(n, 128.0), t, yaw, np.zeros(n),
                                                  "human", None, "P1"))
     assert decoupled["coupling_score"] < TAU_HUMAN
+
+
+# ------------------------------------------------------------------- v2 aim-activity gate
+def test_aim_threshold_is_principled_not_outcome_tuned():
+    # AIM_ACTIVITY_MIN = 4x the oracle abstain gate (a fixed protocol constant), NOT a percentile of
+    # the coupling split (audit guardrail). 4 x 0.01 x 255 = 10.2.
+    assert abs(AIM_ACTIVITY_MIN - 4.0 * MIN_STICK_STD * 255.0) < 1e-9
+    assert abs(AIM_ACTIVITY_MIN - 10.2) < 1e-6
+
+
+def test_aim_gate_excludes_low_aim_and_bumps_schema():
+    humans = [_coupled(i) for i in range(3)] + [_lowaim(9), _lowaim(10)]
+    v2 = run_separation_study(humans, aim_gate=True)
+    assert v2.schema == STUDY_SCHEMA_V2
+    assert v2.n["n_human_aim_inactive"] == 2 and v2.n["n_human_scored"] == 3   # 2 low-aim excluded
+    assert v2.aim_gate["enabled"] is True and v2.aim_gate["AIM_ACTIVITY_MIN"] == 10.2
+    # v1 (no gate) keeps them in
+    v1 = run_separation_study(humans, aim_gate=False)
+    assert v1.schema == STUDY_SCHEMA and v1.n["n_human_scored"] == 5
+
+
+def test_player_skew_warning():
+    single = run_separation_study([_coupled(i, "P1") for i in range(4)], aim_gate=True)
+    assert single.player_skew_warning is True and set(single.player_histogram) == {"P1"}
+    mixed = run_separation_study([_coupled(0, "P1"), _coupled(1, "P2"),
+                                  _coupled(2, "P3"), _coupled(3, "P2")], aim_gate=True)
+    assert mixed.player_skew_warning is False
+    assert mixed.player_histogram["P1"]["n"] == 1 and mixed.player_histogram["P2"]["n"] == 2
+
+
+def test_v1_default_unchanged_by_v2_additions():
+    # existing v1 behavior (aim_gate default False) must be byte-stable — no aim filtering
+    rep = run_separation_study([_coupled(i) for i in range(3)])
+    assert rep.schema == STUDY_SCHEMA and rep.aim_gate["enabled"] is False
+    assert rep.n["n_human_scored"] == 3
+
+
+def _active_decoupled(seed=0, player="P9"):
+    """Aim-ACTIVE (high stick std ~49 -> passes the gate) but camera decoupled (random) -> low
+    coupling. Models the F-P0A-V2-1 case: a player who aims but doesn't couple."""
+    n = 1200
+    t = np.linspace(0, 10000, n)
+    sx = 128 + 70 * np.sin(2 * np.pi * (0.6 + 0.05 * seed) * t / 1000.0)
+    rng = np.random.default_rng(seed)
+    yaw = np.cumsum(rng.standard_normal(n)) * 0.05
+    return SessionData(t, sx, np.full(n, 128.0), t, yaw, np.zeros(n), "human", None, player)
+
+
+def test_players_below_tau_human_surfaces_heterogeneity():
+    # P_strong couples; P_weak aims but doesn't couple -> P_weak flagged below TAU_HUMAN (F-P0A-V2-1)
+    humans = [_coupled(i, "P_strong") for i in range(3)] + [_active_decoupled(i, "P_weak") for i in range(3)]
+    rep = run_separation_study(humans, aim_gate=True)
+    assert "P_weak" in rep.players_below_tau_human and "P_strong" not in rep.players_below_tau_human
+    assert rep.player_histogram["P_weak"]["median_coupling"] < TAU_HUMAN

@@ -1,25 +1,35 @@
 # P0-A — Presence-Oracle Separation Study Design
 
-**Status:** DESIGN ONLY (2026-07-09). Loop cycle 1 deliverable.  
-**Rev:** negative-class / claim-scope sharpen (Claude corpus audit — derived negative, single-operator honesty).  
+**Status:** DESIGN — active schema **`p0a-presence-op-v2`** (aim-activity inclusion amendment).  
+**Rev history:**  
+- v0/v1 design + harness + raw-pool OP → **INCONCLUSIVE** (permanent honest record, commit `22bb867d`).  
+- **v2 amendment:** positive-class aim-activity inclusion gate; decision constants frozen.  
+- **v2 run:** **SEPARATED** (`audits/p0a-presence-op-v2-2026-07-09.*`) — median human 0.374, auto 0.067, gap 0.307.  
+- **v2.1 doc rev (this):** CODE-TRUTH — `sessions_l9` is a **3-player developer corpus** (not N=1 human); §7 P1 heterogeneity limit; min-per-player policy for future schemas.  
 **Audience:** Claude (audit → harness) · operator (sessions + commits).  
 **Rails:** `advisory=True` · `cert_scope=developer_self` · `population_certified=False` ·  
 `verifier_independence=False` · offline analysis only · **zero capture-path touch** · no new  
 FROZEN-v1 · PV-CI 182 unchanged.  
-**Related:** `docs/qortroller-ai-loop-collab-2026-07-09.md` · `docs/session-handoff-for-grok-2026-07-09.md` ·  
-`audits/rp-close-1-ledger-2026-07-07.md` · `l9_presence/README.md` (Stream A banked validation).
+**Related:** `audits/p0a-presence-op-2026-07-09.json` (v1) · `audits/p0a-tail-characterization-2026-07-09.md` ·  
+`l9_presence/README.md` · `l9_presence/presence_separation_study.py`.
 
 ---
 
 ## 1. THE CLAIM (one sentence)
 
-**This study establishes a pre-registered, offline, developer_self operating point for human-vs-modeled-automation separation on the L9 causal-presence oracle (input→rendered-camera coupling) — using a constructed negative class over the same human sessions — and does NOT establish human-vs-real-cheat-hardware detection, identity separation, multi-player population certification, or compromised-host resistance.**
+### v2 claim (active)
 
-Expanded (still one claim):
+**This study establishes a pre-registered, offline, developer_self operating point for human-vs-modeled-automation separation on the L9 causal-presence oracle, restricted to aim-active sessions from a small multi-player developer corpus — using a constructed negative class over those same sessions — and does NOT establish uniform-across-players separation, population certification, identity FAR/FRR, human-vs-real-cheat-hardware detection, or compromised-host resistance.**
 
-> On a declared positive class (live human aim sessions from one operator’s `sessions_l9` corpus) and a **derived** negative class (modeled automation: synthetic full camera-track injection via `synth_adversary`, with time-shuffle as the causality floor), the presence oracle’s scalar score separates the two classes by a gap that clears pre-registered floors.
+Expanded:
 
-**Claim-scoping word that must not be dropped:** **modeled** automation. There is no second real corpus of cheats on disk; the negative is constructed (§4). Over-reading as “field AC works against Cronus/XIM” is out of scope until P2.
+> On a declared positive class (**aim-active** live sessions from the **3-player** `sessions_l9` developer corpus, after the §5.1 inclusion gate) and a **derived** negative class (modeled automation: `synth_adversary` full camera-track injection, with time-shuffle as the causality floor), the **pooled** presence-oracle `coupling_score` separates the two classes by a gap that clears **frozen** pre-registered floors (M1–M6). Per-player medians may differ substantially (§7.1 F-P0A-V2-1).
+
+**Words that must not be dropped:** **modeled** automation · **aim-active** sessions · **pooled** (not uniform-per-player) · **developer corpus** (not population-certified).
+
+### v1 claim (historical — do not re-run as the headline OP)
+
+v1 scoped positives to all scorable human sessions (oracle abstain only). That run returned **INCONCLUSIVE** and remains the permanent raw-pool record. v2 is a **narrower population**, not a retune of TAU_*/GAP_MIN.
 
 ---
 
@@ -84,8 +94,8 @@ where C_* is the multiset of coupling_score values for scored sessions in that c
 
 ```text
 SEPARATED  iff  ALL of:
-  (M1)  n_human_scored  >= N_MIN_POS
-  (M2)  n_auto_scored   >= N_MIN_NEG
+  (M1)  n_human_included >= N_MIN_POS   # v2: after aim gate; v1: all scored
+  (M2)  n_auto_scored    >= N_MIN_NEG
   (M3)  median(C_human) >= TAU_HUMAN          # floor: real presence above runtime threshold
   (M4)  median(C_auto)  <= TAU_AUTO           # ceiling: automation below / near collapse
   (M5)  gap             >= GAP_MIN            # pre-registered separation magnitude
@@ -119,11 +129,14 @@ SEPARATED  iff  ALL of:
 
 | Class | Definition | Real or derived? |
 |-------|------------|------------------|
-| **Positive (human-live)** | `sessions_l9/*.npz` with real stick + real camera tracks; scored `coupling_score` defined | **Real captures** (developer_self) |
-| **Negative (modeled automation)** | **Derived only** — §4.1 `synth_adversary` full camera injection on those same sessions | **Constructed** — no real-cheat corpus on disk |
-| **Floor control (not a class)** | Per-positive `negative_control` time-shuffle (~0.02 banked floor) | **Derived method control** for M6; **not** members of C_auto |
+| **Positive (human, aim-active)** — **v2** | `sessions_l9/*.npz` with real stick + real camera; `coupling_score` defined; **and** `aim_activity_std ≥ AIM_ACTIVITY_MIN` (§5.1) | **Real captures**, activity-selected |
+| **Positive (human, raw pool)** — **v1 only** | Same without aim gate — historical INCONCLUSIVE record | Real, unselected |
+| **Negative (modeled automation)** | **Derived only** — §4.1 `synth_adversary` on **included** positives only | **Constructed** |
+| **Floor control (not a class)** | Per-positive `negative_control` time-shuffle | M6 only; not in `C_auto` |
 
-**Corpus fact that forces this split (Claude audit 2026-07-09):** the ~59 `sessions_l9` files are **all** developer_self human sessions. They are the entire positive class. There is **no second real corpus** of automation sessions to score. Therefore the negative class **must** be constructed; calling it “real automation” would be a documentation lie.
+**Filter order (v2 harness):** (1) load `sessions_l9` → (2) score / drop `insufficient_aim_activity` → (3) **aim-activity inclusion gate** → (4) build synth negatives **only** from included positives → (5) apply frozen M1–M6.
+
+**Corpus fact:** ~59 `sessions_l9` files are developer_self human sessions; negative must be constructed (§4).
 
 ---
 
@@ -199,27 +212,116 @@ For every human session, `analyze_session_data` returns `negative_control` via `
 
 ## 5. N-plan
 
-### 5.1 Phase 1 — first honest OP (offline, developer_self)
+### 5.0 Schema versions
 
-**Population honesty (pinned):**
+| Schema | Positive inclusion | Decision constants | Status |
+|--------|-------------------|--------------------|--------|
+| `p0a-presence-op-v1` | Scorable only (oracle abstain) | TAU_*/GAP_MIN/M1–M6 | **CLOSED — INCONCLUSIVE** (permanent) |
+| `p0a-presence-op-v2` | Scorable **+ aim-activity gate** (§5.1) | **Identical** frozen constants | **ACTIVE** — re-run after this amendment |
 
-| Fact | Implication for the OP |
-|------|------------------------|
-| Positive pool ≈ **59** `sessions_l9/*.npz` | Entire positive class is this pile (after label/score filters) |
-| **1 operator** / `developer_self` | Single-human presence/liveness claim — **legitimate for a first presence OP** (presence ≠ multi-player identity) |
-| No second human required for v0 SEPARATED | Multi-player expansion is growth, not a prerequisite for first OP |
-| Negative count is **derived** | `n_auto = n_human_scored × 3` (modes); not independent sessions |
+v2 is an **inclusion-criterion** amendment only. It does **not** change TAU_HUMAN, TAU_AUTO, GAP_MIN, TAU_NC, N_MIN_*, or the M1–M6 rule text.
+
+### 5.1 Positive-class plan + aim-activity inclusion gate (v2 substantive change)
+
+#### 5.1.1 Population honesty (CODE-TRUTH corrected v2.1)
+
+| Fact | Implication |
+|------|-------------|
+| Positive pool ≈ **59** `sessions_l9/*.npz` | Developer L9 coupling corpus |
+| **Player tags (empirical, v2 histogram):** P1≈32, P2≈8, P3≈12, +~7 untagged | **3-player developer corpus** — **not** single-human / N=1 operator-as-sole-subject. Stronger than “one person only,” still **not** population-certified |
+| `cert_scope=developer_self` | Means *not external population-certified* — does **not** mean “only one labeled player exists in the pile” |
+| v1: 44 scored, 22 with coupling &lt; 0.20 | Tail: mostly **low-aim** (`audits/p0a-tail-characterization-2026-07-09.md`) |
+| v2 SEPARATED is **pooled** | Carried by higher-coupling players; P1 remains low even when aim-active (F-P0A-V2-1) |
+| Negative count is **derived** | `n_auto = n_human_included × 3` |
+
+#### 5.1.2 Gate metric (pre-registered)
+
+```text
+aim_activity_std(session) =
+    max( std(in_sx − median(in_sx)),
+         std(in_sy − median(in_sy)) )
+
+# Same median-centering and max-axis form as the oracle activity check in
+# InputOutputCouplingOracle.extract_features (coupling.py):
+#   if max(sx.std(), sy.std()) < MIN_STICK_STD * 255.0: return None
+```
+
+| Symbol | Definition |
+|--------|------------|
+| `ORACLE_ABSTAIN_STD` | `MIN_STICK_STD * 255.0` — default **2.55** LSB (scale-tolerant; stick streams are 8-bit-class) |
+| `AIM_ACTIVITY_MULT` | **4** (dimensionless, pre-registered) |
+| `AIM_ACTIVITY_MIN` | `AIM_ACTIVITY_MULT * ORACLE_ABSTAIN_STD` = **10.2** LSB (at default `MIN_STICK_STD=0.01`) |
+
+**Inclusion (v2 positive):**
+
+```text
+include_positive  iff
+    coupling_score is defined
+    AND  aim_activity_std >= AIM_ACTIVITY_MIN
+```
+
+Sessions that score but fail the aim gate → bucket `excluded_low_aim` (reported; not in `C_human`; no synth pairs built from them).
+
+#### 5.1.3 Why this threshold is principled (not outcome-tuned)
+
+**Principle first:** Stream A’s claim is *input→camera causal coupling while the player is aiming*. The oracle already refuses to define coupling when stick activity is below `ORACLE_ABSTAIN_STD` (“player not aiming” — `coupling.py` activity gate). That floor only guarantees **minimal** stick variance so Pearson r is defined. It does **not** guarantee that aim is a material activity of the session (idle fidget, rare flicks, walk-heavy captures can clear 2.55 LSB std and still be aim-poor).
+
+**“Aim-active” definition (methodology):** a session in which right-stick variance is large enough that aim is a **primary activity**, not incidental noise above the abstain floor.
+
+**Threshold derivation (from oracle constants + noise physics only):**
+
+1. `ORACLE_ABSTAIN_STD = MIN_STICK_STD * 255` is the **definition of “not aiming / undefined”** already in production code.  
+2. DualSense idle ADC noise is ~**2.5 LSB** std (`DEFAULT_STICK_NOISE_FLOOR` in `killfeed_inline.py`) — same order as the abstain floor.  
+3. Sessions with `aim_activity_std` only 1–2× abstain sit in the **noise-adjacent / incidental-aim** band: scorable, but not “aim is the point of the capture.”  
+4. Require **`AIM_ACTIVITY_MULT = 4`** so session stick std is **≥ 4× the oracle abstain floor** (variance ≥ **16×** the abstain variance scale). That is a fixed multiple of an existing protocol constant — not a percentile of the coupling distribution, not “clear TAU_HUMAN,” not the v1 high-group p25 (34.2), and not the v1 low-group median stick-std (12.6).
+
+**What we deliberately refuse as the gate:**
+
+| Tempting threshold | Why rejected |
+|--------------------|--------------|
+| Split on `coupling_score ≥ 0.20` | That **is** TAU_HUMAN — circular with the decision rule |
+| High-group stick-std p25 (34.2) | Defined from the coupling split (outcome-adjacent) |
+| Low-group median stick-std (12.6) | Defined from the coupling split |
+| “Exclude until median human ≥ 0.20” | Outcome-tuned by construction |
+
+**Post-registration report (Claude runs after gate is coded):** where the corpus falls (`n_included`, `n_excluded_low_aim`, aim_activity quantiles). That report **does not** authorize moving `AIM_ACTIVITY_MIN`.
+
+#### 5.1.4 Player confound + heterogeneity (report; v2 does not hard-balance)
+
+v1 tail was **P1-dominated** among low-aim sessions. v2 aim gate + histogram surfaced a second fact:
+
+| Finding | Detail |
+|---------|--------|
+| **F-P0A-V2-1** | Even among **aim-active** included sessions, **P1 median coupling ≈ 0.09** vs **P2 ≈ 0.59** / **P3 ≈ 0.38**. Pooled SEPARATED is **carried by P2/P3**; P1 is a systematic low-coupling outlier (capture style / protocol / genuine low coupling — cause TBD, not re-labeled as bot). |
+
+| Requirement | **v2 rule (this SEPARATED run)** | **Going forward** |
+|-------------|-------------------------------|-------------------|
+| Per-player histogram | **Mandatory:** n_scored / n_included / n_excluded_low_aim, median aim, median coupling per player | keep |
+| Per-player aim × coupling | **Mandatory** | keep |
+| Min n per player for SEPARATED | **Not required** — would change the decision rule; v2 SEPARATED stands | see below |
+| Skew warning | ≥80% of included from one player → `player_skew_warning` | keep |
+| Per-player floor vs TAU_HUMAN | **Not a SEPARATED veto in v2** | report `players_below_tau_human` list |
+
+**Policy — min per-player n (design decision, frozen for v2):**
+
+| Option | Choice |
+|--------|--------|
+| **v2 / current SEPARATED** | **No** min-per-player-n requirement. Pooled M1–M6 only. F-P0A-V2-1 is a **§7 limit**, not a silent fail. |
+| **v3 candidate (optional stronger claim)** | Schema `p0a-presence-op-v3` *if operator wants* a **uniform-across-labeled-players** claim: e.g. each labeled player with `n_included ≥ 5` must have `median(C_player) ≥ TAU_HUMAN`, else verdict stays SEPARATED only if a new enum branch `SEPARATED_POOLED_ONLY` is used — **not implemented until operator GO**. Do **not** retrofit v2. |
+
+Rationale: requiring min-n + per-player TAU now would (a) move goalposts after a clean pre-registered SEPARATED, (b) mix identity-style balance into a presence OP. Honest path = document heterogeneity, keep pooled SEPARATED, promote uniformity only under a new schema.
+
+#### 5.1.5 Phase-1 corpus + N floors (unchanged floors, applied post-gate)
 
 | Item | Plan |
 |------|------|
-| **Positive corpus** | **Only** `sessions_l9/*.npz` (Phase-1). Prefer `label=="human"` when present; report count excluded. Optional *diagnostic* add of cocapture L9 views is **off by default** for first OP (keep one primary pile). |
-| **Negative corpus** | **Derived in-process** from each scored positive via §4.1 — never loaded from a cheat directory |
-| **Floor control** | Shuffle NC on each positive (§4.2) |
-| **Conditions** | One condition set; report backend mix if known (warning, not auto-fail) |
-| **N_MIN for first honest OP** | `n_human_scored ≥ 8` and `n_auto_scored ≥ 24` (8×3 modes) — floors, not “use all 59” |
-| **Capacity note** | Up to ~59 human scored possible offline without new captures; first OP may use a fixed subset or full pool — report `n_available` vs `n_scored` |
-| **Seed** | `SEED=0` default; printed in report |
-| **Player tags** | Report `player` histogram; v0 **allows n_players = 1** explicitly |
+| **Positive corpus** | **Only** `sessions_l9/*.npz` → score → **aim gate** → included set |
+| **Negative corpus** | Derived via §4.1 from **included** positives only |
+| **Floor control** | Shuffle NC on each **included** positive |
+| **N_MIN_POS / N_MIN_NEG** | Still **8** / **24** — counted on the **included** set (M1–M2 unchanged) |
+| **Decision constants** | **Frozen:** TAU_HUMAN=0.20, TAU_AUTO=0.10, GAP_MIN=0.15, TAU_NC=0.10 |
+| **Seed** | `SEED=0` |
+| **Schema id in report** | `p0a-presence-op-v2` |
 
 ### 5.2 How BCC Match feeds the corpus
 
@@ -253,8 +355,8 @@ SEPARATED
   M1–M6 all true under pre-registered constants.
 
 INSUFFICIENT_N
-  Any of n_human_scored < N_MIN_POS or n_auto_scored < N_MIN_NEG
-  (after skips). Metrics may be reported as diagnostic only.
+  Any of n_human_included < N_MIN_POS or n_auto_scored < N_MIN_NEG
+  (after oracle skips + aim-gate exclusions). Diagnostics OK.
 
 INCONCLUSIVE
   N floors met, causality honesty (M6) held, but M3–M5 failed
@@ -274,43 +376,47 @@ CAUSALITY_FAIL
 
 - Exactly one primary verdict per study run.  
 - `INSUFFICIENT_N` beats `INCONCLUSIVE` (don’t call inconclusive without N).  
-- Never emit `SEPARATED` if any constant was changed after seeing the run (version bump required: study schema `p0a-presence-op-v1` etc.).
+- Never emit `SEPARATED` if any decision constant (TAU_*/GAP_MIN) or the aim gate was changed after seeing that run’s metrics — version bump required (`p0a-presence-op-v3`+).  
+- v1 raw-pool **INCONCLUSIVE** is never overwritten by a v2 SEPARATED; both records coexist.
 
 ---
 
 ## 7. Honest non-claims / limits
 
-### 7.1 Ceiling forced by the negative class (primary)
+### 7.1 Ceilings (negative class + aim selection + player heterogeneity)
 
 | Claim people might over-read | Honest ceiling |
 |------------------------------|----------------|
-| “Separates humans from cheats” | Separates humans from **modeled** automation (`synth_adversary` full camera injection) |
-| “Works against real hardware cheats” | **False until P2** Cronus/XIM (or equivalent) real corpus |
-| “Population-validated anti-cheat OP” | **Single-operator developer_self** presence OP; `population_certified=False` |
-| “Independent automation sessions” | Negatives are **derived from the same positive `.npz` files** — paired, not an independent field sample |
+| “Separates humans from cheats” | Separates **aim-active** humans from **modeled** automation (**pooled**) |
+| “Works on all human sessions” | **False for v2** — low-aim excluded; v1 raw pool INCONCLUSIVE |
+| “Works equally for every labeled player” | **False** — **F-P0A-V2-1:** P1 aim-active median coupling ~0.09 vs P2 ~0.59 / P3 ~0.38; SEPARATED is **not** uniform-across-players |
+| “N=1 single-operator only” | **CODE-TRUTH correction:** `sessions_l9` is a **3-player developer corpus** (P1/P2/P3 + untagged) — stronger than N=1, still not population-certified |
+| “Works against real hardware cheats” | **False until P2** Cronus/XIM corpus |
+| “Population-validated anti-cheat OP” | `developer_self` / `population_certified=False` |
+| “Independent automation sessions” | Negatives derived from included positives only |
+| “We filtered until it passed” | Aim gate = 4× oracle abstain, pre-registered before re-run |
 
 ### 7.2 Full non-claims list
 
 This study / harness / report **does not prove**:
 
-1. **Human-vs-real-cheat-hardware** separation (Cronus/XIM/cloud-bot telemetry) — needs P2.  
-2. **Identity** — who among N enrolled humans is playing (Stream B / AIT / L4 LOO).  
-3. **Per-player FAR/FRR** as tournament operating points.  
-4. **`population_certified=True`** — remains **False**; C-4.2 rails stay in force.  
-5. **Multi-operator generalization** — positive class is one operator’s `sessions_l9` pile (~59).  
-6. **Compromised-host resistance** — self-witnessed rig; EVENT-BIND/PORT-CERT limits unchanged.  
-7. **Partial-assist detection** as the SEPARATED claim — injection sweep is diagnostic only.  
-8. **Input-masked aimbots** that forge matching stick (`synth_adversary` non-goal).  
-9. **RP-specific density/OCR authorship** (M14–M18) — orthogonal; coupling ≠ kill authorship.  
-10. **PoEP/L6B readiness** — N=0.  
-11. **Enforcement** — no `isFullyEligible` / hard BLOCK from this OP alone.  
-12. **New FROZEN-v1 / PoAC edit** — none.  
-13. **Capture-path changes** — harness is offline only.  
-14. **NQPV / `hw_nqpv_*.json` as coupling inputs** — Phase-2 + adapter only.
+1. **Human-vs-real-cheat-hardware** separation — needs P2.  
+2. **Separation on the unselected raw human pool** — that is v1 (INCONCLUSIVE).  
+3. **Identity** / per-player FAR/FRR / `population_certified=True`.  
+4. **Multi-operator generalization** or balanced multi-player presence.  
+5. **Compromised-host resistance**.  
+6. **Partial-assist** detection as the SEPARATED claim.  
+7. **Input-masked aimbots**.  
+8. **RP authorship / OCR** properties.  
+9. **PoEP/L6B** readiness.  
+10. **Enforcement** into tournament hard path.  
+11. **FROZEN-v1 / PoAC / capture-path** changes.  
+12. **NQPV JSON as coupling inputs**.  
+13. That low coupling on low-aim sessions is “bot-like” — v1 tail says it is mostly **absence of aim signal**.
 
-### 7.3 What it *does* support (if SEPARATED)
+### 7.3 What it *does* support (v2 SEPARATED — actual run)
 
-> Under **developer_self / single-operator** scope, the L9 causal-presence scalar separates live human aim sessions from **modeled** full-camera-takeover sessions (constructed by `synth_adversary` on the same stick tracks) by a pre-registered gap, with time-shuffle causality intact — a first **human-vs-modeled-automation presence OP**. Suitable to cite in a narrow RP/cloud wedge thesis as *oracle viability evidence*, not as field AC certification.
+> On the **3-player developer** `sessions_l9` corpus, after a pre-registered **aim-activity** gate, the **pooled** L9 causal-presence scalar separates aim-active human sessions from **modeled** full-camera-takeover sessions (gap 0.307, median human 0.374, auto 0.067, M1–M6) — a **human-vs-modeled-automation OP on aim-active sessions**. P2/P3 carry the human side; **P1 remains low-coupling even when aim-active** (F-P0A-V2-1). Not field AC; not identity; not uniform-per-player; not population-certified.
 
 ---
 
@@ -322,12 +428,14 @@ This study / harness / report **does not prove**:
 | **T2** | No negative→positive leakage: synthesized sessions never enter the human multiset; human `.npz` files never rewritten on disk by the harness. |
 | **T3** | Pre-registered constants are module-level (or frozen dict) and asserted in tests; SEPARATED path uses only those symbols. |
 | **T4** | Fail-closed on insufficient N → verdict `INSUFFICIENT_N`, never `SEPARATED`. |
-| **T5** | `insufficient_aim_activity` excluded from both class counts; counted in `skipped`. |
-| **T6** | Causality fail (M6) → not `SEPARATED` (→ `UNVERIFIABLE` / `CAUSALITY_FAIL`). |
-| **T7** | Paired construction: each auto session is `synthesize(human_i, injection=1.0, mode=m)`; n_auto = n_human_scored × 3 when all score. |
-| **T8** | Report includes `cert_scope=developer_self`, `population_certified=False`, `advisory=True`, study schema id, seed, constant table. |
-| **T9** | Zero imports of dualshock capture loops / daemon stamp paths for scoring (offline-only). |
-| **T10** | Optional: golden fixture — tiny synthetic SessionData with known coupling behavior in unit tests (not live corpus). |
+| **T5** | Oracle `insufficient_aim_activity` → `skipped`; aim-gate fails → `excluded_low_aim` (distinct buckets). |
+| **T6** | Causality fail (M6) → not `SEPARATED`. |
+| **T7** | Synth pairs only from **included** humans; n_auto = n_human_included × 3 when all score. |
+| **T8** | Report: schema `p0a-presence-op-v2`, AIM_ACTIVITY_* constants, seed, frozen TAU_*/GAP_MIN, per-player histogram. |
+| **T9** | Offline-only (no capture-path imports for scoring). |
+| **T10** | Golden fixture optional. |
+| **T11** | `aim_activity_std` uses median-centered max axis std; `AIM_ACTIVITY_MIN == 4 * MIN_STICK_STD * 255` at default env (assert in test). |
+| **T12** | Decision constants byte-identical to v1 module values (regression: changing TAU_* fails test). |
 
 **Suggested harness layout (Claude builds; not this PR):**
 
@@ -342,13 +450,18 @@ This study / harness / report **does not prove**:
 | ID | Decision | Default in this design | Operator |
 |----|----------|------------------------|----------|
 | **D-P0A-1** | Primary oracle = L9 Stream A `coupling_score` | Yes | ☐ accept ☐ amend |
-| **D-P0A-2** | Negative = **derived** paired `synth_adversary` full injection × 3 modes; shuffle = floor only; not real-cheat corpus | Yes | ☐ accept ☐ amend |
+| **D-P0A-2** | Negative = **derived** paired `synth_adversary` full injection × 3 modes; shuffle = floor only | Yes | ☐ accept ☐ amend |
 | **D-P0A-3** | Decision metric = median gap with M1–M6 | Yes | ☐ accept ☐ amend |
-| **D-P0A-4** | `GAP_MIN=0.15`, `TAU_HUMAN=0.20`, `TAU_AUTO=0.10`, `TAU_NC=0.10` | Yes | ☐ accept ☐ amend |
-| **D-P0A-5** | First OP N floors: 8 human / 24 auto | Yes | ☐ accept ☐ amend |
-| **D-P0A-6** | BCC Match Phase-2 feeder only (not required for first OP) | Yes | ☐ accept ☐ amend |
-| **D-P0A-7** | NQPV / PoEP out of primary SEPARATED gate | Yes | ☐ accept ☐ amend |
-| **D-P0A-8** | Proceed to Claude audit → harness build | Hold for GO | ☐ GO ☐ hold |
+| **D-P0A-4** | `GAP_MIN=0.15`, `TAU_HUMAN=0.20`, `TAU_AUTO=0.10`, `TAU_NC=0.10` | **Frozen across v1→v2** | ☐ accept ☐ amend |
+| **D-P0A-5** | N floors: 8 human included / 24 auto | Yes | ☐ accept ☐ amend |
+| **D-P0A-6** | BCC Match Phase-2 feeder only | Yes | ☐ accept ☐ amend |
+| **D-P0A-7** | NQPV / PoEP out of SEPARATED gate | Yes | ☐ accept ☐ amend |
+| **D-P0A-8** | v1 harness build (done) | — | closed |
+| **D-P0A-9** | **v2 aim gate:** `aim_activity_std ≥ 4 × MIN_STICK_STD × 255` (default **10.2** LSB); claim = human-vs-modeled-automation **on aim-active sessions**; schema `p0a-presence-op-v2` | Yes | ☐ accept ☐ amend |
+| **D-P0A-10** | Per-player histogram mandatory; ≥80% one player → `player_skew_warning` only (no hard balance) | Yes | ☐ accept ☐ amend |
+| **D-P0A-11** | v2 harness + re-run OP | Done — **SEPARATED** | closed |
+| **D-P0A-12** | CODE-TRUTH: 3-player developer corpus (not N=1); F-P0A-V2-1 P1 heterogeneity in §7; **no** min-per-player-n for v2 SEPARATED; optional v3 for uniform claim | Yes | ☐ accept ☐ amend |
+| **D-P0A-13** | Commit package: v2 harness + SEPARATED artifact + design rev + ledger line | Operator GO | ☐ commit ☐ hold |
 
 ---
 
@@ -416,7 +529,7 @@ Claude: verify line-by-line. Paths relative to repo root `vapi-pebble-prototype/
 
 | Path | Observed | Role |
 |------|----------|------|
-| `sessions_l9/` | **exists**; **59** `.npz` | **Primary** human L9 sessions for Phase 1 |
+| `sessions_l9/` | **exists**; **59** `.npz`; **3 labeled players** (P1≈32, P2≈8, P3≈12, +untagged) | **Primary** L9 coupling corpus — multi-player **developer** pile, not single-subject |
 | `cocapture_l9/` | **exists**; **32** files | Optional L9+L4 co-capture; extract L9 `SessionData` view if labeled human |
 | `bcc_l9/` | exists; Witness coupling harvest lane | Not required for scoring; isolation from Match |
 | `bcc_match/` | **may be absent** until harvest | Phase-2 session_id whitelist only |
@@ -439,17 +552,23 @@ Claude: verify line-by-line. Paths relative to repo root `vapi-pebble-prototype/
 
 ### 10.9 Constants the harness must not silently override
 
-Do not change `COUPLING_THRESHOLD` / lag window mid-study without a **new study schema version**. Env overrides (`L9_COUPLING_THRESHOLD`, `L9_LAG_MAX_MS`, …) if present must be **read and recorded** in the report; decision constants `TAU_*` / `GAP_MIN` stay as in §3.3 unless operator amends §9.
+| Class | Symbols | v1→v2 |
+|-------|---------|-------|
+| Decision (frozen) | TAU_HUMAN, TAU_AUTO, GAP_MIN, TAU_NC, N_MIN_* , M1–M6 | **Unchanged** |
+| Inclusion (v2 only) | AIM_ACTIVITY_MULT=4, AIM_ACTIVITY_MIN=4×MIN_STICK_STD×255 | **New filter** |
+| Oracle env | `L9_MIN_STICK_STD`, `L9_COUPLING_THRESHOLD`, lag window | Record if overridden; do not retune TAU_* to match |
+
+Schema string in report: **`p0a-presence-op-v2`**. Changing AIM_ACTIVITY_MULT after a SEPARATED run requires **v3**, not a quiet constant edit.
 
 ---
 
 ## 11. Thin wedge thesis link (P0-B, non-blocking)
 
-If this study returns `SEPARATED`, the wedge sentence becomes:
+If **v2** returns `SEPARATED`, the wedge sentence becomes:
 
-> For cloud/RP clients where kernel AC cannot instrument the host, QorTroller can cite a pre-registered developer_self **human-vs-modeled-automation** operating point on causal aim-coupling (plus the multi-surface match stack: PoSP / PORT-CERT / VHR) — **advisory**, not field-cheat certification, not identity-AC, not host-trustless.
+> For cloud/RP clients where kernel AC cannot instrument the host, QorTroller can cite a pre-registered developer_self **human-vs-modeled-automation** OP on causal aim-coupling **for aim-active sessions** (plus PoSP / PORT-CERT / VHR) — **advisory**, not raw-pool certification (v1 INCONCLUSIVE), not field-cheat certification, not identity-AC.
 
-If `INCONCLUSIVE` / `UNVERIFIABLE`, the wedge waits; do not market the banked README numbers as a fresh OP without the harness re-run.
+v1 INCONCLUSIVE remains citable as the honest unselected baseline.
 
 ---
 

@@ -34,6 +34,10 @@ def main() -> int:
     ap.add_argument("--glob", default="sessions_l9/*.npz", help="positive human L9 corpus glob")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--subset", type=int, default=0, help="use first N sessions (0 = all)")
+    ap.add_argument("--aim-gate", dest="aim_gate", action="store_true", default=True,
+                    help="v2 aim-active inclusion gate (default ON -> schema p0a-presence-op-v2)")
+    ap.add_argument("--no-aim-gate", dest="aim_gate", action="store_false",
+                    help="reproduce the v1 raw-pool run (schema p0a-presence-op-v1)")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
 
@@ -60,16 +64,17 @@ def main() -> int:
         sessions.append(s)
 
     print(f"loaded {len(sessions)} positive human sessions from {len(paths)} files "
-          f"(excluded labels: {excluded_labels or 'none'}); deriving {len(sessions)*3} negatives ...",
-          flush=True)
+          f"(excluded labels: {excluded_labels or 'none'}); aim_gate={a.aim_gate}; "
+          f"scoring + deriving negatives ...", flush=True)
 
-    report = run_separation_study(sessions, seed=a.seed)
+    report = run_separation_study(sessions, seed=a.seed, aim_gate=a.aim_gate)
     d = report.to_dict()
     d["positive_glob"] = a.glob
     d["excluded_labels"] = excluded_labels
 
     date = time.strftime("%Y-%m-%d")
-    out_json = a.out or f"audits/p0a-presence-op-{date}.json"
+    ver = "v2" if a.aim_gate else "v1"
+    out_json = a.out or f"audits/p0a-presence-op-{ver}-{date}.json"
     out_md = out_json.replace(".json", ".md")
     os.makedirs(os.path.dirname(out_json), exist_ok=True)
     with open(out_json, "w", encoding="utf-8") as fh:

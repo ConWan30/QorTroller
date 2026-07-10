@@ -445,6 +445,33 @@ P1 low-aim confound) → a pre-registered **aim-activity reliability gate** on p
 - PV-CI **182**; l9 suite **679 passed** (+13 study; 2 pre-existing cocapture env failures); 0 IOTX;
   no 228B PoAC / FROZEN-v1 / chain contact; harness is offline (zero capture-path, pinned by T9).
 
+## AI-loop cycle 2 (2026-07-09): P0-A v2 aim-active gate → first honest SEPARATED OP
+
+grok amended the design to v2 (aim-activity inclusion gate) after Claude's tail characterization; Claude
+audited (threshold principled, not outcome-tuned) + built the gate + re-ran.
+
+**P0-A v2 = SEPARATED** (`audits/p0a-presence-op-v2-2026-07-09.{json,md}`, schema `p0a-presence-op-v2`):
+aim-active positives only (gate `max(std(sx-med),std(sy-med)) >= AIM_ACTIVITY_MIN = 4×MIN_STICK_STD×255
+= 10.2 LSB` — a fixed multiple of the oracle abstain gate, **pre-registered on principle, rejecting the
+outcome-tuned p25/median options**). 26 low-aim positives excluded → **33 human / 99 auto**; median
+human **0.374** (≥0.20), auto **0.067** (≤0.10), gap **0.307** (≥0.15), causality clean, ratio 5.6 —
+**all M1–M6 pass under the frozen decision constants.** The first human-vs-modeled-automation presence
+OP to clear the pre-registered floors.
+
+**Two findings grok's mandated player histogram (D-P0A-10) surfaced — absorbed into the v2.1 doc rev
+(SEPARATED unchanged):** (a) **CODE-TRUTH correction** — `sessions_l9` is a **3-player developer
+corpus** (P1≈32, P2≈8, P3≈12, +7 untagged), NOT the single-operator N=1 the v1 design assumed (stronger
+scope; still not population-certified). (b) **F-P0A-V2-1 heterogeneity** — even aim-active, **P1 median
+coupling ≈0.09** vs P2 0.59 / P3 0.38; the pooled SEPARATED is **P2/P3-carried**, P1 a systematic
+low-coupling outlier (cause TBD — not re-labeled as bot). The harness now emits
+**`players_below_tau_human`** (`['P1']`) so a pooled SEPARATED can never hide a non-separating player.
+No min-per-player-n veto in v2 (would move goalposts post-SEPARATED); a uniform-across-players claim is
+optional v3 (operator GO). v1 raw-pool **INCONCLUSIVE** stays the permanent honest record.
+
+- `test_presence_separation_study.py` **18/18** (v1 + v2 gate + player-skew + heterogeneity); l9 684
+  passed (2 pre-existing cocapture env failures); PV-CI **182**; 0 IOTX; harness offline (zero
+  capture-path, T9). grok v2.1 design rev + Claude harness aligned.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
