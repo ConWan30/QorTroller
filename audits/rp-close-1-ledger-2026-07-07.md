@@ -410,6 +410,41 @@ OFF -> byte-identical; the flag propagates shell -> daemon -> bridge child via `
   0 IOTX, no 228B PoAC / FROZEN-v1 / chain contact. Remaining inc 2b: KAS `binding_mode` surfacing
   (deferred — would touch the KAS record; kept out of the commitment for now).
 
+## AI-loop cycle 1 (2026-07-09): collaboration locked · Session-1/M18 · P0-A first OP
+
+**Claude↔grok engineering loop LOCKED** (`docs/qortroller-ai-loop-collab-2026-07-09.md`): grok
+designs/assesses → Claude audits→builds→verifies→stages → operator commits/rig/arbitrates. Neither
+AI commits; rig/gameplay always notified; mutual audit both directions; this ledger is the single
+append-only canonical memory. grok accepted all 5 open questions (design→build split with Claude as
+integrator on capture-adjacent seams; template enforcement; disagreement→human→ledger; population-first;
+one canonical ledger).
+
+**Session 1 — EVENT-BIND inc 2b live (Match 18):** stamping wiring **VALIDATED live** (record_hash on
+both HID-onset + composite lobes). Authorship blocked by an OCR handle-anchor misread (`QorTrola30` →
+`q0rtr01a30`) → `KAS INSUFFICIENT_KILLS` live. Archive re-scan with the correct handle **recovered the
+kills** (61/600 crops matched `Qortrola30` @conf 95.5, 8 clusters ≥ K=3, 31 verifier checks OK) but the
+deferred tier returned **DEFERRED_OBSERVED_ONLY (8 observed, 0 authored)** — the kill spans didn't
+intersect the 5 R2 windows. **Finding: authorship window-conjunction failure implicates RP-4
+(uncalibrated cross-lobe latency) — RP-4 is now load-bearing for authorship, not just LUMEN-3.** No
+authored pairs → EVENT-BIND crypto-join still unvalidated (needs a clean re-run: fixed anchor + RP-4).
+Artifacts: `audits/kas_deferred_record_match18_eventbind_1783639659_2026-07-09.json`.
+
+**P0-A presence-separation study (loop cycle-1 deliverable):** grok designed
+(`docs/p0a-presence-separation-study-design.md`), Claude audited (CODE-TRUTH clean; corpus 59/32/10
+verified; one self-correction: hw_nqpv is JSON not L9 .npz) + built the harness
+(`l9_presence/presence_separation_study.py` + runner + `test_presence_separation_study.py` 13/13,
+T1–T10). **First OP = INCONCLUSIVE** (`audits/p0a-presence-op-2026-07-09.{json,md}`): auto collapsed
+(median 0.069, M4✓, causality M6✓), but human median **0.195** < TAU_HUMAN 0.20 and gap **0.126** <
+GAP_MIN 0.15 on the raw 44-scored pool. **Pre-registration did its job** — refused to launder the
+banked Stream-A 0.29–0.45 (a reliability-filtered subset) into a fresh OP. **Tail characterization**
+(`audits/p0a-tail-characterization-2026-07-09.md`): the sub-0.20 half is **low-aim, not coupling
+failure** (median stick-std 12.6 vs 46.0; 17/22 below the high group's aim p25; r(coupling,aim)=0.50;
+P1 low-aim confound) → a pre-registered **aim-activity reliability gate** on positives is justified →
+`p0a-presence-op-v2` (grok's §5.1 call + operator §9; do NOT retune the frozen decision constants).
+
+- PV-CI **182**; l9 suite **679 passed** (+13 study; 2 pre-existing cocapture env failures); 0 IOTX;
+  no 228B PoAC / FROZEN-v1 / chain contact; harness is offline (zero capture-path, pinned by T9).
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
