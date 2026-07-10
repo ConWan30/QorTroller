@@ -672,6 +672,31 @@ fires, ring bounded, toggle). PV-CI **182**; 34-test loop-timing/stability regre
 **Next (rig-gated):** one capture with `LOOP_STARVATION_ATTRIBUTION_ENABLED=1` (+ `PRESENCE_LEAN_MODE=true`) names the
 top 2-3 offenders → then F2/F1 (grok loop). Design `docs/bridge-capture-lag-fix-2026-07-10.md`.
 
+## `lag_attr_validate` — 2026-07-10 — THREE LIVE VALIDATIONS IN ONE MATCH (RP Warzone, monitor 0, all 3 flags ON)
+
+One RP match with `LOOP_STARVATION_ATTRIBUTION_ENABLED=1 RETINA_MATCH_STATE_ENABLED=1 RETINA_CANDIDATE_DENSE_SCORE=1`.
+
+- **🎯 DENSE FIX LIVE-VALIDATED — `authored=14`, the FIRST live Remote-Play authored session** (M18/rp4_rp/densecand
+  all returned live 0). The **dense worker promoted the anchor off-loop** — `session-anchor[dense]: promoted
+  regime=PROMOTED sha=311a58ea consistent=3` → `inline_composite_authored=14`; the old sparse-R2-window path got only
+  `inline_authored=5`. `AUTHORED_SESSION` commit `69da4fe6`; **PoSP SYNCHRONIZED** (kas_verified=True, fusion_rows=432,
+  archive_verified=True, 600 crops → `retina_kf_archive/lag_attr_validate_1783721691`). Promoted because the initial
+  cut was **clean** (`Qortrola30`) vs densecand's noisy `Qortrola30M`. **Landed despite the lag** (below) — the dense
+  worker is off-loop, so live authorship is now robust to the starvation. RP-2c authorship gap CLOSED. Task #43 CLOSED.
+- **Arc B (LUMEN-2b) MATCH_STARTED LIVE-VALIDATED:** `match-state: MATCH_STARTED` fired ~15s after match start,
+  `match_state: IN_MATCH` held the whole match, `n_started=1` — the "seamlessly see when a match starts" ask, proven
+  live. **F-ARCB-1 (OPEN):** MATCH_ENDED did NOT emit at stop (`close_session` wired at
+  `qortroller_retina_capture.py:1712` but `n_ended=0`, no ENDED line in `retina_match_state.jsonl`) — the close-emit
+  provisional-span iteration found nothing to close; the "and ends" half needs a fix (→ grok, arc-B close increment).
+- **D1 lag attribution — the named offender class:** 18 loop-starvation events (worst **4.69 s** loop block), every one
+  attributed `NO timed_block entries in window (lean_mode=True) → the blocker is UN-INSTRUMENTED (SQLite/RPC on the loop
+  thread)`. Under lean mode the agent fleet is skipped, so **no instrumented site is the offender** — it is
+  un-instrumented sync on the loop thread. fps min 12.9 / med 17.0 / max 25.8; governor maxed (downscale=8,
+  region_scale=0.5). → **D1.1 (next, → grok): instrument the suspect un-instrumented loop-thread sync** (retina/dualshock
+  DB writes, records inserts, chain RPC view calls, session-loop SQLite) with `timed_block` → re-capture NAMES the site
+  → **F2** offloads it. Reframe: authored=14 landed *despite* this lag, so F2 is now density/precision + bridge-health,
+  not the authorship blocker. Task #45 updated.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
