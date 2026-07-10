@@ -47,6 +47,12 @@ _ADS_SEGMENT_DEFAULT_PATH = os.path.expanduser("~/.vapi/ads_segment.json")
 # last fresh-row appearance -> the FP gate treats a killer-slot hit there as a false fire). The fresh-diff
 # is the mean-abs gray delta in the killer-feed region that signals a NEW transient row (vs a static patch).
 _SESSION_ANCHOR_ROW_PERSIST_MS = 5000.0
+
+
+def _dense_score_enabled(environ) -> bool:
+    """Option 3 flag parse (default-OFF). Truthy set mirrors the sibling capture flags; extracted so the
+    default-off / enable semantics are unit-testable without constructing the WGC-bound capture."""
+    return str(environ.get("RETINA_CANDIDATE_DENSE_SCORE", "0")).strip().lower() in ("1", "true", "yes", "on")
 _SESSION_ANCHOR_FRESH_DIFF = 6.0
 
 
@@ -667,6 +673,22 @@ class RetinaGameCapture:
         self._session_anchor_dir = str(session_anchor_archive_dir or "retina_kf_anchors")
         self._prev_killer_gray = None                  # frame-diff (R2 fresh-row) prior killer-feed region
         self._last_killer_fresh_ms = -1e18             # last fresh-row appearance ts (FP is_background window)
+        # Option 3 — dense-candidate scoring (flag-gated, DEFAULT-OFF). A dedicated off-loop worker
+        # (qt-dense-cand) scores the dense panel stash against the CANDIDATE template so promotion (K=3) /
+        # stall-recut reach even when R2 windows are sparse — the M18/rp4_rp live-0-authored failure (the
+        # anchor cut once then froze in CANDIDATE all match while the offline scan found the kills). No OCR on
+        # this path (rail 1); the K=3/0.66/FP/stall gate is UNCHANGED (it only feeds the gate more crops).
+        # C1: a dedicated lock serializes generator mutation across the fold + this worker (the fold's
+        # observe_candidate runs off the single-flight begin/end, NOT _inline_admission_lock, so that lock
+        # alone would not serialize the two paths). C3: dense-private fresh-row state so the off-loop worker
+        # never corrupts the window-path fold's _prev_killer_gray frame-diff.
+        self._session_anchor_lock = threading.Lock()
+        self._dense_cand_enabled = _dense_score_enabled(os.environ)
+        self._dense_cand_min_ms = max(1.0, float(os.environ.get("RETINA_CANDIDATE_DENSE_MIN_MS", "100") or 100))
+        self._dense_cand_stop = True                   # worker not started unless the flag turns it on
+        self._dense_last_cand_ts = None                # de-dup key: skip re-scoring the same panel stash
+        self._dense_prev_killer_gray = None            # C3: dense-private fresh-row prior (worker-thread only)
+        self._dense_last_killer_fresh_ms = -1e18       # C3: dense-private last fresh-row ts
         # OCR bootstrap sub-flag (DEFAULT-OFF, within the session-anchor envelope): when on, the BOOTSTRAP
         # branch READS the handle glyphs (killfeed_ocr_bootstrap, rendering-independent) as the PRIMARY catch
         # source, bypassing the marginal feed_v1 score gate that failed live (max 0.566). Off -> legacy
@@ -795,6 +817,40 @@ class RetinaGameCapture:
             _th.Thread(target=_flush_loop, daemon=True,
                        name="qt-burst-flush").start()
             log.info("RetinaGameCapture: dedicated burst-flush thread ON (F-FIXB-1)")
+        # Option 3 — dedicated off-loop dense-candidate worker (flag-gated, DEFAULT-OFF). C2: NOT hooked into
+        # save_capture_crops (that runs on the event-loop tune() tick) and NOT window-gated (window-only would
+        # recreate the sparse-observation bug). Mirrors the qt-burst-flush pattern: polls the latest panel
+        # stash at _dense_cand_min_ms cadence and scores it against the CANDIDATE template. Only runs when the
+        # flag is on AND a session-anchor generator exists AND capture started.
+        if self.started and self._dense_cand_enabled and self._session_anchor is not None:
+            import threading as _th2
+            import time as _t2
+            from l9_presence import killfeed_session_anchor as _sa2
+            self._dense_cand_stop = False
+
+            def _dense_cand_loop() -> None:
+                while not getattr(self, "_dense_cand_stop", True):
+                    _t2.sleep(self._dense_cand_min_ms / 1000.0)
+                    if getattr(self, "_dense_cand_stop", True):
+                        break                              # re-check after sleep: NO work after stop()
+                    try:
+                        gen = self._session_anchor
+                        if gen is None or gen.regime != _sa2.CANDIDATE:
+                            continue                       # dense observation only matters in CANDIDATE
+                        bgr = getattr(self._source, "_panel_bgr", None)
+                        if bgr is None:
+                            continue
+                        ts = getattr(self._source, "_panel_ts", None)
+                        if ts is not None and ts == self._dense_last_cand_ts:
+                            continue                       # de-dup: this stash already scored
+                        self._dense_last_cand_ts = ts
+                        self._dense_candidate_observe(bgr, _t2.time() * 1000.0)
+                    except Exception:  # noqa: BLE001 — dense worker must never die loudly
+                        pass
+
+            _th2.Thread(target=_dense_cand_loop, daemon=True, name="qt-dense-cand").start()
+            log.info("RetinaGameCapture: dense-candidate worker ON (Option 3; min_ms=%.0f)",
+                     self._dense_cand_min_ms)
         return self.started
 
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
@@ -1084,8 +1140,9 @@ class RetinaGameCapture:
                     ocr_w = self._ocr_bootstrap_read(bgr)
                     if ocr_w is not None and ocr_w.matched and ocr_w.slot == "killer":
                         raw_auth = True
-                ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
-                                            now_ms=now_ms, raw_killer_authored=raw_auth)
+                with self._anchor_mutation_ctx():  # C1: serialize generator mutation vs the dense worker
+                    ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
+                                                now_ms=now_ms, raw_killer_authored=raw_auth)
             if ev2 is not None and ev2.get("event") in ("candidate_cut", "promoted", "candidate_demoted_fp",
                                                         "candidate_demoted_stall"):
                 # C3 provenance rides the DURABLE log line so the (log-parsed) KAS trail carries the ACTUAL live
@@ -1150,6 +1207,80 @@ class RetinaGameCapture:
             return fresh
         except Exception:
             return False
+
+    def _anchor_mutation_ctx(self):
+        """Generator-mutation lock (C1) — serializes the fold's observe_candidate against the dense worker's.
+        A partial-construction test fixture (no dense worker running) may lack it -> nullcontext (there is no
+        concurrency to guard). Production always sets self._session_anchor_lock in __init__; using it via this
+        accessor also means a missing lock degrades to no-lock rather than a silent AttributeError swallowed
+        by the fold's fail-open except (which would masquerade as no-promotion)."""
+        import contextlib
+        lk = getattr(self, "_session_anchor_lock", None)
+        return lk if lk is not None else contextlib.nullcontext()
+
+    def _dense_killer_fresh_row(self, bgr, now_ms: float) -> bool:
+        """C3: fresh-row test for the dense worker — identical logic to _killer_fresh_row but on PRIVATE
+        prior state (_dense_prev_killer_gray / _dense_last_killer_fresh_ms) so the off-loop dense worker's
+        frame-diff never interleaves with the window-path fold's. Only the qt-dense-cand thread touches this."""
+        try:
+            import cv2
+            import numpy as np
+            mon = self._inline_monitor
+            h, w = bgr.shape[:2]
+            reg = bgr[0:max(1, int(h * mon.feed_region_max_yfrac)), 0:max(1, int(w * mon.killer_max_frac))]
+            g = cv2.cvtColor(reg, cv2.COLOR_BGR2GRAY) if reg.ndim == 3 else reg
+            fresh = False
+            if self._dense_prev_killer_gray is not None and self._dense_prev_killer_gray.shape == g.shape:
+                diff = float(np.mean(np.abs(g.astype(np.int16) - self._dense_prev_killer_gray.astype(np.int16))))
+                fresh = diff > _SESSION_ANCHOR_FRESH_DIFF
+            self._dense_prev_killer_gray = g
+            if fresh:
+                self._dense_last_killer_fresh_ms = now_ms
+            return fresh
+        except Exception:
+            return False
+
+    def _dense_candidate_observe(self, bgr, now_ms: float) -> Optional[dict]:
+        """Option 3 dense-stream CANDIDATE observation (flag-gated; runs ONLY on the qt-dense-cand worker
+        thread — never the event loop, C2). CANDIDATE-only subset of _session_anchor_fold: scores the latest
+        panel stash against the candidate template to feed K-progress, plus an INDEPENDENT feed_v1/bootstrap
+        template score to feed the stall-recut — WITHOUT any OCR (rail 1; preserves the D-CG-1 posture and
+        keeps OCR cost off this stream). Generator mutation is under _session_anchor_lock (C1); fresh-row uses
+        dense-private state (C3). The K=3 / promote_floor / FP-demote / stall_limit gate is UNCHANGED — this
+        only multiplies which crops reach the gate. Fail-open: any error is a no-op."""
+        try:
+            import l9_presence.killfeed_session_anchor as sa
+            from l9_presence.killfeed_cv import killer_slot_best
+            gen = self._session_anchor
+            if gen is None or gen.regime != sa.CANDIDATE:   # only CANDIDATE needs dense promotion evidence
+                return None
+            active = gen.active_anchor()
+            if active is None:
+                return None
+            kscore, kxf, kyf = killer_slot_best(bgr, active)
+            self._dense_killer_fresh_row(bgr, now_ms)       # side effect: updates _dense_last_killer_fresh_ms
+            is_bg = (now_ms - self._dense_last_killer_fresh_ms) > _SESSION_ANCHOR_ROW_PERSIST_MS
+            # Stall witness WITHOUT OCR (rail 1): the bootstrap feed_v1 template independently authored this
+            # crop (>= promote_floor) while the candidate scored sub-floor -> a real kill the weak cut missed.
+            # observe_candidate keeps raw_killer_authored structurally DEMOTE-ONLY (never authors / increments
+            # K), byte-identical to the fold's raw_auth semantics. Gated on an active feed (not is_bg) so a
+            # static high-scoring patch cannot manufacture a stall.
+            raw_auth = False
+            if self._anchor is not None and not is_bg and kscore < gen.promote_floor:
+                feed_score, _fx, _fy = killer_slot_best(bgr, self._anchor)
+                if feed_score >= gen.promote_floor:
+                    raw_auth = True
+            with self._anchor_mutation_ctx():               # C1: serialize vs the fold's observe_candidate
+                ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
+                                            now_ms=now_ms, raw_killer_authored=raw_auth)
+            if ev2 is not None and ev2.get("event") in (
+                    "promoted", "candidate_demoted_fp", "candidate_demoted_stall",
+                    "candidate_progress", "candidate_stall"):
+                log.info("session-anchor[dense]: %s regime=%s sha=%s consistent=%s", ev2["event"],
+                         gen.regime, ev2.get("sha") or ev2.get("candidate_sha"), ev2.get("consistent"))
+            return ev2
+        except Exception:  # noqa: BLE001 — dense observe is advisory; never break the worker
+            return None
 
     def _cut_session_anchor(self, bgr, kxf, kyf):
         """R4: cut the session anchor from the caught killer-slot row via the scale-aware killer-name cut +
@@ -1487,4 +1618,5 @@ class RetinaGameCapture:
 
     def stop(self) -> None:
         self._burst_flush_stop = True      # F-FIXB-1: end the dedicated flush thread
+        self._dense_cand_stop = True       # Option 3: end the dense-candidate worker
         self._source.stop()
