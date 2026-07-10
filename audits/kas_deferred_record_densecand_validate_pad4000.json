@@ -1,0 +1,937 @@
+{
+  "advisory": true,
+  "clusters": [
+    {
+      "crop_files": [
+        "panel_1783700755144438100.png",
+        "panel_1783700756317839300.png"
+      ],
+      "crop_shas": [
+        "256bc83d1f9c0b47091d80e36fd89ed16ef8899ce0f8b74429245076265b2fa0",
+        "47fca14c3d2807cb0d27331fbaa27dc45db12f112a4519be39158a077f5f794a"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783700755144.4,
+        1783700756317.8
+      ],
+      "texts": [
+        "Qortrola30 o On",
+        "Qortrola30  On"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783700761560237900.png",
+        "panel_1783700763883349300.png",
+        "panel_1783700764949305100.png",
+        "panel_1783700766981029200.png",
+        "panel_1783700767711790000.png",
+        "panel_1783700770445002100.png"
+      ],
+      "crop_shas": [
+        "04614ee82d31316f720581e2d10718cee51daabc6aab718afd6831ba578ccc3a",
+        "04614ee82d31316f720581e2d10718cee51daabc6aab718afd6831ba578ccc3a",
+        "ef15d76b26916ca5584228de52773d8e4ecc952a78baadfeab945563805cd4bc",
+        "8c43eaab23494c28c5a91e069e7f83a546da266f5db4f3f8792032fb51f485c9",
+        "a97228ee60331a2cbf416838071185a22325c5f5c6513b2291fe3066509fe541",
+        "8c43eaab23494c28c5a91e069e7f83a546da266f5db4f3f8792032fb51f485c9"
+      ],
+      "size": 6,
+      "span_ms": [
+        1783700761560.2,
+        1783700770445.0
+      ],
+      "texts": [
+        "Qortrola30St",
+        "Qortrola30St",
+        "Qortrola30",
+        " Qortrola30 Dr",
+        "Qortrola30 St",
+        " Qortrola30 Dr"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783700830118753400.png",
+        "panel_1783700831184883800.png",
+        "panel_1783700834381076600.png",
+        "panel_1783700835657595200.png"
+      ],
+      "crop_shas": [
+        "1bf85a3ca8ff32a13f619a8e5d0f0c81c6897cc939df5c5e0341af9311dba7ed",
+        "6f33ca1ac0664cedbc04d922df3c7bdf94b59b8c14c44dfb1f3d1807044cf55e",
+        "cb0aca46dc91d048c885027178af183fc7369f96fad37043abb5c39fb6168140",
+        "cb0aca46dc91d048c885027178af183fc7369f96fad37043abb5c39fb6168140"
+      ],
+      "size": 4,
+      "span_ms": [
+        1783700830118.8,
+        1783700835657.6
+      ],
+      "texts": [
+        "Qortrola30Mr",
+        "Qortrola30",
+        "Qortrola30M",
+        "Qortrola30M"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783700855438024000.png"
+      ],
+      "crop_shas": [
+        "301cb8e4bdee6cea52c373d9758185ff6718fc860cee7da5d32263d589de31d6"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783700855438.0,
+        1783700855438.0
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783700862029420800.png",
+        "panel_1783700864600924000.png"
+      ],
+      "crop_shas": [
+        "b1fe656a50c8b98be69df0e13df7671098f54920a32762d2edcfc9fb369aff80",
+        "5058ad7060cebb570eea376fe777ab6123dec1a880f6dff9b375f5c4951ac8a2"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783700862029.4,
+        1783700864600.9
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783700902372146200.png"
+      ],
+      "crop_shas": [
+        "6cd72d0968f7ff782a226793a2660bc5e4a1587366c9061ba0868767188a68ab"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783700902372.1,
+        1783700902372.1
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783700908078581200.png"
+      ],
+      "crop_shas": [
+        "b76b4132983e3a4069a0af4db6c6a2e515141e24da767cd84096321ae6f1bfe5"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783700908078.6,
+        1783700908078.6
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711113169767000.png",
+        "panel_1783711114818518900.png",
+        "panel_1783711116667734600.png"
+      ],
+      "crop_shas": [
+        "d54208410fa57903abbea6043c2897e4175079d7e25d7607d2235293b8cd754c",
+        "9a635f0fe97c5a9f709937cb78eab2c06d9355b5160275c1a81deb3553b70f2c",
+        "aa9e27579b1b8ce98d7f39944ad9e27caf7058868d58f74adec3b50955c5f863"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783711113169.8,
+        1783711116667.7
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711135756147300.png"
+      ],
+      "crop_shas": [
+        "c08dd8d38cf8c1dd4fe2405f9b1c6007398b45a88e5d52a8a04024c57ad38985"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711135756.1,
+        1783711135756.1
+      ],
+      "texts": [
+        "Qortrola30."
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711222597928600.png"
+      ],
+      "crop_shas": [
+        "7d16943941ed40cd912d68a37d8adc52c5d8e60b713aa7dae7e8a0e6c241fb8e"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711222597.9,
+        1783711222597.9
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711228110222300.png"
+      ],
+      "crop_shas": [
+        "23bbd764ae08774ad7536adbd3615dfb459832b0b64127037d080817d95d4439"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711228110.2,
+        1783711228110.2
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711235609164800.png",
+        "panel_1783711238651627100.png"
+      ],
+      "crop_shas": [
+        "8696395fe40a2b9b9e0e6c7d20e7149c385c02ad2d6ada4f321e5682158c03f6",
+        "8696395fe40a2b9b9e0e6c7d20e7149c385c02ad2d6ada4f321e5682158c03f6"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711235609.2,
+        1783711238651.6
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711247269637400.png",
+        "panel_1783711249617972200.png"
+      ],
+      "crop_shas": [
+        "b1cc2b938de2a909be97fdc91fe9027418d2553483f3a946f750a1bb36f4feb4",
+        "b1cc2b938de2a909be97fdc91fe9027418d2553483f3a946f750a1bb36f4feb4"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711247269.6,
+        1783711249618.0
+      ],
+      "texts": [
+        "Qortrola30 ",
+        "Qortrola30 "
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711261038888200.png"
+      ],
+      "crop_shas": [
+        "f6e9d0e708b87ac88f7ab8d199c326a1fbefa5f7980ba1d4e6e071c52242a41d"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711261038.9,
+        1783711261038.9
+      ],
+      "texts": [
+        "Qortrola30xX"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711267975473600.png",
+        "panel_1783711269019982800.png"
+      ],
+      "crop_shas": [
+        "27e4b976b8d0d743e7be88fd33b92fe248fc3e4fc5509490017204d7f2316153",
+        "a314f1587705f76bd45089e1163ee905b2593f897e0b1c5e09c4a70e9c902e26"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711267975.5,
+        1783711269020.0
+      ],
+      "texts": [
+        "Qortrola30 n",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711274593027100.png",
+        "panel_1783711277955387100.png",
+        "panel_1783711279865678200.png",
+        "panel_1783711281665397300.png"
+      ],
+      "crop_shas": [
+        "f33e0078f2472b1eb93fbf2d4bbcc72b6e77dc6162c9029969304395685c942d",
+        "d191b6ae4b67bc171ffbeb7508320992b906e66eb8a1676ce087fc1a7cddd43f",
+        "7b14a279469f4d77eca76d6ffb84632f5ec7b7606cbb0b585ed0e09cbbab125d",
+        "9e139e027b510f2d85f432d8d051e66f1f85ee8d345854743d29c1eca5e5de35"
+      ],
+      "size": 4,
+      "span_ms": [
+        1783711274593.0,
+        1783711281665.4
+      ],
+      "texts": [
+        "Qortrola30-",
+        "Qortrola30",
+        "Qortrola30 ",
+        "Qortrola30 "
+      ],
+      "verdict": "DEFERRED_AUTHORED",
+      "window_hit_ms": [
+        1783711265157.6,
+        1783711272340.0
+      ]
+    },
+    {
+      "crop_files": [
+        "panel_1783711322227479000.png",
+        "panel_1783711324927833700.png"
+      ],
+      "crop_shas": [
+        "8b5cf632e51604c76116e83dc2868b15dc3a37b513f0e81015a23ca5160c8768",
+        "8b5cf632e51604c76116e83dc2868b15dc3a37b513f0e81015a23ca5160c8768"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711322227.5,
+        1783711324927.8
+      ],
+      "texts": [
+        "Qortrola30 ",
+        "Qortrola30 "
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711333106718500.png",
+        "panel_1783711334947954600.png",
+        "panel_1783711336754556600.png",
+        "panel_1783711338606679500.png",
+        "panel_1783711340975938000.png"
+      ],
+      "crop_shas": [
+        "091eb4d4e41706bc8febfd5f6f9cef6e744dc7b6aa3e6481f6ce0223f88caf2a",
+        "798ef1ac75b0b83ab58548741bccc9550920648128ae34f5bd4d36d62d9f29dc",
+        "5afa4d53590429c6a3912bd3d03bc3fa01594ab38ef051a9915d6bd103c9ab54",
+        "86dd82a0ad3a2258766ea1467926ad3ded93cf0a4c4e8087deb3611f33cb67f3",
+        "28536bec65087a09cf54c636834b7a4328a051677451669ce8597b5c21b14b64"
+      ],
+      "size": 5,
+      "span_ms": [
+        1783711333106.7,
+        1783711340975.9
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711346404714100.png"
+      ],
+      "crop_shas": [
+        "423985e1d7807407b2e82343b1be418609db8a3935705f64c7c77187e7cbd298"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711346404.7,
+        1783711346404.7
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711362456502900.png",
+        "panel_1783711366519530900.png"
+      ],
+      "crop_shas": [
+        "d1c8895f057977ffc1408fa7ca7b18210af213f1c6dbee96767b8d1bff7a85da",
+        "d1c8895f057977ffc1408fa7ca7b18210af213f1c6dbee96767b8d1bff7a85da"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711362456.5,
+        1783711366519.5
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711372557289200.png",
+        "panel_1783711373714653900.png"
+      ],
+      "crop_shas": [
+        "e41113591981eb45b6cf3cda3f4b8c7107b6c0493c84aa0da5436f3fd991a10e",
+        "e41113591981eb45b6cf3cda3f4b8c7107b6c0493c84aa0da5436f3fd991a10e"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711372557.3,
+        1783711373714.7
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711382999869700.png"
+      ],
+      "crop_shas": [
+        "f5e22ed4342897fe1681484cffddc75b751c9d29510266741bf56ea5b82f1b3c"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711382999.9,
+        1783711382999.9
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711403822574300.png"
+      ],
+      "crop_shas": [
+        "d87c213af003c57f1fec9f04581b1b7a0bca459618dda676ec30a639744db118"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711403822.6,
+        1783711403822.6
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711428126164500.png"
+      ],
+      "crop_shas": [
+        "3ba2a47274bca0018ab95393164add5aead5372b8b30529837425053ccd5de82"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711428126.2,
+        1783711428126.2
+      ],
+      "texts": [
+        "qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711433696812300.png",
+        "panel_1783711434822550600.png"
+      ],
+      "crop_shas": [
+        "c980e2d1ed38f2e7d520cde10af89911c08efc603319a9aacbac638bbe5651eb",
+        "d2faa42e08df7b98a599e299d80d5e7141bf55fc375994f62e886e9c969062de"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711433696.8,
+        1783711434822.6
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711449349029800.png"
+      ],
+      "crop_shas": [
+        "874b068eeaac652aab79df8740d82800d601d3a88d816552d896ecb7b6767c67"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711449349.0,
+        1783711449349.0
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711465321954400.png"
+      ],
+      "crop_shas": [
+        "981995252e79e9941047b1f719228d09cfbb413a9cdb50d59e186be297f672cc"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711465322.0,
+        1783711465322.0
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711488288145600.png",
+        "panel_1783711491129103600.png",
+        "panel_1783711493657384400.png"
+      ],
+      "crop_shas": [
+        "43f30fbda49bd24afe2d57e20170eb5583acb8d503e0483d260ae8b5ea0717fc",
+        "eddbcca683a8778bbab8ffbc84d31c52cd9f59c9b3271f879df17691c95f8e65",
+        "bdca77ddb2ece56e54db0204671590e64f017fe1cc5553f982d04c85bef2d877"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783711488288.1,
+        1783711493657.4
+      ],
+      "texts": [
+        "Qortrola30xa",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_AUTHORED",
+      "window_hit_ms": [
+        1783711481671.7,
+        1783711489762.1
+      ]
+    },
+    {
+      "crop_files": [
+        "panel_1783711504648037000.png"
+      ],
+      "crop_shas": [
+        "e0455d984b0745ffd6f427ec1649e5b8529eab5c9496390d09b1c23cfaf01ff4"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711504648.0,
+        1783711504648.0
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711510998591600.png"
+      ],
+      "crop_shas": [
+        "91fb7d6fbf4cb2bbc941785c289442f5e38bb7a3b3ba1298d94a429f625c0a91"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711510998.6,
+        1783711510998.6
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711546236675000.png",
+        "panel_1783711549305516000.png"
+      ],
+      "crop_shas": [
+        "0c69935655368536bef898c62a70960384284a2c987fff16fc9eb9ac2f7e3cd0",
+        "0c77b4be2a4eba611b92bffd719ae4d0cef3cf08cbb214f2d0cbbe9703c32735"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711546236.7,
+        1783711549305.5
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30Vis"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711577366453700.png"
+      ],
+      "crop_shas": [
+        "dbf4ebd5ba6f0f234792c46c67d25b717fc842a8c35e494fa4209988fd5c6833"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711577366.5,
+        1783711577366.5
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711582490390500.png"
+      ],
+      "crop_shas": [
+        "75cf286892b9269c6a9dadc1f74207219985a30ea964a03c237dfb722b2e6270"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711582490.4,
+        1783711582490.4
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711591888642600.png"
+      ],
+      "crop_shas": [
+        "4dc113e10df054c53055c83f0bd3ef813709ec8d49538f57922f49a4760e2bae"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711591888.6,
+        1783711591888.6
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711606719998800.png",
+        "panel_1783711608088908500.png",
+        "panel_1783711609066656200.png",
+        "panel_1783711610353529500.png"
+      ],
+      "crop_shas": [
+        "04f8de29df56888bff9c0705ac5b13e410c1362899cdc95dd5a10ddbb7d22124",
+        "04f8de29df56888bff9c0705ac5b13e410c1362899cdc95dd5a10ddbb7d22124",
+        "018402e6ca9a99d026c49d0df42407f60f3d4ab9ff864adb9d1f86c770d3cea8",
+        "018402e6ca9a99d026c49d0df42407f60f3d4ab9ff864adb9d1f86c770d3cea8"
+      ],
+      "size": 4,
+      "span_ms": [
+        1783711606720.0,
+        1783711610353.5
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30Kn",
+        "Qortrola30Kn"
+      ],
+      "verdict": "DEFERRED_AUTHORED",
+      "window_hit_ms": [
+        1783711598708.4,
+        1783711603658.4
+      ]
+    },
+    {
+      "crop_files": [
+        "panel_1783711627510048100.png"
+      ],
+      "crop_shas": [
+        "a190d8fb4ca3b5426d0e62f5d65ffcdc6a9e076875a9dbb694a2dbb25fef8ea3"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711627510.0,
+        1783711627510.0
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711634515597700.png",
+        "panel_1783711635811442600.png",
+        "panel_1783711637618608000.png"
+      ],
+      "crop_shas": [
+        "e14f0567de7b261106c434d2a4f3eb671a26170ff61f4ede67acc4a083283cac",
+        "e14f0567de7b261106c434d2a4f3eb671a26170ff61f4ede67acc4a083283cac",
+        "46b7340b7d46e32a186a27f8243bfe72b34ff2dc71426ac432053e60c997c20b"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783711634515.6,
+        1783711637618.6
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30[FA"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711653261270400.png"
+      ],
+      "crop_shas": [
+        "04f638f67ac9b054ace0fb8bec36b50520cdd4afa30dd5c3a6b0dae1df550fcb"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711653261.3,
+        1783711653261.3
+      ],
+      "texts": [
+        "|Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711740129124800.png"
+      ],
+      "crop_shas": [
+        "8832aa260a4987eae8eb31f945e92f2140cb0976e54ba6de3d52dd872c43b2c8"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711740129.1,
+        1783711740129.1
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711763487036100.png",
+        "panel_1783711768380339100.png"
+      ],
+      "crop_shas": [
+        "627eda090063c81a8d6260e7119d77fe4f06569682f4fc93eeb3b37551ea7c46",
+        "627eda090063c81a8d6260e7119d77fe4f06569682f4fc93eeb3b37551ea7c46"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711763487.0,
+        1783711768380.3
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711786597921900.png",
+        "panel_1783711790192018400.png"
+      ],
+      "crop_shas": [
+        "d260f08495aa8b129e90adf1311c868b7ddc6d2b808fce66dc16f4de3e88556b",
+        "ef33ccda4d67341c213d880ff434cc456e3defcea9e4b5ec406e7e88bc1633f0"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783711786597.9,
+        1783711790192.0
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711797508867900.png"
+      ],
+      "crop_shas": [
+        "ddb64541fc57634080e0aeb64d2646b257fb8e94fba01534c442d86515a9f9f6"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711797508.9,
+        1783711797508.9
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711807539615300.png"
+      ],
+      "crop_shas": [
+        "9a1be90a6c6d6bf9328fa1f387c88e9abbae1fe060c988a1a28f21d9206eea92"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711807539.6,
+        1783711807539.6
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783711834427297100.png"
+      ],
+      "crop_shas": [
+        "540f614233d521e273ca38f9d08ce0dc4e2ebcf4ccef6833eeb8fba304172d7e"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783711834427.3,
+        1783711834427.3
+      ],
+      "texts": [
+        "Qortrola30 5"
+      ],
+      "verdict": null
+    }
+  ],
+  "deferred_authored": 3,
+  "deferred_observed": 5,
+  "engine": "v6-only (ENGINE_V6) -- same as live bootstrap",
+  "hygiene_inherited": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "timespan"
+  },
+  "k_floor": 3,
+  "manifest_count": 600,
+  "min_kills": 2,
+  "notes": [
+    "window_latency_pad_ms=4000.0 (forward first-appearance pad, arc A -- verifier re-applies)"
+  ],
+  "schema": "qortroller-kas-deferred-v0",
+  "session_display": "densecand_validate_1783711025",
+  "session_id": "28df10283f7abf142a0caf00d4a43f3e10d6e71f6fbca96f2bf545180bb38eee",
+  "source_kas_commitment": "1fa1e6d105b496ada491a5d1c53f97e1764259c4114ae506430262787bc5c99f",
+  "source_kas_verdict": "INSUFFICIENT_KILLS",
+  "unpromotable_clusters": 36,
+  "verdict": "DEFERRED_AUTHORED_SESSION",
+  "window_latency_pad_ms": 4000.0,
+  "windows_used": 28
+}
