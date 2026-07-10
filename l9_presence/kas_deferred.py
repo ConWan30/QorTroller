@@ -80,6 +80,7 @@ class DeferredAttestationRecord:
     manifest_count: Optional[int] = None
     notes: list = field(default_factory=list)
     advisory: bool = True                            # machine-readable: never a hard gate
+    window_latency_pad_ms: float = 0.0               # arc A G-VERIFY: forward window pad at build (0=legacy)
 
     def to_dict(self) -> dict:
         return {
@@ -95,6 +96,7 @@ class DeferredAttestationRecord:
             "hygiene_inherited": self.hygiene_inherited,
             "manifest_count": self.manifest_count,
             "notes": self.notes, "advisory": self.advisory,
+            "window_latency_pad_ms": self.window_latency_pad_ms,
         }
 
     def to_json(self) -> str:
@@ -113,8 +115,35 @@ def _cluster_span_ms(cluster: dict):
     return (min(ts) / 1e6, max(ts) / 1e6)
 
 
+def _window_hit(span, windows, pad_ms: float):
+    """Deferred window conjunction (arc A). Returns the matched window's ORIGINAL [w0, w1]
+    bounds (unpadded, so logs + the verifier stay comparable) or None.
+
+      pad_ms <= 0  -> LEGACY span-overlap, byte-identical to the pre-pad behaviour.
+      pad_ms  > 0  -> FORWARD-ONLY first-appearance pad: the kill's FIRST crop (span[0])
+                      must fall in [window_start, window_end + pad]. A kill that first
+                      appears BEFORE fire (span[0] < w0) never attributes even if the row
+                      lingers into the window; only the window END is extended (the
+                      fire->kill causal direction). Empty windows -> None (input-required:
+                      the pad extends existing windows, it never creates one)."""
+    if not span or not windows:
+        return None
+    s0, s1 = span
+    if pad_ms <= 0:
+        for w0, w1 in windows:
+            if _spans_overlap(s0, s1, float(w0), float(w1)):
+                return [float(w0), float(w1)]
+        return None
+    pad = float(pad_ms)
+    for w0, w1 in windows:
+        w0f, w1f = float(w0), float(w1)
+        if w0f <= s0 <= (w1f + pad):
+            return [w0f, w1f]
+    return None
+
+
 def _classify_cluster(cluster: dict, windows: list, k_floor: int,
-                      manifest_shas: dict, notes: list):
+                      manifest_shas: dict, notes: list, window_latency_pad_ms: float = 0.0):
     """Classify one scan cluster. Returns (cluster_out, verdict_or_None, poisoned).
     poisoned=True when a referenced crop's sha is absent/mismatched vs the manifest
     (anti-tamper -- the whole record fails, never papered over)."""
@@ -141,12 +170,7 @@ def _classify_cluster(cluster: dict, windows: list, k_floor: int,
         out["note"] = f"below K={k_floor} floor -- un-promotable, never attested"
         return out, None, False
 
-    window_hit = None
-    if span:
-        for w in windows:
-            if _spans_overlap(span[0], span[1], float(w[0]), float(w[1])):
-                window_hit = [float(w[0]), float(w[1])]
-                break
+    window_hit = _window_hit(span, windows, window_latency_pad_ms)
     if window_hit:
         out["verdict"] = DEFERRED_AUTHORED
         out["window_hit_ms"] = window_hit
@@ -159,7 +183,8 @@ def _classify_cluster(cluster: dict, windows: list, k_floor: int,
 def build_deferred_record(*, scan: dict, manifest: dict, windows,
                           kas_record: Optional[dict] = None,
                           k_floor: int = DEFAULT_K_FLOOR,
-                          min_kills: int = DEFAULT_MIN_KILLS) -> DeferredAttestationRecord:
+                          min_kills: int = DEFAULT_MIN_KILLS,
+                          window_latency_pad_ms: float = 0.0) -> DeferredAttestationRecord:
     """Fold a v2 scan + manifest + live R2 windows (+ the live KAS record) into a
     DeferredAttestationRecord. FAIL-CLOSED throughout (see module doc)."""
     notes: list = []
@@ -203,6 +228,9 @@ def build_deferred_record(*, scan: dict, manifest: dict, windows,
     if not win_list:
         notes.append("no live R2 windows supplied -- every K-floor cluster is "
                      "DEFERRED_OBSERVED (input conjunction cannot be established)")
+    if window_latency_pad_ms and float(window_latency_pad_ms) > 0:
+        notes.append(f"window_latency_pad_ms={float(window_latency_pad_ms)} "
+                     "(forward first-appearance pad, arc A -- verifier re-applies)")
 
     manifest_shas = {f.get("file"): f.get("sha256") for f in (manifest.get("files") or [])}
 
@@ -210,7 +238,8 @@ def build_deferred_record(*, scan: dict, manifest: dict, windows,
     n_auth = n_obs = n_unprom = 0
     for cluster in (scan.get("clusters") or []):
         out, verdict, poisoned = _classify_cluster(cluster, win_list, k_floor,
-                                                   manifest_shas, notes)
+                                                   manifest_shas, notes,
+                                                   window_latency_pad_ms=window_latency_pad_ms)
         if poisoned:
             return _unverifiable("cluster crop failed manifest sha check (anti-tamper)")
         clusters_out.append(out)
@@ -238,7 +267,8 @@ def build_deferred_record(*, scan: dict, manifest: dict, windows,
         unpromotable_clusters=n_unprom, clusters=clusters_out, windows_used=len(win_list),
         source_kas_commitment=(kas_record or {}).get("commitment"),
         source_kas_verdict=(kas_record or {}).get("verdict"),
-        hygiene_inherited=hygiene, manifest_count=manifest.get("count"), notes=notes)
+        hygiene_inherited=hygiene, manifest_count=manifest.get("count"), notes=notes,
+        window_latency_pad_ms=float(window_latency_pad_ms or 0.0))
 
 
 def slice_scan_by_spans(scan: dict, spans_ms) -> list:
@@ -293,6 +323,7 @@ def verify_deferred_record(record: dict, manifest: dict, archive_dir: str) -> di
                "deferred record must never carry the LIVE verdict string")
 
     manifest_shas = {f.get("file"): f.get("sha256") for f in (manifest.get("files") or [])}
+    pad = float(record.get("window_latency_pad_ms", 0.0) or 0.0)   # G-VERIFY: same pad the build used
     n_auth = n_obs = 0
     for c in (record.get("clusters") or []):
         v = c.get("verdict")
@@ -312,6 +343,14 @@ def verify_deferred_record(record: dict, manifest: dict, archive_dir: str) -> di
                 ok &= _chk(f"disk_sha:{fname}", h == sha, "recomputed crop hash")
             else:
                 ok &= _chk(f"disk_sha:{fname}", False, "crop file missing on disk")
+        if v == DEFERRED_AUTHORED:                     # G-VERIFY: independently re-derive the padded
+            span, wh = c.get("span_ms"), c.get("window_hit_ms")   # conjunction from the record itself
+            re_hit = False
+            if span and wh and len(span) == 2 and len(wh) == 2:
+                s0, s1, w0, w1 = float(span[0]), float(span[1]), float(wh[0]), float(wh[1])
+                re_hit = _spans_overlap(s0, s1, w0, w1) if pad <= 0 else (w0 <= s0 <= (w1 + pad))
+            ok &= _chk("authored_conjunction", re_hit,
+                       f"re-derive AUTHORED: span0 in [w0, w1+pad={pad}]")
     ok &= _chk("counts", n_auth == record.get("deferred_authored", -1)
                and n_obs == record.get("deferred_observed", -1),
                f"recount authored={n_auth} observed={n_obs}")

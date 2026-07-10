@@ -214,3 +214,112 @@ def test_slice_empty_spans_all_unassigned():
     parts = slice_scan_by_spans(scan, [])
     assert len(parts) == 1 and parts[0]["span_ms"] is None
     assert len(parts[0]["scan"]["clusters"]) == 1
+
+
+# ==================================================================================================
+# Arc A — forward window-latency pad (RP fire->kill lag recovery) + G-VERIFY
+# ==================================================================================================
+
+def _real_crop_manifest(tmp_path, cl):
+    """Write real crop bytes to tmp_path, set the reads' REAL sha256, return the manifest (so the
+    verifier's on-disk re-hash passes). Mirrors test_verifier_round_trip."""
+    import hashlib
+    files = []
+    for c in cl:
+        for r in c["reads"]:
+            p = tmp_path / r["file"]
+            p.write_bytes(f"crop-{r['file']}".encode())
+            r["sha256"] = hashlib.sha256(p.read_bytes()).hexdigest()
+            files.append({"file": r["file"], "sha256": r["sha256"]})
+    return {"schema": "qortroller-session-archive-v1", "session_id": _SID,
+            "session_display": _DISPLAY, "count": len(files), "files": files}
+
+
+def test_t1_pad0_lag_demoted_stays_observed():
+    """T1 — pad=0 is byte-identical: a kill first appearing after the window end stays OBSERVED."""
+    cl = [_cluster(5000.0, 3)]                                  # span[0]=5000, window ends 4000
+    r = build_deferred_record(scan=_scan(cl), manifest=_manifest(cl),
+                              windows=[(500.0, 4000.0)], kas_record=_kas(),
+                              window_latency_pad_ms=0.0)
+    assert r.clusters[0]["verdict"] == DEFERRED_OBSERVED
+    assert r.window_latency_pad_ms == 0.0
+
+
+def test_t2_pad_recovers_lag_demoted_kill():
+    """T2 — pad>0: kill with span[0] within [w0, w1+pad] -> AUTHORED (the recovery)."""
+    cl = [_cluster(5000.0, 3)]                                  # 500 <= 5000 <= 4000+4000
+    r = build_deferred_record(scan=_scan(cl), manifest=_manifest(cl),
+                              windows=[(500.0, 4000.0)], kas_record=_kas(),
+                              window_latency_pad_ms=4000.0)
+    assert r.clusters[0]["verdict"] == DEFERRED_AUTHORED
+    assert r.window_latency_pad_ms == 4000.0
+    assert any("window_latency_pad_ms=4000" in n for n in r.notes)
+
+
+def test_t3_pre_fire_kill_never_attributes():
+    """T3 — forward-only: a kill first appearing BEFORE the fire window (span[0] < w0) stays
+    OBSERVED even with a pad (no backward attribution by lingering)."""
+    cl = [_cluster(100.0, 3)]                                   # span[0]=100 < window start 500
+    r = build_deferred_record(scan=_scan(cl), manifest=_manifest(cl),
+                              windows=[(500.0, 4000.0)], kas_record=_kas(),
+                              window_latency_pad_ms=4000.0)
+    assert r.clusters[0]["verdict"] == DEFERRED_OBSERVED
+
+
+def test_t4_pad_empty_windows_zero_authored():
+    """T4 — input-required: pad>0 with NO windows -> 0 AUTHORED (pad extends windows, never creates)."""
+    cl = [_cluster(5000.0, 3)]
+    r = build_deferred_record(scan=_scan(cl), manifest=_manifest(cl),
+                              windows=[], kas_record=_kas(), window_latency_pad_ms=4000.0)
+    assert r.deferred_authored == 0 and r.clusters[0]["verdict"] == DEFERRED_OBSERVED
+
+
+def test_t5_no_onset_session_zero_authored_at_pad():
+    """T5 — anti-cheat guard: a full K-floor session with no R2 onsets (no windows) stays 0 authored
+    at pad=4000. Input is REQUIRED; the pad cannot manufacture authorship."""
+    cl = [_cluster(5000.0, 3, "a"), _cluster(20000.0, 3, "b"), _cluster(40000.0, 3, "c")]
+    r = build_deferred_record(scan=_scan(cl), manifest=_manifest(cl),
+                              windows=[], kas_record=_kas(), window_latency_pad_ms=4000.0)
+    assert r.deferred_authored == 0 and r.verdict == DEFERRED_OBSERVED_ONLY
+
+
+def test_t6_window_hit_forward_only_math():
+    """T6 — unit on _window_hit: only the END is extended; span[0] before w0 never hits."""
+    from l9_presence.kas_deferred import _window_hit
+    win = [(500.0, 4000.0)]
+    assert _window_hit((5000.0, 7000.0), win, 0.0) is None                 # pad=0 no overlap
+    assert _window_hit((1000.0, 3000.0), win, 0.0) == [500.0, 4000.0]      # pad=0 overlap
+    assert _window_hit((5000.0, 7000.0), win, 4000.0) == [500.0, 4000.0]   # span0 within w1+pad
+    assert _window_hit((8001.0, 9000.0), win, 4000.0) is None              # span0 beyond w1+pad
+    assert _window_hit((100.0, 2000.0), win, 4000.0) is None               # span0 < w0 (pre-fire)
+    assert _window_hit((5000.0, 7000.0), [], 4000.0) is None               # empty windows
+
+
+def test_t7_gverify_padded_record_verifies(tmp_path):
+    """T7 — G-VERIFY: a pad=4000 record with recovered AUTHORED clusters passes its own verifier
+    (the verifier re-derives the padded conjunction from span_ms + window_hit_ms + the stored pad)."""
+    cl = [_cluster(5000.0, 3, "a"), _cluster(6000.0, 3, "b")]   # both lag-demoted, recovered at pad
+    man = _real_crop_manifest(tmp_path, cl)
+    rec = build_deferred_record(scan=_scan(cl), manifest=man,
+                                windows=[(500.0, 4000.0)], kas_record=_kas(),
+                                window_latency_pad_ms=4000.0)
+    assert rec.verdict == DEFERRED_AUTHORED_SESSION and rec.deferred_authored == 2
+    v = verify_deferred_record(rec.to_dict(), man, str(tmp_path))
+    assert v["ok"], [c for c in v["checks"] if not c["ok"]]
+    assert any(c["name"] == "authored_conjunction" for c in v["checks"])   # re-derivation ran
+
+
+def test_t8_gverify_stripped_pad_fails(tmp_path):
+    """T8 — G-VERIFY load-bearing: strip/zero the pad on a padded record -> the AUTHORED clusters no
+    longer re-derive (span[0] beyond the unpadded window) -> verify FAILS. Padded authorship without
+    the verifier re-applying the pad is not a result."""
+    cl = [_cluster(5000.0, 3, "a"), _cluster(6000.0, 3, "b")]
+    man = _real_crop_manifest(tmp_path, cl)
+    rec = build_deferred_record(scan=_scan(cl), manifest=man,
+                                windows=[(500.0, 4000.0)], kas_record=_kas(),
+                                window_latency_pad_ms=4000.0)
+    d = rec.to_dict()
+    d["window_latency_pad_ms"] = 0.0                            # STRIP the pad
+    v = verify_deferred_record(d, man, str(tmp_path))
+    assert not v["ok"]
+    assert any(c["name"] == "authored_conjunction" and not c["ok"] for c in v["checks"])

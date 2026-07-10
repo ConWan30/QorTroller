@@ -61,6 +61,9 @@ def main() -> int:
     ap.add_argument("--composites", default="retina_kf_composite.jsonl",
                     help="live window log (rolling jsonl; span-filtered)")
     ap.add_argument("--out", default=None, help="output path (default audits/kas_deferred_record_...)")
+    ap.add_argument("--window-latency-pad-ms", type=float, default=0.0,
+                    help="arc A: forward window pad (ms) for RP fire->kill lag; 0=legacy byte-identical "
+                         "(recommended ~4000 for Remote Play; the verifier re-applies the same value)")
     args = ap.parse_args()
 
     try:
@@ -83,7 +86,8 @@ def main() -> int:
 
     windows = _load_windows(args.composites, kas.get("span_ms"))
     rec = build_deferred_record(scan=scan, manifest=manifest, windows=windows,
-                                kas_record=kas)
+                                kas_record=kas,
+                                window_latency_pad_ms=args.window_latency_pad_ms)
 
     sep = "-" * 64
     print(f"\n{sep}\n  Deferred attestation -- {rec.session_display}\n{sep}")
@@ -92,6 +96,7 @@ def main() -> int:
     print(f"  deferred_observed  : {rec.deferred_observed}")
     print(f"  unpromotable       : {rec.unpromotable_clusters}")
     print(f"  windows_used       : {rec.windows_used}")
+    print(f"  window_pad_ms      : {rec.window_latency_pad_ms}")
     print(f"  live KAS verdict   : {rec.source_kas_verdict} "
           f"(commit {str(rec.source_kas_commitment)[:16]}...)")
     for n in rec.notes:

@@ -588,6 +588,41 @@ PV-CI **182**; 75-test retina regression green; 4 broad-slice fails **proven pre
 0 IOTX; no FROZEN/chain/PoAC contact. **Live validation pending** — next RP match with `RETINA_CANDIDATE_DENSE_SCORE=1`
 (grok §11): expect `candidate_progress`/`promoted` (or stall-recut) + `authored_kills > 0`.
 
+### Dense-candidate LIVE VALIDATION + Arc A deferred window-pad = FIRST verifiable RP authored session (2026-07-10)
+
+**Dense-candidate fix live-validated (`densecand_validate`, 32-kill RP match, flag ON):** the log proves the
+mechanism — `session-anchor[dense]: candidate_progress consistent=2` + `candidate_stall` fired (rp4_rp froze
+with ZERO such events). But live `authored=0` again: severe **13fps lag** (41 loop-starvation events, up to
+5.16s blocks) → anchor took **~9.5 min to bootstrap** → cut a weak candidate → recut right at match end, never
+promoted. **The blocker moved from promotion-logic (fixed) to the capture lag** (pre-existing bridge starvation).
+`inline_authored=8` in the diag — 8 kills WERE recognized, just not counted (R1 coverage gap: pre-promotion
+kills don't fold).
+
+**Arc A — deferred window-latency pad (grok design · Claude audit+build · operator commit) — DELIVERS the
+verifiable authored result the live path couldn't.** Offline card-free path: under RP a kill row appears ~1-4s
+after the R2 fire, but the classify-window is narrow, so `kas_deferred._classify_cluster` finds no overlap →
+`DEFERRED_OBSERVED`. Fix: `window_latency_pad_ms` (default 0 = byte-identical) extends each window's END forward
+by a bounded pad; **first-appearance predicate** `w0 ≤ span[0] ≤ w1+pad` (forward-only — a kill first appearing
+before fire never attributes). **G-VERIFY (Claude audit elevation):** the pad is persisted on the record AND
+`verify_deferred_record` **independently re-derives** each AUTHORED cluster from stored `span_ms` + `window_hit_ms`
++ the pad — so padded authorship is genuinely re-verifiable (T8: strip the pad → verify FAILS).
+
+**Offline validation (all on saved archives, no replay):**
+| Case | pad | Verdict | authored | |
+|---|---|---|---|---|
+| **densecand_validate** | **4000** | **DEFERRED_AUTHORED_SESSION** | **1→3** | **verify OK, 3/3 conjunctions re-derive** |
+| densecand_validate | 0 | DEFERRED_OBSERVED_ONLY | 1 | byte-identical baseline |
+| M14 (regression) | 4000 | DEFERRED_AUTHORED_SESSION | 3→3 | no over-attribution |
+| M18 | 4000 | DEFERRED_OBSERVED_ONLY | 0 | honest — M18 lag >4s, beyond budget |
+
+`densecand_validate` **flipped OBSERVED_ONLY→AUTHORED_SESSION** — the **first verifiable card-free RP authored
+session** off a saved archive. Honest ceiling: 4000ms recovers 3 of 8 (the >4s tail needs a deferred FAR study,
+not a looser pad — grok limit #3). Files: `l9_presence/kas_deferred.py` (+`_window_hit`/pad/G-VERIFY) +
+`scripts/build_deferred_attestation.py` (`--window-latency-pad-ms`) + `test_kas_deferred.py` (22 = 14 byte-
+identical + 8 pad/G-VERIFY) + `docs/deferred-window-latency-pad-fix-2026-07-10.md`. Result record:
+`audits/kas_deferred_record_densecand_validate_pad4000.json`. PV-CI **182**; 37-test regression green; 0 IOTX;
+no FROZEN/chain/PoAC. Pad is a transport-aware **operator choice**, not a frozen constant; default 0.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
