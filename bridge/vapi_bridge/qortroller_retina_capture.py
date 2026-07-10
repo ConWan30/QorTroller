@@ -53,6 +53,12 @@ def _dense_score_enabled(environ) -> bool:
     """Option 3 flag parse (default-OFF). Truthy set mirrors the sibling capture flags; extracted so the
     default-off / enable semantics are unit-testable without constructing the WGC-bound capture."""
     return str(environ.get("RETINA_CANDIDATE_DENSE_SCORE", "0")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _match_state_enabled(environ) -> bool:
+    """LUMEN-2b (arc B) flag parse (default-OFF). Advisory live match-state emit; never gates anything.
+    Extracted so the default-off / enable semantics are unit-testable without a WGC-bound capture."""
+    return str(environ.get("RETINA_MATCH_STATE_ENABLED", "0")).strip().lower() in ("1", "true", "yes", "on")
 _SESSION_ANCHOR_FRESH_DIFF = 6.0
 
 
@@ -722,6 +728,30 @@ class RetinaGameCapture:
                 self._death_lock = threading.Lock()
             except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
                 self._death_monitor = None
+        # LUMEN-2b — live match-state tracker (arc B, DEFAULT-OFF). Advisory: emits MATCH_STARTED /
+        # MATCH_ENDED so the operator SEES match boundaries while playing. It NEVER gates a verdict,
+        # certificate, PoSP, KAS, or the dense-candidate anchor — the cryptographic session boundary
+        # REMAINS daemon start/stop (the tracker's own module invariant). Signals it consumes (onsets /
+        # windows / kill spans) are already computed by the loop; it re-runs the SAME detect_match_state
+        # as the offline detector. Fail-open: any setup error -> None -> zero effect on capture.
+        self._match_state = None
+        self._match_state_log_path = str(os.environ.get("RETINA_MATCH_STATE_LOG",
+                                                        "retina_match_state.jsonl"))
+        self._match_state_last_event = None
+        self._match_state_last_ts_ms = None
+        self._match_state_n_started = 0
+        self._match_state_n_ended = 0
+        self._match_state_current = "OFF"
+        if _match_state_enabled(os.environ):
+            try:
+                from l9_presence.match_state_live import LiveMatchStateTracker
+                from l9_presence.session_identity import ENV_SESSION_ID
+                self._match_state = LiveMatchStateTracker(
+                    session_start_ms=time.time() * 1000.0,
+                    session_id=(os.environ.get(ENV_SESSION_ID) or None))   # reuse the U1 join key; no 2nd id
+                self._match_state_current = "LOBBY"
+            except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
+                self._match_state = None
         # l2_ads — ADS coupling channel (second anti-splice channel). PURE AdsCouplingMonitor consumes the
         # center-ROI luminance on_frame_arrived ALREADY computes for B1 (latest_center_roi_lum) + the L2
         # trigger — ZERO WGC-callback work. Detector UNCALIBRATED -> every record ABSTAINS + logs raw.
@@ -936,6 +966,11 @@ class RetinaGameCapture:
         """R2 fire onset from the per-record consumption loop: open/extend the classification window. Cheap
         (no classify here) — safe to call inline. If this onset starts a genuinely NEW window, the PRIOR
         window's Phase-1 max-over-window composite resolves here — log + persist it. No-op if inline off."""
+        if self._match_state is not None:                          # LUMEN-2b onset feed (advisory)
+            try:
+                self._match_state.push_onset(float(now_ms))
+            except Exception:  # noqa: BLE001 — advisory; never break the consumption tick
+                pass
         if self._inline_monitor is None:
             return
         composite = self._inline_monitor.mark_onset(float(now_ms))
@@ -950,6 +985,15 @@ class RetinaGameCapture:
     def _log_composite(self, composite: Optional[dict]) -> None:
         if composite is None:
             return
+        if self._match_state is not None:                          # LUMEN-2b window/kill feed (advisory)
+            try:
+                g, e = composite.get("window_gate_ms"), composite.get("window_end_ms")
+                if g is not None and e is not None:
+                    self._match_state.push_window(float(g), float(e))   # each composite = one closed window
+                    if composite.get("verdict") == "AUTHORED_PRESENT":  # confirmed kill only (F-LUMEN-2)
+                        self._match_state.push_kill_span(float(g), float(e))
+            except Exception:  # noqa: BLE001 — advisory; never break capture
+                pass
         # EVENT-BIND inc 2b (OUTCOME lobe): stamp the live PoAC anchor into the composite so
         # authored_screen_event carries record_hash. Default-OFF -> no key added (byte-identical).
         if self._event_bind_stamp and self._current_record_hash and "record_hash" not in composite:
@@ -979,6 +1023,43 @@ class RetinaGameCapture:
                          composite.get("composite_score", 0.0), composite.get("window_members", 0))
             if trunc is not None:
                 _append(self._death_log_path, trunc)   # a second death cut a prior window short
+
+    def tick_match_state(self, now_ms: float) -> None:
+        """LUMEN-2b (arc B, advisory): once per consumption cycle, re-detect match state + emit any NEW
+        confirmed MATCH_STARTED/MATCH_ENDED transitions. No-op when the tracker is off. Fail-open — NEVER
+        breaks the consumption loop, and NEVER gates anything (pure emit + diag; the cryptographic session
+        boundary stays daemon start/stop)."""
+        if self._match_state is None:
+            return
+        try:
+            self._emit_match_state(self._match_state.tick(float(now_ms)))
+            self._match_state_current = self._match_state.state_now(float(now_ms))
+        except Exception:  # noqa: BLE001 — advisory; never break the consumption tick
+            pass
+
+    def _emit_match_state(self, transitions) -> None:
+        """Append advisory match-state transitions to the jsonl + log.info + update diag counters. Fail-open;
+        emit-only (never gates)."""
+        if not transitions:
+            return
+        try:
+            import json as _json
+            sid = getattr(self._match_state, "session_id", None)
+            with open(self._match_state_log_path, "a", encoding="utf-8") as fh:
+                for tr in transitions:
+                    d = tr.to_dict()
+                    d.update({"schema": "qortroller-match-state-live-v0", "session_id": sid, "advisory": True})
+                    fh.write(_json.dumps(d) + "\n")
+                    self._match_state_last_event = d.get("event")
+                    self._match_state_last_ts_ms = d.get("ts_ms")
+                    if d.get("event") == "MATCH_STARTED":
+                        self._match_state_n_started += 1
+                    elif d.get("event") == "MATCH_ENDED":
+                        self._match_state_n_ended += 1
+                    log.info("match-state: %s ts_ms=%.0f detected_at=%.0f", d.get("event"),
+                             d.get("ts_ms", 0.0), d.get("detected_at_ms", 0.0))
+        except Exception:  # noqa: BLE001 — advisory; never break capture
+            pass
 
     def flush_stale_inline_window(self, now_ms: float) -> None:
         """Resolve a window that has quietly expired (no further R2 onset extended it) so combat that stops
@@ -1614,9 +1695,21 @@ class RetinaGameCapture:
             # rider-1 raw-vs-pydualsense L2 agreement (0 disagreements = offset 5 confirmed)
             **({"ads_l2_raw_agree": self._ads_l2_agree, "ads_l2_raw_disagree": self._ads_l2_disagree}
                if self._device_clock_l2 is not None else {}),
+            # LUMEN-2b live match-state (arc B; advisory, read-only — NEVER a verdict/gate input)
+            "match_state_enabled": self._match_state is not None,
+            "match_state": self._match_state_current,
+            "match_state_last_event": self._match_state_last_event,
+            "match_state_last_ts_ms": self._match_state_last_ts_ms,
+            "match_state_n_started": self._match_state_n_started,
+            "match_state_n_ended": self._match_state_n_ended,
         }
 
     def stop(self) -> None:
         self._burst_flush_stop = True      # F-FIXB-1: end the dedicated flush thread
         self._dense_cand_stop = True       # Option 3: end the dense-candidate worker
+        if self._match_state is not None:  # LUMEN-2b: flush the final MATCH_ENDED (manifest seal > 240s gap)
+            try:
+                self._emit_match_state(self._match_state.close_session(time.time() * 1000.0))
+            except Exception:  # noqa: BLE001 — advisory; never break teardown
+                pass
         self._source.stop()

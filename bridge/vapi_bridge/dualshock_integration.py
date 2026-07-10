@@ -1801,6 +1801,7 @@ class DualShockTransport:
                         # Phase 1: resolve a window that quietly went cold (no further R2 onset) so combat
                         # that stops firing still gets its max-over-window composite logged promptly.
                         self._retina_game_capture.flush_stale_inline_window(_now_ms)
+                        self._retina_game_capture.tick_match_state(_now_ms)   # LUMEN-2b (advisory, default-OFF)
                         # HID lobe (dual-lobe fusion, default-off): drain the device-clock R2-onset events
                         # (detected in push_l2_raw on the raw path) to retina_hid_events.jsonl off the ~1 kHz
                         # reader thread. No-ops when the HID lobe is off. Pairs with the screen lobe (killfeed

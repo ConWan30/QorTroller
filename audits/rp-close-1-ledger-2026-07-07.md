@@ -623,6 +623,31 @@ identical + 8 pad/G-VERIFY) + `docs/deferred-window-latency-pad-fix-2026-07-10.m
 `audits/kas_deferred_record_densecand_validate_pad4000.json`. PV-CI **182**; 37-test regression green; 0 IOTX;
 no FROZEN/chain/PoAC. Pad is a transport-aware **operator choice**, not a frozen constant; default 0.
 
+### Arc B — LUMEN-2b live match-state WIRED into capture (2026-07-10, grok design · Claude audit+build · operator commit)
+
+**The operator's "seamlessly see when a match starts/ends" ask.** `LiveMatchStateTracker` (`l9_presence/match_state_live.py`)
+was built stream-safe but NEVER hooked into the live daemon. Arc B wires it: `RETINA_MATCH_STATE_ENABLED` (**default-OFF,
+byte-identical when off**) constructs the tracker beside the other advisory monitors; fed the signals the loop already
+computes — `push_onset` from `mark_r2_onset`, `push_window` + AUTHORED-only `push_kill_span` from `_log_composite`;
+`tick()` once per consumption cycle (after `flush_stale_inline_window`, dualshock L1803); `close_session()` at `RGC.stop`
+flushes the final MATCH_ENDED (manifest seal > the 240s exit-gap). Emits `MATCH_STARTED`/`MATCH_ENDED` →
+`retina_match_state.jsonl` + `log.info` (visible in the daemon log while playing) + 6 RGC-diag fields.
+
+**Advisory never-gates (rail 1, load-bearing):** match-state ANNOTATES only — no authorship/PoSP/KAS/dense-candidate/
+certificate branch reads it; the cryptographic session boundary REMAINS daemon start/stop (the tracker's own invariant).
+Asserted by test (`test_never_gates_emit_only`): the wiring reads the composite but never mutates its authorship keys,
+and `tick_match_state` returns nothing a verdict path can consume. Claude audit found **NO corrections** — grok grounded
+every hook line against the current file, correctly tracking the dense-candidate line shifts (mark_r2_onset L935, RGC.stop
+L1619, dualshock flush L1803).
+
+`bridge/vapi_bridge/qortroller_retina_capture.py` (construct/feed/tick/close/diag + `_match_state_enabled`) +
+`bridge/vapi_bridge/dualshock_integration.py` (tick call) + `bridge/tests/test_match_state_wiring.py` (9 tests: flag-off
+no-op, live==offline parity, kill-anchor→STARTED, close_session flush, tick dedup, AUTHORED-only kill feed, onset feed,
+fail-open, never-gates). PV-CI **182**; 96-test targeted + 244-test broad regression green (4 broad fails **stash-verified
+pre-existing**, arc B zero-regression); 0 IOTX; no FROZEN/chain/PoAC. **B2 (noted, not built):** per-match deferred
+auto-segmentation via `kas_deferred.slice_scan_by_spans`. **Live "see it while playing" validation** = next session with
+`RETINA_MATCH_STATE_ENABLED=1` (MATCH_STARTED in the daemon log after real play + diag flips LOBBY↔IN_MATCH).
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
