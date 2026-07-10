@@ -496,6 +496,33 @@ forced. **v3 implication:** a uniform-across-players claim isn't cleanly establi
 - `test_p1_anomaly_diagnostic.py` **9/9**; l9 study+diagnostic 27/27; PV-CI **182**; 0 IOTX; offline
   (zero capture-path). P0-A v2 SEPARATED untouched. Loop lane 2 (P0-B wedge thesis) is grok's next.
 
+### Loop lane 2 — P0-B cloud/RP narrow-wedge THESIS (2026-07-10, grok design · Claude claim-audit · no code)
+
+Design `docs/p0b-cloud-rp-wedge-thesis-2026-07-10.md` — a **strategy/thesis artifact**, not a deploy
+runbook. The wedge: **"advisory presence attestation for cloud/RP — oracle-viable on aim-active play,
+not a Ricochet replacement."** It cites the honest stack (P0-A v2 SEPARATED · P1=MARGINAL_AIM · the
+PoSP/KAS/PORT-CERT/VHR/EVENT-BIND/forgery-matrix composition) at the cloud/RP kernel-AC attestation gap.
+
+**Claude claim-audit: PASS — limits ⊆ claims.** Every *internal* number recomputed real against the
+committed artifacts (SEPARATED median 0.374 / auto 0.067 / **gap 0.307** / schema `p0a-presence-op-v2`;
+P1 MARGINAL_AIM; VHR block 45479067; stack modules). grok kept all 5 limits I specified and added 3
+(**8 total in §5**: modeled-automation · developer_self/not-population · aim-active-only · pooled-not-
+uniform · advisory · host-not-trustless · testnet-context-for-chain · no-new-FROZEN); the §5.2 copy
+block keeps every limit inline; §5.1 has an OK/Not-OK guardrail table. No over-claim in any external
+sentence.
+
+**Two "verify before external use" flags — added to the doc as §5.3 so they travel with it (not
+blockers):** (a) the *competitive* claims (§2 "GeForce NOW concedes a client attestation gap" /
+"Ricochet input-pattern detection") are cited from a prior internal anchor and were **not re-verified
+against vendor docs this session** — the only non-repo-verifiable claims in the thesis; confirm before
+any organizer quote. (b) **EVENT-BIND is mechanism-proven (splice demo + tests), not live-validated on
+real authored kills** (M18 blocked on handle anchor / RP-4); §3.3's "can be splice-bound" hedge is
+correct — must not drift to "validated live."
+
+- **No code** (thesis-only, grok's design). PV-CI **182** unchanged; 0 IOTX; offline. D-P0B-5 one-pager
+  = **held** (operator-optional; and premature until the two §5.3 competitive claims are source-verified).
+  Next in sequence: operator's call — **RP-4 (rig)** or DePIN/consent prose, or pause.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
