@@ -120,7 +120,14 @@ class LiveMatchStateTracker:
 
     def close_session(self, now_ms: float) -> list:
         """Session is over (daemon stop): flush the newest match's end WITHOUT waiting for
-        forward hysteresis -- the manifest seal is a harder boundary than any gap."""
+        forward hysteresis -- the manifest seal is a harder boundary than any gap.
+
+        F-ARCB-1: path (A) alone (emit ENDED for the IN_MATCH spans re-detect finds) returned
+        NOTHING at a live stop while match_state was IN_MATCH (n_ended=0 observed 2026-07-10),
+        so no MATCH_ENDED sealed the session. Path (B) force-closes a still-open match off the
+        _open_match_start_ms flag (set when STARTED fired) -- detect-independent AND
+        clock-independent, so the seal is guaranteed once a match opened. Advisory; never gates;
+        the cryptographic session boundary stays the daemon manifest seal."""
         tl = detect_match_state(
             session_span_ms=(self.session_start_ms, float(now_ms)),
             onsets_ms=self.onsets_ms, windows_ms=self.windows_ms,
@@ -128,11 +135,19 @@ class LiveMatchStateTracker:
             bucket_s=self.bucket_s, enter_consecutive=self.enter_consecutive,
             exit_gap_s=self.exit_gap_s)
         out: list = []
-        for span in (s for s in tl.spans if s.state == IN_MATCH):
+        matches = [s for s in tl.spans if s.state == IN_MATCH]
+        for span in matches:                                    # (A) detect path (multi-match / snapped ends)
             end_key = (MATCH_ENDED, round(span.end_ms / (self.bucket_s * 1000.0)))
             if end_key not in self._emitted:
                 self._emitted.add(end_key)
                 out.append(LiveTransition(MATCH_ENDED, span.end_ms, float(now_ms)))
+        if not matches and self._open_match_start_ms is not None:   # (B) F-ARCB-1 force seal
+            force_key = (MATCH_ENDED, "session_close")              # single-shot per tracker lifetime
+            if force_key not in self._emitted:
+                self._emitted.add(force_key)
+                last_act = self._last_activity_ms()
+                end_ts = last_act if last_act is not None else float(now_ms)  # ts=truth, detected=now
+                out.append(LiveTransition(MATCH_ENDED, end_ts, float(now_ms)))
         self._open_match_start_ms = None
         return out
 
