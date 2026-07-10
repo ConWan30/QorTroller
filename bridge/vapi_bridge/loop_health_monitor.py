@@ -87,6 +87,28 @@ async def run_loop_health_monitor(*, cfg) -> None:
                     "or OS scheduling pressure",
                     check_interval_s, elapsed, excess, threshold_s,
                 )
+                # D1 attribution (LOOP_STARVATION_ATTRIBUTION_ENABLED, default OFF -> byte-identical):
+                # NAME the top loop-blocking timed_block sites in this starvation window + the lean-mode
+                # posture (D2). Fail-open: attribution must never break the monitor.
+                try:
+                    from .loop_timing import attribution_enabled, top_blocks
+                    if attribution_enabled():
+                        lean = getattr(cfg, "presence_lean_mode", None)
+                        since = time.time_ns() - int((elapsed + 1.0) * 1e9)   # window + 1s boundary margin
+                        offenders = top_blocks(k=5, since_wall_ns=since)
+                        if offenders:
+                            log.warning(
+                                "  LOOP STARVATION attribution (top %d timed_block by dur; lean_mode=%s): %s",
+                                len(offenders), lean,
+                                "; ".join("%s=%.3fs(tid=%d)" % (o["label"], o["dur_s"], o["tid"])
+                                          for o in offenders))
+                        else:
+                            log.warning(
+                                "  LOOP STARVATION attribution: NO timed_block entries in window "
+                                "(lean_mode=%s) — the blocker is UN-INSTRUMENTED (needs a new timed_block "
+                                "site) or non-timed_block sync (SQLite/RPC on the loop thread)", lean)
+                except Exception:  # noqa: BLE001 — attribution must never break the monitor
+                    pass
 
             # Periodic summary so operator can see "no starvation in last N min"
             if iter_count % summary_every_n == 0:
