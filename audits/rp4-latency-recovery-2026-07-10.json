@@ -1,0 +1,105 @@
+{
+  "schema": "rp4-latency-recovery-v0",
+  "cap_s": 10.0,
+  "method": "nearest-preceding onset; screen ts = first kill-row crop; Kill-1 excluded (Phase C)",
+  "sessions": [
+    {
+      "label": "M13_hdmi_direct",
+      "transport": "direct-HDMI (baseline candidate)",
+      "total_crops_scanned": 524,
+      "matched_crops_all": 77,
+      "kills_in_window": 27,
+      "onsets_in_window": 61,
+      "onsets_input_caused": 0,
+      "latency_capped_out": 8,
+      "dist_all": {
+        "n": 19,
+        "min": 1.18,
+        "q1": 2.16,
+        "median": 4.584,
+        "q3": 6.776,
+        "max": 9.033,
+        "mean": 4.708,
+        "std": 2.381
+      },
+      "dist_excl_kill1": {
+        "n": 18,
+        "min": 1.18,
+        "q1": 2.966,
+        "median": 4.677,
+        "q3": 6.979,
+        "max": 9.033,
+        "mean": 4.86,
+        "std": 2.354
+      },
+      "latencies_s": [
+        1.9612,
+        7.726,
+        6.0915,
+        2.0981,
+        8.7299,
+        3.2469,
+        4.5836,
+        7.5866,
+        6.776,
+        3.2351,
+        1.18,
+        9.0325,
+        5.8196,
+        1.8127,
+        3.3526,
+        4.3542,
+        2.1599,
+        4.7712,
+        4.9292
+      ]
+    },
+    {
+      "label": "rp4_rp",
+      "transport": "Remote Play",
+      "total_crops_scanned": 600,
+      "matched_crops_all": 29,
+      "kills_in_window": 15,
+      "onsets_in_window": 43,
+      "onsets_input_caused": 0,
+      "latency_capped_out": 4,
+      "dist_all": {
+        "n": 9,
+        "min": 1.401,
+        "q1": 2.422,
+        "median": 3.664,
+        "q3": 8.404,
+        "max": 9.663,
+        "mean": 4.777,
+        "std": 2.956
+      },
+      "dist_excl_kill1": {
+        "n": 8,
+        "min": 1.401,
+        "q1": 2.376,
+        "median": 3.306,
+        "q3": 8.527,
+        "max": 9.663,
+        "mean": 4.916,
+        "std": 3.107
+      },
+      "latencies_s": [
+        3.6636,
+        9.6634,
+        2.5145,
+        8.1585,
+        2.3302,
+        1.401,
+        3.6695,
+        2.9433,
+        8.6497
+      ]
+    }
+  ],
+  "comparison": {
+    "m13_median_s": 4.677,
+    "rp4_rp_median_s": 3.306,
+    "delta_median_s": -1.371,
+    "interpretation": "rp4_rp LOWER than M13 -> baseline assumption inverted; investigate (play-mix / OCR-lag confound)"
+  }
+}
