@@ -564,8 +564,8 @@ HDMI-**out**, not an HDMI capture card (`eth_getCode`-style device enumeration: 
 adapter; no capture-in) — this IS the parked OA-RP-1 hardware gap. So a live direct-HDMI low-latency baseline is
 **not capturable on this rig**.
 
-**RP-4 latency delta = HONEST NEGATIVE** (`scripts/rp4_latency_recovery.py` + `audits/rp4-latency-recovery-2026-07-10.json`,
-uncommitted — bank separately): offline-recovered R2-onset→kill latencies (same method both sessions, onsets
+**RP-4 latency delta = HONEST NEGATIVE** (`scripts/rp4_latency_recovery.py` + `audits/rp4-latency-recovery-2026-07-10.json`):
+offline-recovered R2-onset→kill latencies (same method both sessions, onsets
 window-filtered from the global log). M13 (direct-HDMI candidate) median **4.68s** vs rp4_rp (RP) median **3.31s**
 — delta **−1.37s** (RP *lower* than the "baseline"), and the sign **flips to +0.46s at a 3s cap**. The ~80–300ms
 RP-stream signal is buried under **seconds** of in-game trigger→kill + nearest-preceding-onset-mismatch variance
