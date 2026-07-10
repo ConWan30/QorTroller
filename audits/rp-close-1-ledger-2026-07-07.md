@@ -555,6 +555,39 @@ self-note:** I initially doubted grok's `_phase237_status: deployed` citation (f
   (consent-flow reporter) + OPT-2 (flywheel metrics stub) **held** (operator-gated, unbundled). Loop pause
   after commit remains: **RP-4 (rig)** or stop — no offline code-buildable surface without new captures.
 
+### RP-4 rig session (2026-07-10) — baseline BLOCKED + latency HONEST-NEGATIVE + live-authorship FIX
+
+**RP arm captured (`rp4_rp`, 25-kill RP match):** 1,480 R2 onsets + 600 crops + PoSP SYNCHRONIZED, but live
+**authored=0** (INSUFFICIENT_KILLS) — the SAME failure as M18 (handle read `Qortrola30M`, anchor reached
+CANDIDATE then never promoted). **RP-4 baseline BLOCKED:** the rig's "USB Type-C Digital AV Adapter" is
+HDMI-**out**, not an HDMI capture card (`eth_getCode`-style device enumeration: only a 720p webcam + the output
+adapter; no capture-in) — this IS the parked OA-RP-1 hardware gap. So a live direct-HDMI low-latency baseline is
+**not capturable on this rig**.
+
+**RP-4 latency delta = HONEST NEGATIVE** (`scripts/rp4_latency_recovery.py` + `audits/rp4-latency-recovery-2026-07-10.json`,
+uncommitted — bank separately): offline-recovered R2-onset→kill latencies (same method both sessions, onsets
+window-filtered from the global log). M13 (direct-HDMI candidate) median **4.68s** vs rp4_rp (RP) median **3.31s**
+— delta **−1.37s** (RP *lower* than the "baseline"), and the sign **flips to +0.46s at a 3s cap**. The ~80–300ms
+RP-stream signal is buried under **seconds** of in-game trigger→kill + nearest-preceding-onset-mismatch variance
+(std 2.3–3.1s) — exactly Phase C C-1.3 §6.1's UNCALIBRATED limit, now proven on fresh data. **RP-4 needs BOTH a
+capture card (OA-RP-1) AND a controlled stimulus** (gunfight kills can't isolate transport). M13 is NOT a clean
+offline baseline. LUMEN-3 inc-2 (gated on RP-4) stays gated.
+
+**Live-authorship dense-candidate FIX (Option 3) — BUILT (AI-loop: grok design · Claude audit+build · operator
+commit):** the recurring live-0-authored (M18 + rp4_rp) root-caused — promotion (K=3 template re-match ≥0.66) is
+driven only by sparse R2-onset classify windows under loop starvation, so the candidate froze in CANDIDATE while
+the offline scan found the kills. Fix (`docs/live-authorship-dense-candidate-fix-2026-07-10.md`): a dedicated
+off-loop worker (`qt-dense-cand`, flag `RETINA_CANDIDATE_DENSE_SCORE`, **default-OFF**) scores the dense panel
+stash against the CANDIDATE template so K-progress **and** feed_v1-raw-auth stall-recut reach even when windows
+are sparse — **no OCR** on the dense path, off the event loop, K=3/0.66/FP/stall gate **UNCHANGED**. Claude audit
+caught 3 code-truth corrections (C1 lock = `_inline_admission_lock`; C2 hook is the event-loop `tune()` → use a
+dedicated worker, not `save_capture_crops`; C3 dense-private fresh-row) + a build refinement (`_anchor_mutation_ctx`
+nullcontext-safe lock so the fold's fail-open except can't silently no-promote on partial fixtures).
+`bridge/vapi_bridge/qortroller_retina_capture.py` (+134/−2) + `bridge/tests/test_dense_candidate_score.py` (9 tests).
+PV-CI **182**; 75-test retina regression green; 4 broad-slice fails **proven pre-existing** (stash-verified at HEAD);
+0 IOTX; no FROZEN/chain/PoAC contact. **Live validation pending** — next RP match with `RETINA_CANDIDATE_DENSE_SCORE=1`
+(grok §11): expect `candidate_progress`/`promoted` (or stall-recut) + `authored_kills > 0`.
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
