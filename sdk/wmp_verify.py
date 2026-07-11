@@ -81,6 +81,53 @@ _SCOPE_OBSERVATION_ABSENT = "ABSENT_BY_DESIGN_DATA_FLOOR"
 _SCOPE_FIDELITY_MACRO = "MACRO_INTENT_POST_PHI_NOT_BIOMECHANICAL"
 
 
+# ── published post-phi data-floor list (consumer-side mirror) ────────
+# The verifier is zero-trust: it MUST NOT import bridge code. This is a FROZEN
+# published copy of the producer floor (ReplayPreProcessor.FORBIDDEN_COLUMNS,
+# pinned by INV-VHR-004). A certified-human bundle promises the biometric moat
+# never exports; check_scope_honesty enforces that by scanning the payload for
+# any of these keys, so the scope assertion is no longer trusted on its own
+# (AH-1 finding F-AH1-A15). Keep in sync with pre_processor if that list grows.
+_FROZEN_FORBIDDEN_COLUMNS = frozenset({
+    "l4_mahalanobis_distance", "l4_vector", "l4_feature_0",
+    "l5_cv", "l5_entropy", "l5_quantization",
+    "e4_spectral_entropy", "e4_band_power",
+    "ait_rms", "ait_variance", "grip_asymmetry",
+    "micro_tremor_variance", "press_timing_jitter_variance",
+    "trigger_onset_velocity_l2", "trigger_onset_velocity_r2",
+    "stick_autocorr_lag1", "stick_autocorr_lag5",
+    "accel_tremor_peak_hz", "tremor_band_power",
+    "accel_magnitude_spectral_entropy",
+})
+
+
+def _forbidden_hits(bundle: dict) -> list:
+    """Sorted forbidden biometric keys smuggled anywhere a consumer reads them:
+    top-level bundle keys, extra_metadata keys (any depth), and the
+    action_trace_channels names. Evidence for the data-floor scan (F-AH1-A15).
+    """
+    hits = set()
+    for k in bundle.keys():
+        if k in _FROZEN_FORBIDDEN_COLUMNS:
+            hits.add(k)
+
+    def _walk(obj):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k in _FROZEN_FORBIDDEN_COLUMNS:
+                    hits.add(k)
+                _walk(v)
+        elif isinstance(obj, list):
+            for it in obj:
+                _walk(it)
+
+    _walk(bundle.get("extra_metadata", {}))
+    for ch in bundle.get("action_trace_channels", []) or []:
+        if isinstance(ch, str) and ch in _FROZEN_FORBIDDEN_COLUMNS:
+            hits.add(ch)
+    return sorted(hits)
+
+
 # ── outcome codes ─────────────────────────────────────────────────────
 OUTCOME_VERIFIED = "VERIFIED"
 OUTCOME_REJECTED = "REJECTED"
@@ -125,7 +172,15 @@ def _bundle_hash(bundle_dict: dict) -> str:
 # ── individual checks ─────────────────────────────────────────────────
 
 def check_scope_honesty(bundle: dict) -> dict:
-    """Check 5: scope_disclosure must carry the FROZEN values."""
+    """Check 5: scope_disclosure must carry the FROZEN values AND the payload
+    must honor them.
+
+    Asserting the scope strings (action-only / observation-absent / macro-intent)
+    is not enough: a forged bundle could claim biometric-absent while carrying a
+    raw biometric key. So this check ALSO scans the payload for the published
+    forbidden columns (AH-1 finding F-AH1-A15) — scope-honesty now enforces what
+    it asserts. A hit is a post-phi data-floor breach → REJECTED.
+    """
     issues = []
     if bundle.get("scope_channel") != _SCOPE_CHANNEL_ACTION_ONLY:
         issues.append(f"scope_channel must be {_SCOPE_CHANNEL_ACTION_ONLY!r}")
@@ -135,6 +190,12 @@ def check_scope_honesty(bundle: dict) -> dict:
         issues.append(f"scope_fidelity must be {_SCOPE_FIDELITY_MACRO!r}")
     if bundle.get("scope_is_full_pomdp_tuple") is not False:
         issues.append("scope_is_full_pomdp_tuple must be False (lane is not full POMDP)")
+    forbidden = _forbidden_hits(bundle)
+    if forbidden:
+        issues.append(
+            "post-phi data-floor breach: forbidden biometric key(s) present: "
+            + ", ".join(forbidden)
+        )
     return {
         "passed": len(issues) == 0,
         "issues": issues,
