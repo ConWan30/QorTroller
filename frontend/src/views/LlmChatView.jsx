@@ -91,7 +91,14 @@ export function LlmChatView() {
         const newMessages = [...messages, { role: 'user', content: queryText }]
         setMessages(newMessages)
 
-        const apiKey = import.meta.env.VITE_QUICKSILVER_API_KEY || "sk-el_TumeRtoQdi-lY-YQmTQ"
+        // Never hardcode a credential fallback — this bundle is shipped to every
+        // browser and the repo is public. Require the env var; fail closed.
+        const apiKey = import.meta.env.VITE_QUICKSILVER_API_KEY
+        if (!apiKey) {
+            setErrorMsg('LLM is not configured (VITE_QUICKSILVER_API_KEY is unset).')
+            setLoading(false)
+            return
+        }
 
         // Exclude the initial welcome message and visual tool indicators from LLM prompt
         let payloadMessages = newMessages

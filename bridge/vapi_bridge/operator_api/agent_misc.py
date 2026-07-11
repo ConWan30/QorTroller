@@ -155,8 +155,13 @@ def register_agent_misc_routes(
                 path = args.get("path", "")
                 if not path:
                     return {"result": "Error: path parameter is required"}
-                safe_path = os.path.normpath(os.path.join(repo_root_str, path))
-                if not safe_path.startswith(os.path.normpath(repo_root_str)):
+                repo_root_norm = os.path.normpath(repo_root_str)
+                safe_path = os.path.normpath(os.path.join(repo_root_norm, path))
+                # Containment check must use commonpath, NOT startswith: a bare
+                # prefix test admits sibling dirs whose name extends the root
+                # (e.g. "../QorTroller-secret/..." resolves outside the repo but
+                # still startswith("/home/user/QorTroller")).
+                if os.path.commonpath([safe_path, repo_root_norm]) != repo_root_norm:
                     return {"result": "Error: Access denied (path traversal outside workspace)"}
                 if not os.path.exists(safe_path) or os.path.isdir(safe_path):
                     return {"result": "Error: File not found or is a directory"}
