@@ -47,6 +47,24 @@ tamper the root → FAIL · tamper set_size → FAIL · misstate the inventory �
 revealed value → membership FAIL · smuggle a foreign (uncommitted) claim into `revealed` → membership
 FAIL · claims from two bundles → refused at build.
 
+## SD-2 — Merkle-tree upgrade (`build_merkle_disclosure` / `verify_merkle_disclosure`)
+
+SD-1's flat envelope revealed every leaf hash. SD-2 commits via a binary Merkle tree: the disclosure
+carries only the root + a per-revealed-claim **log-N inclusion proof**, so proof size scales with
+log N (not N) and **most** hidden leaf hashes stay hidden.
+
+**Honest caveat (test-pinned):** a revealed claim's *leaf-level Merkle sibling* hash is exposed by
+its proof — inherent to Merkle inclusion. So revealing k of N leaks ≤ k sibling leaf-hashes, never all
+N. **Values are always hidden.** Otherwise the ceiling is identical to SD-1 (membership + binding in
+an immutable committed structure; not hidden values, not zero-knowledge).
+
+Rails: tamper a revealed value → membership FAIL · tamper the root → commitment + membership FAIL ·
+forge an inclusion proof → membership FAIL · foreign claim with a borrowed proof → membership FAIL.
+
+```bash
+pytest bridge/tests/test_wmp_disclosure_sd2.py -q   # 10 pinning tests
+```
+
 ## Ladder position
 
 certified data (WMP) → verifiable derived claim (VDC-1) → **selective disclosure (SD-1, here)** →
@@ -54,5 +72,6 @@ ZK property proof (ceremony-gated) → corpus-scale analytics (breadth-gated / p
 
 ---
 
-*WMP SD-1 — opened 2026-07-11 (C1: commit-and-selective-reveal over VDC claims). Living doc. Next
-(ceremony-gated): ZK property proof — prove a claim's value satisfies a predicate without revealing it.*
+*WMP SD — opened 2026-07-11 (SD-1 flat commit-and-selective-reveal; SD-2 Merkle upgrade — log-N proofs,
+hidden leaves). Living doc. Next (ceremony-gated): ZK property proof — prove a claim's value satisfies a
+predicate without revealing it (scaffold + honest deferral built in `sdk/wmp_zk_property.py`).*
