@@ -160,3 +160,51 @@ class LiveMatchStateTracker:
         if last_act is not None and (float(now_ms) - last_act) > self.exit_gap_s * 1000.0:
             return "LOBBY"
         return IN_MATCH
+
+
+def seal_open_match_from_jsonl(jsonl_path: str, session_id: str, now_ms: float) -> Optional[dict]:
+    """F-ARCB-1b -- daemon-side MATCH_ENDED seal.
+
+    The retina daemon's `stop` force-kills the bridge (taskkill /F), so RGC.stop() ->
+    LiveMatchStateTracker.close_session NEVER runs and a live-open match is left un-sealed (a
+    MATCH_STARTED with no matching MATCH_ENDED in retina_match_state.jsonl). This pure helper lets
+    the daemon emit the seal the same way it harvests KAS/PoSP -- independent of the killed bridge
+    process. It scans the persisted jsonl for `session_id`; if the MATCH_STARTED count exceeds the
+    MATCH_ENDED count, it returns ONE MATCH_ENDED seal dict (the caller appends it). Returns None
+    when already balanced / file absent / never started -- idempotent, so a second stop never
+    double-seals (by then the counts are balanced).
+
+    ts_ms = now (session-close time): unlike the in-process close_session, which snaps ts to the
+    last activity, the daemon does not hold the tracker's signals, so the honest timestamp is the
+    session-close moment; `reason="daemon_session_close"` marks the provenance. Advisory; never
+    gates; the cryptographic session boundary stays the daemon manifest seal."""
+    import json
+    import os
+    if not os.path.exists(jsonl_path):
+        return None
+    started = ended = 0
+    try:
+        with open(jsonl_path, encoding="utf-8", errors="replace") as fh:
+            for ln in fh:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    d = json.loads(ln)
+                except Exception:  # noqa: BLE001 -- skip a malformed line, never crash the seal
+                    continue
+                if d.get("session_id") != session_id:
+                    continue
+                ev = d.get("event")
+                if ev == MATCH_STARTED:
+                    started += 1
+                elif ev == MATCH_ENDED:
+                    ended += 1
+    except Exception:  # noqa: BLE001 -- unreadable jsonl -> no seal, never break stop
+        return None
+    if started <= ended:
+        return None                                      # already sealed / never started -> no-op
+    return {"event": MATCH_ENDED, "ts_ms": round(float(now_ms), 1),
+            "detected_at_ms": round(float(now_ms), 1),
+            "schema": "qortroller-match-state-live-v0", "session_id": session_id,
+            "advisory": True, "reason": "daemon_session_close"}

@@ -140,3 +140,37 @@ def test_close_session_detect_path_no_double_seal():
     ev = tr.close_session(_S + 60_000)                         # detect finds the span
     assert [e.event for e in ev] == [MATCH_ENDED]             # exactly one, no force double
     assert tr._open_match_start_ms is None
+
+
+# --- F-ARCB-1b: daemon-side seal (close_session never runs — the daemon force-kills the bridge) ---
+def test_seal_open_match_from_jsonl(tmp_path):
+    """An unmatched MATCH_STARTED for a session_id -> the daemon seal returns ONE MATCH_ENDED
+    scoped to that session (a fully-sealed OTHER session is ignored)."""
+    import json
+    from l9_presence.match_state_live import seal_open_match_from_jsonl
+    p = tmp_path / "ms.jsonl"
+    sid = "sess_abc"
+    p.write_text(
+        json.dumps({"event": "MATCH_STARTED", "ts_ms": 1000, "session_id": sid}) + "\n"
+        + json.dumps({"event": "MATCH_STARTED", "ts_ms": 500, "session_id": "other"}) + "\n"
+        + json.dumps({"event": "MATCH_ENDED", "ts_ms": 900, "session_id": "other"}) + "\n",
+        encoding="utf-8")
+    seal = seal_open_match_from_jsonl(str(p), sid, now_ms=2000.0)
+    assert seal is not None
+    assert seal["event"] == "MATCH_ENDED" and seal["session_id"] == sid
+    assert seal["ts_ms"] == 2000.0 and seal["detected_at_ms"] == 2000.0
+    assert seal["reason"] == "daemon_session_close" and seal["advisory"] is True
+
+
+def test_seal_none_when_balanced_absent_or_never_started(tmp_path):
+    """Idempotent + honest: absent file / already-balanced / never-started -> None (no double-seal)."""
+    import json
+    from l9_presence.match_state_live import seal_open_match_from_jsonl
+    assert seal_open_match_from_jsonl(str(tmp_path / "nope.jsonl"), "s", 1.0) is None  # absent
+    p = tmp_path / "ms.jsonl"
+    p.write_text(
+        json.dumps({"event": "MATCH_STARTED", "ts_ms": 1, "session_id": "s"}) + "\n"
+        + json.dumps({"event": "MATCH_ENDED", "ts_ms": 2, "session_id": "s"}) + "\n",
+        encoding="utf-8")
+    assert seal_open_match_from_jsonl(str(p), "s", 3.0) is None                        # balanced
+    assert seal_open_match_from_jsonl(str(p), "unseen_sid", 3.0) is None               # never started
