@@ -397,6 +397,23 @@ def cmd_stop(a) -> int:
     if len(sessions) < 10:
         print(f"[daemon] NOTE: {len(sessions)} usable sessions (<10/class floor) — play longer next time "
               "or lower --diag-every.")
+    # F-ARCB-1b: daemon-side MATCH_ENDED seal. The `_kill_tree` above force-killed the bridge, so
+    # RGC.stop() -> LiveMatchStateTracker.close_session NEVER ran; if this session left a live-open
+    # match (MATCH_STARTED with no MATCH_ENDED) in retina_match_state.jsonl, seal it here -- the same
+    # independent-of-the-killed-bridge harvest as KAS/PoSP. Fail-open: never breaks the stop path.
+    try:
+        from l9_presence.match_state_live import seal_open_match_from_jsonl
+        from l9_presence.session_identity import derive_session_id
+        _ms_path = _REPO / "retina_match_state.jsonl"
+        _seal = seal_open_match_from_jsonl(str(_ms_path), derive_session_id(label, st["started_at"]),
+                                           time.time() * 1000.0)
+        if _seal is not None:
+            with open(_ms_path, "a", encoding="utf-8") as _fh:
+                _fh.write(json.dumps(_seal) + "\n")
+            print(f"[daemon] match-state: sealed MATCH_ENDED (daemon_session_close) for "
+                  f"{_seal['session_id'][:16]}")
+    except Exception as e:  # noqa: BLE001 — advisory seal; never break stop
+        print(f"[daemon] match-state seal failed (non-fatal): {e!r}")
     # R3 ring-archival (DEFAULT-ON; --no-archive-ring to skip): preserve this session's rendering before the
     # next session overwrites the rolling ring. Fail-open — archival never breaks the stop path.
     if not getattr(a, "no_archive_ring", False):
