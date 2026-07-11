@@ -440,90 +440,15 @@ class WgcFrameSource:
             @cap.event
             def on_frame_arrived(frame, capture_control):  # noqa: ANN001
                 self._last_frame_wall = time.time()        # mark arrival even if processing fails (stall clock)
-                wall_ms = self._last_frame_wall * 1000.0
                 try:
-                    buf = frame.frame_buffer               # HxWx4; 8-bit BGRA (SDR) or wider under HDR
-                    if self.frame_format == "unknown":
-                        self.frame_format = f"{getattr(buf, 'dtype', '?')}{tuple(getattr(buf, 'shape', ()))}"
-                        log.info("RetinaGameCapture: first WGC frame format=%s (HDR-aware normalization active)",
-                                 self.frame_format)
-                    # #1 Presentation timestamp: use the WGC frame's own presentation time (frame.timespan),
-                    # epoch-aligned to the HID wall-clock, for the coupling feeds — removes callback jitter
-                    # so HID<->screen lag_ms is tighter. Fail-open to wall_ms if timespan is absent/zero.
-                    screen_ts, self._ts_state, self._ts_source = align_timespan_ms(
-                        getattr(frame, "timespan", None), wall_ms, self._ts_state)
-                    if self._ts_source == "timespan" and not self._ts_logged:
-                        self._ts_logged = True            # BUILD-TIME VERIFY: raw->ms scale + epoch offset
-                        log.info("RetinaGameCapture: WGC presentation timestamp ACTIVE — raw timespan=%s "
-                                 "-> %.1f ms; epoch offset=%.1f ms. Verify /%g scale: subsequent timespan "
-                                 "deltas should track frame cadence, not callback jitter.",
-                                 getattr(frame, "timespan", None),
-                                 float(getattr(frame, "timespan", 0)) / _TIMESPAN_TICKS_PER_MS,
-                                 self._ts_state.get("offset_ms") or 0.0, _TIMESPAN_TICKS_PER_MS)
-                    # Downscale AT SOURCE: stride-slice the raw HxWx4 view by the live downscale BEFORE the
-                    # expensive convert. Read _downscale ONCE — tune() mutates it on the bridge thread;
-                    # splitting it mid-frame would desync the shape guard.
-                    d = max(1, int(self._downscale))
-                    buf_small = buf[::d, ::d]              # strided view (cheap); ceil(H/d) x ceil(W/d) x 4
-                    # #2 CPU ROI-crop convert: full-frame GRAY (geometric + B1) + B2 center-ROI BGR only —
-                    # no full-frame BGR materialization. Shares the HDR lum_scale across both outputs.
-                    gray, b2_bgr, self._lum_scale = convert_for_channels(buf_small, self._lum_scale)
-                    # Channels B1 (center-ROI flash luminance, on full gray) + B2 (RED hitmarker, on its ROI)
-                    # -> the trigger->HUD oracles. Best-effort; a bad ROI never kills the capture thread.
-                    try:
-                        from l9_presence.trigger_hud_coupling import center_roi_luminance, center_roi_redness
-                        self._core.feed_roi(screen_ts, center_roi_luminance(gray))     # B1: flash (full gray)
-                        _b2 = center_roi_redness(b2_bgr, frac=1.0, v_center=0.5, h_center=0.5)
-                        self._core.feed_roi_red(screen_ts, _b2)                        # B2: red (pre-cropped ROI)
-                        # B2 INSTRUMENTED TRACE (G0 needs-capture close; RETINA_B2_TRACE_ENABLED, default-OFF):
-                        # per-frame (ts, red) buffered in-memory; a batch of 512 flushes on a daemon thread —
-                        # never file I/O on this frame callback. Offline analysis aligns the trace to the
-                        # composite-AUTHORED kill timestamps to measure per-kill B2 reliability (R2^B2 leg 1).
-                        if self._b2_trace is not None:
-                            self._b2_trace.append((screen_ts, _b2))
-                            if len(self._b2_trace) >= 512:
-                                batch, self._b2_trace = self._b2_trace, []
-                                import threading
-                                threading.Thread(target=_append_b2_batch,
-                                                 args=(self._b2_trace_path, batch), daemon=True).start()
-                    except Exception:  # noqa: BLE001
-                        pass
-                    # Kill-feed authorship ROI: stash a contiguous BGR crop of the feed region every N frames
-                    # (cheap); the OCR itself runs on the throttled tune() tick, never on this frame callback.
-                    if self._kf_roi is not None or self._panel_roi is not None:
-                        self._kf_frame_n += 1
-                        if self._kf_frame_n % _stash_every(
-                                self._kf_every, self._kf_burst_every,
-                                screen_ts, self._burst_dense_until_ms) == 0:
-                            try:
-                                if self._kf_roi is not None:
-                                    _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
-                                    self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
-                                    self._kf_ts = screen_ts
-                                # Dense corpus: stash the left HUD panel (feed+roster) crop for the saver
-                                # tick — from the FULL-RES buf (see _panel_roi_crop; buf_small would be
-                                # ~76px under GPU-pressure downscale = unreadable for the handle detector).
-                                if self._panel_roi is not None:
-                                    self._panel_bgr = _panel_roi_crop(buf, self._panel_roi, self._lum_scale)
-                                    self._panel_ts = screen_ts   # D-TRIO-1: frame-capture ts of THIS panel
-                            except Exception:  # noqa: BLE001
-                                pass
-                    # Shape guard: the governor changes downscale live, which changes the gray image size.
-                    # Optical flow REQUIRES prev.size()==next.size(); a mismatch must SKIP motion (re-baseline),
-                    # never throw — else prev_gray never updates and every later frame fails forever.
-                    if (self._prev_gray is not None and self._prev_ts is not None
-                            and self._prev_gray.shape == gray.shape):
-                        dt = (screen_ts - self._prev_ts) / 1000.0
-                        if dt > 0:
-                            fm = frames_to_motion(self._prev_gray, gray, dt)
-                            self._core.feed_frame_motion(screen_ts, fm.yaw_rate, fm.pitch_rate)
-                            self.frames_seen += 1
-                            self._frame_ts.append(wall_ms)   # governor fps/stall stays on wall-clock arrival
-                    self._prev_gray, self._prev_ts = gray, screen_ts  # ALWAYS update -> re-baseline on size change
-                except Exception as _fx:  # noqa: BLE001 — a bad frame must never kill the capture thread
+                    _buf = frame.frame_buffer              # HxWx4; 8-bit BGRA (SDR) or wider under HDR
+                    _tsp = getattr(frame, "timespan", None)
+                except Exception as _fx:  # noqa: BLE001 — a bad frame object must never kill the thread
                     if self._frame_err_n == 0:
                         log.warning("RetinaGameCapture: frame processing error (HDR format?): %s", _fx)
                     self._frame_err_n += 1
+                    return
+                self._process_frame(_buf, self._last_frame_wall * 1000.0, _tsp)
 
             @cap.event
             def on_closed():  # noqa: ANN202
@@ -543,6 +468,96 @@ class WgcFrameSource:
     def recent_frame_ts(self) -> list:
         """Recent WGC frame arrival times (ms, wall-clock) for the adaptive governor's fps telemetry."""
         return list(self._frame_ts)
+
+    def _process_frame(self, buf, wall_ms: float, timespan) -> None:
+        """The SHARED per-frame pipeline (UVC-adapter extraction, 2026-07-11): body moved VERBATIM from
+        the WGC on_frame_arrived closure so a delivery-swapped source (UvcFrameSource: cv2 reader thread,
+        HxWx3 BGR, no QPC timespan) reuses the identical motion/B1/B2/killfeed/panel/timestamp logic —
+        zero duplication, zero behavior change on the WGC path. timespan=None fail-opens to wall_ms via
+        align_timespan_ms (existing rail). Never raises (a bad frame must never kill a capture thread)."""
+        try:
+            from l9_presence.cv_motion import frames_to_motion
+            if self.frame_format == "unknown":
+                self.frame_format = f"{getattr(buf, 'dtype', '?')}{tuple(getattr(buf, 'shape', ()))}"
+                log.info("RetinaGameCapture: first WGC frame format=%s (HDR-aware normalization active)",
+                         self.frame_format)
+            # #1 Presentation timestamp: use the WGC frame's own presentation time (frame.timespan),
+            # epoch-aligned to the HID wall-clock, for the coupling feeds — removes callback jitter
+            # so HID<->screen lag_ms is tighter. Fail-open to wall_ms if timespan is absent/zero.
+            screen_ts, self._ts_state, self._ts_source = align_timespan_ms(
+                timespan, wall_ms, self._ts_state)
+            if self._ts_source == "timespan" and not self._ts_logged:
+                self._ts_logged = True            # BUILD-TIME VERIFY: raw->ms scale + epoch offset
+                log.info("RetinaGameCapture: WGC presentation timestamp ACTIVE — raw timespan=%s "
+                         "-> %.1f ms; epoch offset=%.1f ms. Verify /%g scale: subsequent timespan "
+                         "deltas should track frame cadence, not callback jitter.",
+                         timespan,
+                         float(timespan or 0) / _TIMESPAN_TICKS_PER_MS,
+                         self._ts_state.get("offset_ms") or 0.0, _TIMESPAN_TICKS_PER_MS)
+            # Downscale AT SOURCE: stride-slice the raw HxWx4 view by the live downscale BEFORE the
+            # expensive convert. Read _downscale ONCE — tune() mutates it on the bridge thread;
+            # splitting it mid-frame would desync the shape guard.
+            d = max(1, int(self._downscale))
+            buf_small = buf[::d, ::d]              # strided view (cheap); ceil(H/d) x ceil(W/d) x 4
+            # #2 CPU ROI-crop convert: full-frame GRAY (geometric + B1) + B2 center-ROI BGR only —
+            # no full-frame BGR materialization. Shares the HDR lum_scale across both outputs.
+            gray, b2_bgr, self._lum_scale = convert_for_channels(buf_small, self._lum_scale)
+            # Channels B1 (center-ROI flash luminance, on full gray) + B2 (RED hitmarker, on its ROI)
+            # -> the trigger->HUD oracles. Best-effort; a bad ROI never kills the capture thread.
+            try:
+                from l9_presence.trigger_hud_coupling import center_roi_luminance, center_roi_redness
+                self._core.feed_roi(screen_ts, center_roi_luminance(gray))     # B1: flash (full gray)
+                _b2 = center_roi_redness(b2_bgr, frac=1.0, v_center=0.5, h_center=0.5)
+                self._core.feed_roi_red(screen_ts, _b2)                        # B2: red (pre-cropped ROI)
+                # B2 INSTRUMENTED TRACE (G0 needs-capture close; RETINA_B2_TRACE_ENABLED, default-OFF):
+                # per-frame (ts, red) buffered in-memory; a batch of 512 flushes on a daemon thread —
+                # never file I/O on this frame callback. Offline analysis aligns the trace to the
+                # composite-AUTHORED kill timestamps to measure per-kill B2 reliability (R2^B2 leg 1).
+                if self._b2_trace is not None:
+                    self._b2_trace.append((screen_ts, _b2))
+                    if len(self._b2_trace) >= 512:
+                        batch, self._b2_trace = self._b2_trace, []
+                        import threading
+                        threading.Thread(target=_append_b2_batch,
+                                         args=(self._b2_trace_path, batch), daemon=True).start()
+            except Exception:  # noqa: BLE001
+                pass
+            # Kill-feed authorship ROI: stash a contiguous BGR crop of the feed region every N frames
+            # (cheap); the OCR itself runs on the throttled tune() tick, never on this frame callback.
+            if self._kf_roi is not None or self._panel_roi is not None:
+                self._kf_frame_n += 1
+                if self._kf_frame_n % _stash_every(
+                        self._kf_every, self._kf_burst_every,
+                        screen_ts, self._burst_dense_until_ms) == 0:
+                    try:
+                        if self._kf_roi is not None:
+                            _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
+                            self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
+                            self._kf_ts = screen_ts
+                        # Dense corpus: stash the left HUD panel (feed+roster) crop for the saver
+                        # tick — from the FULL-RES buf (see _panel_roi_crop; buf_small would be
+                        # ~76px under GPU-pressure downscale = unreadable for the handle detector).
+                        if self._panel_roi is not None:
+                            self._panel_bgr = _panel_roi_crop(buf, self._panel_roi, self._lum_scale)
+                            self._panel_ts = screen_ts   # D-TRIO-1: frame-capture ts of THIS panel
+                    except Exception:  # noqa: BLE001
+                        pass
+            # Shape guard: the governor changes downscale live, which changes the gray image size.
+            # Optical flow REQUIRES prev.size()==next.size(); a mismatch must SKIP motion (re-baseline),
+            # never throw — else prev_gray never updates and every later frame fails forever.
+            if (self._prev_gray is not None and self._prev_ts is not None
+                    and self._prev_gray.shape == gray.shape):
+                dt = (screen_ts - self._prev_ts) / 1000.0
+                if dt > 0:
+                    fm = frames_to_motion(self._prev_gray, gray, dt)
+                    self._core.feed_frame_motion(screen_ts, fm.yaw_rate, fm.pitch_rate)
+                    self.frames_seen += 1
+                    self._frame_ts.append(wall_ms)   # governor fps/stall stays on wall-clock arrival
+            self._prev_gray, self._prev_ts = gray, screen_ts  # ALWAYS update -> re-baseline on size change
+        except Exception as _fx:  # noqa: BLE001 — a bad frame must never kill the capture thread
+            if self._frame_err_n == 0:
+                log.warning("RetinaGameCapture: frame processing error (HDR format?): %s", _fx)
+            self._frame_err_n += 1
 
     def _to_u8_bgr(self, buf):
         """HDR-aware normalize to 8-bit 3-channel BGR (kept for direct callers / tests; on_frame_arrived
@@ -594,6 +609,97 @@ class WgcFrameSource:
             self._control = None
 
 
+class UvcFrameSource(WgcFrameSource):
+    """OA-RP-1 direct-HDMI source (2026-07-11): a UVC capture card (PS5 -> HDMI-in card -> loop-out to the
+    TV; card USB -> laptop) delivered via cv2.VideoCapture on a dedicated reader thread. DELIVERY SWAP
+    ONLY — the entire per-frame pipeline is the inherited _process_frame (identical motion / B1 / B2 /
+    killfeed / panel / governor semantics; cv2 hands HxWx3 BGR uint8, which the channel helpers already
+    accept). No QPC timespan on UVC -> timespan=None -> align_timespan_ms wall-clock fail-open (honest
+    'wall_fallback' in diag). Selected ONLY by RETINA_CAPTURE_SOURCE=uvc (default 'wgc' = byte-identical).
+    restart_if_stalled() is inherited and composes these overrides -> stall re-acquire = device reopen.
+    Fail-open like WGC: no cv2 / no device / no frames -> start() False, the lobe abstains."""
+
+    def __init__(self, core, *, uvc_index: int = 0, uvc_width: int = 1920, uvc_height: int = 1080,
+                 uvc_fps: int = 60, uvc_fourcc: str = "MJPG", **kw) -> None:
+        super().__init__(core, f"uvc:{uvc_index}", **kw)
+        self._uvc_index = int(uvc_index)
+        self._uvc_w, self._uvc_h = int(uvc_width), int(uvc_height)
+        self._uvc_fps = int(uvc_fps)
+        self._uvc_fourcc = (str(uvc_fourcc) + "    ")[:4]   # MJPG is what 1080p60 cards need (YUY2 ~5fps)
+        self._target_desc = f"UVC capture device #{self._uvc_index} ({self._uvc_w}x{self._uvc_h}@{self._uvc_fps})"
+        self._uvc_cap = None
+        self._uvc_thread = None
+
+    def start(self) -> bool:
+        try:
+            import cv2
+        except Exception as exc:  # noqa: BLE001
+            log.warning("RetinaGameCapture: cv2 unavailable for UVC source (lobe abstains): %s", exc)
+            return False
+        try:
+            # CAP_DSHOW honors FOURCC/FPS requests far more reliably than MSMF on Windows; fall back to
+            # the default backend if DSHOW can't open the device.
+            cap = cv2.VideoCapture(self._uvc_index, getattr(cv2, "CAP_DSHOW", 0))
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(self._uvc_index)
+            if not cap.isOpened():
+                log.warning("RetinaGameCapture: UVC device #%d did not open (lobe abstains)", self._uvc_index)
+                return False
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self._uvc_fourcc))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._uvc_w)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._uvc_h)
+            cap.set(cv2.CAP_PROP_FPS, self._uvc_fps)
+            ok, first = cap.read()                       # prove frames flow before declaring the lobe up
+            if not ok or first is None:
+                log.warning("RetinaGameCapture: UVC device #%d opened but no frame (HDCP on? cable?) — "
+                            "lobe abstains", self._uvc_index)
+                cap.release()
+                return False
+            self._uvc_cap = cap
+            self._running = True
+            self._last_frame_wall = time.time()
+            self._process_frame(first, self._last_frame_wall * 1000.0, None)   # seed with the probe frame
+
+            def _reader() -> None:
+                while self._running and self._uvc_cap is not None:
+                    try:
+                        ok2, frame = self._uvc_cap.read()
+                        if not ok2 or frame is None:
+                            time.sleep(0.05)             # transient miss; stall clock + re-acquire handle it
+                            continue
+                        self._last_frame_wall = time.time()
+                        self._process_frame(frame, self._last_frame_wall * 1000.0, None)
+                    except Exception:  # noqa: BLE001 — reader must never die mid-session
+                        time.sleep(0.05)
+
+            import threading
+            self._uvc_thread = threading.Thread(target=_reader, name="qt-uvc-reader", daemon=True)
+            self._uvc_thread.start()
+            log.info("RetinaGameCapture: UVC capturing %s — direct HDMI, no Remote Play encode "
+                     "(actual %.0fx%.0f@%.0f)", self._target_desc,
+                     cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT),
+                     cap.get(cv2.CAP_PROP_FPS))
+            return True
+        except Exception as exc:  # noqa: BLE001
+            log.warning("RetinaGameCapture: UVC start failed (lobe abstains): %s", exc)
+            return False
+
+    def stop(self) -> None:
+        self._running = False
+        t, self._uvc_thread = self._uvc_thread, None
+        if t is not None:
+            try:
+                t.join(timeout=2.0)
+            except Exception:  # noqa: BLE001
+                pass
+        cap, self._uvc_cap = self._uvc_cap, None
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception:  # noqa: BLE001
+                pass
+
+
 class RetinaGameCapture:
     """Tie: WGC frame source -> core. feed_hid() from the bridge loop (right-stick);
     latest_coupled_verdict() read by the co-capture hook -> meta['retina_coupled_verdict']."""
@@ -619,12 +725,26 @@ class RetinaGameCapture:
         self._inline_enabled = bool(inline_enabled)
         # Inline authorship classification needs the panel crop stashed even if crop-saving is off.
         _need_panel = self._capture_enabled or self._inline_enabled
-        self._source = WgcFrameSource(self.core, window_substr, downscale=downscale,
-                                      monitor_index=monitor_index,
-                                      min_update_interval_ms=min_update_interval_ms,
-                                      killfeed_roi=(killfeed_roi if killfeed_enabled else ""),
-                                      killfeed_every=killfeed_every,
-                                      panel_roi=(panel_roi if _need_panel else ""))
+        # OA-RP-1 source selection: RETINA_CAPTURE_SOURCE=uvc -> direct-HDMI capture card (UVC camera
+        # device via cv2 reader thread); default 'wgc' -> byte-identical Windows Graphics Capture path.
+        _src_kind = os.environ.get("RETINA_CAPTURE_SOURCE", "wgc").strip().lower()
+        _shared_kw = dict(downscale=downscale,
+                          min_update_interval_ms=min_update_interval_ms,
+                          killfeed_roi=(killfeed_roi if killfeed_enabled else ""),
+                          killfeed_every=killfeed_every,
+                          panel_roi=(panel_roi if _need_panel else ""))
+        if _src_kind == "uvc":
+            self._source = UvcFrameSource(
+                self.core,
+                uvc_index=int(os.environ.get("RETINA_UVC_INDEX", "0") or 0),
+                uvc_width=int(os.environ.get("RETINA_UVC_WIDTH", "1920") or 1920),
+                uvc_height=int(os.environ.get("RETINA_UVC_HEIGHT", "1080") or 1080),
+                uvc_fps=int(os.environ.get("RETINA_UVC_FPS", "60") or 60),
+                uvc_fourcc=os.environ.get("RETINA_UVC_FOURCC", "MJPG") or "MJPG",
+                **_shared_kw)
+        else:
+            self._source = WgcFrameSource(self.core, window_substr,
+                                          monitor_index=monitor_index, **_shared_kw)
         self._killfeed_enabled = bool(killfeed_enabled)
         self._kf_logged = False
         self._capture_dir = str(capture_dir)

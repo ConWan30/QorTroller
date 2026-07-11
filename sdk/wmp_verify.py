@@ -48,9 +48,23 @@ read-only IoTeX RPC URL for the Arc 6 view-call.
 
 For v1 fixture testing this module ships a SOFT verifier that performs
 the structural + Poseidon checks but stubs the Groth16 verify + on-chain
-view-calls. A future commit wires snarkjs + web3 calls in. The stub
-clearly logs which steps are stubbed so a consumer never confuses a
-fixture pass with a real-data pass.
+view-calls. The stub clearly logs which steps are stubbed so a consumer
+never confuses a fixture pass with a real-data pass.
+
+PHASE-2 PROMOTION (2026-07-11, injection pattern — PORT-CERT precedent):
+each stubbed check now accepts an OPTIONAL injected callable; every
+default of None reproduces the v1 stub/deferred behavior byte-identically
+(the network/subprocess blast radius lives in the runner,
+`scripts/wmp_full_verify.py`, never in this module):
+
+    groth16_verify(public_inputs: dict, proof_bytes_hex: str) -> bool
+    poseidon_root(matrix: dict)                              -> str  (decimal field element)
+    beacon_lookup(block: int)                                -> str|None  (0x block hash)
+    consent_lookup(gamer_address: str)                       -> bool
+
+A check that ran its injected callable reports `stubbed=False`; a
+consumer therefore always knows whether a pass was cryptographic or
+structural.
 """
 
 from __future__ import annotations
@@ -127,7 +141,7 @@ def check_scope_honesty(bundle: dict) -> dict:
     }
 
 
-def check_matrix_root_rehash(bundle: dict) -> dict:
+def check_matrix_root_rehash(bundle: dict, poseidon_root=None) -> dict:
     """Check 2: Poseidon(action_trace_matrix) == sanitizedTraceRoot.
 
     CANONICAL HOME for the Arc 5 off-circuit root rehash. A consumer
@@ -189,24 +203,48 @@ def check_matrix_root_rehash(bundle: dict) -> dict:
         # tamper-detection happens at the producer side via Phase-2.
         passed = True
         issues = ["structural_rehash_v1 not paired in bundle — v1 verifier surfaces digest only; Phase-2 promotes to Poseidon"]
-    return {
+    result = {
         "passed": passed,
         "actual": actual_digest,
         "claimed": str(bundle.get("sanitized_trace_root_ref", "")),
         "algorithm": "STRUCTURAL_REHASH_v1",
         "issues": issues,
     }
+    if poseidon_root is None:
+        return result
+    # ── Phase-2 promoted path: THE cryptographic matrix↔root binding. Recompute the
+    # Poseidon-BN254 root over the bundle's own matrix bytes and require equality with the
+    # root the Groth16 proof actually verified against (public_inputs.sanitizedTraceRoot,
+    # falling back to the producer's sanitized_trace_root_ref). This is the matrix-swap kill.
+    try:
+        recomputed = str(poseidon_root({
+            "ticks": int(bundle.get("action_trace_ticks", 0) or 0),
+            **{ch: matrix_hex.get(ch, "") for ch in channels},
+        })).strip()
+    except Exception as exc:  # noqa: BLE001 — a failing helper is a FAIL, never a silent pass
+        result.update(passed=False, algorithm="POSEIDON_BN254", stubbed=False)
+        result["issues"] = [f"poseidon_root callable failed: {exc}"]
+        return result
+    pub = bundle.get("humanity_proof_public_inputs") or {}
+    claimed = str(pub.get("sanitizedTraceRoot", "") or bundle.get("sanitized_trace_root_ref", "")).strip()
+    ok = bool(recomputed) and recomputed == claimed
+    result.update(passed=ok, actual=recomputed, claimed=claimed,
+                  algorithm="POSEIDON_BN254", stubbed=False)
+    result["issues"] = [] if ok else [
+        f"Poseidon root mismatch: recomputed={recomputed!r} claimed={claimed!r} — "
+        "matrix does not match the root the proof verified against"]
+    return result
 
 
-def check_humanity(bundle: dict) -> dict:
+def check_humanity(bundle: dict, groth16_verify=None) -> dict:
     """Check 1: Arc 5 VHR Groth16 verify.
 
-    v1 STUB: returns a structural check only. A real implementation
-    invokes snarkjs `groth16 verify` against the published verifying
-    key. Until that wiring lands, the verifier returns:
-        passed  — True iff proof_bytes_hex looks structurally valid
-                  (non-empty, hex, expected length)
-        stubbed — True (consumer knows this is a v1 stub)
+    Default (groth16_verify=None) = v1 STUB, byte-identical: structural
+    hex check only, `stubbed=True`. Phase-2 promoted path: the injected
+    `groth16_verify(public_inputs: dict, proof_bytes_hex: str) -> bool`
+    runs the REAL snarkjs verify against the published verifying key
+    (the runner reconstructs proof.json from the 256-byte ABI wire and
+    public.json from the bundle's own public inputs — zero-trust).
     """
     proof_hex = bundle.get("humanity_proof_bytes_hex", "")
     deferred = bool(bundle.get("humanity_deferred", False))
@@ -220,19 +258,35 @@ def check_humanity(bundle: dict) -> dict:
     # Structural: 256-byte proof = 512 hex chars (+ optional 0x)
     h = proof_hex[2:] if proof_hex.startswith("0x") else proof_hex
     structurally_ok = bool(h) and all(c in "0123456789abcdefABCDEF" for c in h)
-    return {
-        "passed": structurally_ok,
-        "stubbed": True,
-        "deferred": False,
-        "note": "v1 stub — snarkjs groth16 verify wiring is Phase-2",
-    }
+    if groth16_verify is None:
+        return {
+            "passed": structurally_ok,
+            "stubbed": True,
+            "deferred": False,
+            "note": "v1 stub — snarkjs groth16 verify wiring is Phase-2",
+        }
+    if not structurally_ok:
+        return {"passed": False, "stubbed": False, "deferred": False,
+                "issues": ["proof_bytes_hex structurally invalid"]}
+    try:
+        ok = bool(groth16_verify(dict(bundle.get("humanity_proof_public_inputs") or {}), proof_hex))
+    except Exception as exc:  # noqa: BLE001 — a failing verifier is a FAIL, never a silent pass
+        return {"passed": False, "stubbed": False, "deferred": False,
+                "issues": [f"groth16_verify callable failed: {exc}"]}
+    return {"passed": ok, "stubbed": False, "deferred": False,
+            "note": "snarkjs groth16 verify (injected)",
+            "issues": [] if ok else ["Groth16 proof did NOT verify against the bundle's public inputs"]}
 
 
-def check_recency(bundle: dict) -> dict:
+def check_recency(bundle: dict, beacon_lookup=None) -> dict:
     """Check 3: Arc 6 PoSR beacons.
 
     Honest no-op when the bundle's recency_registry_address is empty
-    (Arc 6 was dormant when this bundle was assembled).
+    (Arc 6 was dormant when this bundle was assembled). Default
+    (beacon_lookup=None) = v1 structural stub, byte-identical. Phase-2
+    promoted path: the injected `beacon_lookup(block: int) -> hash|None`
+    reads the LIVE registry (view-call, 0 IOTX) and the bundle's claimed
+    open/close hashes must equal the anchored hashes.
     """
     registry = bundle.get("recency_registry_address", "")
     if not registry:
@@ -254,20 +308,42 @@ def check_recency(bundle: dict) -> dict:
         issues.append("recency_open_block_hash must be 0x + 64 hex")
     if not (close_h.startswith("0x") and len(close_h) == 66):
         issues.append("recency_close_block_hash must be 0x + 64 hex")
-    return {
-        "passed": len(issues) == 0,
-        "stubbed": True,
-        "note": "v1 stub — IoTeX verifyBeacon view-call wiring is Phase-2",
-        "issues": issues,
-    }
+    if beacon_lookup is None:
+        return {
+            "passed": len(issues) == 0,
+            "stubbed": True,
+            "note": "v1 stub — IoTeX verifyBeacon view-call wiring is Phase-2",
+            "issues": issues,
+        }
+    if issues:                                   # structural failures short-circuit the RPC
+        return {"passed": False, "stubbed": False, "issues": issues}
+    try:
+        anchored_open = beacon_lookup(open_block)
+        anchored_close = beacon_lookup(close_block)
+    except Exception as exc:  # noqa: BLE001 — RPC failure is a FAIL, never a silent pass
+        return {"passed": False, "stubbed": False,
+                "issues": [f"beacon_lookup callable failed: {exc}"]}
+    if not anchored_open:
+        issues.append(f"no beacon anchored at open_block {open_block}")
+    elif str(anchored_open).lower() != open_h.lower():
+        issues.append(f"open beacon mismatch: anchored={anchored_open} claimed={open_h}")
+    if not anchored_close:
+        issues.append(f"no beacon anchored at close_block {close_block}")
+    elif str(anchored_close).lower() != close_h.lower():
+        issues.append(f"close beacon mismatch: anchored={anchored_close} claimed={close_h}")
+    return {"passed": len(issues) == 0, "stubbed": False,
+            "note": "IoTeX beacon view-calls (injected)", "issues": issues}
 
 
-def check_consent(bundle: dict) -> dict:
+def check_consent(bundle: dict, consent_lookup=None) -> dict:
     """Check 4: Arc 4 consent reference.
 
-    v1 W1-D: world-model consent dimension is DEFERRED. The verifier
-    returns deferred=True with CONSENT_GATE_DEFERRED reason. Phase-2
-    wires the greenfield VAPIWorldModelConsentRegistry view-call.
+    v1 W1-D: world-model consent dimension is DEFERRED → deferred=True
+    with CONSENT_GATE_DEFERRED (byte-identical default). Phase-2
+    promoted path: dimension "GRANTED" + the injected
+    `consent_lookup(gamer_address) -> bool` view-calls the LIVE
+    VAPIWorldModelConsentRegistry — the bundle's consent claim must be
+    TRUE on-chain for the gamer it names.
     """
     dim = str(bundle.get("world_model_consent_dimension", "") or "")
     if dim == "DEFERRED":
@@ -277,12 +353,26 @@ def check_consent(bundle: dict) -> dict:
             "deferred_reason": "CONSENT_GATE_DEFERRED",
             "note": "Phase-2 promote: VAPIWorldModelConsentRegistry view-call",
         }
-    # Phase-2 path (unreached in v1 — keeps the contract stable):
-    return {
-        "passed": True,
-        "stubbed": True,
-        "note": "v1 stub — Phase-2 wires registry view-call",
-    }
+    if consent_lookup is None:
+        # Phase-2 dimension without an injected lookup: structural-only, honestly stubbed.
+        return {
+            "passed": True,
+            "stubbed": True,
+            "note": "v1 stub — Phase-2 wires registry view-call",
+        }
+    gamer = str(bundle.get("consent_gamer_address", "") or "")
+    if not gamer:
+        return {"passed": False, "stubbed": False,
+                "issues": ["bundle names no consent_gamer_address"]}
+    try:
+        granted = bool(consent_lookup(gamer))
+    except Exception as exc:  # noqa: BLE001 — RPC failure is a FAIL, never a silent pass
+        return {"passed": False, "stubbed": False,
+                "issues": [f"consent_lookup callable failed: {exc}"]}
+    return {"passed": granted, "stubbed": False,
+            "note": "VAPIWorldModelConsentRegistry view-call (injected)",
+            "issues": [] if granted else
+            [f"world-model consent NOT granted on-chain for {gamer}"]}
 
 
 # ── orchestrator ──────────────────────────────────────────────────────
@@ -291,6 +381,10 @@ def verify_bundle(
     bundle: dict,
     *,
     allow_synthetic: bool = False,
+    groth16_verify=None,
+    poseidon_root=None,
+    beacon_lookup=None,
+    consent_lookup=None,
 ) -> VerificationResult:
     """Run all five checks and return a consolidated result.
 
@@ -300,6 +394,9 @@ def verify_bundle(
         allow_synthetic: when False, a bundle with
             scope_synthetic=True is REJECTED as non-real corpus data.
             Set True for fixture verification.
+        groth16_verify / poseidon_root / beacon_lookup / consent_lookup:
+            Phase-2 injected callables (see module docstring). All-None
+            reproduces the v1 stub/deferred behavior byte-identically.
     """
     bh = _bundle_hash(bundle)
     result = VerificationResult(
@@ -324,10 +421,10 @@ def verify_bundle(
 
     checks = {
         CHECK_SCOPE:    check_scope_honesty(bundle),
-        CHECK_REHASH:   check_matrix_root_rehash(bundle),
-        CHECK_HUMANITY: check_humanity(bundle),
-        CHECK_RECENCY:  check_recency(bundle),
-        CHECK_CONSENT:  check_consent(bundle),
+        CHECK_REHASH:   check_matrix_root_rehash(bundle, poseidon_root),
+        CHECK_HUMANITY: check_humanity(bundle, groth16_verify),
+        CHECK_RECENCY:  check_recency(bundle, beacon_lookup),
+        CHECK_CONSENT:  check_consent(bundle, consent_lookup),
     }
     result.checks = checks
 

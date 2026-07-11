@@ -151,6 +151,13 @@ class ProvenanceBundle:
     scope_synthetic: bool               # default False; True flags a synthetic / fixture bundle
     scope_is_full_pomdp_tuple: bool     # always False — the lane never gives full (s, a) tuples
 
+    # ── extra metadata (Phase-2 INC-3, 2026-07-11) ─────────────────────
+    # Optional caller annotations (e.g. the UC-2 skill-strata band labels). ALWAYS passes
+    # _assert_no_forbidden_keys BEFORE assembly (the DataFloorViolationError guard predates
+    # this field — v1 validated-then-DROPPED it; Phase-2 stores it). Default None keeps
+    # pre-Phase-2 JSONL loadable (missing key -> default) and fixture bundles label-free.
+    extra_metadata: Optional[dict] = None
+
     def to_dict(self) -> dict:
         """Serialize for JSONL export (one bundle per line)."""
         d = asdict(self)
@@ -302,4 +309,7 @@ class BundleAssembler:
             scope_fidelity=_SCOPE_FIDELITY_MACRO,
             scope_synthetic=bool(synthetic),
             scope_is_full_pomdp_tuple=False,
+
+            # guarded caller annotations (Phase-2 INC-3): validated above, now STORED
+            extra_metadata=(dict(extra_metadata) if extra_metadata is not None else None),
         )
