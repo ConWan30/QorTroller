@@ -43,15 +43,21 @@ PAD_MS = 4000.0                    # Remote-Play fire->kill window-latency pad (
 _MIN_AUTHORED = 2                  # DEFAULT_MIN_KILLS floor for a *_SESSION verdict
 
 # Bounded-lag golden archives (LOCAL). M18 (>4 s lag) is intentionally NOT here -- see HONEST SCOPE.
+# Checklist bar E3: every golden MUST carry a lag_note documenting the measured fire->kill lag and
+# why it fits the 4000 ms pad budget (test-pinned non-empty; content quality is review, not code).
 GOLDEN = [
     {"label": "densecand_validate",
      "archive": "retina_kf_archive/densecand_validate_1783711025",
      "scan": "audits/rp_ocr_scan_densecand.json",
-     "kas": "audits/kas_record_densecand_validate_2026-07-10.json"},
+     "kas": "audits/kas_record_densecand_validate_2026-07-10.json",
+     "lag_note": "RP match 2026-07-10; pad=4000 flipped OBSERVED_ONLY(1)->AUTHORED_SESSION(3), so "
+                 "recovered kills' fire->kill gap <= 4s (arc A study); live KAS INSUFFICIENT_KILLS"},
     {"label": "match14_rp_option_b",
      "archive": "retina_kf_archive/match14_rp_option_b_1783475385",
      "scan": "audits/rp_ocr_precision_scan_v2_m14_m13.json",
-     "kas": "audits/kas_record_match14_rp_option_b_2026-07-07.json"},
+     "kas": "audits/kas_record_match14_rp_option_b_2026-07-07.json",
+     "lag_note": "RP match 2026-07-07 (M14); deferred stable 3->3 at pad=0 AND pad=4000 (arc A "
+                 "regression anchor), so within-window kills need no pad; bounded by construction"},
 ]
 
 
@@ -82,11 +88,30 @@ def run_one(g: dict, composites: str = "retina_kf_composite.jsonl") -> tuple:
     rec = build_deferred_record(scan=scan, manifest=manifest, windows=windows, kas_record=kas,
                                 window_latency_pad_ms=PAD_MS)
     v = verify_deferred_record(rec.to_dict(), manifest, arch)
-    ok = (rec.verdict == "DEFERRED_AUTHORED_SESSION"
-          and rec.deferred_authored >= _MIN_AUTHORED and v["ok"])
+    # Checklist bar D (three-artifact join), pack-hardened: the builder tolerates a KAS record
+    # WITHOUT session_id (pre-U1 records); goldens are all post-U1, so require it present + equal
+    # across manifest / KAS / deferred record. Anti-splice rail, not optional metadata.
+    sid_m, sid_k, sid_r = manifest.get("session_id"), kas.get("session_id"), rec.session_id
+    joined = bool(sid_m) and sid_m == sid_k == sid_r
+    ok = (rec.verdict == "DEFERRED_AUTHORED_SESSION"                       # bar A1
+          and rec.deferred_authored >= _MIN_AUTHORED                       # bar A2
+          and v["ok"]                                                      # bar B1/B2 (G-VERIFY)
+          and joined)                                                      # bar D
     detail = (f"verdict={rec.verdict} authored={rec.deferred_authored} "
-              f"observed={rec.deferred_observed} verify={'OK' if v['ok'] else 'FAIL'} pad={PAD_MS:.0f}")
+              f"observed={rec.deferred_observed} verify={'OK' if v['ok'] else 'FAIL'} "
+              f"session_id={'joined' if joined else 'MISMATCH'} pad_ms={PAD_MS:.0f}")
     return ("PASS" if ok else "FAIL"), detail
+
+
+def pack_exit(n_pass: int, n_fail: int, n_missing: int) -> int:
+    """Checklist bar C, pure + test-pinned. FAIL of a PRESENT golden dominates (exit 1 -- never
+    hide regression behind missing); any MISSING golden makes the environment incomplete (exit 2 --
+    bar F rejects exit 0 with missing>0); only all-present all-pass is exit 0."""
+    if n_fail:
+        return 1
+    if n_missing or n_pass == 0:
+        return 2
+    return 0
 
 
 def main() -> int:
@@ -101,18 +126,24 @@ def main() -> int:
         n_fail += status == "FAIL"
         n_missing += status == "MISSING"
     print("-" * 74)
-    print(f"  PASS={n_pass}  FAIL={n_fail}  MISSING={n_missing}")
-    if n_fail:
-        print("  RESULT: FAIL -- a present golden archive did not reproduce DEFERRED_AUTHORED_SESSION "
-              "(deferred-logic regression). Investigate before trusting the offline proof.")
-        return 1
-    if n_pass == 0:
-        print("  RESULT: NO GOLDEN ARCHIVE ON DISK -- restore one of the archives above "
-              "(retina_kf_archive/ is local + gitignored). Not a pass.")
-        return 2
-    print(f"  RESULT: PASS -- {n_pass} golden archive(s) reproduce authored>0 + verifier OK. "
-          "Card-free authorship proven, no new match. (Scope: bounded-lag archives only; see header.)")
-    return 0
+    code = pack_exit(n_pass, n_fail, n_missing)
+    if code == 1:
+        print(f"  GOLDEN OFFLINE AUTHORED PACK: FAIL  (present golden regressed)")
+        print(f"    goldens={len(GOLDEN)} pass={n_pass} fail={n_fail} missing={n_missing}  exit=1")
+        print("    deferred logic or inputs broke -- investigate before trusting the offline proof.")
+    elif code == 2:
+        print(f"  GOLDEN OFFLINE AUTHORED PACK: INCOMPLETE  (missing golden archive -- never a pass)")
+        print(f"    goldens={len(GOLDEN)} pass={n_pass} fail={n_fail} missing={n_missing}  exit=2")
+        print("    restore the named archive(s); retina_kf_archive/ is local + gitignored.")
+    else:
+        # Checklist bar F: the reviewer-facing PASS line -- semantic fields are mandatory.
+        print("  GOLDEN OFFLINE AUTHORED PACK: PASS")
+        print(f"    goldens={len(GOLDEN)} present={n_pass} missing=0")
+        print(f"    each: verdict=DEFERRED_AUTHORED_SESSION authored>={_MIN_AUTHORED} verify=OK "
+              f"session_id=joined pad_ms={PAD_MS:.0f}")
+        print("    scope=developer_self bounded_lag=true m18_excluded=true")
+        print("    exit=0")
+    return code
 
 
 if __name__ == "__main__":

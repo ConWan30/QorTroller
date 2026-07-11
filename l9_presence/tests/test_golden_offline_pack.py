@@ -26,6 +26,25 @@ def test_registry_well_formed():
         assert g["archive"].startswith("retina_kf_archive/")
 
 
+def test_e3_every_golden_states_measured_lag():
+    """Checklist bar E3: any golden MUST document its measured fire->kill lag + why it fits the
+    pad budget. Mechanically: a non-empty lag_note on every entry (content quality is review)."""
+    for g in gold.GOLDEN:
+        assert isinstance(g.get("lag_note"), str) and len(g["lag_note"].strip()) > 20, \
+            f"golden {g['label']!r} missing a substantive lag_note (bar E3)"
+
+
+def test_c_exit_semantics_missing_never_exit0():
+    """Checklist bars C + F: FAIL of a present golden dominates (1, never hidden behind missing);
+    ANY missing golden -> 2 (F rejects exit 0 with missing>0); only all-present all-pass -> 0."""
+    assert gold.pack_exit(2, 0, 0) == 0          # all present, all pass
+    assert gold.pack_exit(1, 1, 0) == 1          # present regression -> FAIL
+    assert gold.pack_exit(1, 1, 1) == 1          # regression dominates missing
+    assert gold.pack_exit(1, 0, 1) == 2          # F reject rule: exit 0 with missing>0 impossible
+    assert gold.pack_exit(0, 0, 2) == 2          # nothing on disk
+    assert gold.pack_exit(0, 0, 0) == 2          # degenerate empty -> never a silent pass
+
+
 def test_no_m18_honest_scope_rail():
     """M18 (>4 s lag) is an honest 0 -- it must never be promoted into the golden set (the pad
     recovered only 3/8 of its kills; a looser pad would paper over the limit, not fix it)."""
