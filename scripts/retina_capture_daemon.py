@@ -90,6 +90,9 @@ def cmd_start(a) -> int:
         env[ENV_SESSION_DISPLAY] = session_display(a.label, stamp)
     except Exception:  # noqa: BLE001 — the join key is additive; its absence never blocks capture
         pass
+    if getattr(a, "uvc_index", None) is not None:        # OA-RP-1: direct-HDMI UVC capture card source
+        env["RETINA_CAPTURE_SOURCE"] = "uvc"
+        env["RETINA_UVC_INDEX"] = str(a.uvc_index)
     if getattr(a, "killfeed", False):                    # kill-feed authorship (anti-spectate differentiator)
         env["RETINA_KILLFEED_ENABLED"] = "true"
         if a.killfeed_roi:
@@ -463,6 +466,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="detached retina capture daemon")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("start"); s.set_defaults(fn=cmd_start)
+    s.add_argument("--uvc-index", type=int, default=None,
+                   help="OA-RP-1: capture from a UVC HDMI capture card (device index, usually 0) instead "
+                        "of WGC window/monitor grab — direct PS5 HDMI, no Remote Play encode")
     s.add_argument("--label", default="genuine"); s.add_argument("--monitor", type=int, default=0,
                    help="0=window-name capture ('Remote Play' — default; immune to monitor layout); >=1=full monitor")
     s.add_argument("--diag-every", type=int, default=4, help="emit RGC diag every N records (dense=lower)")
