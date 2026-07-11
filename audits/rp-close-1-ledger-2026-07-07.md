@@ -727,6 +727,52 @@ order-pollution in the untouched `operator_steward_absorbed_agents.py`; other 4 
 0 IOTX; no FROZEN/chain/228B-PoAC contact. **Next:** operator commits (D-ARCB-4 / D-D11-4) → one lean capture with
 `LOOP_STARVATION_ATTRIBUTION_ENABLED=1` NAMES the offender → grok designs F2 (`to_thread` that one site).
 
+## `lean_f2_validate` — 2026-07-10 — F2/F-ARCB-1b VALIDATION MATCH (RP Warzone, 3rd place, ~12.7 min)
+
+One lean RP match, all 3 flags ON, validating the pushed stack (`67313153`→`d701d2b7`). Three verdicts:
+
+- **✅ F-ARCB-1b LIVE-VALIDATED (first live test):** `match-state: sealed MATCH_ENDED (daemon_session_close)` fired at
+  stop for session `d04d6caa…` — the jsonl now carries the full pair (MATCH_STARTED ts=1783731848512 live →
+  MATCH_ENDED ts=1783732612033 sealed at close). **Arc B "seamlessly see when a match starts AND ends" is now proven
+  live end-to-end.** (B2 per-match auto-segmentation remains the only arc-B residue.)
+- **⚖️ F2 — offload VERIFIED, lag NOT closed (honest split verdict):** the two named offenders are GONE from every
+  attribution dump (`store_frame_checkpoint` 0 mentions across 184 starvations; `get_detection_policy` absent) — the
+  offload demonstrably removed them from the loop. BUT the starvation itself did not improve: **184 events (vs 143
+  dumps lean_d11), worst excess 7.34s (vs 4.69s in lag_attr_validate — lean_d11's excess distribution was not
+  measured), fps med 13.5 (vs 17.0)**. Decisive residual finding: **every instrumented
+  loop-thread site is ≤0.035s** (tick_match_state max 0.013s no-growth, flush 0.012s, cognitive_embedding 0.035s) while
+  the loop starves for seconds → **the residual blocker is NOT a wrappable Python sync site.** Candidate class:
+  GIL/CPU contention from the capture worker stack (WGC frame callbacks + qt-dense-cand + classify-burst + HID reader
+  all churn on the same interpreter) / executor saturation / OS scheduling under Remote-Play load. This is the
+  new-failure-class handoff to grok: F2.x is a SYSTEMIC design (F1 capture-priority deferral / process isolation for
+  the vision stack / accept-and-institutionalize-offline), not another `to_thread`.
+- **⚠️ authored=0 — honest INSUFFICIENT_KILLS, integrity rails held:** the anchor never PROMOTED (3 `candidate_cut`, 1
+  `candidate_demoted_stall`, 1 `candidate_demoted_fp` — the dense stall/FP demotion rails fired correctly rather than
+  promoting junk); `inline_authored=4` recognized on the sparse path; fps med 13.5 + a lower-kill 3rd-place match =
+  fewer template chances. **This is exactly the case the golden offline pack institutionalizes** — the 600-crop archive
+  is sealed (`retina_kf_archive/lean_f2_validate_1783731776`, PoSP SYNCHRONIZED kas_verified=True fusion_rows=184
+  archive_verified=True); offline scan + deferred@pad=4000 can recover authorship card-free per the P0 #2 path.
+
+**P0 exit-criterion status:** "offline authored provable every time" ✅ (P0 #2 closed) · "live path no longer
+self-starving under lean" ❌ NOT MET — but now with proof the starvation is systemic, not site-wrappable. → grok F2.x.
+
+**Offline recovery on tonight's archive (same night, P0 #2 thesis on fresh data):** scan 112/600 matched → 36 clusters
+(2 suspect) → deferred @ pad=4000: **DEFERRED_AUTHORED_SESSION authored=2** (observed=13, unpromotable=21, windows=25),
+**verifier OK (91 checks)** → `audits/kas_deferred_record_lean_f2_validate_1783731776_2026-07-10.json`. **Live
+INSUFFICIENT_KILLS(0) → offline authored=2 — third consecutive archive where the deferred path recovers what the
+lag-thinned live path missed.** Lag characterization (bar E3-grade): pad=0 yields the SAME authored=2 → within-window
+kills, no measurable fire→kill overhang (M14 profile, bounded by construction). **Third-golden call: DIAGNOSTIC, not
+promoted** — it meets the bounded-lag admission bar but authored=2 is floor-exact (min_kills=2, zero margin); a single
+flaky cluster would flip the pack to exit 1. The two authored=3 goldens keep the pack robust; tonight's record stands
+as fresh-data evidence, not a gate.
+
+**F2.x decision doc audited (D-F2X-6): PASS, claim ⊆ reality.** Audit notes: (N1) the "worst ~4.7s" prior class
+correctly pairs with lag_attr_validate (this ledger's own earlier juxtaposition fixed above); (N2) §3 "M14 ~38fps" is
+unverified color, non-load-bearing; (N3) **the F1 kill-check would be a real experiment, not theater** — the lean
+bridge still runs residual asyncio work (uvicorn HTTP, MQTT retry loop, revocation listener, 30-min
+CalibrationIntelligenceAgent, per-record create_tasks), so D-F2X-2 has a concrete defer-list if the operator ever GOs
+it. Decisions D-F2X-1/2/3/4/5 are the operator's; recommendation per doc §5 (offline primary + honest P0 narrative).
+
 ## OPERATOR-ACTION box
 
 - **OA-RP-1 (DEMOTED TO OPTIONAL 2026-07-07 — operator has no funds; roadmap
