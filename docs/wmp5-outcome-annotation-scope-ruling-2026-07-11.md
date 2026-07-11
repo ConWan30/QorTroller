@@ -100,8 +100,11 @@ Verifier **SCOPE HONESTY** (check #5) extends: if `scope_outcome_channel` presen
 **Default recommendation (design, not operator):** **R-WMP5-IN** is *coherent* if and only if disclosure never pretends observation is present and T1–T6 are enforced in assembler + verifier. If operator wants zero screen-derived anything in export forever → **R-WMP5-OUT**.
 
 ```text
-Operator ruling:  ☐ OUT   ☐ IN   ☐ HOLD
-Date / initials:  ________
+Operator ruling:  ☐ OUT   ☐ IN   ☑ HOLD          (R-WMP5-HOLD)
+Date / initials:  2026-07-11 / operator (session ruling; Claude audit PASS both docs)
+Rationale: park until the capture card's clean event channel is proven live (and/or a
+publisher event API reduces the pixel-derivation critique). No urgency penalty — the
+build was gated regardless. Re-open = operator re-rules IN against the same T1–T6 test.
 ```
 
 **Stop here if not IN.** Sections 2–3 are design **contingent** on R-WMP5-IN.
@@ -199,7 +202,7 @@ Publish with every WMP-5 corpus:
 
 | ID | Decision | Default | Operator |
 |----|----------|---------|----------|
-| **D-WMP5-1** | Scope ruling OUT / IN / HOLD (§1.6) | **HOLD** until explicit | ☐ OUT ☐ IN ☐ HOLD |
+| **D-WMP5-1** | Scope ruling OUT / IN / HOLD (§1.6) | **HOLD** until explicit | ☑ **HOLD 2026-07-11** (re-open after live card-clean event channel; T1–T6 test stands) |
 | **D-WMP5-2** | If IN: adopt T1–T6 + §1.5 disclosure strings | Yes | ☐ accept ☐ amend |
 | **D-WMP5-3** | If IN: reference-and-bind only; no crops in bundle | Yes | ☐ accept ☐ amend |
 | **D-WMP5-4** | If IN: verifier #6; v1 5-check path preserved | Yes | ☐ accept ☐ amend |

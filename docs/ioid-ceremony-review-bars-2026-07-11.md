@@ -146,11 +146,11 @@ Mirror keeper / VHR / deploy posture:
 
 | ID | Decision | Default | Operator |
 |----|----------|---------|----------|
-| **D-IOID-CER-1** | v1 DID: MFG tx NOW if available; birth CID NOW if pinned; PoEP DEFER | Yes | ☐ accept ☐ amend |
-| **D-IOID-CER-2** | Full-loop: ioID **before** external WMP identity claim; fixtures may omit DID with honest ABSENT | Yes | ☐ accept ☐ amend |
-| **D-IOID-CER-3** | Triple-gate + 0.75 IOTX hard cap; estimate-first; dry_run default | Yes | ☐ accept ☐ amend |
-| **D-IOID-CER-4** | No absolute “first controller DID” without sourced survey | Yes | ☐ accept ☐ amend |
-| **D-IOID-CER-5** | Fire live registration (spend + gamer sign) | Hold until GO | ☐ GO ☐ hold |
+| **D-IOID-CER-1** | v1 DID: MFG tx NOW if available; birth CID NOW if pinned; PoEP DEFER | Yes | ☑ **ACCEPTED 2026-07-11** |
+| **D-IOID-CER-2** | Full-loop: ioID **before** external WMP identity claim; fixtures may omit DID with honest ABSENT | Yes | ☑ **ACCEPTED 2026-07-11** |
+| **D-IOID-CER-3** | Triple-gate + 0.75 IOTX hard cap; estimate-first; dry_run default | Yes | ☑ **ACCEPTED 2026-07-11** |
+| **D-IOID-CER-4** | No absolute “first controller DID” without sourced survey | Yes | ☑ **ACCEPTED 2026-07-11** |
+| **D-IOID-CER-5** | Fire live registration (spend + gamer sign) | Hold until GO | ☑ **HOLD 2026-07-11** — hard pre-req per Claude audit: the live send/readback path is placeholder (`ioid_token_id = 42`, `controller_ioid_registration.py` ~L293); wire-up build (agent-path quality, `operator_session_register_agents.py` step-7 precedent) must go green BEFORE any GO |
 
 ---
 
