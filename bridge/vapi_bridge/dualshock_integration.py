@@ -1970,8 +1970,7 @@ class DualShockTransport:
                 # NEVER modifies classifier state. NEVER overrides hard cheat codes.
                 if bio_result is None and getattr(self._cfg, "adaptive_thresholds_enabled", True):
                     try:
-                        _policy = self._timed_loop_store(
-                            "ds.store.get_detection_policy",
+                        _policy = await asyncio.to_thread(       # F2: offload off the event-loop thread
                             self._store.get_detection_policy, self._device_id.hex())
                         if _policy:
                             _mult = float(_policy.get("multiplier", 1.0))
@@ -3243,8 +3242,8 @@ class DualShockTransport:
             _should_write = (not _grinding) or (_now_mono - _last_cp >= 0.10)
             if _should_write:
                 _rh = _hl.sha256(raw[:164]).hexdigest()
-                self._timed_loop_store(
-                    "ds.store.store_frame_checkpoint", self._store.store_frame_checkpoint,
+                await asyncio.to_thread(                          # F2: offload off the event-loop thread
+                    self._store.store_frame_checkpoint,
                     device_id=self._device_id.hex() if self._device_id is not None else "",
                     record_hash=_rh,
                     frames=list(self._replay_ring),
