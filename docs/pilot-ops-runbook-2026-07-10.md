@@ -114,9 +114,19 @@ python scripts/match_certificate.py verify --cert audits/match_certificate_<labe
 ```
 
 Without `--snarkjs`/`--chain-rpc` the verify honestly reports **`OVERALL: PARTIAL` (ZK UNCHECKED,
-anchor-onchain UNCHECKED)** — that is the expected result on a bare rig (smoke-verified on the M17 demo
-cert). Full `VERIFIED` requires passing both (the optional PORT-CERT-full item); PARTIAL is a valid,
-honest handoff as long as it is reported as PARTIAL.
+anchor-onchain UNCHECKED)** — a valid, honest handoff as long as it is reported as PARTIAL. For the full
+**`VERIFIED`** (C5 Groth16 re-verify + C6 on-chain anchor read, 0 IOTX), use the one-command runner:
+
+```bash
+python scripts/portcert_full_verify.py --cert audits/match_certificate_<label>.json \
+    --posp audits/posp_record_<label>_<date>.json
+```
+
+It discovers a local snarkjs (env `SNARKJS` → `contracts/node_modules/.bin` → PATH → npx), defaults the
+IoTeX **testnet** RPC, pre-checks the cert's ZK refs, and holds a VERIFIED-only bar: exit 0 =
+`OVERALL: VERIFIED`; exit 1 = ran but not VERIFIED; exit 2 = incomplete environment (never a pass).
+Demonstrated on the M17 demo cert 2026-07-10: all checks green incl. `snarkjs groth16 verify OK` + anchor
+tx confirmed on-chain.
 
 **Goes to the organizer:** the certificate JSON (`qortroller-match-certificate-v0` — carries
 `advisory=true`, `population_certified=false`, `verifier_independence` limits) + the verify command +

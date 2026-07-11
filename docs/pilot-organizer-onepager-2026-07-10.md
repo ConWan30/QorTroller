@@ -85,7 +85,7 @@ Live thinned crops → offline deferred recovery is the reliability story. **Mis
 | Surface | Third party can… | Cannot claim… | Path |
 |---------|------------------|---------------|------|
 | **PoSP** | Re-check session join / surface presence verdict | Host compromise resistance | `l9_presence/posp.py` |
-| **PORT-CERT** | Re-verify portable cert off-rig (snarkjs/RPC checks are **injected** callables) | Capture independence / trustless host | `l9_presence/port_cert.py` · M17 cert above |
+| **PORT-CERT** | Re-verify portable cert off-rig (snarkjs/RPC checks are **injected** callables); full `OVERALL: VERIFIED` demonstrated on the M17 cert (C5 Groth16 re-verify + C6 testnet anchor read) | Capture independence / trustless host | `l9_presence/port_cert.py` · M17 cert above · `scripts/portcert_full_verify.py` |
 | **VHR (testnet)** | Confirm a real Groth16 replay proof was accepted on-chain once (demo path) | Population enforcement or mainnet product | `audits/vhr_proof2_m17/vhr_onchain_submission.json` |
 
 ---
