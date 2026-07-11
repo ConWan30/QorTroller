@@ -61,17 +61,35 @@ from vapi_bridge.wmp import ProvenanceBundle, SCHEMA_VERSION
 
 
 # ── deferred-export guard ──────────────────────────────────────────────
-# W1-D: this lambda hard-returns False in v1. WHEN the greenfield
-# VAPIWorldModelConsentRegistry ships (Phase-2 promote) and the bridge
-# is wired to view-call setWorldModelConsent for a specific gamer, this
-# function will return the view-call result. Until then, REAL-gamer data
-# cannot leave the export script.
+# W1-D: hard-returns False UNTIL the greenfield VAPIWorldModelConsentRegistry is deployed and
+# WORLD_MODEL_CONSENT_REGISTRY_ADDRESS is set (Phase-2 promote, INC-4). With the env set, this
+# performs the read-only isWorldModelConsentGranted(gamer) view-call — the gamer's own on-chain
+# signature is the ONLY thing that can flip it. Env unset -> v1 behavior byte-identical.
+_WMC_SELECTOR = "0xf92ce72a"   # isWorldModelConsentGranted(address) — keccak-computed 2026-07-11
+_DEFAULT_RPC = "https://babel-api.testnet.iotex.io"
+
+
 def world_model_consent_present(gamer_address: str) -> bool:
-    """Returns False in v1 — the cryptographic consent leg for WMP export
-    does not yet exist on-chain. Real-data export is intentionally
-    blocked behind this gate."""
-    _ = gamer_address  # kept for API stability — Phase-2 will read it
-    return False
+    """False when no registry is configured (W1-D deferral, v1 byte-identical); otherwise the
+    LIVE on-chain consent state for `gamer_address`. Fail-closed: any RPC/parse error -> False
+    (real data never exports on a broken consent read)."""
+    registry = os.environ.get("WORLD_MODEL_CONSENT_REGISTRY_ADDRESS", "").strip()
+    if not registry or not gamer_address:
+        return False
+    try:
+        import urllib.request
+        g = gamer_address[2:] if gamer_address.startswith("0x") else gamer_address
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call",
+                           "params": [{"to": registry,
+                                       "data": _WMC_SELECTOR + g.rjust(64, "0")}, "latest"]}).encode()
+        req = urllib.request.Request(
+            os.environ.get("WMP_RPC_URL", _DEFAULT_RPC), data=body,
+            headers={"Content-Type": "application/json", "User-Agent": "qortroller-wmp-export"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            out = json.loads(r.read()).get("result") or "0x"
+        return out != "0x" and int(out, 16) == 1
+    except Exception:  # noqa: BLE001 — fail-closed: no consent read, no export
+        return False
 
 
 # ── output paths ───────────────────────────────────────────────────────
@@ -204,10 +222,75 @@ def _load_fixture_corpus(path: Path) -> list[ProvenanceBundle]:
     return bundles
 
 
+def _build_real_bundle(args) -> "ProvenanceBundle":
+    """Phase-2 real-data path (INC-3): thread the regenerated matrix + the committed VHR proof
+    + recency + consent into the UNTOUCHED assembler. The matrix input is the private-inputs
+    JSON `scripts/wmp_regen_matrix.py` emits (its root was kill-checked byte-equal against the
+    real proof's public input at INC-0)."""
+    from vapi_bridge.replay_proof_pipeline.groth16_prover import _encode_proof
+    from vapi_bridge.replay_proof_pipeline.pre_processor import SanitizedReplayMatrix
+    from vapi_bridge.wmp.bundle_assembler import BundleAssembler
+
+    priv = json.loads(Path(args.matrix).read_text(encoding="utf-8"))
+    mx = priv["matrix"]
+    public_list = json.loads(Path(args.vhr_public).read_text(encoding="utf-8"))
+    proof_json = json.loads(Path(args.vhr_proof).read_text(encoding="utf-8"))
+    # FROZEN INV-VHR-005 public order (output-first).
+    order = ("replayProofToken", "sanitizedTraceRoot", "poacChainRoot",
+             "consentPolicyHash", "humanityThreshold", "vhpCommitment")
+    public = {k: str(public_list[i]) for i, k in enumerate(order)}
+
+    matrix = SanitizedReplayMatrix(
+        session_id=args.session_id, ticks=int(mx["ticks"]),
+        stick_L_sector=bytes.fromhex(mx["stick_L_sector"]),
+        stick_R_sector=bytes.fromhex(mx["stick_R_sector"]),
+        trigger_L_state=bytes.fromhex(mx["trigger_L_state"]),
+        trigger_R_state=bytes.fromhex(mx["trigger_R_state"]),
+        button_mask=bytes.fromhex(mx["button_mask"]),
+        imu_gravity_sector=bytes.fromhex(mx["imu_gravity_sector"]),
+        poac_chain_root=bytes.fromhex(priv["poacChainRoot"][2:]
+                                      if str(priv["poacChainRoot"]).startswith("0x")
+                                      else priv["poacChainRoot"]),
+        vhp_token_id=0, humanity_prob_floor=float(public["humanityThreshold"]) / 1000.0,
+        session_verdict=args.session_verdict,
+    )
+    humanity = {"proof_type": "VAPI-REPLAY-PROOF-v1",
+                "proof_bytes_hex": _encode_proof(proof_json).hex(),
+                "public_inputs": public,
+                "sanitized_trace_root": public["sanitizedTraceRoot"],
+                "verifier_address": args.verifier_address,
+                "deferred": False, "deferred_reason": ""}
+    if args.recency_open and args.recency_close:
+        recency = {"open_block": int(args.recency_open),
+                   "open_block_hash": args.recency_open_hash,
+                   "close_block": int(args.recency_close),
+                   "close_block_hash": args.recency_close_hash,
+                   "registry_address": args.beacon_registry}
+    else:
+        # Honest deferral: no anchored open/close pair supplied — the bundle carries an empty
+        # registry and the verifier reads BEACON_REGISTRY_NOT_DEPLOYED. Never fabricated.
+        recency = {"open_block": 0, "open_block_hash": "", "close_block": 0,
+                   "close_block_hash": "", "registry_address": ""}
+    consent = {"registry_address": args.consent_manifest_registry,
+               "gamer_address": args.gamer,
+               "manifest_hash": args.consent_manifest_hash,
+               "world_model_dimension": "GRANTED",
+               "world_model_registry": os.environ.get(
+                   "WORLD_MODEL_CONSENT_REGISTRY_ADDRESS", "")}
+    extra = None
+    if args.strata_band:
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from l9_presence.skill_strata import wmp_metadata
+        extra = wmp_metadata(args.strata_band)   # UC-2 hook; DataFloorViolationError guard applies
+    return BundleAssembler().assemble(sanitized_matrix=matrix, humanity_proof=humanity,
+                                      recency=recency, consent=consent, synthetic=False,
+                                      extra_metadata=extra)
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="wmp_export",
-        description="WMP-2 fixtures-first exporter (W1-D deferred-export guard).",
+        description="WMP-2 exporter (fixtures + Phase-2 real path behind the consent gate).",
     )
     p.add_argument("--out", required=True, type=Path,
                    help="Output directory. Created if missing.")
@@ -219,14 +302,47 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fixture-corpus", type=Path, default=None,
                    help="Path to a fixture corpus dir containing wmp_corpus.jsonl.")
     p.add_argument("--gamer", type=str, default="",
-                   help="Gamer wallet address. Reserved for Phase-2 when the "
-                        "consent gate is cryptographic.")
+                   help="Gamer wallet address (the on-chain consent subject).")
+    # ── Phase-2 real path (INC-3) ──────────────────────────────────────
+    p.add_argument("--real", action="store_true",
+                   help="Export ONE real bundle. Requires the on-chain world-model consent "
+                        "view-call to return True for --gamer (WMP-4 deployed + granted).")
+    p.add_argument("--matrix", type=Path, default=None,
+                   help="private-inputs JSON from scripts/wmp_regen_matrix.py")
+    p.add_argument("--vhr-proof", type=Path, default=None, help="snarkjs proof.json")
+    p.add_argument("--vhr-public", type=Path, default=None, help="snarkjs public.json")
+    p.add_argument("--session-id", default="")
+    p.add_argument("--session-verdict", default="HUMAN")
+    p.add_argument("--verifier-address", default="")
+    p.add_argument("--recency-open", type=int, default=0)
+    p.add_argument("--recency-open-hash", default="")
+    p.add_argument("--recency-close", type=int, default=0)
+    p.add_argument("--recency-close-hash", default="")
+    p.add_argument("--beacon-registry",
+                   default="0x962440312a995b21d4E203bE6d93021CC22bA051")
+    p.add_argument("--consent-manifest-registry",
+                   default="0x5F7c8068D0e61818FCD613D47e68a9Ea906a2743")
+    p.add_argument("--consent-manifest-hash", default="")
+    p.add_argument("--strata-band", default="",
+                   help="optional UC-2 band label (rides as extra_metadata)")
     args = p.parse_args(argv)
 
     # ── deferred-export guard ──────────────────────────────────────────
-    # Real-data export gate. v1 hard-returns False.
+    # Real-data export gate: the on-chain consent view-call (env-configured) or hard-False.
     real_data_ok = world_model_consent_present(args.gamer)
-    if not real_data_ok and not args.allow_fixtures:
+    if args.real:
+        if not real_data_ok:
+            sys.stderr.write(
+                "[wmp_export] REFUSING --real export — on-chain world-model consent is NOT "
+                "granted for this gamer (or WORLD_MODEL_CONSENT_REGISTRY_ADDRESS is unset).\n"
+                "  Deploy WMP-4 + run contracts/scripts/set-world-model-consent.js first.\n")
+            return 2
+        for req_name in ("matrix", "vhr_proof", "vhr_public", "session_id", "gamer"):
+            if not getattr(args, req_name):
+                sys.stderr.write(f"[wmp_export] --real requires --{req_name.replace('_', '-')}\n")
+                return 2
+        bundles = [_build_real_bundle(args)]
+    elif not real_data_ok and not args.allow_fixtures:
         sys.stderr.write(
             "[wmp_export] REFUSING real-data export — world-model consent "
             "is DEFERRED in v1 (W1-D).\n"
@@ -235,17 +351,15 @@ def main(argv: list[str] | None = None) -> int:
             "  rationale and the Phase-2 promote path.\n"
         )
         return 2
-
     # ── fixtures path ──────────────────────────────────────────────────
-    if args.allow_fixtures:
+    elif args.allow_fixtures:
         if args.fixture_corpus is None:
             sys.stderr.write("[wmp_export] --allow-fixtures requires --fixture-corpus PATH\n")
             return 2
         bundles = _load_fixture_corpus(args.fixture_corpus)
     else:
-        # Unreachable in v1 (the guard above rejects). Reserved for
-        # Phase-2 when real_data_ok can return True.
-        sys.stderr.write("[wmp_export] real-data path is not implemented in v1\n")
+        # Consent readable but no mode selected — demand explicitness, never guess.
+        sys.stderr.write("[wmp_export] choose --real (one real bundle) or --allow-fixtures\n")
         return 2
 
     summary = export_bundles(
