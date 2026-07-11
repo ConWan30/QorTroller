@@ -17,7 +17,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 
 ## Cycle 1 — 2026-07-11 — Lens: core proof-products + first derivative class
 
-### UC-1 · Certified action-demonstration corpora (the WMP base product)
+### UC-1 · Certified action-demonstration corpora (the WMP base product) — **LIVE 2026-07-11** (first real bundle VERIFIED 5/5 zero-stub, recency explicitly deferred; WMP-4 `0x06836Fb8…`, consent tx `0x8f70bca3…`; `audits/wmp-phase2-first-real-bundle-2026-07-11.md`)
 - **Produces:** post-φ action traces (stick sectors, trigger states, button mask, IMU gravity sector @60Hz/4-bit) from real matches.
 - **Proof:** VHR Groth16 humanity (real proof precedent: M17, block 45479067) + PoSR open/close beacons (keeper LIVE) + Arc 4 consent (`0x5F7c8068…`) → `ProvenanceBundle` (`wmp/bundle_assembler.py`) → consumer runs the 5-check verifier (`sdk/wmp_verify.py`) trustlessly.
 - **Consumer:** world-model / imitation-learning labs (Li-taxonomy planner-demo scarcity).
