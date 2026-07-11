@@ -8,7 +8,18 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
-**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated); Trio-Retina + CCO×PoEP Fusion + L9 coupled-retina presence BUILT (advisory, default-OFF) — **public repo, mainnet-ready** · **Date:** 2026-06-27
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated); Trio-Retina + CCO×PoEP Fusion + L9 coupled-retina presence BUILT (advisory, default-OFF); **PoSP synchronized presence + kill-authorship (live RP authored) + first real on-chain ZK replay proof + PORT-CERT full VERIFIED + organizer pilot package SHIPPED (2026-07)** — **public repo · IoTeX testnet** · **Date:** 2026-07-10
+
+## In plain English — what this actually is
+
+When you play a competitive match, QorTroller watches two things: the **screen** (like security-camera footage) and your **controller's real physical signals** (like door-badge swipes). After the match it seals both into a tamper-evident **receipt** proving a real human was at the controller and that *their* trigger pulls caused the kills on screen. Anyone — a tournament organizer, a rival, a journalist — can re-check that receipt with one command, without trusting us.
+
+**What it catches:** the "nobody's-actually-there" cheats — bots, replays, account farms, remote input streaming — exactly the class that's invisible to normal anti-cheat when a match runs over cloud gaming or Remote Play.
+**What it doesn't:** a real human using an aimbot (they're genuinely present), or *which* human is playing. It's one honest layer, built to stack with existing tools.
+**The other half:** the gamer *owns* the data this produces. Consent is granted and revoked by the player's own wallet — the system is built so we *can't* do it for them.
+**Today's grade:** advisory pilot on a test network — a smoke detector, not a judge. There is no token and nothing for sale.
+
+*(Organizer-facing plain-English docs: [pilot walkthrough](docs/pilot-organizer-walkthrough-2026-07-10.md) · [pilot one-pager](docs/pilot-organizer-onepager-2026-07-10.md) · [ops runbook](docs/pilot-ops-runbook-2026-07-10.md).)*
 
 | Surface | Status |
 |---|---|
@@ -32,7 +43,31 @@
 | **CI matrix** | GitHub Actions: Python 3.10/3.11/3.12 × Node 18/20 + Rust stable + WASM target enforcing the 182-invariant gate on every PR. Governance gates (PV-CI, Mythos, Path Scope) green; full integration matrix has tracked pre-existing toolchain debt (hardhat-ABI ordering) under repair — branch-protection draft proposes making the governance gates blocking |
 | **Trio-Retina (advisory perception oracle)** | **BUILT through Phase 3, default-OFF** — controller-embed → perception → `retina_state_commitment` → Poseidon `events_root` (off-chain ZK-prep) → on-chain PDA attestation; W3bstream `retina_state_commitment` validation + DA bulk/witness sidecar (same decoupled-pointer pattern as Arc 7 PQ). Wired read-only into `session_adjudicator` as a second forensic oracle; **does NOT touch the 228-byte PoAC wire** (`RETINA_PERCEPTION_ENABLED`/`RETINA_DA_WITNESS_ENABLED` default false) |
 | **CCO × PoEP Fusion (two-axis: identity × presence)** | **Phases A–F shipped** — `CapabilityOracle` + `ChallengeVerifier` (Edge `adaptive_force` + measured DualSense `rumble_imu`) + identity×presence grid + off-chain composability on `GET /player/session-status`. **Phase G measurement VALIDATED + operator-attested:** PREMIUM_EDGE `sony_dualshock_edge_v1` N=210, MID_TIER `sony_dualsense_v1` N=130 (HUMAN N=50, FRR proxy 0.0); MINIMAL_PAD deferred (no hardware). Live PoEP `PRESENT` verdict remains **operator-gated** (default-OFF, N≥50 corpus + env flip) |
+| **PoSP + kill-authorship stack (2026-07)** | **QORTROLLER-POSP-v0 synchronized presence proven live across matches**; kill-authorship (KAS) live under Remote Play — **first live RP authored sessions 2026-07-10 (authored=14, then 11)**; offline **deferred-attestation** tier recovers authorship from sealed archives when live capture is lag-thinned (three consecutive live-0→offline-recovery archives) |
+| **First REAL on-chain ZK replay proof** | Groth16 `VAPIReplayProofVerifier` proof from a real match (M17) **accepted on IoTeX testnet** — `ReplayProofVerified`, block **45479067** (`audits/vhr_proof2_m17/`) |
+| **Golden offline authored pack** | `python scripts/golden_offline_authored.py` → deterministic card-free `authored>0` re-proof (bars A–H frozen in `docs/golden-offline-authored-pack.md`; exit 0 mandatory before any external claim) |
+| **PORT-CERT full VERIFIED** | Portable match certificate re-check end-to-end: `scripts/portcert_full_verify.py` → **`OVERALL: VERIFIED`** demonstrated on M17 (C5 snarkjs Groth16 re-verify + C6 on-chain anchor read, one command, 0 IOTX) |
+| **Organizer pilot package** | One-pager (claim-audited) + ops runbook (rig-validated) + plain-English walkthrough — **four claim ceilings frozen**: advisory never-ban · offline-primary reliability · developer-self scope (no field-FAR/identity/population) · testnet no-token |
 | **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; zero-trust sandbox compliant; every chain-write path operator-fired |
+
+---
+
+## Milestones from genesis to now (plain-English timeline)
+
+| When | Milestone | Why it matters in plain terms |
+|---|---|---|
+| Genesis | **The 228-byte PoAC record** — every controller input cryptographically signed and chained | The atom of the system: an input event that can't be quietly rewritten |
+| 2026-04 | **3-player biometric corpus; AIT separation gate cleared (1.199, N=37)** | First evidence real people are statistically tellable-apart by grip physics alone |
+| 2026-05-06 | **GIC_100 anchored on IoTeX** (block 43348052) | 100 consecutive clean play sessions chained + timestamped on a public blockchain |
+| 2026-05-17 | **3-agent autonomous operator fleet live at full authority** (Sentry/Guardian/Curator) | The protocol's maintenance runs under cryptographic, auditable rules — not admin whim |
+| 2026-05-26→30 | **Path A silicon-rooted device registry + Data-economy arcs built** (replay proofs, recency beacons, post-quantum sidecar) | Controllers get birth certificates; match data gets an owner-controlled marketplace rail |
+| 2026-06-05 | **First gamer-signed consent manifest on-chain; 66 contracts live** | The player flipped their own data switches with their own wallet — provably not us |
+| 2026-07-04→07 | **PoSP — synchronized presence proof, proven live** (incl. first Remote-Play-born PoSP) | Three independent evidence surfaces (authorship log, biometric co-capture, sealed archive) agree it was one real session |
+| 2026-07-08 | **First *real* zero-knowledge replay proof verified on-chain** (block 45479067) | Math, not promises: a real match's replay integrity checked by a public contract |
+| 2026-07-08→10 | **Kill-authorship: kills bound to real trigger pulls — offline path institutional** | The receipt names *which kills* the physical controller caused; reproducible from a sealed archive with one command, every time |
+| 2026-07-10 | **First live Remote-Play authored sessions** (authored=14, then 11) | The hardest capture path (cloud streaming) attributed kills *during live play* |
+| 2026-07-10 | **First full certificate re-check: `OVERALL: VERIFIED`** | An outsider can re-run our proof end-to-end — ZK proof + blockchain anchor — in one command |
+| 2026-07-10 | **Pilot package published** (organizer one-pager · ops runbook · plain-English walkthrough) | A tournament organizer can evaluate and run this without us re-explaining anything |
 
 ---
 
@@ -109,6 +144,8 @@ Live at `/consent` (alias `/cockpit`) — separate from the operator dashboard a
 | **tremor_resting** | 1.177 | 27 | False | `all_pairs_p0_ok=False`; P1vP3=0.032 — Phase 213 AccelTremorFFT fix shipped, verification pending |
 
 The token launch invariant ("no TGE before separation_ratio > 1.0 + all_pairs_above_1") **REMAINS IN FORCE** for legal/economic defensibility of token issuance. AIT clears the technical gate for testnet/non-tournament demonstrations; touchpad_corners is the actual tournament BLOCK enforcement blocker.
+
+**Claim ceilings (frozen 2026-07-10):** advisory soft-signal, never a ban input · offline sealed-archive authorship is the reliability path (live capture is best-effort; we do not claim it "healthy" — the self-starving criterion is OPEN per `docs/f2x-residual-capture-contention-2026-07-10.md`) · developer-self scope — no field error rates, no identity claims, no population certification yet · testnet only, no token. The presence oracle is SEPARATED against *modeled* automation only (`audits/p0a-presence-op-v2-2026-07-09.json`); real-adversary and multi-player studies are deliberately queued behind demand, not ahead of it.
 
 **On-chain anchored milestones (IoTeX testnet, chain 4690):**
 - **GIC_100 cognitive chain head** permanently anchored 2026-05-06 — tx `0xe807347eb837...` block 43348052. A 100-link cognitive-session integrity chain anchored on IoTeX testnet.
