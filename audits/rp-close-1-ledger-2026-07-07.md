@@ -785,3 +785,19 @@ it. Decisions D-F2X-1/2/3/4/5 are the operator's; recommendation per doc §5 (of
   M14's sealed archive already holds 4/11 kills at K=3 with 0 false reads =
   DEFERRED_AUTHORED 36%, honestly labeled vs live AUTHORED). Match 15/Option A
   parks until funds exist; RP-2b task parked accordingly.
+
+## WMP PHASE-2 PROMOTE — UC-1 LIVE (2026-07-11) — the first real provenance bundle, VERIFIED 5/5 zero-stub
+
+Full plan executed same-day (INC-0→6, plan `build-the-top-2-abundant-muffin.md`, code `12cbbe5c`):
+**INC-0 kill-check PASS** (M17 matrix regenerates deterministically; Poseidon root == the real proof's public[1]
+exactly) → INC-1..3 built (verifier injection promote + gamer consent CLI + real export path; 40/40 tests, 24
+existing unmodified) → **INC-4 ceremony**: `VAPIWorldModelConsentRegistry` DEPLOYED `0x06836Fb87B64A05D81ebec9C9e234c01c2DEc5C4`
+(tx `0x5456e576…` block 45534708) + first gamer-signed `setWorldModelConsent(true)` (tx `0x8f70bca3…` block
+45534743, msg.sender == gamer, readback true) — **cost 0.247443 IOTX measured** (29.118262→28.870819) →
+**INC-5: `wmp_full_verify` → VERIFIED, 5/5, zero stubs, exit 0** (real snarkjs Groth16 + real Poseidon rehash +
+LIVE consent view-call all unstubbed; recency explicitly-deferred per the pre-declared M17 honesty rail — the
+next keeper-anchored match upgrades it to a true 5/5-with-recency). Matrix-swap tamper drill on real data:
+one flipped byte → REJECTED (the long-open Arc 5 off-circuit-root finding closed on a REAL bundle). The bundle
+carries the UC-2 strata band (`AUTHORED_HIGH_DENSITY`) through the data-floor guard. Report:
+`audits/wmp-phase2-first-real-bundle-2026-07-11.md`. Ceilings: action-only, post-φ macro-intent, developer_self,
+N=1, no buyer implied, TGE frozen.

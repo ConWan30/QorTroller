@@ -1,0 +1,14 @@
+{
+  "schema": "vapi-wmp-provenance-bundle-v1",
+  "created_at": 1783782712631354300,
+  "entries": [
+    {
+      "schema": "vapi-wmp-provenance-bundle-v1",
+      "bundle_hash": "01ca889b7ac418c112376de7ede046d4f8408c477e48882e9215821bed79f0b5",
+      "ts_ns": 1783782712630089500,
+      "ticks": 1730,
+      "humanity_deferred": false,
+      "scope_synthetic": false
+    }
+  ]
+}
