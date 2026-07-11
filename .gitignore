@@ -217,6 +217,8 @@ poep_l9/
 
 # BCC sealed developer-reference lane (local-only)
 bcc_l9/
+# BCC Match sealed gamer-local match-presence lane (A1-b; session-derived — never commit)
+bcc_match/
 
 # Design system handoff staging (read-only reference; never commit)
 .design-handoff-staging/
@@ -278,6 +280,13 @@ retina_rp_rawdump.jsonl
 retina_rp_pyds.jsonl
 # B2 instrumented trace (per-frame redness; gameplay-derived; local-only)
 retina_b2_trace*.jsonl
+
+# Per-session permanent archive bundles (tier-1 resilience; controller telemetry + gameplay-derived)
+retina_session_archive/
+# HID-lobe R2-onset sink + corpus-growth daemon logs/corpora (controller telemetry; operator-local)
+retina_hid_events.jsonl
+retina_daemon_corpus_growth_*.log
+corpus_growth_*.jsonl
 
 # Recognition bake-off raw per-crop OCR (derived from gitignored crops; other-player gamertags; bulky)
 audits/rbo_*.jsonl

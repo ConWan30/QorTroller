@@ -1,0 +1,16 @@
+{
+  "anchored_at": "2026-07-08 12:25:25",
+  "artifact": "posp-anchor-manifest-v0",
+  "block": 45438141,
+  "contract": "0x44CF981f46a52ADE56476Ce894255954a7776fb4",
+  "device_id_hash": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+  "file_sha256": "1667147aba1027b54aa73f1e2b95f6a23322fe5530496365d29b8a89f8f7e746",
+  "gas_used": 143115,
+  "method": "recordAdjudication(deviceIdHash, payload=file_sha256, flagged=false)",
+  "posp_file": "audits/posp_record_match14_rp_option_b_2026-07-07.json",
+  "preimage": "SHA-256 over the exact published record file bytes (KC-A3-1: PoSP has no commitment method BY DESIGN; this is an external file digest)",
+  "session_id": "1c9847111fb464b49a536f56b2cbc48ac365a3edfca8e6660c4228fe2cdd583b",
+  "status": 1,
+  "tx": "98fab4111c211a6aa38b006b7f9f6e9630dedc06aa2bfcd206eea567e71f5a2d",
+  "verdict": "SYNCHRONIZED"
+}

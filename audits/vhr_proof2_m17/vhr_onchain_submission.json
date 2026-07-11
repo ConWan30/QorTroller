@@ -1,0 +1,16 @@
+{
+  "artifact": "vhr-proof-onchain-submission-v0",
+  "block": 45479067,
+  "gas_used": 283279,
+  "humanity_threshold": 700,
+  "method": "verify(a,b,c,publicInputs[6]) -> ReplayProofVerified",
+  "poac_chain_root": "0x65fc5b5a397a97531705b107451136e03fd6fc7520e0c63958b54c390fbb166",
+  "proof_file": "audits/vhr_proof2_m17/proof_m17_real.json",
+  "public_file": "audits/vhr_proof2_m17/public_m17_real.json",
+  "replay_proof_token": "0xe675e6ae23ebb23cb3d01dd235f1ddd5d00008097b73a3fc704ce850844fd7c",
+  "status": 1,
+  "submitted_at": "2026-07-09 17:59:12",
+  "tx": "0db5fafff622d8510786f38e03d950f1fbe5f27a52173a1a50b520c5801445f9",
+  "verifier": "0x5182372d1D033db0c9230843DFDE606733D5F91B",
+  "verifyView_accepted": true
+}

@@ -1,0 +1,38 @@
+{
+  "bands": {
+    "tremor": [
+      4.0,
+      15.0
+    ],
+    "haptic": [
+      30.0,
+      200.0
+    ]
+  },
+  "pre_registered": {
+    "ratio_bar": 10.0,
+    "event_margin": 1.5,
+    "event_win_ms": 250.0
+  },
+  "idle": {
+    "tremor_power": 74795998.41165842,
+    "haptic_power": 2902130.7433897336,
+    "fs": 999.6
+  },
+  "fire": {
+    "tremor_power": 770104965.7676828,
+    "haptic_power": 117357777.05352244,
+    "fs": 999.6
+  },
+  "haptic_ratio_fire_over_idle": 40.44,
+  "tremor_ratio_fire_over_idle": 10.3,
+  "ratio_bar_met": true,
+  "event_threshold": 225494.42956858996,
+  "idle_windows": 602,
+  "idle_false_events": 0,
+  "fire_windows": 602,
+  "fire_event_windows": 56,
+  "fire_event_fraction": 0.093,
+  "zero_false_on_idle": true,
+  "bar_met_overall": true
+}

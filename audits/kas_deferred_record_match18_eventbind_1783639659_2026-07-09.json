@@ -1,0 +1,778 @@
+{
+  "advisory": true,
+  "clusters": [
+    {
+      "crop_files": [
+        "panel_1783277296792428400.png",
+        "panel_1783277299336674500.png",
+        "panel_1783277301012974700.png"
+      ],
+      "crop_shas": [
+        "6705b9552d281113928f6ad763d6d9f37184a3c194591bed4a5b092e76f0f578",
+        "36bdeba2b990126c4363d7d7d42817acc5bcfb7a261f64d647a9c0b6b19b0778",
+        "1d9a7256bf2df3461334eece39e93beba589e306f9cb9cc27b968d2fd9b33607"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783277296792.4,
+        1783277301013.0
+      ],
+      "texts": [
+        "Qortrola30 ",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783277306379465200.png",
+        "panel_1783277310786845400.png",
+        "panel_1783277315023781000.png"
+      ],
+      "crop_shas": [
+        "d7f9f08ea83c8adcc0692e71518bd58235a8556ac3b1d54ec1790dda30680a4e",
+        "9405ad39b50a6e015ea9000f767e74077027ecf8b0375edbd5ce5aa99306b2a9",
+        "3664f48179d317c263686c363441a51b9f382fab7bd70f1b47364b63e5199c2e"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783277306379.5,
+        1783277315023.8
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783277353306590000.png",
+        "panel_1783277354288306700.png"
+      ],
+      "crop_shas": [
+        "83e9ce0a7cf795414f9b0fa385f0cc7a8db8205090047f261449cd025a68bf32",
+        "9a7c15d2cdeadd027dec89d09b29133396ab54caced1e798b8aa390bcd76634a"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783277353306.6,
+        1783277354288.3
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280765391523200.png"
+      ],
+      "crop_shas": [
+        "927209203e6a9c206f501ac196d6d41f5f99931f3cb7f0078ccf76bb7a0ce3c4"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783280765391.5,
+        1783280765391.5
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280770798411800.png",
+        "panel_1783280775027579500.png",
+        "panel_1783280778958203700.png"
+      ],
+      "crop_shas": [
+        "aea17ff63085c3610fe58e23c2d9536074464aa8eeea71653b57c513053f9d30",
+        "6000595b18c2d0046cc77749bdf9897e19686f7df411f4f3c0a44f50f72e360b",
+        "7a47343cff1659bd437040a3151dd71c304395ee2c9144a45461a8a3af8099c3"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783280770798.4,
+        1783280778958.2
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280798008995200.png"
+      ],
+      "crop_shas": [
+        "e7ca04aa3a7f989c891b6920e1c45f077b26ac0c11553f3f490d2cd4848cbd63"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783280798009.0,
+        1783280798009.0
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280881006943600.png"
+      ],
+      "crop_shas": [
+        "f878f55642631a9c5f9770f479016844daf784978771fde564820e19acc301e0"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783280881006.9,
+        1783280881006.9
+      ],
+      "texts": [
+        "Qortrola30str"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280887259714300.png",
+        "panel_1783280891394101200.png"
+      ],
+      "crop_shas": [
+        "f4631c86925814f5f09141332c3cd39d150c050ad53a3f8cafcd55738e4facda",
+        "5cf56c7d229d5c6df477b3bdaa6c896ceec8a4528c9c52488ca4fb8a6d26967d"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783280887259.7,
+        1783280891394.1
+      ],
+      "texts": [
+        " Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280929125306200.png"
+      ],
+      "crop_shas": [
+        "d3abd74b8bd4c9ba10bef64a6c5c3828ecdb0592da980a8cf20e9446b100cd8d"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783280929125.3,
+        1783280929125.3
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280950486056000.png"
+      ],
+      "crop_shas": [
+        "f80f72af929f90a9649823e4d19deb608bd9d9ffe5475066451ce619fd6e2db5"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783280950486.1,
+        1783280950486.1
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783280957726947600.png",
+        "panel_1783280962714683500.png",
+        "panel_1783280966658033800.png"
+      ],
+      "crop_shas": [
+        "ea09b95721420cb93632c55f8d88780e3133cdec6016df271ef235e1222552ef",
+        "24828878731d59c0f52b5426c0bb1adc832a60220c1ba95f2dbaf12cb51e5aee",
+        "af1eb54f7e52ec3593fcff73dca931b5224dbe18a76dc752dff3da7ebb087844"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783280957726.9,
+        1783280966658.0
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30TO",
+        "Qortrola30TO"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281009478335900.png"
+      ],
+      "crop_shas": [
+        "15e3c91138d9a7c7f3deaa92c1206a7327b0308ede0293d2a7192905ac7698cf"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783281009478.3,
+        1783281009478.3
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281034496568700.png",
+        "panel_1783281036577005100.png",
+        "panel_1783281038671056500.png",
+        "panel_1783281040025206900.png",
+        "panel_1783281043922462400.png"
+      ],
+      "crop_shas": [
+        "9577a82a9d8ae3b7e2e9d6bb21f5f0d1e566aa7ea991436c77291ea8464807ec",
+        "9577a82a9d8ae3b7e2e9d6bb21f5f0d1e566aa7ea991436c77291ea8464807ec",
+        "795cf36432a699d35c9be5ed56b5d7dba60381e6d50ad52f7383c0d2865bdb1e",
+        "854c987ac8067858c47faa46379cba480a71c7242c4c89500f672705c36dedf8",
+        "c1a47fca2869cfb20a359801ab30102411aa26f39c3485350712217fb00c5ad2"
+      ],
+      "size": 5,
+      "span_ms": [
+        1783281034496.6,
+        1783281043922.5
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281050636953900.png",
+        "panel_1783281054467936500.png",
+        "panel_1783281058073139500.png"
+      ],
+      "crop_shas": [
+        "8a33b6b887dbd05f5200661db0323d89b07a00fdd9fd72ff95d2def1a940032a",
+        "f7d30adfc60cc7b8f07d02132db24651935de151f52194168b86024ab609424b",
+        "b036193604e5ae2894f020c4340045d50e0c00c6cee966f290dfc7d9df2ee981"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783281050637.0,
+        1783281058073.1
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30bl",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281067024779800.png"
+      ],
+      "crop_shas": [
+        "2a7a2ffb43116e1da5e0190768a16d3e47aa29835d1f664c32265a63ccbdf8c5"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783281067024.8,
+        1783281067024.8
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281089086226100.png"
+      ],
+      "crop_shas": [
+        "265ab017f2eddaae593da863b0a1213dcca5ec082617d615620eb6646aa9c563"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783281089086.2,
+        1783281089086.2
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281130570678700.png"
+      ],
+      "crop_shas": [
+        "d6700ff29ab454c6a4dbfb9bf2e7c0b9e57d6c5f5745c89dd565632a11f686ab"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783281130570.7,
+        1783281130570.7
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281158106212900.png"
+      ],
+      "crop_shas": [
+        "73fded8589ba1fe85958c6dd3f56aa5fbfa1441617980985afb562ad663de2eb"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783281158106.2,
+        1783281158106.2
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281202097534000.png"
+      ],
+      "crop_shas": [
+        "fcb23c9b370a0ee846084aca606b955bedfd6f1c20870bceef1caa05e03cada4"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783281202097.5,
+        1783281202097.5
+      ],
+      "texts": [
+        "Qortrola30 "
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281217641643900.png"
+      ],
+      "crop_shas": [
+        "3f3cc6b9cd79f258ffbc0881651eac510d3b609b542c3329df4e4d616edbe635"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783281217641.6,
+        1783281217641.6
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783281223672009700.png",
+        "panel_1783281227439273800.png"
+      ],
+      "crop_shas": [
+        "57e250309ca9b2169f6bb02980f2ac8f11807bfbcdef33c6723be02ebaa4ace0",
+        "636c4e76677477d2f0464723125113eaf3549d7ae9bdedba13b8d90386cd0271"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783281223672.0,
+        1783281227439.3
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783283681801828400.png"
+      ],
+      "crop_shas": [
+        "cc421938c4576bddf2587e908aca01b6ef6a9847bacd814b6ec492bbb2601f75"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783283681801.8,
+        1783283681801.8
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783283696177326700.png",
+        "panel_1783283698469377300.png"
+      ],
+      "crop_shas": [
+        "fdedd187c025919ec4b506398d1fb28c8b2c51fde7c52f3b30b4963f4b07ac89",
+        "d0f4fd4424dde54bb4b7a51b40558f1b5c7d08af73ede3c512b20a5e559f9dfb"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783283696177.3,
+        1783283698469.4
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783283811757150300.png"
+      ],
+      "crop_shas": [
+        "3ea1c11c939c38b500deff0bbac4a7dc58c94424fc5b8044a36ca90aedd7c3fa"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783283811757.2,
+        1783283811757.2
+      ],
+      "texts": [
+        "\u4e00 Qortrola3011"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783283845595811700.png",
+        "panel_1783283847289003900.png",
+        "panel_1783283848950615200.png"
+      ],
+      "crop_shas": [
+        "c52efdf0a05afea2f9c070a39e757248c58daa3502d056dc67160fa93651adb3",
+        "5381229546f8d649e73596640c7239c702894b1673a42b68e183c45541ddc1d7",
+        "87a959c78cf6a7f7212494f868d79da87be64091fcd79cfae90890abb2895425"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783283845595.8,
+        1783283848950.6
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284109884258700.png"
+      ],
+      "crop_shas": [
+        "9665c5c6b8441c5be7e85bd32dfa46015f046ede757ecf635c72a1d7ce109556"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783284109884.3,
+        1783284109884.3
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284203117898000.png"
+      ],
+      "crop_shas": [
+        "7ef861b7cb508baa19f3d56438b04aa0a97c72772997d481cfce5c040601f960"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783284203117.9,
+        1783284203117.9
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284245496928600.png"
+      ],
+      "crop_shas": [
+        "c55caaaf0c7e43b0fceb00e81c64d6fe292657922b932ab494fa9d4da4d2dd21"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783284245496.9,
+        1783284245496.9
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284271628436300.png",
+        "panel_1783284274639406800.png",
+        "panel_1783284278520947500.png"
+      ],
+      "crop_shas": [
+        "092dd5990724c4f8e7e6836f9801f31df6a268cf763d3b4522a410cd3b487fa0",
+        "ecd886eb44851a740cba81d6db2fe4cf20605f3fe95a9e9409377fe58637260e",
+        "9ab57d077f1bb23b438255ac14be3ea039a38ebcc5e7d4d305296a82ef02ea92"
+      ],
+      "size": 3,
+      "span_ms": [
+        1783284271628.4,
+        1783284278520.9
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": "DEFERRED_OBSERVED",
+      "window_hit_ms": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284335007862100.png"
+      ],
+      "crop_shas": [
+        "0e06cb28c112b051be47a9d1835dcd33679fa4abd95d9982f3b045c490c76ef7"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783284335007.9,
+        1783284335007.9
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284403300368700.png"
+      ],
+      "crop_shas": [
+        "fd21b1827365333e2875b2d3d4d81e22dc7b0bae9cb7b8dd1fb556e385f70239"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783284403300.4,
+        1783284403300.4
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284714403233900.png"
+      ],
+      "crop_shas": [
+        "e0869ded0e7582d01995f9d89247e14167afc6ab2bbe0ca5cfb6d263d589b446"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783284714403.2,
+        1783284714403.2
+      ],
+      "texts": [
+        "Qortrola30Pe"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783284853307115100.png"
+      ],
+      "crop_shas": [
+        "f14c1408212fbb88bce49c3ac35d57296f924b63a28bcd5308f73aa7cce73d9a"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783284853307.1,
+        1783284853307.1
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783285091784839600.png"
+      ],
+      "crop_shas": [
+        "372d37dd32a7d8719b7c491641aaec22dd613e19ae98f5cc73c817356639d775"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783285091784.8,
+        1783285091784.8
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783285101637943200.png",
+        "panel_1783285104477177400.png"
+      ],
+      "crop_shas": [
+        "9342a9561109fc9754d1d6b7b00bc6769d875cba5d361d278be18d91c6b0358f",
+        "ff9f2d5d5e57b433f2848710acccb6ea1af780cc3ca85a99c042b946102623ea"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 2,
+      "span_ms": [
+        1783285101637.9,
+        1783285104477.2
+      ],
+      "texts": [
+        "Qortrola30",
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783285110225531900.png"
+      ],
+      "crop_shas": [
+        "e07f3c75d8e822dcdb8779200626b943d533f85deeb7aba0b9e5eacc8ecb3141"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783285110225.5,
+        1783285110225.5
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783286983488995000.png"
+      ],
+      "crop_shas": [
+        "86072b7b542847654c2ed66193f90faeaed8c90cd801b566591aa0b1beaf7bad"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783286983489.0,
+        1783286983489.0
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    },
+    {
+      "crop_files": [
+        "panel_1783287208608657800.png"
+      ],
+      "crop_shas": [
+        "d40f9bc67c642b4c72743ecac82d09fd302a699b63893216ba219b49e7f6cf43"
+      ],
+      "note": "below K=3 floor -- un-promotable, never attested",
+      "size": 1,
+      "span_ms": [
+        1783287208608.7,
+        1783287208608.7
+      ],
+      "texts": [
+        "Qortrola30"
+      ],
+      "verdict": null
+    }
+  ],
+  "deferred_authored": 0,
+  "deferred_observed": 8,
+  "engine": "v6-only (ENGINE_V6) -- same as live bootstrap",
+  "hygiene_inherited": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "timespan"
+  },
+  "k_floor": 3,
+  "manifest_count": 600,
+  "min_kills": 2,
+  "notes": [],
+  "schema": "qortroller-kas-deferred-v0",
+  "session_display": "match18_eventbind_1783639659",
+  "session_id": "aae7404c28b3e519b5bec06650ad4dd7d85535153bf0676eb4fca53af01b0584",
+  "source_kas_commitment": "792c7d43e1874316e793ba7ac82925da9dd04d2f8a5a4efe014e9fed9f7fb431",
+  "source_kas_verdict": "INSUFFICIENT_KILLS",
+  "unpromotable_clusters": 30,
+  "verdict": "DEFERRED_OBSERVED_ONLY",
+  "windows_used": 5
+}

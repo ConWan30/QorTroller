@@ -1,0 +1,33 @@
+{
+  "advisory": true,
+  "artifact": "retina-perception-root-candidate-v0",
+  "distinct_record_hash_bindings": 299,
+  "event_types": {
+    "controller.stick.radial_jump": 15943,
+    "controller.trajectory.anomalous": 30494,
+    "controller.tremor.anomalous": 2,
+    "controller.trigger.onset": 44
+  },
+  "events_root_scheme": "sha256_v1",
+  "n_events": 46483,
+  "n_per_row_state_commitments": 299,
+  "n_perception_rows": 299,
+  "pipeline": {
+    "captured": "LIVE during the session (retina_event_log)",
+    "embedder": "retina_controller_embedder (qortroller-controller-v1, dim=16)",
+    "installed": true,
+    "package": "trio-retina (MachineFi/IoTeX, Apache-2.0)",
+    "version": "0.3.0"
+  },
+  "posp_join": {
+    "perception_rows_bound_to_posp_refs": 98,
+    "posp_fusion_refs": 200,
+    "posp_retina_perception_root_at_issue": null,
+    "posp_session_id": "1c9847111fb464b49a536f56b2cbc48ac365a3edfca8e6660c4228fe2cdd583b",
+    "session_id_match": true
+  },
+  "retina_perception_root": "4f3355889b541d1d6b3b3b3c02cb466fcbe654490418eddd93280e997252d8cd",
+  "session_display": "match14_rp_option_b_1783475385",
+  "session_id": "1c9847111fb464b49a536f56b2cbc48ac365a3edfca8e6660c4228fe2cdd583b",
+  "status": "CANDIDATE -- NOT retro-inserted into any issued PoSP record (issued records are immutable; a future session carries this live)"
+}

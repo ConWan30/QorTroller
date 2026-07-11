@@ -229,6 +229,14 @@ class InlineAuthorshipMonitor:
             return False
         return (now_ms - self._last_classify_ms) >= self.min_gap_ms
 
+    def in_window(self, now_ms: float) -> bool:
+        """The bare window predicate (gate <= now <= end) — the SAME bounds should_classify
+        uses, WITHOUT the single-flight/min-gap admission concerns. Consumed by the RP-2c
+        window-gated burst-flush (F-RP2-1 densification): ring flushes may only happen
+        inside a live R2 window — screen content alone NEVER opens density (the R2∧B2-class
+        rail, pinned by test)."""
+        return self._window_gate_ms <= float(now_ms) <= self._window_end_ms
+
     def begin(self, now_ms: float) -> None:
         self._inflight = True
         self._last_classify_ms = now_ms

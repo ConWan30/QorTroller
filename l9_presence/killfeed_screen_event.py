@@ -26,9 +26,15 @@ CLOCK_RESOLUTION_FALLBACK = "resolution_fallback"
 def authored_screen_event(composite: Optional[Mapping[str, Any]], *, engine: Optional[str] = None,
                           anchor_sha: Optional[str] = None, raw_read: Optional[str] = None,
                           match_kind: Optional[str] = None,
-                          row_freshness: Optional[Any] = None) -> Optional[dict]:
+                          row_freshness: Optional[Any] = None,
+                          record_hash: Optional[str] = None) -> Optional[dict]:
     """A killfeed AUTHORED composite -> canonical screen-lobe event mapping (feeds events_root). Returns None
-    unless the composite is AUTHORED_PRESENT (only own-kills are authorship outcomes)."""
+    unless the composite is AUTHORED_PRESENT (only own-kills are authorship outcomes).
+
+    EVENT-BIND increment 2: `record_hash` (arg, or the composite's own) is the live PoAC anchor stamped at
+    capture time so this OUTCOME and its causing HID onset share a cryptographic bind. KEY-ONLY-WHEN-STAMPED:
+    absent -> byte-identical to pre-EVENT-BIND (events_root unchanged); present -> the anchor folds into the
+    events_root/KAS commitment."""
     if not composite or composite.get("verdict") != "AUTHORED_PRESENT":
         return None
     kfirst = composite.get("killer_first_ms")
@@ -37,7 +43,7 @@ def authored_screen_event(composite: Optional[Mapping[str, Any]], *, engine: Opt
     else:                                   # no frame-capture anchor -> resolution ts, FLAGGED (D-TRIO-1 unmet)
         rez = composite.get("ts_ms")
         t_ms, clock = (float(rez) if rez is not None else None), CLOCK_RESOLUTION_FALLBACK
-    return {
+    ev = {
         "type": SCREEN_EVENT_AUTHORED,
         "t_ms": round(t_ms, 1) if t_ms is not None else None,
         "clock": clock,                     # frame_capture | resolution_fallback (verifiable honesty)
@@ -55,6 +61,10 @@ def authored_screen_event(composite: Optional[Mapping[str, Any]], *, engine: Opt
         # anti-splice: a kill OUTCOME requires a live input cause (the R2^B2 invariant at the event level)
         "input_caused": True,
     }
+    rh = record_hash if record_hash is not None else composite.get("record_hash")
+    if rh is not None:
+        ev["record_hash"] = str(rh)          # the shared PoAC anchor (key-only-when-stamped)
+    return ev
 
 
 def session_screen_events(composites, *, provenance: Optional[Mapping[str, Any]] = None) -> list[dict]:

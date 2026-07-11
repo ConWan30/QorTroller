@@ -1,0 +1,92 @@
+{
+  "attacks": [
+    {
+      "detail": "overall=FAILED",
+      "name": "posp_forged_synchronized",
+      "rail": "verdict_consistent (S6)",
+      "rejected": true,
+      "target": "posp_verifier"
+    },
+    {
+      "detail": "verdict=UNVERIFIABLE",
+      "name": "deferred_replayed_crop",
+      "rail": "anti-tamper sha poison",
+      "rejected": true,
+      "target": "kas_deferred"
+    },
+    {
+      "detail": "verdict=UNVERIFIABLE",
+      "name": "deferred_session_splice",
+      "rail": "session_id anti-assertion",
+      "rejected": true,
+      "target": "kas_deferred"
+    },
+    {
+      "detail": "reasons=['G4: coherence 0.200 < floor 0.50']",
+      "name": "bcc_coherence_gaming",
+      "rail": "coherence floor (G4)",
+      "rejected": true,
+      "target": "bcc_match"
+    },
+    {
+      "detail": "reasons=['G5: no authored session (live/deferred) or authored_clusters < 1', \"G6: inherited KAS verdict 'HYGIENE_FAIL'\"]",
+      "name": "bcc_hygiene_bypass",
+      "rail": "hygiene inheritance (G6)",
+      "rejected": true,
+      "target": "bcc_match"
+    },
+    {
+      "detail": "reasons=[\"G2: PoSP verdict 'PARTIAL_SURFACES' != SYNCHRONIZED\"]",
+      "name": "bcc_partial_posp",
+      "rail": "SYNCHRONIZED-only (G2)",
+      "rejected": true,
+      "target": "bcc_match"
+    },
+    {
+      "detail": "reasons=['G6: KAS session_id mismatch vs artifact (anti-assertion)']",
+      "name": "bcc_session_mismatch",
+      "rail": "surface session_id anti-assertion (G6)",
+      "rejected": true,
+      "target": "bcc_match"
+    },
+    {
+      "detail": "overall=FAILED",
+      "name": "cert_digest_tamper",
+      "rail": "anchor-digest match (C4)",
+      "rejected": true,
+      "target": "port_cert"
+    },
+    {
+      "detail": "overall=FAILED",
+      "name": "cert_zk_false",
+      "rail": "VHR ZK proof (C5)",
+      "rejected": true,
+      "target": "port_cert"
+    },
+    {
+      "detail": "overall=FAILED",
+      "name": "cert_session_splice",
+      "rail": "session join (C2)",
+      "rejected": true,
+      "target": "port_cert"
+    },
+    {
+      "detail": "crypto=0 temporal=1",
+      "name": "event_splice",
+      "rail": "record_hash cryptographic join",
+      "rejected": true,
+      "target": "event_bind"
+    },
+    {
+      "detail": "verdict=SPLICE_PROOF_ONLY",
+      "name": "stale_replay",
+      "rail": "PoSR recency (stale beacon)",
+      "rejected": true,
+      "target": "event_bind_recency"
+    }
+  ],
+  "holds": true,
+  "n_attacks": 12,
+  "n_rejected": 12,
+  "schema": "qortroller-forgery-matrix-v0"
+}

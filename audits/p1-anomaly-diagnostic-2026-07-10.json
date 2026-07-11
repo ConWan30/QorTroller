@@ -1,0 +1,191 @@
+{
+  "advisory": true,
+  "cert_scope": "developer_self",
+  "focus_sessions": [
+    {
+      "_path": "P1_02.npz",
+      "aim": 17.79,
+      "aim_active": true,
+      "coupling": 0.0755,
+      "decoupled_energy": 0.9942959888407934,
+      "duration_bin": 60,
+      "duration_s": 60.0,
+      "label": "human",
+      "lag_ms": 216.66666666666666,
+      "mo_energy": 36.161,
+      "n_in": 2606,
+      "n_mo": 2602,
+      "player": "P1",
+      "stick_p90_abs": 3.0,
+      "stick_range": 255.0
+    },
+    {
+      "_path": "P1_03.npz",
+      "aim": 17.83,
+      "aim_active": true,
+      "coupling": 0.0904,
+      "decoupled_energy": 0.9918285133259245,
+      "duration_bin": 60,
+      "duration_s": 60.0,
+      "label": "human",
+      "lag_ms": 100.0,
+      "mo_energy": 31.707,
+      "n_in": 2765,
+      "n_mo": 2761,
+      "player": "P1",
+      "stick_p90_abs": 4.0,
+      "stick_range": 255.0
+    },
+    {
+      "_path": "P1_04.npz",
+      "aim": 17.87,
+      "aim_active": true,
+      "coupling": 0.0428,
+      "decoupled_energy": 0.9981712119411249,
+      "duration_bin": 60,
+      "duration_s": 60.0,
+      "label": "human",
+      "lag_ms": 58.333333333333336,
+      "mo_energy": 41.063,
+      "n_in": 2797,
+      "n_mo": 2793,
+      "player": "P1",
+      "stick_p90_abs": 2.0,
+      "stick_range": 255.0
+    },
+    {
+      "_path": "P1_09.npz",
+      "aim": 13.9,
+      "aim_active": true,
+      "coupling": 0.1829,
+      "decoupled_energy": 0.9665474807020317,
+      "duration_bin": 60,
+      "duration_s": 60.0,
+      "label": "human",
+      "lag_ms": 341.6666666666667,
+      "mo_energy": 22.187,
+      "n_in": 1225,
+      "n_mo": 1222,
+      "player": "P1",
+      "stick_p90_abs": 3.0,
+      "stick_range": 255.0
+    },
+    {
+      "_path": "P1_15.npz",
+      "aim": 14.75,
+      "aim_active": true,
+      "coupling": 0.1448,
+      "decoupled_energy": 0.9790443894721103,
+      "duration_bin": 60,
+      "duration_s": 60.0,
+      "label": "human",
+      "lag_ms": 116.66666666666667,
+      "mo_energy": 32.861,
+      "n_in": 1480,
+      "n_mo": 1477,
+      "player": "P1",
+      "stick_p90_abs": 3.0,
+      "stick_range": 255.0
+    },
+    {
+      "_path": "P1_20.npz",
+      "aim": 11.29,
+      "aim_active": true,
+      "coupling": 0.1697,
+      "decoupled_energy": 0.9711869165216498,
+      "duration_bin": 60,
+      "duration_s": 56.5,
+      "label": "human",
+      "lag_ms": 491.6666666666667,
+      "mo_energy": 17.917,
+      "n_in": 382,
+      "n_mo": 240,
+      "player": "P1",
+      "stick_p90_abs": 3.0,
+      "stick_range": 254.0
+    },
+    {
+      "_path": "P1_22.npz",
+      "aim": 14.37,
+      "aim_active": true,
+      "coupling": 0.0908,
+      "decoupled_energy": 0.9917539895016938,
+      "duration_bin": 60,
+      "duration_s": 60.0,
+      "label": "human",
+      "lag_ms": 500.0,
+      "mo_energy": 24.565,
+      "n_in": 627,
+      "n_mo": 377,
+      "player": "P1",
+      "stick_p90_abs": 3.0,
+      "stick_range": 255.0
+    }
+  ],
+  "n_focus_aim_active": 7,
+  "p0a_v2_separated_unchanged": true,
+  "per_player": {
+    "?": {
+      "med_aim": 31.73,
+      "med_coupling": 0.4128,
+      "med_dec": 0.8295,
+      "med_lag": 41.7,
+      "n": 6
+    },
+    "P1": {
+      "med_aim": 14.75,
+      "med_coupling": 0.0908,
+      "med_dec": 0.9918,
+      "med_lag": 216.7,
+      "n": 7
+    },
+    "P2": {
+      "med_aim": 51.18,
+      "med_coupling": 0.5929,
+      "med_dec": 0.648,
+      "med_lag": 33.3,
+      "n": 8
+    },
+    "P3": {
+      "med_aim": 48.97,
+      "med_coupling": 0.3793,
+      "med_dec": 0.8561,
+      "med_lag": 300.0,
+      "n": 12
+    }
+  },
+  "population_certified": false,
+  "positive_glob": "sessions_l9/*.npz",
+  "primary": "MARGINAL_AIM",
+  "protocol_fields_available": [
+    "label",
+    "duration_bin"
+  ],
+  "reason": "first-True in pre-registered order (env/protocol before genuine); 2 test(s) True",
+  "schema": "p1-anomaly-diagnostic-v0",
+  "secondaries": [
+    "HIGH_RESIDUAL"
+  ],
+  "tests": {
+    "T-H1_MARGINAL_AIM": {
+      "detail": "P1 med_aim 14.8 < peers 50.0 and < 20.400000000000002",
+      "pass": true
+    },
+    "T-H2_HIGH_RESIDUAL": {
+      "detail": "P1 med_dec 0.992 (>= 0.95) vs peers 0.838",
+      "pass": true
+    },
+    "T-H3_LAG_REGIME": {
+      "detail": "|P1 217 - peers 183| vs 100.0ms gap",
+      "pass": false
+    },
+    "T-H4_GENUINE_LOW": {
+      "detail": "no aim-matched comparator (P1 aim band [11.8,17.7] has 0 peer sessions \u2014 P1 aim does not overlap peers; genuine-low UNTESTABLE)",
+      "pass": null
+    },
+    "T-H5_PROTOCOL_MIX": {
+      "detail": "no discrete protocol field differs (only label/duration_bin available)",
+      "pass": false
+    }
+  }
+}

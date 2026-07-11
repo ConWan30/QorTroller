@@ -1561,6 +1561,20 @@ class DualShockTransport:
         await asyncio.sleep(self._interval)
 
     # ------------------------------------------------------------------
+    # D1.1 loop-starvation attribution — instrument inline (event-loop-thread) store calls
+    # ------------------------------------------------------------------
+    def _timed_loop_store(self, _label: str, _fn, *args, **kwargs):
+        """Time an inline event-loop-thread store call into the D1.1 attribution ring so a LOOP
+        STARVATION dump NAMES it (lean mode runs ONLY this session loop, so the residual loop
+        blocker is here). warn_s is high (never-warn) => byte-identical when attribution is OFF:
+        the ring appends only when LOOP_STARVATION_ATTRIBUTION_ENABLED is on, and no WARNING fires
+        on slow 5.4GB-DB calls. Exceptions propagate unchanged (fail-passthrough)."""
+        from .loop_timing import timed_block
+        with timed_block(_label, warn_s=999.0, logger=log, prefix="[LEAN-RESIDUAL]",
+                         hint="loop-thread store"):
+            return _fn(*args, **kwargs)
+
+    # ------------------------------------------------------------------
     # Main session loop
     # ------------------------------------------------------------------
     async def _session_loop(self, active_bounties: list[int]):
@@ -1800,7 +1814,10 @@ class DualShockTransport:
                         self._retina_game_capture.maybe_classify_in_window(_now_ms)
                         # Phase 1: resolve a window that quietly went cold (no further R2 onset) so combat
                         # that stops firing still gets its max-over-window composite logged promptly.
-                        self._retina_game_capture.flush_stale_inline_window(_now_ms)
+                        self._timed_loop_store("retina.flush_stale_inline_window",
+                                               self._retina_game_capture.flush_stale_inline_window, _now_ms)
+                        self._timed_loop_store("retina.tick_match_state",
+                                               self._retina_game_capture.tick_match_state, _now_ms)  # LUMEN-2b advisory
                         # HID lobe (dual-lobe fusion, default-off): drain the device-clock R2-onset events
                         # (detected in push_l2_raw on the raw path) to retina_hid_events.jsonl off the ~1 kHz
                         # reader thread. No-ops when the HID lobe is off. Pairs with the screen lobe (killfeed
@@ -1953,7 +1970,8 @@ class DualShockTransport:
                 # NEVER modifies classifier state. NEVER overrides hard cheat codes.
                 if bio_result is None and getattr(self._cfg, "adaptive_thresholds_enabled", True):
                     try:
-                        _policy = self._store.get_detection_policy(self._device_id.hex())
+                        _policy = await asyncio.to_thread(       # F2: offload off the event-loop thread
+                            self._store.get_detection_policy, self._device_id.hex())
                         if _policy:
                             _mult = float(_policy.get("multiplier", 1.0))
                             if _mult < 1.0:
@@ -2397,6 +2415,12 @@ class DualShockTransport:
                 except Exception:
                     pass
 
+                # EVENT-BIND inc 2b: thread the live PoAC record_hash to the retina capture so the
+                # OUTCOME (composite) + INPUT (r2_onset) lobes share it. No-op unless stamping is on
+                # (set_record_hash internally gates) -> output byte-identical by default.
+                if _record_hash_hex and self._retina_game_capture is not None:
+                    self._retina_game_capture.set_record_hash(_record_hash_hex)
+
                 if self._retina_perception_active():
                     await self._run_retina_perception_hook(_record_hash_hex)
 
@@ -2793,20 +2817,19 @@ class DualShockTransport:
                             try:
                                 import numpy as _np
                                 new_emb = self._ewc_model.get_embedding(session_vec)
-                                prev_emb_list = self._store.get_last_cognitive_embedding(
-                                    self._device_id.hex()
-                                )
+                                prev_emb_list = self._timed_loop_store(
+                                    "ds.store.get_last_cognitive_embedding",
+                                    self._store.get_last_cognitive_embedding, self._device_id.hex())
                                 if prev_emb_list is not None:
                                     prev_arr = _np.array(prev_emb_list, dtype=_np.float32)
                                     _e4_cognitive_drift = float(
                                         _np.linalg.norm(new_emb - prev_arr)
                                     )
                                     self._drift_history.append(_e4_cognitive_drift)
-                                self._store.store_cognitive_embedding(
-                                    self._device_id.hex(),
-                                    new_emb.tolist(),
-                                    self._session_count,
-                                )
+                                self._timed_loop_store(
+                                    "ds.store.store_cognitive_embedding",
+                                    self._store.store_cognitive_embedding,
+                                    self._device_id.hex(), new_emb.tolist(), self._session_count)
                             except Exception as _exc:
                                 log.debug("Phase 25: E4 drift computation failed: %s", _exc)
                 except Exception as _ewc_exc:
@@ -3219,7 +3242,8 @@ class DualShockTransport:
             _should_write = (not _grinding) or (_now_mono - _last_cp >= 0.10)
             if _should_write:
                 _rh = _hl.sha256(raw[:164]).hexdigest()
-                self._store.store_frame_checkpoint(
+                await asyncio.to_thread(                          # F2: offload off the event-loop thread
+                    self._store.store_frame_checkpoint,
                     device_id=self._device_id.hex() if self._device_id is not None else "",
                     record_hash=_rh,
                     frames=list(self._replay_ring),
@@ -3306,7 +3330,8 @@ class DualShockTransport:
                 proof, fc, hp_int, null = self._pitl_prover.generate_proof(
                     features, dev_hex, l5, e4, infer, epoch
                 )
-                self._store.store_pitl_proof(dev_hex, hex(null), hex(fc), hp_int)
+                self._timed_loop_store("ds.store.store_pitl_proof",
+                                       self._store.store_pitl_proof, dev_hex, hex(null), hex(fc), hp_int)
                 # Phase 237.5 Path C+ kill-switch: gate the high-frequency
                 # per-PITL-proof chain calls before tasks are created. Without
                 # this, the bridge burned ~3 IOTX/hour against IoTeX testnet's

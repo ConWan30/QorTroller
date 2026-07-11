@@ -47,6 +47,18 @@ _ADS_SEGMENT_DEFAULT_PATH = os.path.expanduser("~/.vapi/ads_segment.json")
 # last fresh-row appearance -> the FP gate treats a killer-slot hit there as a false fire). The fresh-diff
 # is the mean-abs gray delta in the killer-feed region that signals a NEW transient row (vs a static patch).
 _SESSION_ANCHOR_ROW_PERSIST_MS = 5000.0
+
+
+def _dense_score_enabled(environ) -> bool:
+    """Option 3 flag parse (default-OFF). Truthy set mirrors the sibling capture flags; extracted so the
+    default-off / enable semantics are unit-testable without constructing the WGC-bound capture."""
+    return str(environ.get("RETINA_CANDIDATE_DENSE_SCORE", "0")).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _match_state_enabled(environ) -> bool:
+    """LUMEN-2b (arc B) flag parse (default-OFF). Advisory live match-state emit; never gates anything.
+    Extracted so the default-off / enable semantics are unit-testable without a WGC-bound capture."""
+    return str(environ.get("RETINA_MATCH_STATE_ENABLED", "0")).strip().lower() in ("1", "true", "yes", "on")
 _SESSION_ANCHOR_FRESH_DIFF = 6.0
 
 
@@ -305,6 +317,19 @@ def convert_for_channels(buf_small, lum_scale, *, b2_frac: float = 0.30,
     return gray_full, roi_bgr, lum_scale
 
 
+def _stash_every(base_every: int, burst_every: int, now_ms: float,
+                 dense_until_ms: float) -> int:
+    """RP-2c Fix B cadence choice (PURE — pinned by test): the burst cadence applies ONLY
+    while now_ms is inside the R2-propagated dense window (dense_until_ms, set exclusively
+    by mark_r2_onset). burst_every=0 = feature OFF = base cadence always. Screen content
+    can never reach this decision — only live input opens density (the anti-splice rail).
+    dense_until_ms=0.0 is the NEVER-ARMED sentinel and must not match now_ms=0.0 — the
+    pinned rail test caught exactly this boundary on first run."""
+    if burst_every > 0 and 0.0 < float(dense_until_ms) and float(now_ms) <= float(dense_until_ms):
+        return max(1, int(burst_every))
+    return max(1, int(base_every))
+
+
 def _parse_roi(s: str):
     """Parse 'fx,fy,fw,fh' (0..1 fractions) -> tuple or None (kill-feed ROI; Warzone feed is top-right)."""
     try:
@@ -386,6 +411,12 @@ class WgcFrameSource:
         self._b2_trace_path = os.environ.get("RETINA_B2_TRACE_PATH", "retina_b2_trace.jsonl")
         self._panel_bgr = None                          # latest panel ROI (contiguous BGR) for the crop saver
         self._panel_ts = None                           # D-TRIO-1: frame-capture ts of _panel_bgr (WGC wall ms)
+        # RP-2c Fix B (F-RP2-1 densification): inside a live R2 window, stash the panel every
+        # RETINA_KF_EVERY_BURST frames instead of _kf_every (default 0 = OFF, byte-identical
+        # behavior). _burst_dense_until_ms is set ONLY by mark_r2_onset (input-side) — screen
+        # content never opens density. Same env-local pattern as the B2 trace above.
+        self._kf_burst_every = max(0, int(os.environ.get("RETINA_KF_EVERY_BURST", "0") or 0))
+        self._burst_dense_until_ms = 0.0
 
     def start(self) -> bool:
         try:
@@ -461,7 +492,9 @@ class WgcFrameSource:
                     # (cheap); the OCR itself runs on the throttled tune() tick, never on this frame callback.
                     if self._kf_roi is not None or self._panel_roi is not None:
                         self._kf_frame_n += 1
-                        if self._kf_frame_n % self._kf_every == 0:
+                        if self._kf_frame_n % _stash_every(
+                                self._kf_every, self._kf_burst_every,
+                                screen_ts, self._burst_dense_until_ms) == 0:
                             try:
                                 if self._kf_roi is not None:
                                     _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
@@ -598,6 +631,7 @@ class RetinaGameCapture:
         self._capture_max = int(capture_max)
         self._capture_n = 0
         self._capture_logged = False
+        self._last_burst_flush_ts = None     # RP-2c Fix B: de-dup key for window-gated flushes
         self.started = False
         # Trigger-gated INLINE authorship (advisory; default-off). PURE monitor holds the R2-window +
         # single-flight decision; the anchor + classify + persist happen off the event loop (see
@@ -645,6 +679,22 @@ class RetinaGameCapture:
         self._session_anchor_dir = str(session_anchor_archive_dir or "retina_kf_anchors")
         self._prev_killer_gray = None                  # frame-diff (R2 fresh-row) prior killer-feed region
         self._last_killer_fresh_ms = -1e18             # last fresh-row appearance ts (FP is_background window)
+        # Option 3 — dense-candidate scoring (flag-gated, DEFAULT-OFF). A dedicated off-loop worker
+        # (qt-dense-cand) scores the dense panel stash against the CANDIDATE template so promotion (K=3) /
+        # stall-recut reach even when R2 windows are sparse — the M18/rp4_rp live-0-authored failure (the
+        # anchor cut once then froze in CANDIDATE all match while the offline scan found the kills). No OCR on
+        # this path (rail 1); the K=3/0.66/FP/stall gate is UNCHANGED (it only feeds the gate more crops).
+        # C1: a dedicated lock serializes generator mutation across the fold + this worker (the fold's
+        # observe_candidate runs off the single-flight begin/end, NOT _inline_admission_lock, so that lock
+        # alone would not serialize the two paths). C3: dense-private fresh-row state so the off-loop worker
+        # never corrupts the window-path fold's _prev_killer_gray frame-diff.
+        self._session_anchor_lock = threading.Lock()
+        self._dense_cand_enabled = _dense_score_enabled(os.environ)
+        self._dense_cand_min_ms = max(1.0, float(os.environ.get("RETINA_CANDIDATE_DENSE_MIN_MS", "100") or 100))
+        self._dense_cand_stop = True                   # worker not started unless the flag turns it on
+        self._dense_last_cand_ts = None                # de-dup key: skip re-scoring the same panel stash
+        self._dense_prev_killer_gray = None            # C3: dense-private fresh-row prior (worker-thread only)
+        self._dense_last_killer_fresh_ms = -1e18       # C3: dense-private last fresh-row ts
         # OCR bootstrap sub-flag (DEFAULT-OFF, within the session-anchor envelope): when on, the BOOTSTRAP
         # branch READS the handle glyphs (killfeed_ocr_bootstrap, rendering-independent) as the PRIMARY catch
         # source, bypassing the marginal feed_v1 score gate that failed live (max 0.566). Off -> legacy
@@ -678,6 +728,30 @@ class RetinaGameCapture:
                 self._death_lock = threading.Lock()
             except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
                 self._death_monitor = None
+        # LUMEN-2b — live match-state tracker (arc B, DEFAULT-OFF). Advisory: emits MATCH_STARTED /
+        # MATCH_ENDED so the operator SEES match boundaries while playing. It NEVER gates a verdict,
+        # certificate, PoSP, KAS, or the dense-candidate anchor — the cryptographic session boundary
+        # REMAINS daemon start/stop (the tracker's own module invariant). Signals it consumes (onsets /
+        # windows / kill spans) are already computed by the loop; it re-runs the SAME detect_match_state
+        # as the offline detector. Fail-open: any setup error -> None -> zero effect on capture.
+        self._match_state = None
+        self._match_state_log_path = str(os.environ.get("RETINA_MATCH_STATE_LOG",
+                                                        "retina_match_state.jsonl"))
+        self._match_state_last_event = None
+        self._match_state_last_ts_ms = None
+        self._match_state_n_started = 0
+        self._match_state_n_ended = 0
+        self._match_state_current = "OFF"
+        if _match_state_enabled(os.environ):
+            try:
+                from l9_presence.match_state_live import LiveMatchStateTracker
+                from l9_presence.session_identity import ENV_SESSION_ID
+                self._match_state = LiveMatchStateTracker(
+                    session_start_ms=time.time() * 1000.0,
+                    session_id=(os.environ.get(ENV_SESSION_ID) or None))   # reuse the U1 join key; no 2nd id
+                self._match_state_current = "LOBBY"
+            except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
+                self._match_state = None
         # l2_ads — ADS coupling channel (second anti-splice channel). PURE AdsCouplingMonitor consumes the
         # center-ROI luminance on_frame_arrived ALREADY computes for B1 (latest_center_roi_lum) + the L2
         # trigger — ZERO WGC-callback work. Detector UNCALIBRATED -> every record ABSTAINS + logs raw.
@@ -731,6 +805,16 @@ class RetinaGameCapture:
                 self._hid_onset = HidOnsetDetector(threshold=self._r2_threshold)
             except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
                 self._hid_onset = None
+        # EVENT-BIND increment 2b: the shared PoAC record_hash anchor (event_bind.py). The transport
+        # calls set_record_hash() per record; the OUTCOME (authored composite) and INPUT (r2_onset)
+        # lobes then carry it so a post-session bind reports RECORD_HASH_PRODUCTION. Default-OFF
+        # (env EVENT_BIND_STAMP_ENABLED) -> byte-identical: no stamping, no record_hash keys.
+        self._current_record_hash: Optional[str] = None
+        try:
+            from l9_presence.event_bind import stamp_enabled
+            self._event_bind_stamp = stamp_enabled()
+        except Exception:  # noqa: BLE001
+            self._event_bind_stamp = False
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
         from l9_presence.adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
@@ -738,6 +822,65 @@ class RetinaGameCapture:
 
     def start(self) -> bool:
         self.started = self._source.start()
+        # F-FIXB-1 fix (2026-07-08): the window-gated ring flush was classify-thread-bound
+        # (~2/s measured M17 vs ~5-6/s stash-limited theoretical, because the burst thread
+        # spends ~1s inside each OCR worker). A dedicated 0.15s flush thread unbinds it.
+        # Spawned ONLY when Fix B is armed + capture enabled; daemon thread; fail-open;
+        # all gating stays inside maybe_flush_burst_crop (window predicate unchanged --
+        # the anti-splice rail is untouched, this only changes WHO calls the flusher).
+        if (self.started and self._capture_enabled
+                and getattr(self._source, "_kf_burst_every", 0) > 0):
+            import threading as _th
+            import time as _t
+            self._burst_flush_stop = False
+
+            def _flush_loop() -> None:
+                while not getattr(self, "_burst_flush_stop", True):
+                    _t.sleep(0.15)
+                    if getattr(self, "_burst_flush_stop", True):
+                        break              # re-check after sleep: NO flush after stop()
+                    try:
+                        self.maybe_flush_burst_crop(_t.time() * 1000.0)
+                    except Exception:  # noqa: BLE001 — flusher must never die loudly
+                        pass
+
+            _th.Thread(target=_flush_loop, daemon=True,
+                       name="qt-burst-flush").start()
+            log.info("RetinaGameCapture: dedicated burst-flush thread ON (F-FIXB-1)")
+        # Option 3 — dedicated off-loop dense-candidate worker (flag-gated, DEFAULT-OFF). C2: NOT hooked into
+        # save_capture_crops (that runs on the event-loop tune() tick) and NOT window-gated (window-only would
+        # recreate the sparse-observation bug). Mirrors the qt-burst-flush pattern: polls the latest panel
+        # stash at _dense_cand_min_ms cadence and scores it against the CANDIDATE template. Only runs when the
+        # flag is on AND a session-anchor generator exists AND capture started.
+        if self.started and self._dense_cand_enabled and self._session_anchor is not None:
+            import threading as _th2
+            import time as _t2
+            from l9_presence import killfeed_session_anchor as _sa2
+            self._dense_cand_stop = False
+
+            def _dense_cand_loop() -> None:
+                while not getattr(self, "_dense_cand_stop", True):
+                    _t2.sleep(self._dense_cand_min_ms / 1000.0)
+                    if getattr(self, "_dense_cand_stop", True):
+                        break                              # re-check after sleep: NO work after stop()
+                    try:
+                        gen = self._session_anchor
+                        if gen is None or gen.regime != _sa2.CANDIDATE:
+                            continue                       # dense observation only matters in CANDIDATE
+                        bgr = getattr(self._source, "_panel_bgr", None)
+                        if bgr is None:
+                            continue
+                        ts = getattr(self._source, "_panel_ts", None)
+                        if ts is not None and ts == self._dense_last_cand_ts:
+                            continue                       # de-dup: this stash already scored
+                        self._dense_last_cand_ts = ts
+                        self._dense_candidate_observe(bgr, _t2.time() * 1000.0)
+                    except Exception:  # noqa: BLE001 — dense worker must never die loudly
+                        pass
+
+            _th2.Thread(target=_dense_cand_loop, daemon=True, name="qt-dense-cand").start()
+            log.info("RetinaGameCapture: dense-candidate worker ON (Option 3; min_ms=%.0f)",
+                     self._dense_cand_min_ms)
         return self.started
 
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
@@ -794,19 +937,67 @@ class RetinaGameCapture:
         except Exception:  # noqa: BLE001 — capture must never break the loop
             return None
 
+    def maybe_flush_burst_crop(self, now_ms: float) -> None:
+        """RP-2c Fix B (F-RP2-1): flush the ring INSIDE live R2 windows at burst-thread cadence
+        instead of only the ~1Hz tune() tick. M14 measured 0.93 crops/s (the tune ceiling) —
+        the archive's crops-per-kill is what both K=3 live promotion and the RP-2d deferred
+        tier feed on. Gates (all must hold): feature ON (RETINA_KF_EVERY_BURST > 0) + capture
+        enabled + monitor.in_window(now) (the SAME window predicate as classification — screen
+        content never opens density) + a NEW panel stash since the last flush (no duplicate
+        crops; the stash ts is the de-dup key). Runs on the burst thread — file I/O never
+        touches the WGC callback or the event loop. Fail-open: any error is a no-op."""
+        try:
+            src = self._source
+            if getattr(src, "_kf_burst_every", 0) <= 0 or not self._capture_enabled:
+                return
+            mon = self._inline_monitor
+            if mon is None or not mon.in_window(float(now_ms)):
+                return
+            ts = getattr(src, "_panel_ts", None)
+            if ts is None or ts == self._last_burst_flush_ts:
+                return
+            self._last_burst_flush_ts = ts
+            self.save_capture_crops()
+        except Exception:  # noqa: BLE001 — densification must never break the burst thread
+            pass
+
     # --- Trigger-gated INLINE authorship classification (consumption side; off the event loop) ----------
     def mark_r2_onset(self, now_ms: float) -> None:
         """R2 fire onset from the per-record consumption loop: open/extend the classification window. Cheap
         (no classify here) — safe to call inline. If this onset starts a genuinely NEW window, the PRIOR
         window's Phase-1 max-over-window composite resolves here — log + persist it. No-op if inline off."""
+        if self._match_state is not None:                          # LUMEN-2b onset feed (advisory)
+            try:
+                self._match_state.push_onset(float(now_ms))
+            except Exception:  # noqa: BLE001 — advisory; never break the consumption tick
+                pass
         if self._inline_monitor is None:
             return
         composite = self._inline_monitor.mark_onset(float(now_ms))
+        # RP-2c Fix B: propagate the (possibly extended) window end to the frame source so
+        # the stash cadence densifies INSIDE this R2 window only. Input-side trigger by
+        # construction — this is the sole writer of _burst_dense_until_ms.
+        if getattr(self._source, "_kf_burst_every", 0) > 0:
+            self._source._burst_dense_until_ms = float(
+                getattr(self._inline_monitor, "_window_end_ms", 0.0))
         self._log_composite(composite)
 
     def _log_composite(self, composite: Optional[dict]) -> None:
         if composite is None:
             return
+        if self._match_state is not None:                          # LUMEN-2b window/kill feed (advisory)
+            try:
+                g, e = composite.get("window_gate_ms"), composite.get("window_end_ms")
+                if g is not None and e is not None:
+                    self._match_state.push_window(float(g), float(e))   # each composite = one closed window
+                    if composite.get("verdict") == "AUTHORED_PRESENT":  # confirmed kill only (F-LUMEN-2)
+                        self._match_state.push_kill_span(float(g), float(e))
+            except Exception:  # noqa: BLE001 — advisory; never break capture
+                pass
+        # EVENT-BIND inc 2b (OUTCOME lobe): stamp the live PoAC anchor into the composite so
+        # authored_screen_event carries record_hash. Default-OFF -> no key added (byte-identical).
+        if self._event_bind_stamp and self._current_record_hash and "record_hash" not in composite:
+            composite["record_hash"] = self._current_record_hash
         from l9_presence.killfeed_inline import append_near_boundary_jsonl
         append_near_boundary_jsonl(self._composite_log_path, composite)
         if composite.get("verdict") == "AUTHORED_PRESENT":
@@ -832,6 +1023,43 @@ class RetinaGameCapture:
                          composite.get("composite_score", 0.0), composite.get("window_members", 0))
             if trunc is not None:
                 _append(self._death_log_path, trunc)   # a second death cut a prior window short
+
+    def tick_match_state(self, now_ms: float) -> None:
+        """LUMEN-2b (arc B, advisory): once per consumption cycle, re-detect match state + emit any NEW
+        confirmed MATCH_STARTED/MATCH_ENDED transitions. No-op when the tracker is off. Fail-open — NEVER
+        breaks the consumption loop, and NEVER gates anything (pure emit + diag; the cryptographic session
+        boundary stays daemon start/stop)."""
+        if self._match_state is None:
+            return
+        try:
+            self._emit_match_state(self._match_state.tick(float(now_ms)))
+            self._match_state_current = self._match_state.state_now(float(now_ms))
+        except Exception:  # noqa: BLE001 — advisory; never break the consumption tick
+            pass
+
+    def _emit_match_state(self, transitions) -> None:
+        """Append advisory match-state transitions to the jsonl + log.info + update diag counters. Fail-open;
+        emit-only (never gates)."""
+        if not transitions:
+            return
+        try:
+            import json as _json
+            sid = getattr(self._match_state, "session_id", None)
+            with open(self._match_state_log_path, "a", encoding="utf-8") as fh:
+                for tr in transitions:
+                    d = tr.to_dict()
+                    d.update({"schema": "qortroller-match-state-live-v0", "session_id": sid, "advisory": True})
+                    fh.write(_json.dumps(d) + "\n")
+                    self._match_state_last_event = d.get("event")
+                    self._match_state_last_ts_ms = d.get("ts_ms")
+                    if d.get("event") == "MATCH_STARTED":
+                        self._match_state_n_started += 1
+                    elif d.get("event") == "MATCH_ENDED":
+                        self._match_state_n_ended += 1
+                    log.info("match-state: %s ts_ms=%.0f detected_at=%.0f", d.get("event"),
+                             d.get("ts_ms", 0.0), d.get("detected_at_ms", 0.0))
+        except Exception:  # noqa: BLE001 — advisory; never break capture
+            pass
 
     def flush_stale_inline_window(self, now_ms: float) -> None:
         """Resolve a window that has quietly expired (no further R2 onset extended it) so combat that stops
@@ -873,6 +1101,7 @@ class RetinaGameCapture:
         and min-gap semantics are unchanged (the monitor decides, same as always)."""
         if self._inline_monitor is None or self._anchor is None:
             return
+        self.maybe_flush_burst_crop(float(now_ms))   # RP-2c Fix B: window-gated ring flush
         bgr = getattr(self._source, "_panel_bgr", None)
         if bgr is None:
             return
@@ -992,8 +1221,9 @@ class RetinaGameCapture:
                     ocr_w = self._ocr_bootstrap_read(bgr)
                     if ocr_w is not None and ocr_w.matched and ocr_w.slot == "killer":
                         raw_auth = True
-                ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
-                                            now_ms=now_ms, raw_killer_authored=raw_auth)
+                with self._anchor_mutation_ctx():  # C1: serialize generator mutation vs the dense worker
+                    ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
+                                                now_ms=now_ms, raw_killer_authored=raw_auth)
             if ev2 is not None and ev2.get("event") in ("candidate_cut", "promoted", "candidate_demoted_fp",
                                                         "candidate_demoted_stall"):
                 # C3 provenance rides the DURABLE log line so the (log-parsed) KAS trail carries the ACTUAL live
@@ -1059,6 +1289,80 @@ class RetinaGameCapture:
         except Exception:
             return False
 
+    def _anchor_mutation_ctx(self):
+        """Generator-mutation lock (C1) — serializes the fold's observe_candidate against the dense worker's.
+        A partial-construction test fixture (no dense worker running) may lack it -> nullcontext (there is no
+        concurrency to guard). Production always sets self._session_anchor_lock in __init__; using it via this
+        accessor also means a missing lock degrades to no-lock rather than a silent AttributeError swallowed
+        by the fold's fail-open except (which would masquerade as no-promotion)."""
+        import contextlib
+        lk = getattr(self, "_session_anchor_lock", None)
+        return lk if lk is not None else contextlib.nullcontext()
+
+    def _dense_killer_fresh_row(self, bgr, now_ms: float) -> bool:
+        """C3: fresh-row test for the dense worker — identical logic to _killer_fresh_row but on PRIVATE
+        prior state (_dense_prev_killer_gray / _dense_last_killer_fresh_ms) so the off-loop dense worker's
+        frame-diff never interleaves with the window-path fold's. Only the qt-dense-cand thread touches this."""
+        try:
+            import cv2
+            import numpy as np
+            mon = self._inline_monitor
+            h, w = bgr.shape[:2]
+            reg = bgr[0:max(1, int(h * mon.feed_region_max_yfrac)), 0:max(1, int(w * mon.killer_max_frac))]
+            g = cv2.cvtColor(reg, cv2.COLOR_BGR2GRAY) if reg.ndim == 3 else reg
+            fresh = False
+            if self._dense_prev_killer_gray is not None and self._dense_prev_killer_gray.shape == g.shape:
+                diff = float(np.mean(np.abs(g.astype(np.int16) - self._dense_prev_killer_gray.astype(np.int16))))
+                fresh = diff > _SESSION_ANCHOR_FRESH_DIFF
+            self._dense_prev_killer_gray = g
+            if fresh:
+                self._dense_last_killer_fresh_ms = now_ms
+            return fresh
+        except Exception:
+            return False
+
+    def _dense_candidate_observe(self, bgr, now_ms: float) -> Optional[dict]:
+        """Option 3 dense-stream CANDIDATE observation (flag-gated; runs ONLY on the qt-dense-cand worker
+        thread — never the event loop, C2). CANDIDATE-only subset of _session_anchor_fold: scores the latest
+        panel stash against the candidate template to feed K-progress, plus an INDEPENDENT feed_v1/bootstrap
+        template score to feed the stall-recut — WITHOUT any OCR (rail 1; preserves the D-CG-1 posture and
+        keeps OCR cost off this stream). Generator mutation is under _session_anchor_lock (C1); fresh-row uses
+        dense-private state (C3). The K=3 / promote_floor / FP-demote / stall_limit gate is UNCHANGED — this
+        only multiplies which crops reach the gate. Fail-open: any error is a no-op."""
+        try:
+            import l9_presence.killfeed_session_anchor as sa
+            from l9_presence.killfeed_cv import killer_slot_best
+            gen = self._session_anchor
+            if gen is None or gen.regime != sa.CANDIDATE:   # only CANDIDATE needs dense promotion evidence
+                return None
+            active = gen.active_anchor()
+            if active is None:
+                return None
+            kscore, kxf, kyf = killer_slot_best(bgr, active)
+            self._dense_killer_fresh_row(bgr, now_ms)       # side effect: updates _dense_last_killer_fresh_ms
+            is_bg = (now_ms - self._dense_last_killer_fresh_ms) > _SESSION_ANCHOR_ROW_PERSIST_MS
+            # Stall witness WITHOUT OCR (rail 1): the bootstrap feed_v1 template independently authored this
+            # crop (>= promote_floor) while the candidate scored sub-floor -> a real kill the weak cut missed.
+            # observe_candidate keeps raw_killer_authored structurally DEMOTE-ONLY (never authors / increments
+            # K), byte-identical to the fold's raw_auth semantics. Gated on an active feed (not is_bg) so a
+            # static high-scoring patch cannot manufacture a stall.
+            raw_auth = False
+            if self._anchor is not None and not is_bg and kscore < gen.promote_floor:
+                feed_score, _fx, _fy = killer_slot_best(bgr, self._anchor)
+                if feed_score >= gen.promote_floor:
+                    raw_auth = True
+            with self._anchor_mutation_ctx():               # C1: serialize vs the fold's observe_candidate
+                ev2 = gen.observe_candidate(score=kscore, x_frac=kxf, y_frac=kyf, is_background=is_bg,
+                                            now_ms=now_ms, raw_killer_authored=raw_auth)
+            if ev2 is not None and ev2.get("event") in (
+                    "promoted", "candidate_demoted_fp", "candidate_demoted_stall",
+                    "candidate_progress", "candidate_stall"):
+                log.info("session-anchor[dense]: %s regime=%s sha=%s consistent=%s", ev2["event"],
+                         gen.regime, ev2.get("sha") or ev2.get("candidate_sha"), ev2.get("consistent"))
+            return ev2
+        except Exception:  # noqa: BLE001 — dense observe is advisory; never break the worker
+            return None
+
     def _cut_session_anchor(self, bgr, kxf, kyf):
         """R4: cut the session anchor from the caught killer-slot row via the scale-aware killer-name cut +
         quality gate (killfeed_cv.cut_killer_name_anchor — G3 matches 2+3 fix: the old fixed box was sized
@@ -1120,6 +1424,15 @@ class RetinaGameCapture:
         if self._device_clock_l2 is not None:
             self._device_clock_l2.push_raw(wall_ms, ts_u32, l2)
             self._last_raw_l2 = int(l2)
+
+    def set_record_hash(self, record_hash_hex: Optional[str]) -> None:
+        """EVENT-BIND increment 2b: the transport calls this per PoAC record with the live record_hash.
+        Stores it as the current session anchor and, when stamping is enabled, forwards it to the HID
+        onset detector so the NEXT r2_onset carries it (the OUTCOME lobe is stamped in _log_composite).
+        Default-OFF -> stores nothing downstream, output byte-identical."""
+        self._current_record_hash = record_hash_hex or None
+        if self._event_bind_stamp and self._hid_onset is not None:
+            self._hid_onset.set_record_hash(self._current_record_hash)
 
     def push_r2_raw(self, wall_ms: float, ts_u32: int, r2: int) -> None:
         """Called by the RAW hidapi reader with the DEVICE sensor timestamp (offset 28) + R2 (raw offset 6).
@@ -1382,7 +1695,21 @@ class RetinaGameCapture:
             # rider-1 raw-vs-pydualsense L2 agreement (0 disagreements = offset 5 confirmed)
             **({"ads_l2_raw_agree": self._ads_l2_agree, "ads_l2_raw_disagree": self._ads_l2_disagree}
                if self._device_clock_l2 is not None else {}),
+            # LUMEN-2b live match-state (arc B; advisory, read-only — NEVER a verdict/gate input)
+            "match_state_enabled": self._match_state is not None,
+            "match_state": self._match_state_current,
+            "match_state_last_event": self._match_state_last_event,
+            "match_state_last_ts_ms": self._match_state_last_ts_ms,
+            "match_state_n_started": self._match_state_n_started,
+            "match_state_n_ended": self._match_state_n_ended,
         }
 
     def stop(self) -> None:
+        self._burst_flush_stop = True      # F-FIXB-1: end the dedicated flush thread
+        self._dense_cand_stop = True       # Option 3: end the dense-candidate worker
+        if self._match_state is not None:  # LUMEN-2b: flush the final MATCH_ENDED (manifest seal > 240s gap)
+            try:
+                self._emit_match_state(self._match_state.close_session(time.time() * 1000.0))
+            except Exception:  # noqa: BLE001 — advisory; never break teardown
+                pass
         self._source.stop()

@@ -173,6 +173,36 @@ def cmd_status(a) -> int:
     return 0
 
 
+def _fetch_latest_beacon() -> dict | None:
+    """A3-b: read VAPITemporalBeaconRegistry.latestBeacon() (view call — zero IOTX, no
+    kill-switch involvement). Registry address from env or bridge/.env. Returns
+    {block_number, block_hash, registry, fetched_at} or None (fail-open)."""
+    addr = os.environ.get("TEMPORAL_BEACON_REGISTRY_ADDRESS", "")
+    if not addr:
+        _dot_env = _REPO / "bridge" / ".env"
+        if _dot_env.exists():
+            for _line in _dot_env.read_text(encoding="utf-8").splitlines():
+                _line = _line.strip()
+                if _line.startswith("TEMPORAL_BEACON_REGISTRY_ADDRESS="):
+                    addr = _line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if not addr:
+        return None
+    from web3 import Web3
+    w3 = Web3(Web3.HTTPProvider("https://babel-api.testnet.iotex.io", request_kwargs={
+        "timeout": 15, "headers": {"User-Agent": "Mozilla/5.0",
+                                   "Content-Type": "application/json"}}))
+    abi = [{"name": "latestBeacon", "type": "function", "stateMutability": "view",
+            "inputs": [], "outputs": [{"name": "blockNumber", "type": "uint256"},
+                                      {"name": "blockHash", "type": "bytes32"}]}]
+    reg = w3.eth.contract(address=Web3.to_checksum_address(addr), abi=abi)
+    block_number, block_hash = reg.functions.latestBeacon().call()
+    if not block_number:
+        return None                                # registry live but nothing anchored yet
+    return {"block_number": int(block_number), "block_hash": "0x" + bytes(block_hash).hex(),
+            "registry": addr, "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+
+
 def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     """U2b: issue the PoSP reference-and-bind record at session close, after KAS issuance.
 
@@ -194,6 +224,7 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     # DB_PATH may be set in bridge/.env (e.g. presence_lean.db) but not in the daemon process
     # environment. Fall back to bridge/.env so _issue_posp() finds the same DB the bridge wrote to.
     fusion_rows: list = []
+    db_path = None
     try:
         _db_path_from_env = os.environ.get("DB_PATH")
         if not _db_path_from_env:
@@ -229,15 +260,47 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
     except Exception as e:  # noqa: BLE001
         print(f"[daemon] PoSP: manifest read failed (non-fatal): {e!r}")
 
-    # retina_perception_root is the Trio-Retina perception events_root (Phase 3c DA witness path);
-    # the KAS events_root is the KAS dual-lobe root (§2.3 — two named, parallel roots).
+    # retina_perception_root is the Trio-Retina perception events_root (§2.3 — two named,
+    # parallel roots; the KAS events_root is the KAS dual-lobe root). LUMEN-4b (2026-07-07):
+    # rolled AT ISSUANCE from the session's live-captured retina_event_log rows via the
+    # SHARED ENGINE (lumen4a_perception_root.roll_perception_root — same computation that
+    # produced the M14 candidate 4f335588...). FAIL-OPEN: a session whose perception
+    # pipeline didn't run keeps its honest null root — never fabricated.
+    retina_root = None
+    try:
+        from lumen4a_perception_root import roll_perception_root
+        _start_s = float(stamp) - 120.0
+        _end_s = time.time() + 120.0
+        retina_root, _p_stats = roll_perception_root(db_path, _start_s, _end_s)
+        if retina_root:
+            print(f"[daemon] PoSP: retina_perception_root rolled from "
+                  f"{_p_stats['n_rows']} live perception rows "
+                  f"({_p_stats['n_events']} events) -> {retina_root[:16]}...")
+        elif _p_stats.get("error"):
+            print(f"[daemon] PoSP: perception root unavailable (non-fatal): {_p_stats['error']}")
+    except Exception as e:  # noqa: BLE001 — perception root must never block PoSP issuance
+        print(f"[daemon] PoSP: perception-root roll failed (non-fatal): {e!r}")
+
+    # A3-b (2026-07-08): advisory recency reference — the latest keeper-anchored temporal
+    # beacon (Arc 6 registry; the keeper pays the anchoring, we only READ). Fail-open:
+    # registry unset / RPC error -> None, never blocks issuance, never fabricated.
+    beacon_ref = None
+    try:
+        beacon_ref = _fetch_latest_beacon()
+        if beacon_ref:
+            print(f"[daemon] PoSP: temporal beacon ref block={beacon_ref['block_number']} "
+                  f"hash={str(beacon_ref['block_hash'])[:16]}...")
+    except Exception as e:  # noqa: BLE001
+        print(f"[daemon] PoSP: beacon fetch failed (non-fatal): {e!r}")
+
     rec = build_posp(
         session_id=sid,
         session_display=kas_rec.get("session_display"),
         kas_record=kas_rec,
         fusion_rows=fusion_rows or None,
         archive_manifest=archive_manifest,
-        retina_perception_root=None,   # Phase 3c: perception root from retina_controller_embedder path
+        retina_perception_root=retina_root,
+        temporal_beacon=beacon_ref,
     )
     out = _REPO / "audits" / f"posp_record_{label}_{date.today().isoformat()}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -334,6 +397,23 @@ def cmd_stop(a) -> int:
     if len(sessions) < 10:
         print(f"[daemon] NOTE: {len(sessions)} usable sessions (<10/class floor) — play longer next time "
               "or lower --diag-every.")
+    # F-ARCB-1b: daemon-side MATCH_ENDED seal. The `_kill_tree` above force-killed the bridge, so
+    # RGC.stop() -> LiveMatchStateTracker.close_session NEVER ran; if this session left a live-open
+    # match (MATCH_STARTED with no MATCH_ENDED) in retina_match_state.jsonl, seal it here -- the same
+    # independent-of-the-killed-bridge harvest as KAS/PoSP. Fail-open: never breaks the stop path.
+    try:
+        from l9_presence.match_state_live import seal_open_match_from_jsonl
+        from l9_presence.session_identity import derive_session_id
+        _ms_path = _REPO / "retina_match_state.jsonl"
+        _seal = seal_open_match_from_jsonl(str(_ms_path), derive_session_id(label, st["started_at"]),
+                                           time.time() * 1000.0)
+        if _seal is not None:
+            with open(_ms_path, "a", encoding="utf-8") as _fh:
+                _fh.write(json.dumps(_seal) + "\n")
+            print(f"[daemon] match-state: sealed MATCH_ENDED (daemon_session_close) for "
+                  f"{_seal['session_id'][:16]}")
+    except Exception as e:  # noqa: BLE001 — advisory seal; never break stop
+        print(f"[daemon] match-state seal failed (non-fatal): {e!r}")
     # R3 ring-archival (DEFAULT-ON; --no-archive-ring to skip): preserve this session's rendering before the
     # next session overwrites the rolling ring. Fail-open — archival never breaks the stop path.
     if not getattr(a, "no_archive_ring", False):
