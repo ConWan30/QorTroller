@@ -7,13 +7,16 @@ Each plane stays independently verifiable; NONE asserts in another's lane -
 federation, not conflation (observation may suggest; only assertion may claim;
 meaning belongs to the gamer).
 
-JOIN HONESTY (grounded F0/F1/F3 on real M17):
+JOIN HONESTY (grounded F0/F1/F3 on real M17; fork semantics per D-CDM-1, operator-decided
+2026-07-12 via the A2A-CDM loop):
   assertion <-> observation : CRYPTOGRAPHIC - both roots live under one session_id in the PoSP.
   meaning   <-> session     : REFERENCE_ATTESTED by default (the WMP bundle carries no
                               session_id, so it binds by bundle_hash + an explicit operator
                               attestation). UPGRADES to CRYPTOGRAPHIC only when the PoSP carries
                               a poac_chain_root byte-equal to the bundle's poacChainRoot (F3) -
-                              earned by a verified root match, never asserted.
+                              earned by a verified root match, never asserted. If both roots are
+                              present and DISAGREE -> CONTENT_FORK, terminal fail-closed on the
+                              JOINED object (plane-local artifacts stay verifiable).
 
 F3 hard-join (BUILT as mechanism, gated on data). The WMP bundle exposes poacChainRoot (its
 FROZEN Groth16 public input, INV-VHR-005) as a BN254 field element. F3 grounding CORRECTED the
@@ -41,6 +44,11 @@ JOIN_CRYPTOGRAPHIC = "CRYPTOGRAPHIC"
 JOIN_REFERENCE_ATTESTED = "REFERENCE_ATTESTED"
 JOIN_UNATTESTED = "UNATTESTED"
 JOIN_INCOMPLETE = "INCOMPLETE"
+# D-CDM-1 (operator-decided 2026-07-12): when BOTH planes carry poac_chain_roots and they
+# DISAGREE, the joined object is terminal fail-closed - the cryptographic evidence
+# contradicts the same-session attestation, so no "attested" label survives. Plane-local
+# objects (PoSP, WMP bundle) stay independently verifiable - the TO's plane-split escape.
+JOIN_CONTENT_FORK = "CONTENT_FORK"
 
 # Fields that only the ASSERTION plane may carry (the separation law, machine-checked).
 _ASSERTING_FIELDS = frozenset({"verdict", "authored_kills", "claim", "asserts", "presence_score"})
@@ -102,10 +110,14 @@ def build_tri_plane_manifest(posp: dict, wmp_bundle: dict, *,
                else JOIN_INCOMPLETE)
     # F3: the meaning join EARNS CRYPTOGRAPHIC only when the PoSP carries a poac_chain_root
     # that byte-matches the WMP bundle's poacChainRoot (both planes over the same PoAC chain).
-    # Absent/mismatch -> it stays attested/unattested; the join is never asserted, only earned.
+    # Absent -> it stays attested/unattested (the join is never asserted, only earned).
+    # MISMATCH -> CONTENT_FORK (D-CDM-1 fail-closed): contradicted attestation never reads
+    # "attested" - the joined object is terminal; plane-local objects verify independently.
     poac_join = poac_chain_join(posp_poac_root, wmp_poac_root)
     if poac_join == POAC_VERIFIED_MATCH:
         meaning_join = JOIN_CRYPTOGRAPHIC
+    elif poac_join == POAC_MISMATCH:
+        meaning_join = JOIN_CONTENT_FORK
     elif attested_same_session:
         meaning_join = JOIN_REFERENCE_ATTESTED
     else:
@@ -185,6 +197,16 @@ def verify_tri_plane_manifest(manifest: dict, *, posp: dict = None, wmp_bundle: 
                manifest.get("session_id") == a_sid and a_sid == o_sid,
                "manifest session_id must match the assertion + observation planes")
 
+    # CONTENT-FORK rail (D-CDM-1, artifact-free): if BOTH planes carry poac_chain_roots and
+    # they disagree, the JOINED object is terminal UNVERIFIABLE - regardless of what label
+    # the producer wrote. Fail-closed beats false-comfort: a contradicted attestation must
+    # never skim as "attested" to a buyer. (Plane-local artifacts remain verifiable.)
+    a_root = (planes.get("assertion") or {}).get("poac_chain_root")
+    m_root = (planes.get("meaning") or {}).get("poac_chain_root")
+    forked = poac_chain_join(a_root, m_root) == POAC_MISMATCH
+    ok &= _chk("content_fork", not forked,
+               "both planes' poac_chain_roots present and unequal -> terminal (D-CDM-1)")
+
     # BINDING (optional artifacts): assertion binds to the PoSP; meaning to the bundle.
     if posp is not None:
         a = planes.get("assertion") or {}
@@ -198,3 +220,38 @@ def verify_tri_plane_manifest(manifest: dict, *, posp: dict = None, wmp_bundle: 
                    "meaning plane must cite this WMP bundle by hash")
 
     return {"ok": bool(ok), "checks": checks, "manifest_hash": manifest.get("manifest_hash")}
+
+
+def consumer_status(manifest: dict, verify_result: dict = None) -> dict:
+    """Q4-P4 multi-status consumer surface (D-CDM-1 companion): NEVER a single boolean -
+    neither a TO nor a data buyer gets one green light to misuse. Names adapted from grok's
+    Round-04 proposal: JOINED_* instead of SYNCHRONIZED to avoid colliding with the PoSP
+    verdict enum (separation discipline applies to naming too).
+
+    joined_status: JOINED_VERIFIED (earned cryptographic meaning join) / JOINED_ATTESTED
+    (reference + operator attestation) / JOINED_PARTIAL (unattested or incomplete) /
+    CONTENT_FORK (terminal - D-CDM-1) / UNVERIFIABLE (verify failed for any other reason)."""
+    js = manifest.get("join_status") or {}
+    meaning = js.get("meaning_session")
+    verified = bool(verify_result["ok"]) if verify_result is not None else None
+
+    if meaning == JOIN_CONTENT_FORK or (verify_result is not None and not verified
+                                        and any(c["name"] == "content_fork" and not c["ok"]
+                                                for c in verify_result.get("checks", []))):
+        joined = "CONTENT_FORK"
+    elif verify_result is not None and not verified:
+        joined = "UNVERIFIABLE"
+    elif meaning == JOIN_CRYPTOGRAPHIC:
+        joined = "JOINED_VERIFIED"
+    elif meaning == JOIN_REFERENCE_ATTESTED:
+        joined = "JOINED_ATTESTED"
+    else:
+        joined = "JOINED_PARTIAL"
+
+    return {
+        "humanity_plane": (manifest.get("planes") or {}).get("assertion", {}).get("verdict"),
+        "observation_plane": js.get("assertion_observation"),
+        "joined_status": joined,
+        "poac_chain_join": js.get("poac_chain_join"),
+        "note": "plane-local artifacts (PoSP / WMP bundle) verify independently of joined_status",
+    }
