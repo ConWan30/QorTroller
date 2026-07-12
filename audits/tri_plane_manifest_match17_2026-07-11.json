@@ -1,0 +1,37 @@
+{
+  "schema": "qortroller-tri-plane-session-v0",
+  "generated_at": "2026-07-11",
+  "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+  "planes": {
+    "assertion": {
+      "source": "posp",
+      "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+      "kas_session_root": "441585a63228ca1ceb7b7fd93b13e969e6c581df22411624e9920e024b3d5f4f",
+      "poac_chain_root": null,
+      "verdict": "SYNCHRONIZED"
+    },
+    "observation": {
+      "source": "posp",
+      "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+      "retina_perception_root": "758fe8c92d958a8ecc85024aba06c08ba0ed9bd589ecdc37c2f3a6749a0440a7",
+      "note": "advisory; commitment-referenced; may suggest, never assert"
+    },
+    "meaning": {
+      "source": "wmp",
+      "bundle_hash": "01ca889b7ac418c112376de7ede046d4f8408c477e48882e9215821bed79f0b5",
+      "poac_chain_root": "2883092103662502984058603518811642510659424348956558687207135404755924005222",
+      "consent_gamer_address": "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692",
+      "note": "gamer-owned; certified-human data; joins by reference + attestation"
+    }
+  },
+  "join_status": {
+    "assertion_observation": "CRYPTOGRAPHIC",
+    "meaning_session": "REFERENCE_ATTESTED",
+    "poac_chain_join": "ABSENT"
+  },
+  "hard_join_path_F3": "surface poac_chain_root on the PoSP side to match the WMP bundle's existing poacChainRoot - CRYPTOGRAPHIC join without re-hashing the published bundle",
+  "federation_law": "each plane independently verifiable; none asserts in another's lane",
+  "ceiling": "N=1, developer_self, IoTeX testnet; meaning<->session is ATTESTED not PROVEN (F3-gated); federation not conflation; advisory planes stay advisory",
+  "advisory": true,
+  "manifest_hash": "b1524349a089665c903e91a00238505ff930d472eb440ad7d0a458397cb68c6c"
+}
