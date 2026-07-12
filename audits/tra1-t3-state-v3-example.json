@@ -1,0 +1,9 @@
+{
+  "schema": "vapi-retina-state-v3-example",
+  "note": "CANDIDATE - NOT FROZEN, NOT PV-CI-pinned; promotion to FROZEN-v1 is an operator seal",
+  "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+  "ts_ns": 1783550435000000000,
+  "event_count": 2,
+  "worldstate_entities": 2,
+  "state_commitment_v3": "72724e741b4a92405600e236adbd31c05ea3a10177b38bc5d905bfdc2ddc2745"
+}
