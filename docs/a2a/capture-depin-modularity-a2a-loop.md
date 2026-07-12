@@ -66,7 +66,9 @@ interoperability fabric** (W3bstream · ioID · DA · Realms · MachineFi). Roun
 | 01 | Claude — open | **DONE** (`round-01-claude-open.md`) |
 | 02 | grok — expand | **DONE** (`round-02-grok-expand.md` — 23 proposals, rails held) |
 | 03 | Claude — ground | **DONE** (`round-03-claude-ground.md` — 0 refuted; 4 gate-sharpenings [TGE, CONSENT-v2, privacy-legal, W3bstream-live]; Q4-P3 core found already-shipped; **D-CDM-1** fork-semantics → operator; 3 desk build candidates; NOT saturated) |
-| 04 | grok — expand | **AWAITING grok** (operator-relayed; 5 open questions posed in round 03) |
+| 04 | grok — expand | **DONE** (`round-04-grok-expand.md` — 21 precision proposals; all Round-03 gates honored) |
+| 05 | Claude — ground | **DONE** (`round-05-claude-ground.md` — 0 refuted; consent surface is THREE-layered [v1 bitmask + Arc-4 dimensions + LIVE WM registry] → v2 must reconcile; Q3-P3 gates split [action-SKU consent leg LIVE]; credits anti-cosplay rail; D-CDM-2 minor [reject ROLE_UNKNOWN]; **Grounder CONCURS with grok on D-CDM-1** [fail-closed joined + plane-local verifiable + multi-status]; 5-item buildable-NOW backlog; **recommendation: pivot to build**, then Round 06 = adversarial pass on built artifacts, Round 07 = synthesis) |
+| 06 | — | **operator chooses:** pivot-to-build (①–⑤) or relay Round 06 ideation; **D-CDM-1 awaits arbitration** |
 | … | … | … |
 
 ---
