@@ -1,4 +1,4 @@
-"""TPF-1 F1 - tri-plane session manifest (sidecar, REFERENCE-AND-BIND).
+"""TPF-1 F1/F3 - tri-plane session manifest (sidecar, REFERENCE-AND-BIND + earned hard join).
 
 Federates QorTroller's three planes into ONE session object WITHOUT mutating any
 artifact: it cites the ASSERTION + OBSERVATION plane (the PoSP record, by session_id
@@ -7,18 +7,24 @@ Each plane stays independently verifiable; NONE asserts in another's lane -
 federation, not conflation (observation may suggest; only assertion may claim;
 meaning belongs to the gamer).
 
-JOIN HONESTY (grounded F0/F1 on real M17):
-  assertion <-> observation : CRYPTOGRAPHIC - both roots live under one session_id in
-                              the PoSP record.
-  meaning   <-> session     : REFERENCE_ATTESTED - the WMP bundle carries no session_id,
-                              so the manifest binds it by bundle_hash + an explicit
-                              operator attestation, and says 'attested', never 'proven'.
+JOIN HONESTY (grounded F0/F1/F3 on real M17):
+  assertion <-> observation : CRYPTOGRAPHIC - both roots live under one session_id in the PoSP.
+  meaning   <-> session     : REFERENCE_ATTESTED by default (the WMP bundle carries no
+                              session_id, so it binds by bundle_hash + an explicit operator
+                              attestation). UPGRADES to CRYPTOGRAPHIC only when the PoSP carries
+                              a poac_chain_root byte-equal to the bundle's poacChainRoot (F3) -
+                              earned by a verified root match, never asserted.
 
-F3 hard-join path (a beneficial catch from F1 grounding, cleaner than re-hashing the
-published bundle): the WMP bundle ALREADY exposes poacChainRoot (its FROZEN Groth16
-public input, INV-VHR-005), and the PoSP's KAS is committed over the SAME M17 PoAC
-records. Surfacing a matching poac_chain_root on the PoSP side would join the meaning
-plane CRYPTOGRAPHICALLY without touching the published WMP bundle. Named here; gated.
+F3 hard-join (BUILT as mechanism, gated on data). The WMP bundle exposes poacChainRoot (its
+FROZEN Groth16 public input, INV-VHR-005) as a BN254 field element. F3 grounding CORRECTED the
+optimistic F1 assumption: the PoSP's KAS commitment is a SHA-256 over KAS-domain data, NOT the
+Arc-5 Poseidon PoAC-chain root - different domain, cannot byte-match. So the hard join requires
+the PoSP to ALSO carry the SAME Arc-5 poac_chain_root the replay pipeline computes; then
+poac_chain_join() byte-compares the two planes and the meaning join earns CRYPTOGRAPHIC. Absent
+(the committed M17, whose PoSP predates the field) it stays honestly REFERENCE_ATTESTED - and a
+CRYPTOGRAPHIC claim without a verified match is REJECTED by verify (defeats the S4 splice).
+Activation: a live PoSP carries poac_chain_root at mint (daemon wiring), or M17 is re-derived
+from bridge_match17.db offline (DB-gated).
 
 Pure stdlib + sdk.wmp_verify (bundle hash). No PoAC/228B/chain/FROZEN contact.
 """
@@ -39,6 +45,38 @@ JOIN_INCOMPLETE = "INCOMPLETE"
 # Fields that only the ASSERTION plane may carry (the separation law, machine-checked).
 _ASSERTING_FIELDS = frozenset({"verdict", "authored_kills", "claim", "asserts", "presence_score"})
 
+# F3 hard-join result taxonomy.
+POAC_VERIFIED_MATCH = "VERIFIED_MATCH"   # both planes carry byte-equal PoAC-chain roots
+POAC_MISMATCH = "MISMATCH"               # a real cross-plane inconsistency (a splice)
+POAC_ABSENT = "ABSENT"                   # one side has no poac_chain_root yet (M17 - honest defer)
+
+
+def _norm_root(x):
+    """Normalize a PoAC-chain root to a canonical int (BN254 field element),
+    representation-robust across decimal str / int / 0x-hex. None if absent/unparseable."""
+    if x is None:
+        return None
+    try:
+        if isinstance(x, str):
+            s = x.strip()
+            return int(s, 16) if s.lower().startswith("0x") else int(s)
+        return int(x)
+    except (ValueError, TypeError):
+        return None
+
+
+def poac_chain_join(assertion_root, meaning_root) -> str:
+    """F3: do the assertion plane (PoSP) and the meaning plane (WMP bundle) reference the
+    SAME PoAC chain? VERIFIED_MATCH only when BOTH roots are present and byte-equal as BN254
+    field elements - the cryptographic upgrade the meaning join must EARN, never assert.
+    ABSENT when either side lacks a poac_chain_root (today's committed M17 - the join stays
+    honestly attested). MISMATCH is a caught splice. Pure; no PoAC/228B/chain contact."""
+    a = _norm_root(assertion_root)
+    m = _norm_root(meaning_root)
+    if a is None or m is None:
+        return POAC_ABSENT
+    return POAC_VERIFIED_MATCH if a == m else POAC_MISMATCH
+
 
 def _mhash(manifest: dict) -> str:
     m = {k: v for k, v in manifest.items() if k != "manifest_hash"}
@@ -56,11 +94,22 @@ def build_tri_plane_manifest(posp: dict, wmp_bundle: dict, *,
     roots = posp.get("events_roots") or {}
     kas_root = roots.get("kas_session_root")
     ret_root = roots.get("retina_perception_root")
+    posp_poac_root = posp.get("poac_chain_root")   # F3: optional Arc-5 PoAC-chain root on the PoSP side
     pub = wmp_bundle.get("humanity_proof_public_inputs") or {}
+    wmp_poac_root = pub.get("poacChainRoot")
 
     ao_join = (JOIN_CRYPTOGRAPHIC if (session_id and kas_root and ret_root)
                else JOIN_INCOMPLETE)
-    meaning_join = JOIN_REFERENCE_ATTESTED if attested_same_session else JOIN_UNATTESTED
+    # F3: the meaning join EARNS CRYPTOGRAPHIC only when the PoSP carries a poac_chain_root
+    # that byte-matches the WMP bundle's poacChainRoot (both planes over the same PoAC chain).
+    # Absent/mismatch -> it stays attested/unattested; the join is never asserted, only earned.
+    poac_join = poac_chain_join(posp_poac_root, wmp_poac_root)
+    if poac_join == POAC_VERIFIED_MATCH:
+        meaning_join = JOIN_CRYPTOGRAPHIC
+    elif attested_same_session:
+        meaning_join = JOIN_REFERENCE_ATTESTED
+    else:
+        meaning_join = JOIN_UNATTESTED
 
     manifest = {
         "schema": SCHEMA,
@@ -68,16 +117,18 @@ def build_tri_plane_manifest(posp: dict, wmp_bundle: dict, *,
         "session_id": session_id,
         "planes": {
             "assertion": {"source": "posp", "session_id": session_id,
-                          "kas_session_root": kas_root, "verdict": posp.get("verdict")},
+                          "kas_session_root": kas_root, "poac_chain_root": posp_poac_root,
+                          "verdict": posp.get("verdict")},
             "observation": {"source": "posp", "session_id": session_id,
                             "retina_perception_root": ret_root,
                             "note": "advisory; commitment-referenced; may suggest, never assert"},
             "meaning": {"source": "wmp", "bundle_hash": _bundle_hash(wmp_bundle),
-                        "poac_chain_root": pub.get("poacChainRoot"),
+                        "poac_chain_root": wmp_poac_root,
                         "consent_gamer_address": wmp_bundle.get("consent_gamer_address"),
                         "note": "gamer-owned; certified-human data; joins by reference + attestation"},
         },
-        "join_status": {"assertion_observation": ao_join, "meaning_session": meaning_join},
+        "join_status": {"assertion_observation": ao_join, "meaning_session": meaning_join,
+                        "poac_chain_join": poac_join},
         "hard_join_path_F3": ("surface poac_chain_root on the PoSP side to match the WMP bundle's "
                               "existing poacChainRoot - CRYPTOGRAPHIC join without re-hashing the "
                               "published bundle"),
@@ -106,9 +157,16 @@ def verify_tri_plane_manifest(manifest: dict, *, posp: dict = None, wmp_bundle: 
     planes = manifest.get("planes") or {}
     js = manifest.get("join_status") or {}
 
-    # HONESTY: meaning<->session must NOT claim CRYPTOGRAPHIC (no hard join exists yet, F3).
-    ok &= _chk("meaning_join_honest", js.get("meaning_session") != JOIN_CRYPTOGRAPHIC,
-               "meaning<->session may only be attested/unattested until F3 (never overclaimed)")
+    # F3 HONESTY: the meaning join MAY now be CRYPTOGRAPHIC - but ONLY when the assertion +
+    # meaning planes carry byte-equal poac_chain_roots (same PoAC chain). A CRYPTOGRAPHIC claim
+    # without that verified match is an overclaim and is REJECTED (defeats the S4 meaning splice).
+    if js.get("meaning_session") == JOIN_CRYPTOGRAPHIC:
+        a_root = (planes.get("assertion") or {}).get("poac_chain_root")
+        m_root = (planes.get("meaning") or {}).get("poac_chain_root")
+        ok &= _chk("meaning_join_honest", poac_chain_join(a_root, m_root) == POAC_VERIFIED_MATCH,
+                   "CRYPTOGRAPHIC meaning join requires byte-equal poac_chain_roots on both planes")
+    else:
+        ok &= _chk("meaning_join_honest", True, "meaning<->session attested/unattested (honest)")
 
     # SEPARATION LAW: only the assertion plane may carry an asserting field.
     sep = True
