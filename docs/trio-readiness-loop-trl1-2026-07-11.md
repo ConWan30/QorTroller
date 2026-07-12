@@ -71,7 +71,7 @@ cross-lobe stimulus until the card) banks the harness + the baseline and moves o
 ### Archive-rung (A) — enhance/additive, offline against M11–M17
 | id | increment | IoTeX | gate | status |
 |----|-----------|-------|------|--------|
-| **A1** | **LUMEN N5 predictive-coupling** offline harness + M11–M17 baseline (predicted-vs-observed causality deviation = replay/injection signal needing BOTH lobes). Full cross-lobe-latency form is card-gated (RP-4) → desk = harness + baseline (honest-negative OK) | **Poseidon/ZK-prep** | advisory | OPEN |
+| **A1** | **LUMEN N5 increment 2 — lag DIRECTIONALITY** (the recoil-precognition Δ≤0 signature generalized; orthogonal to inc1 coherence). `l9_presence/predictive_coupling.py` `assess_directionality` — genuine causal lag → DIR_CAUSAL, replay/precognition → DIR_NONCAUSAL. Full cross-lobe form card-gated (RP-4) | **Poseidon/ZK-prep** | advisory | **BANKED** — pre-registered bar (2026-07-11); metric proven-to-SEPARATE on synthetic (9 tests + demo); genuine baseline on archive, decoupled/replay class card-gated; inc1 untouched (8 tests still green) |
 | **A2** | **Retina game-state buffer** (ROI persistence + temporal event clusters) as an ADVISORY OCR-recall aid — raises *where to look*, never lowers K=3 or opens a window | **W3bstream** | **re-run zero-false-read + C1** | OPEN |
 | **A3** | **Assertion-plane adversarial hardening** — extend AH-1's forge-our-own discipline to `verify_posp_record` / `retina_events_root` / `kas_session_root` | **Poseidon** | advisory | OPEN |
 
