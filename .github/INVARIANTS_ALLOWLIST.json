@@ -667,6 +667,18 @@
     "digest": "62682d9474fd1e66ec378378451c2587dffe538b68f8c20e8622ec18c3519385",
     "description": "VAPIReplayProofVerifier_v2 contract PROOF_TYPE FROZEN as keccak256('VAPI-REPLAY-PROOF-v2') \u2014 distinct discriminator for PoSR-bound VHR proofs. Does NOT overload Arc 5's INV-VHR-003. Coexists with v1 in the marketplace (recency is opt-in until tournament operator requires)."
   },
+  "INV-POSR-WIRING-001": {
+    "digest": "26b813c681982e03afe3bd33c5269ec984d5638feaa70f9245d9bfd58691168d",
+    "description": "PoSR live-path recency binding FAILS CLOSED to Arc 5 v1 \u2014 VAPIReplayProofPipeline._compute_recency returns recency_bound=False on any miss (posr_recency_enabled off, no captured open beacon, no current close beacon, or the registry read errors). A recency claim is NEVER fabricated; the proof falls back to the v1 path. Phase 1 wiring honesty rail."
+  },
+  "INV-POSR-WIRING-002": {
+    "digest": "7b18980388e30ab34387a47a98a9df3e2eb447c61bd5ef3e119835af9ce1a6be",
+    "description": "PoSR wiring enforces close-beacon STRICTLY AFTER open at the bridge layer (not only in-circuit) \u2014 _compute_recency rejects close.block <= open.block before binding recency. Defense in depth: the same forward-ordering guard the v2 circuit enforces (build_inputs_v2 close>open) is surfaced before any prover runs."
+  },
+  "INV-POSR-WIRING-003": {
+    "digest": "6ec415eebc850cb2adc93fa8301cb3bfe5ced39f543bed229dcc94a62a6f922b",
+    "description": "PoSR recency wiring is DEFAULT-OFF \u2014 config.posr_recency_enabled reads POSR_RECENCY_ENABLED with default False. With the flag off, on_session_open_vhr and the package_session recency step are no-ops and behavior is byte-identical to the Arc 5 v1 path. Operator-fired opt-in only."
+  },
   "INV-W3S-001": {
     "digest": "3583ad636d0e094144db897ab6d701d85148c376f3b5c69053d13a5eb6f5e23b",
     "description": "W3bstream native Wasm cadence limit (payload.block_number % ANCHOR_CADENCE == 0)"
@@ -695,6 +707,10 @@
     "digest": "c6ef0b7dce8a7c603c30da363ff252bc9dfde22f1e4f64010824163e7eff6a23",
     "description": "retina_perception_enabled defaults to False in bridge config (fleet-wide manual override OFF; policy auto-arm is separate)."
   },
+  "INV-RETINA-STATE-V3": {
+    "digest": "b3e5cb6a65c275d8d99fb11fcc597dfa138c872c6544ad716c8c479d79fd23e2",
+    "description": "VAPI-RETINA-STATE-v3 FROZEN-v1 verify-rung commitment formula (TRA-1 T3, operator seal 2026-07-12): SHA-256(VAPI-RETINA-STATE-v3 || device_id(32) || ts_ns_be(8) || ordered_events_root(32) || worldstate_digest(32)) \u2014 the ORDERED retina.event/0.1 stream bound to the WorldState frame. Domain tag + preimage structure are frozen; any change requires v4. OBSERVATION-plane; 228B PoAC wire unchanged."
+  },
   "INV-ARC7-002": {
     "digest": "9169a8090275a111b20fd67a97a97cb1762ce1c44c893b3094f92d78322555cc",
     "description": "Asserts that the EVM-layer validation logic explicitly includes a require check blocking null (bytes32(0)) post-quantum signatures."
@@ -714,17 +730,5 @@
   "INV-FIRMWARE-002": {
     "digest": "5f05645995d5c24e86282ab26ee83d1cdd453ae46d5ac3915d236099a89e26ec",
     "description": "Asserts that the UWB presence reader (uwb_presence.c) enforces the privacy gate: frames with the vital-sign flag set are discarded and the sensor is disabled for the session. Vital-sign capture requires an independent privacy review per TRACK1-LESSON-003."
-  },
-  "INV-POSR-WIRING-001": {
-    "digest": "26b813c681982e03afe3bd33c5269ec984d5638feaa70f9245d9bfd58691168d",
-    "description": "PoSR live-path recency binding FAILS CLOSED to Arc 5 v1 \u2014 VAPIReplayProofPipeline._compute_recency returns recency_bound=False on any miss (posr_recency_enabled off, no captured open beacon, no current close beacon, or the registry read errors). A recency claim is NEVER fabricated; the proof falls back to the v1 path. Phase 1 wiring honesty rail."
-  },
-  "INV-POSR-WIRING-002": {
-    "digest": "7b18980388e30ab34387a47a98a9df3e2eb447c61bd5ef3e119835af9ce1a6be",
-    "description": "PoSR wiring enforces close-beacon STRICTLY AFTER open at the bridge layer (not only in-circuit) \u2014 _compute_recency rejects close.block <= open.block before binding recency. Defense in depth: the same forward-ordering guard the v2 circuit enforces (build_inputs_v2 close>open) is surfaced before any prover runs."
-  },
-  "INV-POSR-WIRING-003": {
-    "digest": "6ec415eebc850cb2adc93fa8301cb3bfe5ced39f543bed229dcc94a62a6f922b",
-    "description": "PoSR recency wiring is DEFAULT-OFF \u2014 config.posr_recency_enabled reads POSR_RECENCY_ENABLED with default False. With the flag off, on_session_open_vhr and the package_session recency step are no-ops and behavior is byte-identical to the Arc 5 v1 path. Operator-fired opt-in only."
   }
 }
