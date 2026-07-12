@@ -132,6 +132,14 @@ def verify_index(index: dict) -> int:
                 failures += 1
                 continue
             doc = _load_json(p)
+            # T3-A3/A4 (Round-07 fix): a valid artifact listed under the WRONG session_id is a
+            # timeline lie (re-binding / cross-session substitution). An artifact that carries a
+            # session_id MUST match its index entry. (WMP bundles carry none - the orphan - skip.)
+            doc_sid = doc.get("session_id")
+            if a["kind"] in (KIND_POSP, KIND_MANIFEST) and doc_sid is not None and doc_sid != sid:
+                print(f"  [FAIL] {a['path']} - session_id {doc_sid[:12]}... != index session {sid[:12]}...")
+                failures += 1
+                continue
             session_docs[a["kind"]] = doc
         # re-run each artifact's own verifier (hash-clean ones only)
         for kind, doc in session_docs.items():
@@ -157,9 +165,11 @@ def verify_index(index: dict) -> int:
         failures += 1
 
     print("-" * 78)
-    print("CEILINGS: index is producer-declared (selective omission NOT detected - Round-06");
-    print("target); device continuity != identity (no which-human/population/FAR claims);")
-    print("N=1 developer_self today - longitudinal is not broad.")
+    print("CEILINGS: index is producer-declared (selective omission NOT detected - the DAG is a")
+    print("hash locker + device-continuity + timeline check, NOT a completeness proof);")
+    print("device continuity != identity (no which-human/population/FAR claims); WMP re-verify")
+    print("uses OFFLINE defaults (zero-trust logic bar), NOT the --full 5/5 crypto bar; N=1")
+    print("developer_self today - longitudinal is not broad.")
     print("-" * 78)
     verdict = "DAG VERIFIED" if failures == 0 else f"DAG FAILED ({failures} failure(s))"
     print(f"VERDICT: {verdict}")
