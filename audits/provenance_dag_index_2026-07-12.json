@@ -1,0 +1,26 @@
+{
+  "schema": "qortroller-provenance-dag-index-v0",
+  "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+  "sessions": [
+    {
+      "session_id": "bc7287fbf5e95a4c815d4c520c21397e8aba374b3c0cefc9204b105d827baf06",
+      "artifacts": [
+        {
+          "path": "audits/posp_record_match17_rp_fixb3_2026-07-08.json",
+          "kind": "posp",
+          "sha256": "545f9d44aa76ae504dce346809131a6ac0a6d0b0b06c68211e1ff5fcd4bcdf33"
+        },
+        {
+          "path": "audits/tri_plane_manifest_match17_2026-07-11.json",
+          "kind": "tri_plane_manifest",
+          "sha256": "4b750e8b47eab756fca91fe0482a3072e384f50f8e4ae0079d8dd948befd91e3"
+        },
+        {
+          "path": "wmp_corpus_real/wmp_corpus.jsonl",
+          "kind": "wmp_bundle",
+          "sha256": "303c2d59725686d5ae8b64d19ff40abb384e1e85fcfbbc871fa8aa3848db2a9e"
+        }
+      ]
+    }
+  ]
+}
