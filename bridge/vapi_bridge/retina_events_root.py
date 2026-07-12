@@ -122,6 +122,36 @@ def compute_events_root_poseidon(
     return fn(elems)
 
 
+def ordered_event_field_elements(events: Sequence[Mapping[str, Any]]) -> list[int]:
+    """Field elements in EMISSION ORDER (no sort) - the order-preserving variant for the
+    replayable ``retina.event/0.1`` JSON-Lines stream (TRA-1 F-TRA0-1). Each event is
+    canonicalized (sorted keys) individually, but the LIST order is preserved. Empty -> [0]."""
+    if not events:
+        return [0]
+    return [
+        event_line_to_field_element(
+            json.dumps(dict(e), sort_keys=True, separators=(",", ":"))
+        )
+        for e in events
+    ]
+
+
+def compute_events_root_poseidon_ordered(
+    events: Sequence[Mapping[str, Any]],
+    *,
+    chain_fn: _PoseidonChainFn | None = None,
+) -> bytes:
+    """Order-PRESERVING 32-byte Poseidon-2 chain root (TRA-1 F-TRA0-1): commits the events in
+    emission order, matching the standard's replayable stream. Distinct from the
+    order-independent ``compute_events_root_poseidon`` (which sorts to a set commitment).
+    Only requires the node Poseidon helper when the default backend is actually used."""
+    elems = ordered_event_field_elements(events)
+    fn = chain_fn or _poseidon_chain_fn or _default_poseidon_chain
+    if fn is _default_poseidon_chain and not _POSEIDON_CHAIN_SCRIPT.is_file():
+        raise RuntimeError(f"missing Poseidon helper: {_POSEIDON_CHAIN_SCRIPT}")
+    return fn(elems)
+
+
 def events_root_hex(root: bytes) -> str:
     if len(root) != 32:
         raise ValueError(f"events_root must be 32 bytes, got {len(root)}")
