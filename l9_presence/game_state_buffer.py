@@ -206,3 +206,66 @@ def verify_stream_references(stream: SceneEventStream, manifest: dict) -> dict:
     return {"ok": sid_ok and not dangling, "dangling": dangling,
             "note": ("session_id mismatch" if not sid_ok else
                      f"{len(dangling)} dangling sha(s)" if dangling else "all refs resolve")}
+
+
+# =====================================================================================
+# LUMEN-1 / A2 (TRL-1) -- OCR-recall aid: the buffer RAISES WHERE TO LOOK.
+#
+# Under sparse RP sampling the throttled kill-row OCR misses rows. Bursts of SCENE_CHANGE
+# (a row appeared / left) mark the temporal windows worth the OCR budget; a KILL_ROW_CLUSTER
+# overlapping boosts the priority. recall_priority() ranks those windows so the OCR spends
+# its budget where a row most likely appeared.
+#
+# HARD RAILS (the certificate-path discipline, TRL-1 rail 7 / the alignment doc N1):
+#   * ADVISORY ONLY -- ranks WHERE TO LOOK. Never opens a classification window, never
+#     lowers the K=3 authored-kill floor, never changes canon(), never feeds presence_score.
+#     OCR still owns the read; this only allocates the read budget.
+#   * CONSUMPTION-GATED -- the priorities reach the live authorship / certificate path ONLY
+#     after the zero-false-read gate AND the C1 adversarial pairing RE-PASS on the card feed
+#     (the B8 lesson: a better reader can dissolve an accidental defense). That re-gate is
+#     RIG/CARD-gated, not a desk step. authorship_recall_priority() returns [] until then --
+#     so this ships the aid + the rail while the certificate-path wiring stays deferred.
+
+RECALL_CLUSTER_WINDOW_MS = 750.0
+
+
+def recall_priority(stream: SceneEventStream, *, top_k: int = 8,
+                    cluster_window_ms: float = RECALL_CLUSTER_WINDOW_MS) -> list:
+    """ADVISORY ranked OCR-recall windows [{ts_ns, priority}, ...] by SCENE_CHANGE
+    density (KILL_ROW_CLUSTER overlap boosts). Non-max-suppressed to distinct windows.
+    For logging / OCR scheduling -- NOT the certificate path (that is
+    authorship_recall_priority, which is gated)."""
+    changes = sorted(e.ts_ns for e in stream.events if e.kind == SCENE_CHANGE)
+    if not changes:
+        return []
+    win_ns = cluster_window_ms * 1e6
+    clusters = [tuple(e.span_ms) for e in stream.events
+                if e.kind == KILL_ROW_CLUSTER and e.span_ms]
+
+    def _boost(ts_ns):
+        ts_ms = ts_ns / 1e6
+        return 2 if any(s <= ts_ms <= e for s, e in clusters) else 1
+
+    scored = [(ts, sum(1 for t in changes if abs(t - ts) <= win_ns / 2) * _boost(ts))
+              for ts in changes]
+    scored.sort(key=lambda x: (x[1], x[0]), reverse=True)
+    hints: list = []
+    used: list = []
+    for ts, pr in scored:
+        if all(abs(ts - u) > win_ns for u in used):
+            hints.append({"ts_ns": ts, "priority": pr})
+            used.append(ts)
+        if len(hints) >= top_k:
+            break
+    return hints
+
+
+def authorship_recall_priority(stream: SceneEventStream, *,
+                               consumption_regated: bool = False, top_k: int = 8) -> list:
+    """The CERTIFICATE-PATH consumer. Returns [] unless consumption_regated -- i.e. the
+    zero-false-read gate + C1 adversarial pairing have RE-PASSED on the card feed (a
+    rig/card-gated step). Until then the recall aid cannot influence authorship, by
+    construction."""
+    if not consumption_regated:
+        return []
+    return recall_priority(stream, top_k=top_k)
