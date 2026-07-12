@@ -79,7 +79,7 @@ cross-lobe stimulus until the card) banks the harness + the baseline and moves o
 | id | increment | IoTeX | status |
 |----|-----------|-------|--------|
 | **I1** | Extend the **plug-and-play verifier** (`scripts/verify_wmp_ladder.py`) with an ASSERTION rung — an outsider verifies the anti-cheat proof *and* the data economy in one command | **Poseidon** + `isFullyEligible()` | **BANKED** — RUNG 7 verifies the M17 PoSP (SYNCHRONIZED) offline via `verify_posp_record.py`; same session as the WMP bundle → "one match, two engines"; brief updated |
-| **I2** | **DA sidecar-pointer conformance** for scene payloads — Arc 7's law (bulk on DA, 32B commitment on the wire) applied to scene-stream; a check that nothing inline crosses the boundary | **DA/sidecar** | OPEN |
+| **I2** | **DA sidecar-pointer conformance** — Arc 7's law (bulk on DA, 32B commitment on the wire) applied to the scene/PoSP boundary | **DA/sidecar** | **BANKED** — `l9_presence/da_conformance.py` + `scripts/da_conformance_check.py` (9 tests); M17 **CONFORMANT** (both `events_roots` are 32B pointers, no inline scene payload); catches inlined-payload forgeries (root-as-list, oversized blob, `raw_frame` key, data-URI) |
 | **I3** | **W3bstream retina-event applet parity** — confirm the mechanical-validation sandbox validates events and never captures them (`frame_grabbing=false` pinned) | **W3bstream** | OPEN |
 
 ## 5. Card-transition (saturation → handoff)
