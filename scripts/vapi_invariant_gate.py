@@ -1480,6 +1480,13 @@ INVARIANTS: list[Invariant] = [
         min_matches=1,
     ),
     Invariant(
+        id="INV-RETINA-STATE-V3",
+        description="VAPI-RETINA-STATE-v3 FROZEN-v1 verify-rung commitment formula (TRA-1 T3, operator seal 2026-07-12): SHA-256(VAPI-RETINA-STATE-v3 || device_id(32) || ts_ns_be(8) || ordered_events_root(32) || worldstate_digest(32)) — the ORDERED retina.event/0.1 stream bound to the WorldState frame. Domain tag + preimage structure are frozen; any change requires v4. OBSERVATION-plane; 228B PoAC wire unchanged.",
+        file="bridge/vapi_bridge/retina_state_commitment.py",
+        pattern=r'DOMAIN_TAG_V3\s*=\s*b"VAPI-RETINA-STATE-v3"|DOMAIN_TAG_V3 \+ device_b \+ int\(ts_ns\)\.to_bytes\(8',
+        min_matches=2,
+    ),
+    Invariant(
         id="INV-ARC7-002",
         description="Asserts that the EVM-layer validation logic explicitly includes a require check blocking null (bytes32(0)) post-quantum signatures.",
         file="contracts/contracts/VAPITemporalBeaconRegistry.sol",
