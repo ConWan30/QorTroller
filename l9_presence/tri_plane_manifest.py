@@ -197,15 +197,22 @@ def verify_tri_plane_manifest(manifest: dict, *, posp: dict = None, wmp_bundle: 
                manifest.get("session_id") == a_sid and a_sid == o_sid,
                "manifest session_id must match the assertion + observation planes")
 
-    # CONTENT-FORK rail (D-CDM-1, artifact-free): if BOTH planes carry poac_chain_roots and
-    # they disagree, the JOINED object is terminal UNVERIFIABLE - regardless of what label
-    # the producer wrote. Fail-closed beats false-comfort: a contradicted attestation must
-    # never skim as "attested" to a buyer. (Plane-local artifacts remain verifiable.)
-    a_root = (planes.get("assertion") or {}).get("poac_chain_root")
-    m_root = (planes.get("meaning") or {}).get("poac_chain_root")
-    forked = poac_chain_join(a_root, m_root) == POAC_MISMATCH
-    ok &= _chk("content_fork", not forked,
-               "both planes' poac_chain_roots present and unequal -> terminal (D-CDM-1)")
+    # CONTENT-FORK rail (D-CDM-1). ARTIFACT-DERIVED roots are AUTHORITATIVE when artifacts are
+    # supplied (Round-07 T1-A2/A1 fix): a forger who deletes the plane roots while the real PoSP
+    # + bundle still DISAGREE is now CAUGHT - the fork is read from the artifacts, not the
+    # producer's plane fields. With no artifacts, the planes' own declared roots are used (the
+    # original artifact-free rail). A fork is terminal either way; fail-closed beats false-comfort.
+    a_root_plane = (planes.get("assertion") or {}).get("poac_chain_root")
+    m_root_plane = (planes.get("meaning") or {}).get("poac_chain_root")
+    wroot = None
+    if wmp_bundle is not None:
+        wroot = (wmp_bundle.get("humanity_proof_public_inputs") or {}).get("poacChainRoot")
+    a_root = posp.get("poac_chain_root") if (posp is not None
+             and posp.get("poac_chain_root") is not None) else a_root_plane
+    m_root = wroot if wroot is not None else m_root_plane
+    ok &= _chk("content_fork", poac_chain_join(a_root, m_root) != POAC_MISMATCH,
+               "assertion + meaning poac_chain_roots present and unequal -> terminal (D-CDM-1); "
+               "artifact-derived roots authoritative when artifacts supplied")
 
     # BINDING (optional artifacts): assertion binds to the PoSP; meaning to the bundle.
     if posp is not None:
@@ -214,10 +221,19 @@ def verify_tri_plane_manifest(manifest: dict, *, posp: dict = None, wmp_bundle: 
                    a.get("session_id") == posp.get("session_id")
                    and a.get("kas_session_root") == (posp.get("events_roots") or {}).get("kas_session_root"),
                    "assertion plane must cite this PoSP")
+        # Round-07 T1-A2: a plane that DECLARES a root may not disagree with the artifact's.
+        if a_root_plane is not None:
+            ok &= _chk("assertion_root_matches_posp",
+                       _norm_root(a_root_plane) == _norm_root(posp.get("poac_chain_root")),
+                       "assertion plane poac_chain_root must equal the PoSP's")
     if wmp_bundle is not None:
         m = planes.get("meaning") or {}
         ok &= _chk("meaning_binds_bundle", m.get("bundle_hash") == _bundle_hash(wmp_bundle),
                    "meaning plane must cite this WMP bundle by hash")
+        if m_root_plane is not None:
+            ok &= _chk("meaning_root_matches_bundle",
+                       _norm_root(m_root_plane) == _norm_root(wroot),
+                       "meaning plane poac_chain_root must equal the bundle's public input")
 
     return {"ok": bool(ok), "checks": checks, "manifest_hash": manifest.get("manifest_hash")}
 
@@ -235,14 +251,23 @@ def consumer_status(manifest: dict, verify_result: dict = None) -> dict:
     meaning = js.get("meaning_session")
     verified = bool(verify_result["ok"]) if verify_result is not None else None
 
-    if meaning == JOIN_CONTENT_FORK or (verify_result is not None and not verified
-                                        and any(c["name"] == "content_fork" and not c["ok"]
-                                                for c in verify_result.get("checks", []))):
+    # Round-07 T2-A1: recompute the fork from the planes' own roots ALWAYS - never trust the
+    # producer's label alone (a skim-reader calling consumer_status() without first running
+    # verify_tri_plane_manifest must still see a fork), and honor CRYPTOGRAPHIC only when the
+    # roots actually match (or a passing verify_result vouches for it).
+    planes = manifest.get("planes") or {}
+    plane_join = poac_chain_join((planes.get("assertion") or {}).get("poac_chain_root"),
+                                 (planes.get("meaning") or {}).get("poac_chain_root"))
+    verify_fork = (verify_result is not None and not verified
+                   and any(c["name"] == "content_fork" and not c["ok"]
+                           for c in verify_result.get("checks", [])))
+
+    if meaning == JOIN_CONTENT_FORK or plane_join == POAC_MISMATCH or verify_fork:
         joined = "CONTENT_FORK"
     elif verify_result is not None and not verified:
         joined = "UNVERIFIABLE"
     elif meaning == JOIN_CRYPTOGRAPHIC:
-        joined = "JOINED_VERIFIED"
+        joined = "JOINED_VERIFIED" if (plane_join == POAC_VERIFIED_MATCH or verified) else "UNVERIFIABLE"
     elif meaning == JOIN_REFERENCE_ATTESTED:
         joined = "JOINED_ATTESTED"
     else:

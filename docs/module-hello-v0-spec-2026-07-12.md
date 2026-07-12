@@ -78,6 +78,31 @@ shipped manifest firewall (`tri_plane_manifest._ASSERTING_FIELDS`, proven under 
    Hello hash ever enters a sealed artifact, THAT commitment freezes under its own tag; the schema
    stays a protocol document.
 
+## Trust floor (Round-07 hardening — T4 attacks resolved in spec)
+
+grok's Round-06 attacks against this spec are resolved here **before** any wire implementation, so
+the validator is built correct on day one:
+
+- **T4-A7 / T4-A1 (sig:"" bootstrap hole + spoofed device_id):** an **empty-sig Hello is an
+  ADVERTISEMENT only — it may set a display name and NOTHING else.** A Hello may authorize a
+  SessionBind into a sealed tri-plane **only** when EITHER (1) `sig` is non-empty and verifies against
+  a pubkey provisioned for `identity.value` (VMDR / local allowlist), OR (2) it arrived on a **pairing
+  channel already bound to that device** (USB enumeration / card serial), not ambient LAN. Add a
+  `trust_tier` ∈ {`ADVERTISEMENT`, `BOUND`}; only `BOUND` reaches SessionBind.
+- **T4-A2 (replayed SessionBind):** SessionBind MUST carry a per-session `bind_nonce` + `hello_ts_ns` +
+  `sig(session_id || module_hello_hash || bind_nonce)`; the bus **rejects a duplicate (identity,
+  session_id) rebind** without a fresh Hello.
+- **T4-A6 (nonce / ts_ns replay window):** reject `|now - ts_ns| > Δ`; cache nonces for a TTL and reject
+  reuse; require monotonic `ts_ns` per identity.
+- **T4-A4 (identity-scheme downgrade did:io → none):** identity is **session-sticky** — once bound under
+  `did:io` or `device_id_sha256`, a downgrade to `none` for that session is **rejected**; `none` is
+  legal only for the first Hello in an explicit bring-up flag.
+- **T4-A3 (capability escalation via reserved bits):** reserved bits **never gain meaning without a
+  `schema` bump or a registry-freeze note**; a validator MUST NOT silently promote an unknown bit —
+  unknown bits affect neither accept nor reject.
+- **T4-A8 (role smuggle via alternate key):** `module_role` is read from **that single field only** —
+  never from an alias/unknown key; unknown role → `ROLE_UNKNOWN` reject (D-CDM-2).
+
 ## Rails
 
 Separation law enforced at two layers (hello-time bit check + manifest-verify field check).
