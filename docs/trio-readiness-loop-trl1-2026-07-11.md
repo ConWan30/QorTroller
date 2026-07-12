@@ -66,7 +66,7 @@ cross-lobe stimulus until the card) banks the harness + the baseline and moves o
 |----|-----------|-------|--------|
 | **R1** | Card-arrival **UVC smoke harness + runbook** — enumerate devices the daemon's exact way (CAP_DSHOW→fallback, MJPG, prove-a-frame), GO/NO-GO on the target index; honest NO-DEVICE with no card | — (capture) | **BANKED** — `scripts/retina_card_smoke.py` + `docs/retina-card-arrival-runbook-2026-07-11.md` (9 tests; ASCII-clean) |
 | **R2** | **OCR crop-recalibration harness** — validate crops + pixel-rects at 1080p + one-glance overlay to check content-framing on a card frame | — (capture) | **BANKED** — `scripts/retina_crop_recalibrate.py` (10 tests). **Refined finding:** crops are FRACTIONAL (`RETINA_KILLFEED_ROI`/`RETINA_CAPTURE_PANEL_ROI`) → resolution-independent; the WGC→card shift is content-framing, not resolution (corrected R1's runbook) |
-| **R3** | **Witness-node (N3) design note** — the card as "one purchase, two roadmaps" (RP recall now, DePIN witness-node seed later) + ioID-registration readiness | **ioID** | OPEN |
+| **R3** | **Witness-node (N3) design note + ioID readiness** — the card as the seed of a DePIN gaming witness node (the physical answer to `verifier_independence=False`) | **ioID** | **BANKED** — `docs/witness-node-ioid-readiness-2026-07-11.md` + `scripts/witness_node_ioid_readiness.py` (7 tests); check = **READY** (VAPIioIDRegistry `0xF7885B58…` + VMDR `0x2e5B5FB1…` deployed, `agent_registration` pattern, RP-7 rail, W3bstream all present); registration operator+device+spend gated |
 
 ### Archive-rung (A) — enhance/additive, offline against M11–M17
 | id | increment | IoTeX | gate | status |
