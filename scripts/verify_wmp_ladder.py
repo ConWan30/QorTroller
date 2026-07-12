@@ -130,6 +130,27 @@ def rung_assertion(bundle) -> tuple:
     return (FAIL, title, [(FAIL, "PoSP record did not verify - see verify_posp_record.py output")])
 
 
+def rung_fusion(bundle) -> tuple:
+    """RUNG 8 - the FEDERATION: one match, three planes under one session_id. Builds
+    the tri-plane manifest (assertion + observation from the M17 PoSP, meaning from
+    this WMP bundle) and verifies it - each plane in its lane, the separation law
+    machine-checked (observation/meaning may not assert). IoTeX: three organs
+    (Poseidon/isFullyEligible + W3bstream/DA + ioID/consent) under one join key."""
+    posp = os.path.join(_REPO, "audits", "posp_record_match17_rp_fixb3_2026-07-08.json")
+    title = "Tri-plane fusion (one match, three planes federated)"
+    if not os.path.isfile(posp):
+        return (NOTE, title, [(NOTE, "no committed PoSP record; see build_tri_plane_manifest.py")])
+    from l9_presence.tri_plane_manifest import build_tri_plane_manifest, verify_tri_plane_manifest
+    rec = json.load(open(posp, encoding="utf-8"))
+    m = build_tri_plane_manifest(rec, bundle, attested_same_session=True)
+    res = verify_tri_plane_manifest(m, posp=rec, wmp_bundle=bundle)
+    js = m["join_status"]
+    st = PASS if res["ok"] else FAIL
+    return (st, title, [(st, f"manifest verified - assertion<->observation {js['assertion_observation']}, "
+                            f"meaning<->session {js['meaning_session']}; separation law machine-checked "
+                            "(observation/meaning never assert)")])
+
+
 def _full_crypto() -> tuple:
     """Optional --full: the on-chain + Groth16 legs via wmp_full_verify.py."""
     cmd = [sys.executable, os.path.join(_REPO, "scripts", "wmp_full_verify.py"),
@@ -171,7 +192,7 @@ def main() -> int:
           + (" + FULL crypto" if a.full else "  [add --full for on-chain/Groth16]"))
 
     rungs = [rung_bundle, rung_hardening, rung_derived, rung_disclosure, rung_zk,
-             rung_flywheel, rung_assertion]
+             rung_flywheel, rung_assertion, rung_fusion]
     results = []
     for i, fn in enumerate(rungs, 1):
         try:
