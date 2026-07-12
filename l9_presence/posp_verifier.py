@@ -9,9 +9,18 @@ Verification levels checked:
   COMMITMENT   kas.commitment is present and non-empty.
   CONSISTENCY  stored verdict matches the id_verified flags on kas + fusion surfaces
                (SYNCHRONIZED requires both; PARTIAL_SURFACES requires at least one).
+  HARDENING    (TRL-1 A3, forge-your-own): a SYNCHRONIZED verdict reaches VERIFIED only
+               if kas.commitment is a well-formed 64-hex SHA-256 (not merely non-empty)
+               AND the fusion counts are internally consistent (n_id_verified <= n_rows,
+               and > 0 when the surface claims id-verified). This catches a hand-forged
+               record that carries the right booleans but a bogus commitment or
+               impossible counts.
 
-On-disk archive SHA-256 cross-referencing and KAS file deep-verification are deferred
-(gated on those files being co-located and CHAIN_SUBMISSION_PAUSED being lifted).
+OUT-OF-SCOPE by design (the honest ceiling): on-disk archive SHA-256 cross-referencing
+and KAS file DEEP re-derivation are deferred (gated on those files being co-located and
+CHAIN_SUBMISSION_PAUSED being lifted). A fully-fabricated but internally-consistent
+record cannot be distinguished from a real one without those artifacts -- this is a
+STRUCTURAL + consistency verifier, not a deep re-derivation, and says so.
 """
 from __future__ import annotations
 
@@ -82,6 +91,14 @@ def verify_posp_record(record: dict) -> PoSPVerificationReport:
                       "kas.commitment present" if kas_commitment else "kas.commitment missing")
     rep.checks.append(s4b)
 
+    # S4c (A3 hardening): commitment must be a well-formed 64-hex SHA-256, not merely
+    # non-empty -- a hand-forged 'commitment':'x' must not reach VERIFIED.
+    commitment_wellformed = (len(kas_commitment) == 64
+                             and all(c in "0123456789abcdef" for c in kas_commitment))
+    s4c = CheckResult("kas_commitment_wellformed", commitment_wellformed,
+                      "kas.commitment must be 64 lowercase hex (SHA-256)")
+    rep.checks.append(s4c)
+
     # S5: fusion surface id_verified
     fusion = record.get("fusion") or {}
     fusion_id_verified = bool(fusion.get("id_verified", False))
@@ -91,6 +108,15 @@ def verify_posp_record(record: dict) -> PoSPVerificationReport:
                      f"fusion.id_verified={fusion_id_verified!r}, "
                      f"n_id_verified={n_id}/{n_rows}")
     rep.checks.append(s5)
+
+    # S5b (A3 hardening): fusion counts must be internally consistent -- a forger
+    # claiming id_verified with n_id_verified=0 or n_id_verified>n_rows is impossible.
+    fusion_counts_sane = (isinstance(n_id, int) and isinstance(n_rows, int)
+                          and 0 <= n_id <= n_rows
+                          and (n_id > 0 if fusion_id_verified else True))
+    s5b = CheckResult("fusion_counts_sane", fusion_counts_sane,
+                      f"n_id_verified={n_id}, n_rows={n_rows}, id_verified={fusion_id_verified}")
+    rep.checks.append(s5b)
 
     # S6: verdict consistency
     if verdict == "SYNCHRONIZED":
@@ -110,7 +136,8 @@ def verify_posp_record(record: dict) -> PoSPVerificationReport:
     all_critical_pass = all(c.passed for c in rep.checks if c.name in _CRITICAL)
     if not all_critical_pass:
         rep.overall = "FAILED"
-    elif verdict == "SYNCHRONIZED" and kas_id_verified and kas_commitment and fusion_id_verified:
+    elif (verdict == "SYNCHRONIZED" and kas_id_verified and kas_commitment
+          and fusion_id_verified and commitment_wellformed and fusion_counts_sane):
         rep.overall = "VERIFIED"
     elif verdict == "PARTIAL_SURFACES" and (kas_id_verified or fusion_id_verified):
         rep.overall = "PARTIAL"
