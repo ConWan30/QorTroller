@@ -842,6 +842,14 @@ _PATTERN_017_FROZEN_TAGS: frozenset[bytes] = frozenset({
                                      # allowlist 2026-06-04 as bookkeeping
                                      # catch-up after Mythos-Crypto audit
                                      # surfaced it as UNKNOWN HIGH.
+    b"VAPI-RETINA-STATE-v3",         # retina_state_commitment.py — TRA-1 T3 verify rung over the
+                                     # canonical machinefi/trio-retina standard (ordered events_root
+                                     # + WorldState frame). PROMOTED candidate -> FROZEN-v1 PATTERN-017
+                                     # commitment family by OPERATOR SEAL 2026-07-12 (pinned by
+                                     # INV-RETINA-STATE-V3). v1/v2 remain candidate capability tags
+                                     # (legacy); v3 is the committed primitive going forward.
+                                     # OBSERVATION-plane only; 228B PoAC wire unchanged; does NOT
+                                     # touch the PoAC world_model_hash.
 })
 
 # AUDIT NOTE 2026-05-15: When this audit was first run live, Mythos-Crypto
@@ -884,12 +892,6 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
                                       # v2 commitment carrying the Poseidon events_root;
                                       # same advisory family as v1, candidate / NOT
                                       # FROZEN-v1, default-OFF, 228B PoAC wire unchanged
-    b"VAPI-RETINA-STATE-v3",          # TRA-1 T3 — retina_state_commitment.py; the VERIFY rung
-                                      # over the CANONICAL machinefi/trio-retina standard:
-                                      # ordered events_root (F-TRA0-1) bound to the WorldState
-                                      # frame. Same advisory family as v1/v2, CANDIDATE / NOT
-                                      # FROZEN-v1, OBSERVATION-plane only, 228B PoAC wire
-                                      # unchanged. FROZEN-v1 promotion is an operator seal.
     b"VAPI-RETINA-EVENT-LINE-v1",     # Trio-Retina Phase 3 (PR #41) — retina_events_root.py
                                       # per-event-line domain tag for off-chain Poseidon
                                       # events_root (ZK-prep); advisory capability,
