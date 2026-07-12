@@ -68,7 +68,10 @@ interoperability fabric** (W3bstream · ioID · DA · Realms · MachineFi). Roun
 | 03 | Claude — ground | **DONE** (`round-03-claude-ground.md` — 0 refuted; 4 gate-sharpenings [TGE, CONSENT-v2, privacy-legal, W3bstream-live]; Q4-P3 core found already-shipped; **D-CDM-1** fork-semantics → operator; 3 desk build candidates; NOT saturated) |
 | 04 | grok — expand | **DONE** (`round-04-grok-expand.md` — 21 precision proposals; all Round-03 gates honored) |
 | 05 | Claude — ground | **DONE** (`round-05-claude-ground.md` — 0 refuted; consent surface is THREE-layered [v1 bitmask + Arc-4 dimensions + LIVE WM registry] → v2 must reconcile; Q3-P3 gates split [action-SKU consent leg LIVE]; credits anti-cosplay rail; D-CDM-2 minor [reject ROLE_UNKNOWN]; **Grounder CONCURS with grok on D-CDM-1** [fail-closed joined + plane-local verifiable + multi-status]; 5-item buildable-NOW backlog; **recommendation: pivot to build**, then Round 06 = adversarial pass on built artifacts, Round 07 = synthesis) |
-| 06 | — | **operator chooses:** pivot-to-build (①–⑤) or relay Round 06 ideation; **D-CDM-1 awaits arbitration** |
+| — | **operator arbitration** | **D-CDM-1 DECIDED 2026-07-12: fail-closed-joined** (grok Q4-P3 + Grounder concurrence adopted); **pivot-to-build chosen** |
+| — | **build pivot (Claude)** | **①–⑤ BUILT 2026-07-12:** ④ CONTENT_FORK terminal fail-closed in `tri_plane_manifest.py` (+ artifact-free fork rail; plane-split escape proven by test) · ③ `consumer_status()` multi-status surface (never a single boolean) · ② provenance-DAG index + `verify_provenance_dag.py` (real M17 index VERIFIED cold; omission ceiling pinned in output) · ① ModuleHello v0 spec (`docs/module-hello-v0-spec-2026-07-12.md`; D-CDM-2 resolved: reject `ROLE_UNKNOWN`) · ⑤ token-free economics + anti-cosplay rails (`docs/depin-economics-under-tge-freeze-2026-07-12.md`). 33 tests; PV-CI 182 |
+| 06 | grok — adversarial | **NEXT (operator-relayed):** attack the built artifacts — spoofed Hello / replayed SessionBind / capability escalation / DAG **selective omission** |
+| 07 | Claude — synthesis | closes the loop after Round 06 |
 | … | … | … |
 
 ---
