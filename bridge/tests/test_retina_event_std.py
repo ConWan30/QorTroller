@@ -17,9 +17,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from bridge.vapi_bridge.retina_event_std import (
-    KNOWN_TYPES, RETINA_EVENT_VERSION,
+    KNOWN_TYPES, RETINA_EVENT_VERSION, _ASSERTING_FIELDS,
     make_event, validate_event, is_valid, validate_stream, to_jsonl,
     is_namespaced_type, ordered_events_root,
+    separation_law_problems, emits_state_only,
 )
 from bridge.vapi_bridge.retina_events_root import compute_events_root_poseidon
 
@@ -117,3 +118,49 @@ def test_conformant_events_feed_existing_root():
     assert validate_stream(evs) == []
     root = ordered_events_root(evs, chain_fn=_mock_chain)
     assert isinstance(root, bytes) and len(root) == 32
+
+
+# ============================ T4 — separation law at the wire layer ============================
+
+def test_separation_law_rejects_verdict_and_humanity():
+    for bad in ("verdict", "presence_score", "humanity", "is_human", "eligible", "authored_kills"):
+        problems = separation_law_problems({"type": "x_q.kill", "t": 1.0, "src": "cam", bad: 1})
+        assert any(bad in p for p in problems), bad
+        with pytest.raises(ValueError):
+            make_event("x_q.kill", 1.0, "cam", **{bad: 1})       # emitter is fail-closed
+
+
+def test_separation_law_rejects_assertion_primitive_leak():
+    # QorTroller ASSERTION-plane primitives must never appear on an OBSERVATION event
+    for bad in ("poac", "kas", "poac_chain_root"):
+        assert not emits_state_only({"type": "x_q.kill", "t": 1.0, "src": "cam", bad: "x"})
+
+
+def test_worldstate_entity_asserting_field_caught():
+    ws = {"src": "cam", "t": 1.0, "entities": [
+        {"id": "7", "type": "person", "bbox": [1, 2, 3, 4]},
+        {"id": "9", "type": "player", "verdict": "SYNCHRONIZED"},   # asserting nested in an entity
+    ]}
+    problems = separation_law_problems(ws)
+    assert any("entities[1]." in p and "verdict" in p for p in problems)
+
+
+def test_emit_serialize_commit_all_fail_closed_on_assertion():
+    forged = {"type": "x_q.kill", "t": 1.0, "src": "cam", "presence_score": 0.9}
+    with pytest.raises(ValueError):
+        to_jsonl([forged])                                        # serialize refuses
+    with pytest.raises(ValueError):
+        ordered_events_root([forged], chain_fn=lambda e: b"\x00" * 32)   # commit refuses
+
+
+def test_conformant_observation_emits_state_only():
+    evs = [make_event("x_q.kill", 1.0, "cam", label="headshot", conf=0.9),
+           make_event("zone.enter", 2.0, "cam", zone="mid", id=3)]
+    assert all(emits_state_only(e) for e in evs)                  # real gaming events carry no verdict
+
+
+def test_covers_tri_plane_manifest_asserting_fields():
+    """Cross-layer consistency: the OBSERVATION-plane rail must forbid at least everything the
+    tri-plane manifest's ASSERTION-field rail forbids."""
+    from l9_presence.tri_plane_manifest import _ASSERTING_FIELDS as MANIFEST_ASSERTING
+    assert MANIFEST_ASSERTING <= _ASSERTING_FIELDS
