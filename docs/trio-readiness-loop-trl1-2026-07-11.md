@@ -78,7 +78,7 @@ cross-lobe stimulus until the card) banks the harness + the baseline and moves o
 ### Interconnect (I) — the IoTeX through-line, desk-buildable
 | id | increment | IoTeX | status |
 |----|-----------|-------|--------|
-| **I1** | Extend the **plug-and-play verifier** (`scripts/verify_wmp_ladder.py`) with an ASSERTION rung — an outsider verifies the anti-cheat proof *and* the data economy in one command | **Poseidon** + `isFullyEligible()` | OPEN |
+| **I1** | Extend the **plug-and-play verifier** (`scripts/verify_wmp_ladder.py`) with an ASSERTION rung — an outsider verifies the anti-cheat proof *and* the data economy in one command | **Poseidon** + `isFullyEligible()` | **BANKED** — RUNG 7 verifies the M17 PoSP (SYNCHRONIZED) offline via `verify_posp_record.py`; same session as the WMP bundle → "one match, two engines"; brief updated |
 | **I2** | **DA sidecar-pointer conformance** for scene payloads — Arc 7's law (bulk on DA, 32B commitment on the wire) applied to scene-stream; a check that nothing inline crosses the boundary | **DA/sidecar** | OPEN |
 | **I3** | **W3bstream retina-event applet parity** — confirm the mechanical-validation sandbox validates events and never captures them (`frame_grabbing=false` pinned) | **W3bstream** | OPEN |
 

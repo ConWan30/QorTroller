@@ -112,6 +112,24 @@ def rung_flywheel(bundle) -> tuple:
     return (st, "Two-engines flywheel (breadth-gated)", lines)
 
 
+def rung_assertion(bundle) -> tuple:
+    """RUNG 7 - the ASSERTION plane (anti-cheat). The SAME M17 session that is the
+    certified-human data bundle above also carries a synchronized PRESENCE PROOF
+    (PoSP). Verified offline via verify_posp_record.py (schema + KAS commitment +
+    verdict). IoTeX: Poseidon events_roots + isFullyEligible()."""
+    posp = os.path.join(_REPO, "audits", "posp_record_match17_rp_fixb3_2026-07-08.json")
+    title = "Assertion plane - anti-cheat presence proof (PoSP, same M17 session)"
+    if not os.path.isfile(posp):
+        return (NOTE, title, [(NOTE, "no committed PoSP record in this clone; "
+                                     "verifier is scripts/verify_posp_record.py")])
+    r = subprocess.run([sys.executable, os.path.join(_REPO, "scripts", "verify_posp_record.py"), posp],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        return (PASS, title, [(PASS, "M17 PoSP -> SYNCHRONIZED (schema + KAS commitment + verdict, "
+                                     "verified offline) - one match, two engines proven")])
+    return (FAIL, title, [(FAIL, "PoSP record did not verify - see verify_posp_record.py output")])
+
+
 def _full_crypto() -> tuple:
     """Optional --full: the on-chain + Groth16 legs via wmp_full_verify.py."""
     cmd = [sys.executable, os.path.join(_REPO, "scripts", "wmp_full_verify.py"),
@@ -146,13 +164,14 @@ def main() -> int:
     bundle = _load_bundle()
 
     print("=" * 80)
-    print("  QorTroller - WMP Data-Economy Ladder - VERIFY IT YOURSELF (zero trust)")
+    print("  QorTroller - VERIFY IT YOURSELF (zero trust): data economy + anti-cheat assertion")
     print("=" * 80)
     print(f"  Bundle : wmp_corpus_real/wmp_corpus.jsonl (the real published session)")
     print(f"  Mode   : OFFLINE - pure Python stdlib, no deps"
           + (" + FULL crypto" if a.full else "  [add --full for on-chain/Groth16]"))
 
-    rungs = [rung_bundle, rung_hardening, rung_derived, rung_disclosure, rung_zk, rung_flywheel]
+    rungs = [rung_bundle, rung_hardening, rung_derived, rung_disclosure, rung_zk,
+             rung_flywheel, rung_assertion]
     results = []
     for i, fn in enumerate(rungs, 1):
         try:
@@ -167,7 +186,7 @@ def main() -> int:
     if a.full:
         status, title, lines = _full_crypto()
         results.append(status if status != NOTE else PASS)   # NOTE (missing tools) not a failure
-        print(f"\n  RUNG 7  {title}")
+        print(f"\n  RUNG {len(rungs) + 1}  {title}")
         for st, msg in lines:
             print(f"    [{st:5}] {msg}")
 
