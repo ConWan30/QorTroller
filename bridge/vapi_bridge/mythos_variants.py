@@ -884,6 +884,12 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
                                       # v2 commitment carrying the Poseidon events_root;
                                       # same advisory family as v1, candidate / NOT
                                       # FROZEN-v1, default-OFF, 228B PoAC wire unchanged
+    b"VAPI-RETINA-STATE-v3",          # TRA-1 T3 — retina_state_commitment.py; the VERIFY rung
+                                      # over the CANONICAL machinefi/trio-retina standard:
+                                      # ordered events_root (F-TRA0-1) bound to the WorldState
+                                      # frame. Same advisory family as v1/v2, CANDIDATE / NOT
+                                      # FROZEN-v1, OBSERVATION-plane only, 228B PoAC wire
+                                      # unchanged. FROZEN-v1 promotion is an operator seal.
     b"VAPI-RETINA-EVENT-LINE-v1",     # Trio-Retina Phase 3 (PR #41) — retina_events_root.py
                                       # per-event-line domain tag for off-chain Poseidon
                                       # events_root (ZK-prep); advisory capability,
