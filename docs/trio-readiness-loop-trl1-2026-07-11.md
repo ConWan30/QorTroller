@@ -72,7 +72,7 @@ cross-lobe stimulus until the card) banks the harness + the baseline and moves o
 | id | increment | IoTeX | gate | status |
 |----|-----------|-------|------|--------|
 | **A1** | **LUMEN N5 increment 2 — lag DIRECTIONALITY** (the recoil-precognition Δ≤0 signature generalized; orthogonal to inc1 coherence). `l9_presence/predictive_coupling.py` `assess_directionality` — genuine causal lag → DIR_CAUSAL, replay/precognition → DIR_NONCAUSAL. Full cross-lobe form card-gated (RP-4) | **Poseidon/ZK-prep** | advisory | **BANKED** — pre-registered bar (2026-07-11); metric proven-to-SEPARATE on synthetic (9 tests + demo); genuine baseline on archive, decoupled/replay class card-gated; inc1 untouched (8 tests still green) |
-| **A2** | **Retina game-state buffer** (ROI persistence + temporal event clusters) as an ADVISORY OCR-recall aid — raises *where to look*, never lowers K=3 or opens a window | **W3bstream** | **re-run zero-false-read + C1** | OPEN |
+| **A2** | **Retina game-state buffer** OCR-recall aid (additive to LUMEN-1) — `recall_priority` raises *where to look* (SCENE_CHANGE density + KILL_ROW_CLUSTER boost, NMS-deduped) | **W3bstream** | **re-run zero-false-read + C1** | **BANKED** — `l9_presence/game_state_buffer.py` (`recall_priority`/`authorship_recall_priority`; 7 tests + 10 existing green); advisory + **consumption-gated** (certificate-path wiring deferred behind the rig/card re-gate, `consumption_regated=False` — no desk certificate-path change); doc `docs/game-state-recall-aid-a2-2026-07-11.md` |
 | **A3** | **Assertion-plane adversarial hardening** — forge-our-own vs the PoSP verifier | **Poseidon** | advisory | **BANKED** — **2 gaps FOUND+FIXED** (`kas_commitment_wellformed` 64-hex + `fusion_counts_sane` in `l9_presence/posp_verifier.py`); P8 deep-re-derivation ceiling OUT-OF-SCOPE-documented; matrix `audits/posp-adversarial-matrix-2026-07-11.md` (9 tests + 6 existing green; M17 + I1 rung unbroken) |
 
 ### Interconnect (I) — the IoTeX through-line, desk-buildable
@@ -83,6 +83,11 @@ cross-lobe stimulus until the card) banks the harness + the baseline and moves o
 | **I3** | **W3bstream applet parity** — the mechanical-validation sandbox validates events, never captures them | **W3bstream** | **BANKED** — `l9_presence/w3s_parity.py` + `scripts/w3s_parity_check.py` (9 tests); real repo **CONFORMANT** (frame_grabbing/optical_capture=false pinned, applet validation-only w/ no capture markers, INV-W3S-001/002 in gate+allowlist); catches a flipped flag / capture marker / unpinned invariant. **IoTeX interconnect triad I1·I2·I3 COMPLETE** |
 
 ## 5. Card-transition (saturation → handoff)
+
+> **LOOP STATUS: SATURATED (9/9 banked, 2026-07-11).** Readiness pack R1·R2·R3 · archive A1·A2 ·
+> assertion hardening A3 · IoTeX interconnect I1·I2·I3 — all shipped, all rails held, PV-CI 182
+> throughout. The desk (archive) rung is complete; the loop now **awaits the card** to hand off to
+> the live rung.
 
 The archive rung **saturates** when: the readiness pack (R1–R3) is shipped, the N5 baseline (A1) is
 banked, and the advisory recall aid (A2) is proven offline with its gates re-passed. At that point the
