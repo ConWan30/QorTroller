@@ -29,6 +29,7 @@ def test_rung_statuses_offline():
     assert vwl.rung_zk(b)[0] == vwl.DEFER          # honest deferral, not pass/fail
     assert vwl.rung_flywheel(b)[0] == vwl.DEFER     # breadth-gated at N=1
     assert vwl.rung_assertion(b)[0] == vwl.PASS     # anti-cheat PoSP (same M17 session)
+    assert vwl.rung_fusion(b)[0] == vwl.PASS         # tri-plane federation (one match, three planes)
 
 
 def test_ladder_runs_exit_zero_from_clone():
