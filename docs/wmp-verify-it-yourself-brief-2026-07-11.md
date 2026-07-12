@@ -31,6 +31,7 @@ was honestly deferred.
 | 4 | **Selective disclosure (SD)** | the gamer commits to the whole claim set and reveals only a chosen subset (flat and Merkle) — membership + binding verified, hidden values absent |
 | 5 | **ZK property proof** *(ceremony-gated)* | prove "value ≥ threshold" *without revealing the value* — scaffolded with an honest deferral: no fake proof ships before the trusted-setup ceremony (verifies as **DEFERRED**, never pass/fail) |
 | 6 | **Two-engines flywheel** *(breadth-gated)* | the certified corpus feeds the anti-cheat — read-only, defers at today's N=1, writes no threshold |
+| 7 | **Assertion plane (anti-cheat)** | the *same* session (M17) that is the certified-human data bundle is *also* a synchronized presence proof (PoSP) — schema + KAS commitment + verdict verified offline. **One match, two engines** (IoTeX: Poseidon `events_roots` + `isFullyEligible()`) |
 
 ## Full cryptographic verification (optional tier)
 
