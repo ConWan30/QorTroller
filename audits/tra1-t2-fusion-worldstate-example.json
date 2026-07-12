@@ -1,0 +1,42 @@
+{
+  "src": "retina_m17",
+  "t": 1783550435.0,
+  "frame": 524,
+  "entities": [
+    {
+      "id": "enemy_7",
+      "type": "person",
+      "bbox": [
+        812,
+        430,
+        902,
+        640
+      ],
+      "vec": {
+        "model": "osnet-reid",
+        "dim": 4,
+        "dtype": "fp32",
+        "values": [
+          0.11,
+          0.22,
+          0.33,
+          0.44
+        ]
+      }
+    },
+    {
+      "id": "edge_pad",
+      "type": "controller",
+      "locus": [
+        0.62,
+        0.05
+      ]
+    }
+  ],
+  "scene": {
+    "model": "v-jepa2-vitl",
+    "dim": 1024,
+    "dtype": "fp16",
+    "ref": "vec://scene_m17"
+  }
+}
