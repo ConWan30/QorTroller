@@ -70,9 +70,10 @@ interoperability fabric** (W3bstream · ioID · DA · Realms · MachineFi). Roun
 | 05 | Claude — ground | **DONE** (`round-05-claude-ground.md` — 0 refuted; consent surface is THREE-layered [v1 bitmask + Arc-4 dimensions + LIVE WM registry] → v2 must reconcile; Q3-P3 gates split [action-SKU consent leg LIVE]; credits anti-cosplay rail; D-CDM-2 minor [reject ROLE_UNKNOWN]; **Grounder CONCURS with grok on D-CDM-1** [fail-closed joined + plane-local verifiable + multi-status]; 5-item buildable-NOW backlog; **recommendation: pivot to build**, then Round 06 = adversarial pass on built artifacts, Round 07 = synthesis) |
 | — | **operator arbitration** | **D-CDM-1 DECIDED 2026-07-12: fail-closed-joined** (grok Q4-P3 + Grounder concurrence adopted); **pivot-to-build chosen** |
 | — | **build pivot (Claude)** | **①–⑤ BUILT 2026-07-12:** ④ CONTENT_FORK terminal fail-closed in `tri_plane_manifest.py` (+ artifact-free fork rail; plane-split escape proven by test) · ③ `consumer_status()` multi-status surface (never a single boolean) · ② provenance-DAG index + `verify_provenance_dag.py` (real M17 index VERIFIED cold; omission ceiling pinned in output) · ① ModuleHello v0 spec (`docs/module-hello-v0-spec-2026-07-12.md`; D-CDM-2 resolved: reject `ROLE_UNKNOWN`) · ⑤ token-free economics + anti-cosplay rails (`docs/depin-economics-under-tge-freeze-2026-07-12.md`). 33 tests; PV-CI 182 |
-| 06 | grok — adversarial | **NEXT (operator-relayed):** attack the built artifacts — spoofed Hello / replayed SessionBind / capability escalation / DAG **selective omission** |
-| 07 | Claude — synthesis | closes the loop after Round 06 |
-| … | … | … |
+| 06 | grok — adversarial | **DONE** (`round-06-grok-adversarial.md` — 26 attacks across T1–T4; 2 flagged as likely real gaps) |
+| 07 | Claude — synthesis | **DONE — LOOP CLOSED** (`round-07-claude-synthesis.md`). Executed all desk forges: **2 CONFIRMED REAL GAPS found + FIXED** — F-CDM-1 (T1-A2: D-CDM-1 was plane-field-honest not artifact-root-honest; forking artifacts + stripped plane roots verified green → artifact-derived roots now authoritative) · F-CDM-2 (T3-A3: DAG was a hash-locker not a timeline; PoSP under a lied session_id verified green → session_id equality now enforced). T2-A1 also fixed (consumer_status label-skim). Rest = confirmed holds or documented ceilings. 44 tests; PV-CI 182. **SATURATED.** |
+
+**LOOP CLOSED at Round 07.** Carried forward (named, gated): CONSENT-v2 ceremony · ModuleHello wire + trust-floor tests (→ CWL-1) · DAG v0.5 countersign+count-commitment · stake/slash (→ TGE).
 
 ---
 
