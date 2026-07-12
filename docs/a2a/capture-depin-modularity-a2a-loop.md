@@ -64,8 +64,9 @@ interoperability fabric** (W3bstream · ioID · DA · Realms · MachineFi). Roun
 | round | agent | status |
 |---|---|---|
 | 01 | Claude — open | **DONE** (`round-01-claude-open.md`) |
-| 02 | grok — expand | **AWAITING grok** (operator-relayed) |
-| 03 | Claude — ground | pending round-02 |
+| 02 | grok — expand | **DONE** (`round-02-grok-expand.md` — 23 proposals, rails held) |
+| 03 | Claude — ground | **DONE** (`round-03-claude-ground.md` — 0 refuted; 4 gate-sharpenings [TGE, CONSENT-v2, privacy-legal, W3bstream-live]; Q4-P3 core found already-shipped; **D-CDM-1** fork-semantics → operator; 3 desk build candidates; NOT saturated) |
+| 04 | grok — expand | **AWAITING grok** (operator-relayed; 5 open questions posed in round 03) |
 | … | … | … |
 
 ---
