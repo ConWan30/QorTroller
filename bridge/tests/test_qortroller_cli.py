@@ -184,16 +184,32 @@ def test_node_state_first_proof_pending_path_b(tmp_path):
     (tmp_path / "setup").mkdir()
     (tmp_path / "setup" / "stage3_roi_pass.json").write_text(
         '{"roi":"0,0,1,1","operator_ack":true}', encoding="utf-8")
+    # PKG-D-15: Stage 4 pass required before FIRST_PROOF_PENDING
+    (tmp_path / "setup" / "stage4_controller_pass.json").write_text(
+        '{"schema":"qortroller-stage4-controller-v1","present":true,"operator_ack":true}',
+        encoding="utf-8")
     ns = q.compute_node_state(tmp_path)
     assert ns["state"] == q.NODE_STATE_FIRST_PROOF_PENDING
     assert ns.get("stage5_deferred") is True
     assert "first proof pending" in ns["detail"]
 
 
+def test_node_state_provisioning_controller_pending(tmp_path):
+    """ROI done but Stage 4 missing -> still PROVISIONING (PKG-D-15)."""
+    q.write_flat_toml(tmp_path / "node.toml", {"uvc_index": 1, "pack": "observer-only"})
+    (tmp_path / "setup").mkdir()
+    (tmp_path / "setup" / "stage3_roi_pass.json").write_text("{}", encoding="utf-8")
+    ns = q.compute_node_state(tmp_path)
+    assert ns["state"] == q.NODE_STATE_PROVISIONING
+    assert "controller" in ns["detail"]
+
+
 def test_node_state_born(tmp_path):
     q.write_flat_toml(tmp_path / "node.toml", {"uvc_index": 1, "pack": "observer-only"})
     (tmp_path / "setup").mkdir()
     (tmp_path / "setup" / "stage3_roi_pass.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "setup" / "stage4_controller_pass.json").write_text(
+        '{"present":true,"operator_ack":true}', encoding="utf-8")
     (tmp_path / "birth_receipt.json").write_text(
         '{"first_session_id":"proof_drill_x","path":"A"}', encoding="utf-8")
     ns = q.compute_node_state(tmp_path)
@@ -283,3 +299,84 @@ def test_dogfood_default_off_and_allowlist(tmp_path):
     assert row["event"] == "roi_ack" and row["duration_ms"] == 1200
     assert "secret_key" not in row and "frames" not in row
     assert not q.dogfood_enabled({})
+
+
+# --- PKG-D-15: Stage 4 controller presence (safe fields only) ----------------
+def test_classify_controller_presence_found_and_absent():
+    found = q.classify_controller_presence([
+        {"vendor_id": 0x054C, "product_id": 0x0DF2, "product_string": "DualSense Edge",
+         "path": "\\\\?\\HID#SHOULD_NOT_LEAK", "serial_number": "SERIAL_NO"},
+        {"vendor_id": 0x1234, "product_id": 0x5678},
+    ])
+    assert found["present"] is True
+    assert found["vid_hex"] == "054C" and found["pid_hex"] == "0DF2"
+    assert found["product"] == "DualSense Edge"
+    assert found["n_matches"] == 1
+    assert "path" not in found and "serial" not in found and "serial_number" not in found
+
+    absent = q.classify_controller_presence([{"vendor_id": 0x1234, "product_id": 0x5678}])
+    assert absent["present"] is False and absent["n_matches"] == 0
+
+
+def test_build_stage4_pass_record_strips_forbidden():
+    presence = q.classify_controller_presence([
+        {"vendor_id": q.EDGE_VID, "product_id": q.EDGE_PID, "product_string": "Edge"}
+    ])
+    # attacker-shaped extras must not land on disk even if smuggled into presence
+    presence["path"] = "C:\\evil"
+    presence["serial_number"] = "ABC"
+    rec = q.build_stage4_pass_record(presence, operator_ack=True,
+                                     dual_connection_note_shown=True, ts=42)
+    assert rec["schema"] == q.STAGE4_SCHEMA
+    assert rec["present"] is True and rec["operator_ack"] is True
+    assert rec["dual_connection_note_shown"] is True
+    assert rec["ts"] == 42
+    assert "path" not in rec and "serial_number" not in rec
+    # soft-skip path
+    skip = q.build_stage4_pass_record(
+        q.classify_controller_presence([]), operator_ack=True,
+        dual_connection_note_shown=True, operator_skip=True, ts=1)
+    assert skip["present"] is False and skip["operator_skip"] is True
+
+
+def test_probe_controller_presence_injectable():
+    def fake_enum(vid, pid):
+        assert vid == q.EDGE_VID and pid == q.EDGE_PID
+        return [{"vendor_id": vid, "product_id": pid, "product_string": "Injected Edge",
+                 "path": "must-not-return", "serial_number": "nope"}]
+    out = q.probe_controller_presence(enumerate_fn=fake_enum)
+    assert out["present"] is True and out["detection"] == "injected"
+    assert out["product"] == "Injected Edge"
+    assert "path" not in out and "serial_number" not in out
+
+
+def test_dual_connection_note_mentions_usb_and_bt():
+    note = q.DUAL_CONNECTION_NOTE.lower()
+    assert "usb" in note and "bluetooth" in note or "bt" in note
+    assert "ps5" in note
+
+
+# --- PKG-D-16: dogfood report schema ----------------------------------------
+def test_dogfood_report_scaffold_and_validate():
+    r = q.scaffold_dogfood_report(run_label="tonight", path="B")
+    assert r["schema"] == q.DOGFOOD_REPORT_SCHEMA
+    assert r["run_label"] == "tonight" and r["path"] == "B"
+    assert r["operator_would_rerun_without_chat"] is None  # operator fills after run
+    ok, errs = q.validate_dogfood_report(r)
+    assert ok and errs == []
+
+    # Phase D bar set true
+    r["operator_would_rerun_without_chat"] = True
+    r["friction_events"] = [{"code": "ROI_CONFUSION", "stage": "roi", "detail": "green box?"}]
+    ok, errs = q.validate_dogfood_report(r)
+    assert ok
+
+    bad = dict(r)
+    bad["path"] = "C"
+    bad["friction_events"] = [{"code": "NOT_A_CODE"}]
+    bad["bridge_private_key"] = "x"  # secret-shaped key
+    ok, errs = q.validate_dogfood_report(bad)
+    assert not ok
+    joined = " ".join(errs)
+    assert "path" in joined and "friction" in joined.lower() or "NOT_A_CODE" in joined
+    assert any("secret" in e for e in errs)
