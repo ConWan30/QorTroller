@@ -1,9 +1,12 @@
 /**
- * StreamView — gamer witness HUD (PKG-UI-01..03 React SPA).
+ * StreamView — gamer witness HUD (PKG-UI-01..03 + STREAM-2 node face).
  *
  * Reads ONLY local CLI snapshots via /stream-ui/* (Vite middleware →
  * ~/.qortroller/ui). Never bridge /agent, never mockBridge liveness.
  * URL-reachable: /?view=stream
+ *
+ * STREAM-2: node identity mark · contribution pulse · provenance score ·
+ * witness blink (kills_seen). fresh_fires stays ABSENT until daemon persists.
  *
  * Named exports. Brand tokens from stream/streamTokens.
  */
@@ -13,6 +16,10 @@ import {
   WitnessRespiration,
   ReceiptReveal,
   BirthCeremonyMap,
+  NodeIdentityMark,
+  ContributionPulse,
+  ScoreMoment,
+  WitnessBlink,
   useStreamSnapshots,
   STREAM_PAL,
   STREAM_FONTS,
@@ -48,7 +55,15 @@ export function StreamView(props = {}) {
   })
 
   const on = snap.stream?.on_screen || {}
+  const status = snap.status || {}
   const freshness = on.freshness_class || 'UNKNOWN'
+  // Prefer stream on_screen faces; fall back to status snapshot (both CLI-written)
+  const identity = on.node_identity || status.node_identity || null
+  const contribution = on.contribution || status.contribution || null
+  const scorecard = on.scorecard || status.scorecard || null
+  const blink = on.witness_blink || status.witness_blink || null
+  const nodeIdShort = on.node_id_short || identity?.node_id_short || status.node_id_short || null
+
   const eyebrowStatus = useMemo(() => {
     if (freshness === 'LIVE') return { label: 'WITNESS LIVE', tone: 'live' }
     if (freshness === 'FRESH') return { label: 'WITNESS FRESH', tone: 'pending' }
@@ -59,11 +74,11 @@ export function StreamView(props = {}) {
 
   useViewEyebrow({
     num: 'SV',
-    name: 'STREAM · WITNESS',
+    name: 'STREAM · NODE',
     status: eyebrowStatus.label,
     statusTone: eyebrowStatus.tone,
     readouts: [
-      { k: 'NODE', v: on.node_state || '—', tone: 'dim' },
+      { k: 'NODE', v: nodeIdShort || on.node_state || '—', tone: nodeIdShort ? 'live' : 'dim' },
       { k: 'FRESH', v: freshness, tone: freshness === 'LIVE' ? 'live' : 'dim' },
       { k: 'MODE', v: snap.mode || 'EMPTY', tone: 'dim' },
     ],
@@ -118,6 +133,26 @@ export function StreamView(props = {}) {
             sessionIdDisplay={on.session_id_display}
             pack={on.pack}
           />
+          <div style={{ marginTop: 12 }}>
+            <WitnessBlink blink={blink} />
+          </div>
+        </section>
+
+        {/* STREAM-2 node face — identity · contribution · score */}
+        <section
+          style={{
+            display: 'grid',
+            gap: 12,
+            marginBottom: 32,
+          }}
+          data-testid="stream-node-face"
+        >
+          <NodeIdentityMark identity={identity} />
+          <ContributionPulse contribution={contribution} />
+          {/* Score is quieter mid-match; full reveal in RECEIPT, ambient here when present */}
+          {(scorecard?.present || snap.mode === 'RECEIPT' || snap.mode === 'EMPTY') ? (
+            <ScoreMoment scorecard={scorecard} />
+          ) : null}
         </section>
 
         {/* Mode panels */}
@@ -133,6 +168,12 @@ export function StreamView(props = {}) {
               model={snap.receipt}
               forceComplete={props.forceReceiptComplete === true}
             />
+            {/* Provenance score re-appears in reveal choreography context */}
+            {scorecard?.present ? (
+              <div style={{ marginTop: 16 }}>
+                <ScoreMoment scorecard={scorecard} />
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -161,8 +202,10 @@ export function StreamView(props = {}) {
           fontSize: 10,
           lineHeight: 1.7,
         }}>
-          <div>novelty: witness_respiration · deliberately absent: crop counts, FPS, biometrics, grind bars, green-check theater</div>
+          <div>novelty: node_face_witness_respiration · identity · contribution · provenance score · killfeed blink</div>
+          <div>deliberately absent: crop counts, FPS, biometrics, grind bars, green-check theater, fabricated on-chain</div>
           <div>F-T66B-1 disclosed on receipt surfaces · PKG-D-06: UI observes CLI, never a second control plane</div>
+          <div>rails: node_id DERIVED not minted · anchored only with real tx · tags MEASURED/OPERATOR-REPORTED visible</div>
           {snap.error ? <div data-testid="stream-error">load note: {snap.error}</div> : null}
         </footer>
       </div>

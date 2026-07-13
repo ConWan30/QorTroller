@@ -396,7 +396,8 @@ def test_stream_view_model_witness_live_and_absences(tmp_path):
     assert m["schema"] == q.STREAM_VIEW_SCHEMA
     assert m["on_screen"]["presence_line"] == "your witness is live"
     assert m["on_screen"]["presence_tone"] == "live"
-    assert m["novelty"] == "witness_respiration"
+    # STREAM-2 novelty supersedes pure witness_respiration (still contains the phrase)
+    assert "witness_respiration" in m["novelty"]
     assert "crop_counts" in m["deliberately_absent"]
     assert "fps" in m["deliberately_absent"]
     assert m["mock"] is False and m["signing_material_present"] is False
