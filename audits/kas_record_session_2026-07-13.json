@@ -1,0 +1,46 @@
+{
+  "session_label": "session",
+  "handle": "QorTrola30",
+  "verdict": "HYGIENE_FAIL",
+  "authored_kills": 0,
+  "authored_scores": [],
+  "anchor_tags": [],
+  "windows_total": 0,
+  "composites_total": 0,
+  "own_deaths": 0,
+  "event_trail": [],
+  "coupling_corroboration": {
+    "th2_coupled_true_ticks": 3,
+    "inline_classifications": 3,
+    "inline_composite_windows": 0
+  },
+  "hygiene": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.0,
+    "ts_source": "wall_fallback"
+  },
+  "span_ms": null,
+  "min_kills": 2,
+  "notes": [
+    "hygiene: ts_source 'wall_fallback' not in ('timespan',)"
+  ],
+  "events_root": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "events_root_scheme": "sha256_v1",
+  "events_root_lobes": [],
+  "kas_domain_tag": "QORTROLLER-KAS-v0",
+  "commitment": "d0305ae81be34cfad806f7dddfb7869312b3fa9273b23ecd83b7aff58e859738",
+  "cross_lobe_coherence": {
+    "schema": "vapi-retina-causal-coherence-v1",
+    "calibration": "UNCALIBRATED",
+    "verdict": "INSUFFICIENT",
+    "coherence_ratio": 0.0,
+    "n_outcomes_required": 0,
+    "n_matched": 0,
+    "n_orphan_outcomes": 0,
+    "n_inputs": 0,
+    "nearest_preceding_latency_s": [],
+    "n_hid_inputs": 0
+  },
+  "session_id": "d07b169f4985da9aafb73b3e79b97fd60233940b36cea8d7e48c74155c5ca298",
+  "session_display": "session_1783982308"
+}

@@ -1,0 +1,51 @@
+{
+  "schema": "qortroller-retina-state-v3",
+  "domain": "VAPI-RETINA-STATE-v3",
+  "device_id": "d07b169f4985da9aafb73b3e79b97fd60233940b36cea8d7e48c74155c5ca298",
+  "ts_ns": 1783982308000000000,
+  "ordered_events_root": "0a26f43cc358375df609d5c8ece8055de065ff99ccef1420789d4310de2cde70",
+  "worldstate_digest": "78e0850fa8404f4ead9c4213dbe0865b0dfaae9e106677eb42d74789540f244c",
+  "commitment": "c2c8c97b90530cb913c81ee7ed6dde6bfeaa54b1c8a5e08a112285d9979b2c37",
+  "n_events": 5,
+  "events": [
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783982362990.311,
+      "src": "retina.killfeed",
+      "killer": "iwer",
+      "victim": "umur"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783982561277.7588,
+      "src": "retina.killfeed",
+      "killer": "sha dy",
+      "victim": "THURY"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783982628415.8572,
+      "src": "retina.killfeed",
+      "killer": "1",
+      "victim": "\u4e09:"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783982632873.499,
+      "src": "retina.killfeed",
+      "killer": "\u4e00",
+      "victim": "\u4e09"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783982918570.873,
+      "src": "retina.killfeed",
+      "killer": "1",
+      "victim": "222"
+    }
+  ],
+  "worldstate": {
+    "src": "retina.session",
+    "t": 1783982308.0
+  }
+}
