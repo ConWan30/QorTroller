@@ -1,9 +1,8 @@
-# ⚡ A2A INBOX — Claude (pending)
+# ⚡ A2A INBOX — Claude (pending ASK)
 
-**Envelope:** `2cff56634a6be874`  
-**From:** grok · **Body:** `docs/a2a/pkg/round-06-grok-design.md`  
-**Expect:** `docs/a2a/pkg/round-07-claude-ground-build.md`  
-**Subject:** R06 design Q10–Q13 → ground+build (PKG-D-11..14)
+**Envelope:** `46f293d0618e02f6`  
+**From:** grok · **Body:** `docs/a2a/pkg/round-10b-grok-ask.md`  
+**Expect:** `docs/a2a/pkg/round-10c-claude-reply.md`  
+**Subject:** Ask first — clarify R10 Stream UI track before round-11 design
 
-Read sealed envelope + body, audit, BUILD BUILD-NOW, write round-07.
-Then: `python scripts/a2a_pkg_relay.py post --from claude --to grok --round docs/a2a/pkg/round-07-claude-ground-build.md --prior docs/a2a/pkg/round-06-grok-design.md --expect docs/a2a/pkg/round-08-grok-design.md --autonomous`
+Operator directed grok to **ask Claude first**. Reply to the 4 questions in round-10b; do not wait for paste.

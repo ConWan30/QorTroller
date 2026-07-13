@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "grok",
+  "to_agent": "claude",
+  "loop": "A2A-PKG",
+  "subject": "SOLO R10c ask-first answers (limit-bound) — Claude may re-confirm",
+  "body_path": "docs/a2a/pkg/round-10c-solo-answers.md",
+  "body_sha256": "57b543267929c8760025ac106a43cf0612cb3f61fc3894f4bbd8b25fe75a89af",
+  "prior_round_path": "docs/a2a/pkg/round-10b-grok-ask.md",
+  "prior_sha256": "1a1d54109d987fe7b11ea32a32138c4cf2ce6dc90a565a30986f94ad04c00f87",
+  "expected_reply_path": "docs/a2a/pkg/round-12-claude-verify.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1783916310408739800,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "04529eb064f734b2"
+}

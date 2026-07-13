@@ -357,6 +357,101 @@ def test_dual_connection_note_mentions_usb_and_bt():
 
 
 # --- PKG-D-16: dogfood report schema ----------------------------------------
+# --- PKG-UI stream UX pure helpers (round-11) ---------------------------------
+def test_classify_freshness_class_taxonomy():
+    assert q.classify_freshness_class(30.0) == q.FRESHNESS_LIVE
+    assert q.classify_freshness_class(180.0) == q.FRESHNESS_FRESH
+    assert q.classify_freshness_class(4000.0) == q.FRESHNESS_STALE
+    assert q.classify_freshness_class(None) == q.FRESHNESS_UNKNOWN
+    assert q.classify_freshness_class(10.0, n_crops=0) == q.FRESHNESS_EMPTY
+    assert q.classify_freshness_class(float("inf"), n_crops=0) == q.FRESHNESS_EMPTY
+    # Share surface stays coarser (FROZEN redaction matrix)
+    assert q.freshness_for_share(30.0) == q.FRESHNESS_FRESH
+    assert q.freshness_for_share(4000.0) == q.FRESHNESS_STALE
+    assert q.freshness_for_share(None) == q.FRESHNESS_UNKNOWN
+
+
+def test_status_snapshot_no_secrets_no_fabricated_live(tmp_path):
+    q.write_flat_toml(tmp_path / "node.toml", {"uvc_index": 1, "pack": "observer-only"})
+    snap = q.build_status_snapshot(home=tmp_path, session=None, port_owners=[], pack="observer-only")
+    assert snap["schema"] == q.STATUS_SNAPSHOT_SCHEMA
+    assert snap["signing_material_present"] is False and snap["consent_authority"] is False
+    assert snap["mock"] is False and snap["fabricated_liveness"] is False
+    assert snap["freshness_class"] == q.FRESHNESS_EMPTY
+    assert snap["witness_live"] is False
+    assert not any(q.secret_shaped(k) for k in snap)
+
+
+def test_stream_view_model_witness_live_and_absences(tmp_path):
+    snap = {
+        "schema": q.STATUS_SNAPSHOT_SCHEMA,
+        "node_state": q.NODE_STATE_LIVE,
+        "freshness_class": q.FRESHNESS_LIVE,
+        "witness_live": True,
+        "session_label": "m13",
+        "session_id_display": "m13_..._x",
+        "pack": "observer-only",
+    }
+    m = q.build_stream_view_model(snap)
+    assert m["schema"] == q.STREAM_VIEW_SCHEMA
+    assert m["on_screen"]["presence_line"] == "your witness is live"
+    assert m["on_screen"]["presence_tone"] == "live"
+    assert m["novelty"] == "witness_respiration"
+    assert "crop_counts" in m["deliberately_absent"]
+    assert "fps" in m["deliberately_absent"]
+    assert m["mock"] is False and m["signing_material_present"] is False
+    # Quiet path: never invent LIVE
+    quiet = q.build_stream_view_model({"freshness_class": q.FRESHNESS_STALE, "node_state": "NODE_BORN"})
+    assert quiet["on_screen"]["presence_tone"] == "quiet"
+    assert "live" not in quiet["on_screen"]["presence_line"]
+
+
+def test_receipt_reveal_dignified_verdicts_and_choreography():
+    kas = {"verdict": "HYGIENE_FAIL", "commitment": "ab" * 32}
+    posp = {"verdict": "PARTIAL_SURFACES", "events_roots": {"retina_perception_root": "cc" * 32}}
+    rev = q.build_receipt_reveal_model("match_1", kas, posp, None, None,
+                                      pack="observer-only", ring_age_s=40.0)
+    assert rev["schema"] == q.RECEIPT_REVEAL_SCHEMA
+    assert [c["stage"] for c in rev["choreography"]] == [
+        "SETTLE", "SURFACES", "HONESTY", "SHARE_SPLIT"]
+    assert rev["surfaces"]["kas"]["tone"] == q.VERDICT_TONE_HYGIENE
+    assert "not a player failure" in rev["surfaces"]["kas"]["line"]
+    assert rev["surfaces"]["posp"]["tone"] == q.VERDICT_TONE_PARTIAL
+    assert rev["surfaces"]["v3"]["tone"] == q.VERDICT_TONE_ABSENT
+    assert rev["f_t66b1"]["visible_on_share"] is True
+    assert rev["share"]["shows_crop_counts"] is False
+    assert "HYGIENE_FAIL" in rev["local"]["body_text"]
+    assert "F-T66B-1" in rev["share"]["body_text"]
+    assert rev["signing_material_present"] is False
+
+
+def test_receipt_reveal_synchronized_is_earned():
+    posp = {"verdict": "SYNCHRONIZED", "events_roots": {}}
+    rev = q.build_receipt_reveal_model("m", None, posp, {"commitment": "dd" * 32}, None)
+    assert rev["surfaces"]["posp"]["tone"] == q.VERDICT_TONE_EARNED
+    assert rev["surfaces"]["v3"]["tone"] == q.VERDICT_TONE_EARNED
+
+
+def test_birth_ceremony_map_stages_and_roi_visual(tmp_path):
+    q.write_flat_toml(tmp_path / "node.toml", {"uvc_index": 1, "pack": "observer-only"})
+    (tmp_path / "setup").mkdir()
+    (tmp_path / "setup" / "stage3_roi_pass.json").write_text(
+        '{"roi":"0,0,1,1","operator_ack":true}', encoding="utf-8")
+    (tmp_path / "setup" / "stage3_roi_check.png").write_bytes(b"\x89PNG\r\n")
+    m = q.build_birth_ceremony_map(tmp_path)
+    assert m["schema"] == q.BIRTH_CEREMONY_SCHEMA
+    ids = [s["id"] for s in m["stages"]]
+    assert ids == ["port", "card", "roi", "controller", "drill"]
+    roi = next(s for s in m["stages"] if s["id"] == "roi")
+    assert roi["visual"] == "roi_overlay_png"
+    assert roi["overlay_exists"] is True
+    assert roi["status"] == "done"
+    ctrl = next(s for s in m["stages"] if s["id"] == "controller")
+    assert ctrl["status"] == "current"  # ROI done, stage4 missing
+    assert m["ceremony_complete"] is False
+    assert m["signing_material_present"] is False
+
+
 def test_dogfood_report_scaffold_and_validate():
     r = q.scaffold_dogfood_report(run_label="tonight", path="B")
     assert r["schema"] == q.DOGFOOD_REPORT_SCHEMA
