@@ -172,12 +172,13 @@ def compute_node_state(home: Path, *, session: dict | None = None,
     Priority (first match wins after LIVE check):
       LIVE                 -- session state present AND capture ring fresh (or port held by us)
       UNPROVISIONED        -- no node.toml
-      PROVISIONING         -- node.toml but Stage-3 ROI ack missing
-      FIRST_PROOF_PENDING  -- ROI acked, birth_receipt.json missing (Path A or B)
+      PROVISIONING         -- node.toml but Stage-3 ROI and/or Stage-4 controller ack missing
+      FIRST_PROOF_PENDING  -- ROI + Stage-4 acked, birth_receipt.json missing (Path A or B)
       NODE_BORN            -- birth_receipt present
     """
     node = home / "node.toml"
     roi = home / "setup" / "stage3_roi_pass.json"
+    stage4 = home / "setup" / "stage4_controller_pass.json"
     birth_path = home / "birth_receipt.json"
     owners = port_owners or []
     if capture_live or (session and owners):
@@ -191,6 +192,9 @@ def compute_node_state(home: Path, *, session: dict | None = None,
     if not roi.exists():
         return {"state": NODE_STATE_PROVISIONING,
                 "detail": "ROI pending -- run: qortroller setup --stage roi"}
+    if not stage4.exists():
+        return {"state": NODE_STATE_PROVISIONING,
+                "detail": "controller presence pending -- run: qortroller setup --stage controller"}
     birth = _load_json(birth_path)
     if not birth:
         cfg = read_node_config(node)
@@ -204,6 +208,220 @@ def compute_node_state(home: Path, *, session: dict | None = None,
             "detail": f"first_session_id={birth.get('first_session_id', '?')}",
             "first_session_id": birth.get("first_session_id"),
             "birth_path": "path_b" if birth.get("path") == "B" else birth.get("path", "A")}
+
+
+# ---------------------------------------------------------------- PKG-D-15 Stage 4: controller presence
+
+# DualSense Edge CFI-ZCP1 (Sony) -- public USB IDs only; never a secret surface.
+EDGE_VID = 0x054C
+EDGE_PID = 0x0DF2
+STAGE4_SCHEMA = "qortroller-stage4-controller-v1"
+
+# Fields that MUST NOT be written to stage4_controller_pass.json (path/serial fingerprint risk).
+_STAGE4_FORBIDDEN_KEYS = frozenset({
+    "path", "serial", "serial_number", "usage", "usage_page", "release_number",
+    "interface_number", "bus_type",
+})
+
+DUAL_CONNECTION_NOTE = (
+    "Dual-connection (recommended for live match proof):\n"
+    "  USB-C DATA cable to this laptop  ->  HID presence (this stage reads it)\n"
+    "  AND Bluetooth paired to PS5      ->  gameplay (NCAA CFB 26 etc.)\n"
+    "  This check is USB-HID only -- BT to PS5 is invisible here (do NOT unpair PS5).\n"
+    "  CaptureHealthMonitor / grind dual-connection docs: same rule."
+)
+
+
+def classify_controller_presence(devices: list, *, vid: int = EDGE_VID,
+                                 pid: int = EDGE_PID) -> dict:
+    """PKG-D-15 pure: map hid.enumerate()-shaped dicts -> safe presence result.
+
+    PERSIST-SAFE (may land on disk): present, vid_hex, pid_hex, product, n_matches,
+    detection, schema. Never serial, never HID path, never usage pages.
+    """
+    matches = []
+    for d in devices or []:
+        if not isinstance(d, dict):
+            continue
+        try:
+            dv = int(d.get("vendor_id", -1))
+            dp = int(d.get("product_id", -1))
+        except (TypeError, ValueError):
+            continue
+        if dv == vid and dp == pid:
+            matches.append(d)
+    present = len(matches) > 0
+    product = "DualSense Edge CFI-ZCP1"
+    if present:
+        raw = (matches[0].get("product_string") or "").strip()
+        # Display/persist product marketing name only (truncate; strip control chars)
+        if raw:
+            product = "".join(ch for ch in raw if 32 <= ord(ch) < 127)[:64] or product
+    return {
+        "schema": STAGE4_SCHEMA,
+        "present": present,
+        "vid_hex": f"{vid:04X}",
+        "pid_hex": f"{pid:04X}",
+        "product": product,
+        "n_matches": len(matches),
+        "detection": "injected",
+    }
+
+
+def build_stage4_pass_record(presence: dict, *, operator_ack: bool,
+                             dual_connection_note_shown: bool,
+                             operator_skip: bool = False,
+                             ts: int | None = None) -> dict:
+    """PKG-D-15 pure: stage4_controller_pass.json body. Fail-closed strip of forbidden keys."""
+    ts = int(ts if ts is not None else time.time())
+    rec = {
+        "schema": STAGE4_SCHEMA,
+        "present": bool(presence.get("present")),
+        "vid_hex": str(presence.get("vid_hex", f"{EDGE_VID:04X}")),
+        "pid_hex": str(presence.get("pid_hex", f"{EDGE_PID:04X}")),
+        "product": str(presence.get("product", "DualSense Edge CFI-ZCP1"))[:64],
+        "n_matches": int(presence.get("n_matches") or 0),
+        "detection": str(presence.get("detection", "unknown"))[:32],
+        "ts": ts,
+        "operator_ack": bool(operator_ack),
+        "dual_connection_note_shown": bool(dual_connection_note_shown),
+        "operator_skip": bool(operator_skip),
+    }
+    # Defense in depth: never let a caller smuggle serial/path through presence dict
+    for k in list(rec.keys()):
+        if k in _STAGE4_FORBIDDEN_KEYS or secret_shaped(k):
+            del rec[k]
+    return rec
+
+
+def probe_controller_presence(*, enumerate_fn=None) -> dict:
+    """Live HID probe for Edge VID/PID. Never raises. Serial/path never returned.
+
+    enumerate_fn: optional injectable (tests) returning list[dict] like hid.enumerate().
+    """
+    if enumerate_fn is not None:
+        try:
+            devices = list(enumerate_fn(EDGE_VID, EDGE_PID) or [])
+        except Exception:  # noqa: BLE001
+            devices = []
+        out = classify_controller_presence(devices)
+        out["detection"] = "injected"
+        return out
+
+    last_err = None
+    for pkg in ("hid", "hidapi"):
+        try:
+            mod = __import__(pkg)
+            devices = list(mod.enumerate(EDGE_VID, EDGE_PID) or [])
+            # Strip forbidden fields before classification (path/serial never enter the result)
+            safe_devs = []
+            for d in devices:
+                if not isinstance(d, dict):
+                    continue
+                safe_devs.append({
+                    "vendor_id": d.get("vendor_id"),
+                    "product_id": d.get("product_id"),
+                    "product_string": d.get("product_string") or "",
+                    # deliberately omit path / serial_number
+                })
+            out = classify_controller_presence(safe_devs)
+            out["detection"] = pkg
+            return out
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            continue
+    return {
+        "schema": STAGE4_SCHEMA,
+        "present": False,
+        "vid_hex": f"{EDGE_VID:04X}",
+        "pid_hex": f"{EDGE_PID:04X}",
+        "product": "DualSense Edge CFI-ZCP1",
+        "n_matches": 0,
+        "detection": "unavailable",
+        "note": f"hid probe unavailable ({last_err!r})" if last_err else "no hid backend",
+    }
+
+
+# ---------------------------------------------------------------- PKG-D-16 dogfood report schema
+
+DOGFOOD_REPORT_SCHEMA = "qortroller-dogfood-report-v1"
+DOGFOOD_REPORT_REQUIRED = frozenset({
+    "schema", "run_label", "path", "operator_would_rerun_without_chat",
+})
+DOGFOOD_REPORT_OPTIONAL = frozenset({
+    "started_at", "finished_at", "time_to_first_proof_s", "stages_completed",
+    "friction_events", "wizard_wording_confused", "receipt_ok", "share_ok",
+    "verify_tier", "node_state_at_end", "f_t66b1_status_seen", "blocked_on",
+    "freeform_notes", "pack", "ts",
+})
+# Friction event codes (closed set for cross-run aggregation; freeform goes in detail)
+DOGFOOD_FRICTION_CODES = frozenset({
+    "PORT_PHANTOM", "CARD_INDEX", "ROI_CONFUSION", "CONTROLLER_MISSING",
+    "RP5_BLOCK", "DAEMON_FAIL", "RECEIPT_MISSING", "SHARE_CONFUSION",
+    "WIZARD_WORDING", "OTHER",
+})
+
+
+def scaffold_dogfood_report(*, run_label: str = "dogfood_1", path: str = "B",
+                            pack: str = "observer-only") -> dict:
+    """PKG-D-16: empty operator-fillable report. Local only; never uploaded by the kit."""
+    return {
+        "schema": DOGFOOD_REPORT_SCHEMA,
+        "run_label": run_label,
+        "path": path if path in ("A", "B") else "B",
+        "pack": pack,
+        "started_at": "",
+        "finished_at": "",
+        "time_to_first_proof_s": None,
+        "stages_completed": [],  # e.g. [0, 1, 3, 4, 5]
+        "friction_events": [],   # [{code, stage, detail}]
+        "wizard_wording_confused": [],  # [{stage, quote, expected}]
+        "receipt_ok": None,
+        "share_ok": None,
+        "verify_tier": None,     # INDICATIVE | STRANGER_OK | n/a
+        "node_state_at_end": None,
+        "f_t66b1_status_seen": None,  # OPEN | MEASURED | HISTORICAL_GAP
+        "blocked_on": [],
+        "operator_would_rerun_without_chat": None,  # THE Phase D dogfood bar
+        "freeform_notes": "",
+        "ts": int(time.time()),
+    }
+
+
+def validate_dogfood_report(report: dict) -> tuple[bool, list[str]]:
+    """PKG-D-16 pure: structural validation. Returns (ok, errors). Never raises."""
+    errs: list[str] = []
+    if not isinstance(report, dict):
+        return False, ["report must be a dict"]
+    if report.get("schema") != DOGFOOD_REPORT_SCHEMA:
+        errs.append(f"schema must be {DOGFOOD_REPORT_SCHEMA}")
+    for k in DOGFOOD_REPORT_REQUIRED:
+        if k not in report:
+            errs.append(f"missing required field: {k}")
+    # Refuse secret-shaped keys anywhere in the top level
+    for k in report:
+        if secret_shaped(str(k)):
+            errs.append(f"secret-shaped key refused: {k}")
+        if str(k) not in DOGFOOD_REPORT_REQUIRED | DOGFOOD_REPORT_OPTIONAL:
+            # unknown keys are soft-warn only for forward compat -- still ok
+            pass
+    path = report.get("path")
+    if path is not None and path not in ("A", "B"):
+        errs.append("path must be A or B")
+    for fe in report.get("friction_events") or []:
+        if not isinstance(fe, dict):
+            errs.append("friction_events entries must be objects")
+            continue
+        code = fe.get("code")
+        if code and code not in DOGFOOD_FRICTION_CODES:
+            errs.append(f"unknown friction code: {code}")
+        for fk in fe:
+            if secret_shaped(str(fk)):
+                errs.append(f"secret-shaped key in friction_event: {fk}")
+    bar = report.get("operator_would_rerun_without_chat")
+    if bar is not None and not isinstance(bar, bool):
+        errs.append("operator_would_rerun_without_chat must be bool or null")
+    return (len(errs) == 0), errs
 
 
 def build_honesty_notes(*, own_kill_recall: tuple | None = None,
@@ -359,7 +577,8 @@ def append_dogfood_event(home: Path, event: dict, *, enabled: bool) -> None:
         return
     # Fail-closed field allowlist (names only -- values still must not be secret-shaped keys)
     allowed = {"event", "stage", "duration_ms", "choice", "n_loops", "recapture_count",
-               "preflight_code", "play_ok", "stop_ok", "receipt_ok", "pack", "ts", "path"}
+               "preflight_code", "play_ok", "stop_ok", "receipt_ok", "pack", "ts", "path",
+               "friction_code"}
     safe = {k: v for k, v in event.items() if k in allowed and not secret_shaped(str(k))}
     if "event" not in safe:
         return
@@ -583,6 +802,7 @@ def _setup_stage_roi(cfg: dict) -> int:
                         "ts": stamp, "operator_ack": True}
             (setup_dir / "stage3_roi_pass.json").write_text(json.dumps(pass_rec, indent=2), encoding="utf-8")
             print(f"  ROI acked + persisted -> {_NODE_TOML}")
+            print("  Next: setup --stage controller  ->  drill (or drill --path B)")
             return 0
         if ans == "n":
             roi_s = input("  new ROI 'fx,fy,fw,fh' (fractions 0..1): ").strip()
@@ -591,10 +811,71 @@ def _setup_stage_roi(cfg: dict) -> int:
             return 1
 
 
+def _setup_stage_controller(cfg: dict) -> int:
+    """PKG-D-15: Stage 4 controller presence -- HID VID/PID + dual-connection note.
+
+    Persist ONLY display-safe fields (vid/pid/product/present/acks). Never serial, never HID path.
+    Soft-skip allowed (operator_skip) so pure-observation dogfood is not blocked without Edge USB.
+    """
+    setup_dir = _HOME / "setup"
+    setup_dir.mkdir(parents=True, exist_ok=True)
+    print("- Stage 4: CONTROLLER PRESENCE (DualSense Edge CFI-ZCP1)")
+    print(DUAL_CONNECTION_NOTE)
+    print(f"  Looking for USB HID {EDGE_VID:04X}:{EDGE_PID:04X} ...")
+    while True:
+        presence = probe_controller_presence()
+        mark = "FOUND" if presence.get("present") else "NOT FOUND"
+        print(f"  [{mark}] product={presence.get('product')}  "
+              f"vid:pid={presence.get('vid_hex')}:{presence.get('pid_hex')}  "
+              f"n={presence.get('n_matches')}  via={presence.get('detection')}")
+        if presence.get("note"):
+            print(f"  note: {presence['note']}")
+        # DISPLAY-only line (not persisted): reminder of what we refuse to store
+        print("  (serial number + HID path are NEVER stored -- presence is VID/PID + product only)")
+        if presence.get("present"):
+            ans = input("  [y] ack presence  [r] re-probe  [q] quit stage: ").strip().lower()
+            if ans == "y":
+                rec = build_stage4_pass_record(
+                    presence, operator_ack=True, dual_connection_note_shown=True, operator_skip=False)
+                (setup_dir / "stage4_controller_pass.json").write_text(
+                    json.dumps(rec, indent=2), encoding="utf-8")
+                print(f"  Stage 4 acked -> {setup_dir / 'stage4_controller_pass.json'}")
+                print("  Next: drill (Path A)  OR  drill --path B  then play a real match + stop")
+                append_dogfood_event(_HOME, {"event": "stage4_ack", "stage": "controller",
+                                             "choice": "present"},
+                                     enabled=dogfood_enabled(cfg))
+                return 0
+            if ans == "q":
+                print("  stage aborted; no stage4 pass written")
+                return 1
+            continue
+        # not present
+        ans = input("  [r] re-probe  [s] soft-skip (ceremony continues; present=false)  "
+                    "[q] quit: ").strip().lower()
+        if ans == "s":
+            rec = build_stage4_pass_record(
+                presence, operator_ack=True, dual_connection_note_shown=True, operator_skip=True)
+            (setup_dir / "stage4_controller_pass.json").write_text(
+                json.dumps(rec, indent=2), encoding="utf-8")
+            print("  Stage 4 soft-skipped (present=false, operator_skip=true) -- first proof still allowed.")
+            print("  Re-run setup --stage controller later when Edge is USB-connected.")
+            append_dogfood_event(_HOME, {"event": "stage4_skip", "stage": "controller",
+                                         "choice": "skip"},
+                                 enabled=dogfood_enabled(cfg))
+            return 0
+        if ans == "q":
+            print("  stage aborted; no stage4 pass written")
+            return 1
+        # r or anything else -> re-probe
+
+
 def cmd_setup(a) -> int:
-    if getattr(a, "stage", "all") == "roi":
+    stage = getattr(a, "stage", "all")
+    if stage == "roi":
         return _setup_stage_roi(read_node_config())
-    print("QorTroller node provisioning (v0: stages 0-1 + `--stage roi`; controller/drill stages next)")
+    if stage == "controller":
+        return _setup_stage_controller(read_node_config())
+    print("QorTroller node provisioning (stages 0-1 + `--stage roi` + `--stage controller`)")
     print("- Stage 0: HOST PREFLIGHT")
     try:
         out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=20).stdout
@@ -637,7 +918,7 @@ def cmd_setup(a) -> int:
     write_flat_toml(_NODE_TOML, cfg)
     print(f"- node config written -> {_NODE_TOML}")
     print("  Reminders: PS5 HDCP OFF (Settings > System > HDMI); OBS/Camera CLOSED (single-holder).")
-    print("  Next: setup --stage roi  ->  drill (or drill --path B)  ->  receipt --share")
+    print("  Next: setup --stage roi  ->  setup --stage controller  ->  drill / drill --path B")
     return 0
 
 
@@ -907,6 +1188,43 @@ def cmd_drill(a) -> int:
     return rc
 
 
+def cmd_dogfood_report(a) -> int:
+    """PKG-D-16: scaffold or validate a local dogfood report (operator fills; kit never uploads)."""
+    validate_path = getattr(a, "validate", "") or ""
+    if validate_path:
+        p = Path(validate_path)
+        if not p.exists():
+            print(f"report not found: {p}")
+            return 1
+        try:
+            report = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:  # noqa: BLE001
+            print(f"invalid JSON: {e!r}")
+            return 1
+        ok, errs = validate_dogfood_report(report)
+        if ok:
+            print(f"dogfood report OK  schema={report.get('schema')}  "
+                  f"bar={report.get('operator_would_rerun_without_chat')!r}")
+            return 0
+        print("dogfood report INVALID:")
+        for e in errs:
+            print(f"  - {e}")
+        return 2
+    if getattr(a, "scaffold", False):
+        report = scaffold_dogfood_report(run_label=getattr(a, "label", "dogfood_1") or "dogfood_1",
+                                         path=getattr(a, "path", "B") or "B",
+                                         pack=str(read_node_config().get("pack", "observer-only")))
+        out = _HOME / "dogfood_report.json"
+        _HOME.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print(f"scaffolded -> {out}")
+        print("  Fill operator_would_rerun_without_chat (bool) after setup->roi->controller->"
+              "play/drill->stop->receipt --share. Kit never uploads this file.")
+        return 0
+    print("usage: qortroller dogfood-report --scaffold | --validate <path>")
+    return 1
+
+
 def cmd_verify(a) -> int:
     """Offline stranger-check. PKG-D-12: --share postcard tier; optional --pack for STRANGER_OK."""
     share_file = getattr(a, "share_file", "") or ""
@@ -969,10 +1287,21 @@ def main() -> int:
     s.add_argument("--uvc-index", type=int, default=None)
     s.add_argument("--killfeed-roi", default="")
     s.add_argument("--pack", default="observer-only", choices=sorted(PACKS))
-    s.add_argument("--stage", default="all", choices=["all", "roi"])
+    s.add_argument("--stage", default="all", choices=["all", "roi", "controller"],
+                   help="all=stages 0-1; roi=Stage 3; controller=Stage 4 HID presence")
     s.add_argument("--dogfood-telemetry", choices=["on", "off"], default=None,
                    help="PKG-D-14: explicit local friction telemetry (default off)")
     s.set_defaults(fn=cmd_setup)
+    # PKG-D-16: scaffold a local dogfood report for the operator's first full product run
+    dr = sub.add_parser("dogfood-report",
+                        help="scaffold/validate local dogfood report (never uploaded)")
+    dr.add_argument("--scaffold", action="store_true",
+                    help="write empty report template to ~/.qortroller/dogfood_report.json")
+    dr.add_argument("--validate", default="",
+                    help="path to an existing dogfood report JSON to validate")
+    dr.add_argument("--label", default="dogfood_1", help="run_label for --scaffold")
+    dr.add_argument("--path", default="B", choices=["A", "B"], help="drill path for --scaffold")
+    dr.set_defaults(fn=cmd_dogfood_report)
     p = sub.add_parser("play", help="start a capture session (persisted config, session-scoped dirs)")
     p.add_argument("--label", default="")
     p.add_argument("--i-know", dest="i_know", action="store_true",
