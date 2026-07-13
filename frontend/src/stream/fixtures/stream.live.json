@@ -1,0 +1,29 @@
+{
+  "schema": "qortroller-stream-view-v1",
+  "surface": "stream",
+  "on_screen": {
+    "presence_line": "your witness is live",
+    "presence_tone": "live",
+    "node_state": "LIVE",
+    "freshness_class": "LIVE",
+    "session_id_display": "m13_..._x",
+    "session_label": "m13",
+    "pack": "observer-only",
+    "f_t66b1_disclosure_visible": true
+  },
+  "deliberately_absent": [
+    "crop_counts",
+    "fps",
+    "raw_biometric",
+    "grind_bar",
+    "green_check_theater",
+    "mock_liveness",
+    "keys",
+    "consent"
+  ],
+  "novelty": "witness_respiration",
+  "mock": false,
+  "fabricated_liveness": false,
+  "signing_material_present": false,
+  "consent_authority": false
+}

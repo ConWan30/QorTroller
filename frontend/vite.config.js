@@ -1,8 +1,56 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+
+/**
+ * PKG-UI-04 dogfood path: serve CLI-written ~/.qortroller/ui/* at /stream-ui/*
+ * so StreamView can fetch status/stream/ceremony/receipt JSON without a second
+ * control plane and without copying files into the repo.
+ * Read-only; no auth; never invents LIVE if files are missing (404).
+ */
+function qortrollerUiStaticPlugin() {
+  const uiRoot = path.join(os.homedir(), ".qortroller", "ui");
+  const MIME = {
+    ".json": "application/json; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".png": "image/png",
+    ".md": "text/markdown; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
+  };
+  return {
+    name: "qortroller-ui-static",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url || "";
+        if (!url.startsWith("/stream-ui")) return next();
+        // Strip querystring; prevent path traversal.
+        const rel = decodeURIComponent(url.replace(/^\/stream-ui\/?/, "").split("?")[0]);
+        if (!rel || rel.includes("..") || path.isAbsolute(rel)) {
+          res.statusCode = 400;
+          res.end("bad path");
+          return;
+        }
+        const filePath = path.join(uiRoot, rel);
+        if (!filePath.startsWith(uiRoot) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+          res.statusCode = 404;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "missing", path: rel, note: "run qortroller status --write-ui or qortroller ui" }));
+          return;
+        }
+        const ext = path.extname(filePath).toLowerCase();
+        res.statusCode = 200;
+        res.setHeader("Content-Type", MIME[ext] || "application/octet-stream");
+        res.setHeader("Cache-Control", "no-store");
+        fs.createReadStream(filePath).pipe(res);
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), qortrollerUiStaticPlugin()],
   server: {
     port: 5173,
     open: true,

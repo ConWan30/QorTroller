@@ -355,12 +355,22 @@ DOGFOOD_REPORT_OPTIONAL = frozenset({
     "friction_events", "wizard_wording_confused", "receipt_ok", "share_ok",
     "verify_tier", "node_state_at_end", "f_t66b1_status_seen", "blocked_on",
     "freeform_notes", "pack", "ts",
+    # PKG-UI-06 (round-13): Stream SPA dogfood surface
+    "ui_surface_exercised", "ui_serve_path", "ui_mode_seen",
 })
 # Friction event codes (closed set for cross-run aggregation; freeform goes in detail)
 DOGFOOD_FRICTION_CODES = frozenset({
     "PORT_PHANTOM", "CARD_INDEX", "ROI_CONFUSION", "CONTROLLER_MISSING",
     "RP5_BLOCK", "DAEMON_FAIL", "RECEIPT_MISSING", "SHARE_CONFUSION",
     "WIZARD_WORDING", "OTHER",
+    # PKG-UI-06 (round-13): Stream SPA friction codes (operator dogfood of React UI)
+    "UI_STREAM_EMPTY",          # empty/UNKNOWN expected but operator confused
+    "UI_DATA_PATH",             # could not find /stream-ui or offline shell
+    "UI_RECEIPT_CONFUSION",     # LOCAL vs SHARE split unclear
+    "UI_WORDING",               # presence_line / dignity line confusing
+    "UI_CEREMONY_MAP",          # birth stages unclear
+    "UI_ANIMATION_DISTRACTION", # stage chrome felt like suspense-theater
+    "UI_LIVE_SUSPECT",          # operator suspected fabricated LIVE (should never)
 })
 
 
@@ -386,6 +396,10 @@ def scaffold_dogfood_report(*, run_label: str = "dogfood_1", path: str = "B",
         "blocked_on": [],
         "operator_would_rerun_without_chat": None,  # THE Phase D dogfood bar
         "freeform_notes": "",
+        # PKG-UI-06: which Stream surface the operator exercised this run
+        "ui_surface_exercised": None,  # "vite_spa" | "offline_shell" | "none" | null
+        "ui_serve_path": None,         # e.g. "http://127.0.0.1:5173/?view=stream"
+        "ui_mode_seen": None,          # EMPTY | CEREMONY | STREAM | RECEIPT
         "ts": int(time.time()),
     }
 
@@ -1524,7 +1538,8 @@ def cmd_stop(a) -> int:
     _session_env(cfg, st["capture_dir"])                      # friction #3: env re-applied, not re-typed
     rc = subprocess.call([sys.executable, str(_DAEMON), "stop", "--label", st["label"], "--kas"],
                          cwd=str(_REPO))
-    _print_and_write_receipt(st["label"], cfg, stranger_verified=None)
+    # Always write receipt reveal for Stream SPA (local JSON only; no secrets)
+    _print_and_write_receipt(st["label"], cfg, stranger_verified=None, write_ui=True)
     _maybe_complete_path_b_birth(st["label"], st.get("stamp", "?"), cfg)
     append_dogfood_event(_HOME, {"event": "stop", "stop_ok": rc == 0, "receipt_ok": True,
                                  "pack": str(cfg.get("pack"))},
@@ -1546,7 +1561,8 @@ def _collect_artifacts(label: str):
 
 
 def _print_and_write_receipt(label: str, cfg: dict, stranger_verified, *,
-                             share: bool = False, html: bool = False) -> Path:
+                             share: bool = False, html: bool = False,
+                             write_ui: bool = False) -> Path:
     kas, posp, v3, manifest = _collect_artifacts(label)
     pack = str(cfg.get("pack", "?"))
     text = render_receipt(label, kas, posp, v3, manifest,
@@ -1559,11 +1575,14 @@ def _print_and_write_receipt(label: str, cfg: dict, stranger_verified, *,
         h = _REPO / "audits" / f"session_receipt_{label}.html"
         h.write_text(html_wrap(f"QorTroller Session Receipt - {label}", text), encoding="utf-8")
         print(f"[qortroller] receipt html -> {h.relative_to(_REPO)}")
-    if share:                                             # PKG-D-09: NEVER overwrites the local full file
-        st = load_session_state() or {}
-        age = None
-        if st.get("capture_dir"):
+    st = load_session_state() or {}
+    age = None
+    if st.get("capture_dir"):
+        try:
             _, age = ring_freshness(_REPO / st["capture_dir"], time.time())
+        except Exception:  # noqa: BLE001
+            age = None
+    if share:                                             # PKG-D-09: NEVER overwrites the local full file
         card = render_share_postcard(label, kas, posp, v3, manifest,
                                      stranger_verified=stranger_verified, pack=pack, ring_age_s=age)
         sh = _REPO / "audits" / f"session_receipt_{label}.share.md"
@@ -1574,6 +1593,17 @@ def _print_and_write_receipt(label: str, cfg: dict, stranger_verified, *,
             shh = _REPO / "audits" / f"session_receipt_{label}.share.html"
             shh.write_text(html_wrap(f"QorTroller Proof Postcard - {label}", card), encoding="utf-8")
             print(f"[qortroller] SHARE html -> {shh.relative_to(_REPO)}")
+    if write_ui:
+        # PKG-UI-02 React: write receipt reveal model for StreamView SPA
+        rev = build_receipt_reveal_model(
+            label, kas, posp, v3, manifest,
+            pack=pack, stranger_verified=stranger_verified, ring_age_s=age,
+        )
+        ui_dir = _HOME / "ui"
+        ui_dir.mkdir(parents=True, exist_ok=True)
+        rpath = ui_dir / "receipt.json"
+        rpath.write_text(json.dumps(rev, indent=2), encoding="utf-8")
+        print(f"[qortroller] ui receipt -> {rpath}")
     return out
 
 
@@ -1584,7 +1614,8 @@ def cmd_receipt(a) -> int:
         print("no session known -- pass a label: qortroller receipt --label <label>")
         return 1
     _print_and_write_receipt(label, read_node_config(), stranger_verified=None,
-                             share=getattr(a, "share", False), html=getattr(a, "html", False))
+                             share=getattr(a, "share", False), html=getattr(a, "html", False),
+                             write_ui=getattr(a, "write_ui", False))
     return 0
 
 
@@ -1808,6 +1839,8 @@ def main() -> int:
     r.add_argument("--label", default="")
     r.add_argument("--share", action="store_true", help="also write the SHARE-redacted postcard (*.share.md)")
     r.add_argument("--html", action="store_true", help="also write offline HTML surfaces")
+    r.add_argument("--write-ui", action="store_true",
+                   help="PKG-UI-02: write ~/.qortroller/ui/receipt.json for Stream SPA")
     r.set_defaults(fn=cmd_receipt)
     v = sub.add_parser("verify", help="offline stranger-check (v3 crypto OR --share postcard tiers)")
     v.add_argument("--label", default="")
