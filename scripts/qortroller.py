@@ -59,6 +59,7 @@ _DEFAULTS = {
 PACKS: dict[str, dict[str, str]] = {
     "observer-only": {
         "RETINA_CAPTURE_SOURCE": "uvc",
+        "RETINA_KF_FRESH_TRIGGER": "true",       # HARD-1: fresh-feed OCR watcher (F-T66B-1 fix)
         "RETINA_PERCEPTION_ENABLED": "true",     # observation plane on for the pilot
         "RETINA_DA_WITNESS_ENABLED": "false",    # DePIN DA side-path off until opt-in
         "CHAIN_SUBMISSION_PAUSED": "true",       # HARD: the kit never spends/deploys
