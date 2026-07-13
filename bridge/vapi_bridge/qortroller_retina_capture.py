@@ -587,8 +587,14 @@ class WgcFrameSource:
                         screen_ts, self._burst_dense_until_ms) == 0:
                     try:
                         if self._kf_roi is not None:
-                            _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
-                            self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
+                            # F-MATCH-3 ROOT FIX (2026-07-13 recall mining): crop from the FULL-RES
+                            # buf, NOT buf_small -- under GPU-pressure downscale (measured 5x live)
+                            # the small-buf kf crop is unreadable garbage ('iwer'/'sha dy'/CJK noise)
+                            # while the SAME feed at full-res reads the handle EXACTLY
+                            # ('Qortrola30 -> Megaooo1234'). Mirrors the _panel_roi_crop fix, which
+                            # documented this identical failure for the handle detector.
+                            _y0, _y1, _x0, _x1 = _roi_px(buf.shape, self._kf_roi)
+                            self._kf_bgr = _u8_from_scale(buf[_y0:_y1, _x0:_x1], self._lum_scale)
                             self._kf_ts = screen_ts
                         # Dense corpus: stash the left HUD panel (feed+roster) crop for the saver
                         # tick — from the FULL-RES buf (see _panel_roi_crop; buf_small would be
