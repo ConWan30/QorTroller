@@ -5,7 +5,8 @@
   Label    : session
   Pack     : observer-only
   Session  : 056ad30198556d8ad69e2fba4d2ce90155bd1f572674313c5a9c8a2f1cc953aa  [OK]
-  Node     : (null)  [ABSENT]  (honest -- node_id needs birth + public device_id)
+  Node     : 01a574e7ca7f  [DERIVED]  domain=QORTROLLER-NODE-v0
+             (full node_id DERIVED -- not on-chain; device 581a836c98b3... + birth)
 ----------------------------------------------------------------
   RECALL (load-bearing rail)
   status   : SCORED
@@ -19,7 +20,7 @@
   PoSP     : SYNCHRONIZED  [MEASURED]
   fusion_n : 140  [MEASURED]
   v3 events: 205  [MEASURED]
-  sink rows: 426  [MEASURED]  (NOT scored kills)
+  sink rows: 29  [MEASURED]  (NOT scored kills)
 ----------------------------------------------------------------
   False-authorship language (MAY only):
    + A2/A3 structural guards CLOSED (exact-token killer match + leftmost-killer death path)
@@ -35,7 +36,8 @@
   Dignity tone: honest_null
    * authored=0 is a legitimate observation (no R2-bound authored kills this session), not a player failure
   Dogfood     : ABSENT (honest-null — not a fail)
-  Birth       : ABSENT (honest-null)
+  Birth       : path=A  first_session_id=proof_drill_20260713_1843_1783986208
+               node_id=01a574e7ca7f... (DERIVED, not minted)
 ----------------------------------------------------------------
   Provenance: MEASURED = our instruments; OPERATOR-REPORTED = only they know;
   DERIVED = arithmetic over tagged inputs; ABSENT = honest-null.
