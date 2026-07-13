@@ -1,0 +1,24 @@
+﻿{
+    "envelope_id":  "991180b2c0832181",
+    "inbox":  "docs/a2a/pkg/mailbox/INBOX_CLAUDE.md",
+    "expect":  "docs/a2a/pkg/round-05-claude-ground-build.md",
+    "pending_for":  "claude",
+    "loop":  "A2A-PKG",
+    "ts":  "2026-07-12T22:23:23.5180926-05:00",
+    "fire_attempts":  [
+                          {
+                              "result":  "idle/failed",
+                              "mode":  "background"
+                          },
+                          {
+                              "result":  "credit_balance_too_low",
+                              "mode":  "print-api-key"
+                          },
+                          {
+                              "result":  "in_flight",
+                              "mode":  "resume-oauth"
+                          }
+                      ],
+    "body":  "docs/a2a/pkg/round-04-grok-design.md",
+    "schema":  "qortroller-a2a-status-v1"
+}
