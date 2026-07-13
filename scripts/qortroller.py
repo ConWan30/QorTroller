@@ -48,6 +48,38 @@ _DEFAULTS = {
     "label_prefix": "session",
 }
 
+# PKG-D-10: pack matrix -- capability ENVELOPES of PUBLIC env pins, applied to the session child
+# process only (never merged into bridge/.env). Env names corrected to repo reality (round-04 wrote
+# KF_ENGINE/KILLFEED_ROI shorthand; the real names carry the RETINA_ prefix). `observer-only` =
+# maximum proof surface, minimum side-effect surface: kill-switch FORCED on, hard-rule biometric
+# layers FORCED off, grind off, DA witness off. Secrets are structurally impossible here (the
+# secret-shaped-key detector polices node.toml; PACKS carries names only, checked by test).
+PACKS: dict[str, dict[str, str]] = {
+    "observer-only": {
+        "RETINA_CAPTURE_SOURCE": "uvc",
+        "RETINA_PERCEPTION_ENABLED": "true",     # observation plane on for the pilot
+        "RETINA_DA_WITNESS_ENABLED": "false",    # DePIN DA side-path off until opt-in
+        "CHAIN_SUBMISSION_PAUSED": "true",       # HARD: the kit never spends/deploys
+        "L6_CHALLENGES_ENABLED": "false",        # hard rule (N gate)
+        "L6B_ENABLED": "false",                  # hard rule (N gate)
+        "GSR_ENABLED": "false",                  # hard rule (N=0)
+        "GRIND_MODE": "false",                   # observer != grind
+    },
+    # developer-full: the operator's existing shell/bridge/.env governs -- the pack pins ONLY the
+    # safety floor (kill-switch). Everything else is deliberately NOT pinned (dev freedom).
+    "developer-full": {
+        "CHAIN_SUBMISSION_PAUSED": "true",
+    },
+}
+
+
+def apply_pack_env(pack: str, env: dict) -> dict:
+    """Apply a pack's pins onto an env mapping (session child only). Unknown pack -> observer-only
+    (fail-safe to the tightest envelope). Returns the same mapping for chaining."""
+    for k, v in PACKS.get(pack, PACKS["observer-only"]).items():
+        env[k] = v
+    return env
+
 
 # ---------------------------------------------------------------- pure helpers (tested)
 
@@ -120,10 +152,237 @@ def ring_freshness(capture_dir: Path, now_s: float) -> tuple[int, float]:
         return 0, float("inf")
 
 
+# ---------------------------------------------------------------- PKG-D-11/12/13 pure helpers
+
+# Birth-state machine for a witness node (PKG-D-11). Not an install progress bar.
+NODE_STATE_UNPROVISIONED = "UNPROVISIONED"
+NODE_STATE_PROVISIONING = "PROVISIONING"
+NODE_STATE_FIRST_PROOF_PENDING = "FIRST_PROOF_PENDING"
+NODE_STATE_NODE_BORN = "NODE_BORN"
+NODE_STATE_LIVE = "LIVE"
+
+HONESTY_NOTES_SCHEMA = "qortroller-honesty-notes-v1"  # PKG-D-13
+
+
+def compute_node_state(home: Path, *, session: dict | None = None,
+                       port_owners: list | None = None,
+                       capture_live: bool = False) -> dict:
+    """PKG-D-11: product state for a node. status prints this so "did I finish setup?" is gone.
+
+    Priority (first match wins after LIVE check):
+      LIVE                 -- session state present AND capture ring fresh (or port held by us)
+      UNPROVISIONED        -- no node.toml
+      PROVISIONING         -- node.toml but Stage-3 ROI ack missing
+      FIRST_PROOF_PENDING  -- ROI acked, birth_receipt.json missing (Path A or B)
+      NODE_BORN            -- birth_receipt present
+    """
+    node = home / "node.toml"
+    roi = home / "setup" / "stage3_roi_pass.json"
+    birth_path = home / "birth_receipt.json"
+    owners = port_owners or []
+    if capture_live or (session and owners):
+        # LIVE only when we have a known session AND something that looks active
+        if session and (capture_live or owners):
+            return {"state": NODE_STATE_LIVE,
+                    "detail": f"session={session.get('label', '?')} capture active",
+                    "label": session.get("label"), "stamp": session.get("stamp")}
+    if not node.exists():
+        return {"state": NODE_STATE_UNPROVISIONED, "detail": "run: qortroller setup"}
+    if not roi.exists():
+        return {"state": NODE_STATE_PROVISIONING,
+                "detail": "ROI pending -- run: qortroller setup --stage roi"}
+    birth = _load_json(birth_path)
+    if not birth:
+        cfg = read_node_config(node)
+        path_b = bool(cfg.get("stage5_deferred", False))
+        detail = ("node provisioned, first proof pending"
+                  + (" (Path B: play a real match, then stop)" if path_b
+                     else " (run: qortroller drill  OR  play -> stop)"))
+        return {"state": NODE_STATE_FIRST_PROOF_PENDING, "detail": detail,
+                "stage5_deferred": path_b}
+    return {"state": NODE_STATE_NODE_BORN,
+            "detail": f"first_session_id={birth.get('first_session_id', '?')}",
+            "first_session_id": birth.get("first_session_id"),
+            "birth_path": "path_b" if birth.get("path") == "B" else birth.get("path", "A")}
+
+
+def build_honesty_notes(*, own_kill_recall: tuple | None = None,
+                        capture_era_has_metric: bool | None = None,
+                        f_t66b1_open: bool = True) -> list:
+    """PKG-D-13: versioned honesty notes. Never invent recall for sessions that lacked it.
+
+    own_kill_recall: optional (numerator, denominator) when OCR metric exists for THIS session.
+    capture_era_has_metric:
+      True  -> session was captured under code that could measure recall
+      False -> historical capture; re-render must not pretend new OCR saw old kills
+      None  -> unknown / current default OPEN disclosure
+    """
+    notes: list[dict] = []
+    if own_kill_recall is not None:
+        n, d = own_kill_recall
+        notes.append({"code": "F-T66B-1", "status": "MEASURED",
+                      "detail": f"own_kill_recall={n}/{d}",
+                      "as_of_schema": HONESTY_NOTES_SCHEMA})
+    elif capture_era_has_metric is False:
+        notes.append({"code": "F-T66B-1", "status": "HISTORICAL_GAP",
+                      "detail": "F-T66B-1 applied at capture time; not re-scored by later OCR",
+                      "as_of_schema": HONESTY_NOTES_SCHEMA})
+    elif f_t66b1_open:
+        notes.append({"code": "F-T66B-1", "status": "OPEN",
+                      "detail": "own-kill OCR recall incomplete (fix in progress); "
+                                "zero-false-read holds",
+                      "as_of_schema": HONESTY_NOTES_SCHEMA})
+    notes.append({"code": "VERDICT_AS_IS", "status": "FROZEN",
+                  "detail": "PARTIAL/UNVERIFIABLE never upgraded on render",
+                  "as_of_schema": HONESTY_NOTES_SCHEMA})
+    return notes
+
+
+def format_honesty_notes(notes: list, *, share: bool = False) -> list[str]:
+    """Render honesty notes as receipt lines. SHARE keeps code+status; omits long paths."""
+    lines = ["  Honesty notes:"]
+    for n in notes:
+        code = n.get("code", "?")
+        status = n.get("status", "?")
+        detail = n.get("detail", "")
+        if share and len(detail) > 80:
+            detail = detail[:77] + "..."
+        lines.append(f"   - [{status}] {code}: {detail}")
+    return lines
+
+
+def parse_share_claims(text: str) -> dict:
+    """PKG-D-12: extract claimed labels from a SHARE postcard (markdown or plain). Fail-soft."""
+    claims: dict = {"posp": None, "kas": None, "v3": None, "f_t66b1": False,
+                    "kas_prefix": None, "v3_prefix": None, "retina_prefix": None}
+    low = text
+    import re
+    m = re.search(r"PoSP\s*:\s*(\S+)", low)
+    if m:
+        claims["posp"] = m.group(1).strip()
+    m = re.search(r"KAS:\s*(\S+)", low)
+    if m:
+        claims["kas"] = m.group(1).strip()
+    if "honest-null" in low and "RETINA-STATE-v3" in low:
+        claims["v3"] = "honest-null"
+    elif "RETINA-STATE-v3" in low and "present" in low:
+        claims["v3"] = "present"
+    claims["f_t66b1"] = "F-T66B-1" in low
+    m = re.search(r"kas\s+([0-9a-fA-F]{8,16})\.\.\.", low)
+    if m:
+        claims["kas_prefix"] = m.group(1).lower()
+    m = re.search(r"v3\s+([0-9a-fA-F]{8,16})\.\.\.", low)
+    if m:
+        claims["v3_prefix"] = m.group(1).lower()
+    m = re.search(r"retina\s+([0-9a-fA-F]{8,16})\.\.\.", low)
+    if m:
+        claims["retina_prefix"] = m.group(1).lower()
+    return claims
+
+
+def verify_share_postcard(text: str, *, kas: dict | None = None, posp: dict | None = None,
+                          v3: dict | None = None, pack_provided: bool = False) -> dict:
+    """PKG-D-12: two-tier stranger check. Postcard alone is INDICATIVE_ONLY -- never STRANGER_OK.
+
+    With pack artifacts (kas/posp/v3 dicts): prefix-match roots + verdict equality + F-T66B-1
+    presence when required. Returns {tier, verdict, checks, note}.
+    """
+    claims = parse_share_claims(text)
+    if not pack_provided and kas is None and posp is None and v3 is None:
+        return {"tier": "POSTCARD", "verdict": "INDICATIVE",
+                "checks": [{"name": "postcard_parse", "ok": True,
+                            "detail": f"claims posp={claims.get('posp')} kas={claims.get('kas')}"}],
+                "note": "INDICATIVE_ONLY -- postcard is not a proof; re-verify with --pack"}
+
+    checks = []
+    mismatches = []
+
+    def _pfx_ok(claimed, full) -> bool:
+        if not claimed:
+            return full in (None, "", "null")  # both empty ok
+        s = str(full or "").lower().replace("0x", "")
+        return bool(s) and s.startswith(claimed.lower())
+
+    # (1) PoSP verdict equality (never upgrade)
+    if posp is not None:
+        local_v = str(posp.get("verdict") or "none")
+        ok = claims.get("posp") == local_v
+        checks.append({"name": "posp_verdict", "ok": ok,
+                       "detail": f"card={claims.get('posp')} local={local_v}"})
+        if not ok:
+            mismatches.append("posp_verdict")
+    # (2) KAS verdict
+    if kas is not None:
+        local_v = str(kas.get("verdict") or "none")
+        ok = claims.get("kas") == local_v
+        checks.append({"name": "kas_verdict", "ok": ok,
+                       "detail": f"card={claims.get('kas')} local={local_v}"})
+        if not ok:
+            mismatches.append("kas_verdict")
+    # (3) root prefixes
+    if kas is not None and claims.get("kas_prefix"):
+        ok = _pfx_ok(claims["kas_prefix"], kas.get("commitment"))
+        checks.append({"name": "kas_prefix", "ok": ok, "detail": claims["kas_prefix"]})
+        if not ok:
+            mismatches.append("kas_prefix")
+    if v3 is not None and claims.get("v3_prefix"):
+        ok = _pfx_ok(claims["v3_prefix"], v3.get("commitment"))
+        checks.append({"name": "v3_prefix", "ok": ok, "detail": claims["v3_prefix"]})
+        if not ok:
+            mismatches.append("v3_prefix")
+    if posp is not None and claims.get("retina_prefix"):
+        er = posp.get("events_roots") or {}
+        ok = _pfx_ok(claims["retina_prefix"], er.get("retina_perception_root"))
+        checks.append({"name": "retina_prefix", "ok": ok, "detail": claims["retina_prefix"]})
+        if not ok:
+            mismatches.append("retina_prefix")
+    # (4) F-T66B-1 must stay disclosed
+    ok_gap = bool(claims.get("f_t66b1"))
+    checks.append({"name": "f_t66b1_disclosed", "ok": ok_gap,
+                   "detail": "present" if ok_gap else "MISSING on postcard"})
+    if not ok_gap:
+        mismatches.append("f_t66b1")
+
+    if not checks:
+        return {"tier": "PACK", "verdict": "INCOMPLETE_PACK",
+                "checks": [], "note": "pack artifacts missing -- cannot stranger-check"}
+    if mismatches:
+        return {"tier": "PACK", "verdict": "MISMATCH", "checks": checks,
+                "note": f"mismatch: {','.join(mismatches)}"}
+    return {"tier": "PACK", "verdict": "STRANGER_OK", "checks": checks,
+            "note": "prefix+verdict match; full crypto on local pack only"}
+
+
+def append_dogfood_event(home: Path, event: dict, *, enabled: bool) -> None:
+    """PKG-D-14: optional local friction telemetry. Allowlisted fields only; never biometrics."""
+    if not enabled:
+        return
+    # Fail-closed field allowlist (names only -- values still must not be secret-shaped keys)
+    allowed = {"event", "stage", "duration_ms", "choice", "n_loops", "recapture_count",
+               "preflight_code", "play_ok", "stop_ok", "receipt_ok", "pack", "ts", "path"}
+    safe = {k: v for k, v in event.items() if k in allowed and not secret_shaped(str(k))}
+    if "event" not in safe:
+        return
+    safe.setdefault("ts", int(time.time()))
+    path = home / "dogfood_events.jsonl"
+    home.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(safe, separators=(",", ":")) + "\n")
+
+
+def dogfood_enabled(cfg: dict | None = None) -> bool:
+    """Default OFF. Explicit node.toml dogfood_telemetry=true or env QORTROLLER_DOGFOOD=1."""
+    if os.environ.get("QORTROLLER_DOGFOOD", "").strip() in ("1", "true", "TRUE", "yes"):
+        return True
+    cfg = cfg or {}
+    return bool(cfg.get("dogfood_telemetry", False))
+
+
 def render_receipt(label: str, kas: dict | None, posp: dict | None, v3: dict | None,
                    manifest: dict | None, *, stranger_verified: bool | None = None,
-                   pack: str = "?") -> str:
+                   pack: str = "?", honesty_notes: list | None = None) -> str:
     """PKG-D-03: the human Proof Receipt over the machine artifacts. Honest verdicts AS-IS."""
+    notes = honesty_notes if honesty_notes is not None else build_honesty_notes()
     L = ["=" * 62, "  QorTroller Session Receipt", "=" * 62,
          f"  Session : {label}", f"  Pack    : {pack}",
          f"  Date    : {time.strftime('%Y-%m-%d %H:%M')}", "-" * 62]
@@ -151,13 +410,81 @@ def render_receipt(label: str, kas: dict | None, posp: dict | None, v3: dict | N
     L += ["-" * 62,
           "  What you hold: a cryptographic pack a stranger can re-verify",
           "  offline. Not a highlight reel. A presence+authorship receipt.",
-          "-" * 62,
-          "  Honesty notes:",
-          "   - F-T66B-1: own-kill OCR recall incomplete (fix in progress);",
-          "     zero-false-read holds (nothing is ever falsely authored).",
-          "   - PARTIAL/UNVERIFIABLE verdicts render as-is, never upgraded.",
-          "=" * 62]
+          "-" * 62]
+    L += format_honesty_notes(notes, share=False)
+    L.append("=" * 62)
     return "\n".join(L)
+
+
+def _trunc_hex(h, keep: int = 16) -> str:
+    """Truncate a hex root/commitment for the SHARE surface: prefix only, uniqueness-claimable but
+    not a full join key. None/empty -> 'null'."""
+    s = str(h or "")
+    return (s[:keep] + "...") if len(s) > keep else (s or "null")
+
+
+def _trunc_session_id(sid) -> str:
+    """SHARE form of a session id: first4...last4 (or 'null')."""
+    s = str(sid or "")
+    return f"{s[:4]}...{s[-4:]}" if len(s) > 12 else (s or "null")
+
+
+def render_share_postcard(label: str, kas: dict | None, posp: dict | None, v3: dict | None,
+                          manifest: dict | None, *, stranger_verified: bool | None = None,
+                          pack: str = "?", ring_age_s: float | None = None,
+                          honesty_notes: list | None = None) -> str:
+    """PKG-D-09: the SHARE-redacted postcard. FROZEN Phase D redaction matrix (fail-closed omit):
+    verdicts AS-IS (never rounded up) + F-T66B-1 disclosure ALWAYS; session_id truncated; device ids /
+    absolute paths / usernames NEVER; roots truncated to 16-hex prefix; crop counts -> freshness CLASS
+    only (counts without age mislead -- the T6.6b lesson)."""
+    if ring_age_s is None:
+        fresh_class = "UNKNOWN"
+    else:
+        fresh_class = "FRESH" if ring_age_s < 300 else "STALE"
+    er = (posp or {}).get("events_roots") or {}
+    notes = honesty_notes if honesty_notes is not None else build_honesty_notes()
+    # Always surface F-T66B-1 line on SHARE (trust requires the gap) even if notes evolve.
+    gap_line = next((n for n in notes if n.get("code") == "F-T66B-1"), None)
+    gap_status = (gap_line or {}).get("status", "OPEN")
+    L = ["+" + "-" * 52 + "+",
+         "|  QorTroller - Proof Postcard",
+         '|  "I played. My node observed. This is the',
+         '|   cryptographic shape of that session."',
+         "|",
+         f"|  Session : {label}  ({time.strftime('%Y-%m-%d')})",
+         f"|  Pack    : {pack}",
+         f"|  PoSP    : {(posp or {}).get('verdict', 'none')}"
+         f"    KAS: {(kas or {}).get('verdict', 'none')}",
+         f"|  RETINA-STATE-v3 : {'present' if v3 else 'honest-null'}"
+         + (f"  verified={stranger_verified}" if stranger_verified is not None else ""),
+         f"|  Archive : {fresh_class}",
+         "|",
+         f"|  Known gap (disclosed): F-T66B-1 [{gap_status}]",
+         "|  incomplete -- not hidden. Zero-false-read holds.",
+         "|",
+         f"|  Roots (prefix only): kas {_trunc_hex((kas or {}).get('commitment'))}",
+         f"|    v3 {_trunc_hex((v3 or {}).get('commitment'))}"
+         f"  retina {_trunc_hex(er.get('retina_perception_root'))}",
+         "|  Full preimages: local receipt only.",
+         "|  Stranger verify: qortroller verify --share <this> --pack <dir>",
+         "+" + "-" * 52 + "+"]
+    return "\n".join(L)
+
+
+def html_wrap(title: str, body_text: str) -> str:
+    """Minimal offline HTML receipt (PKG-D-09): single page, brand tokens, print-friendly, ZERO live
+    calls -- a static artifact around the canonical text."""
+    import html as _html
+    return ("<!doctype html><html><head><meta charset='utf-8'>"
+            f"<title>{_html.escape(title)}</title>"
+            "<style>body{background:#0a0a0a;color:#e8e8e8;font-family:Consolas,monospace;"
+            "padding:2rem;max-width:720px;margin:auto}pre{white-space:pre-wrap;"
+            "border:1px solid #ff6a00;padding:1.2rem;border-radius:6px}"
+            "h1{color:#ff6a00;font-size:1.1rem}em{color:#00e5ff}</style></head>"
+            f"<body><h1>{_html.escape(title)}</h1>"
+            f"<pre>{_html.escape(body_text)}</pre>"
+            "<em>Offline artifact - verify with: python scripts/qortroller.py verify</em>"
+            "</body></html>")
 
 
 def find_latest(pattern: str, root: Path) -> Path | None:
@@ -185,7 +512,9 @@ def load_session_state() -> dict | None:
 
 
 def _session_env(cfg: dict, capture_dir: str) -> None:
-    """Apply the session env (frictions #2/#3): same values at play AND stop, from config not memory."""
+    """Apply the session env (frictions #2/#3): same values at play AND stop, from config not memory.
+    PKG-D-10: the pack envelope is applied FIRST, then the session-specific knobs."""
+    apply_pack_env(str(cfg.get("pack", "observer-only")), os.environ)
     os.environ["RETINA_KF_ENGINE"] = str(cfg.get("kf_engine", "rapidocr"))
     os.environ["RETINA_STATE_V3_EMIT_ENABLED"] = "true" if cfg.get("emit_v3", True) else "false"
     os.environ["RETINA_KILLFEED_CAPTURE_DIR"] = capture_dir
@@ -193,8 +522,79 @@ def _session_env(cfg: dict, capture_dir: str) -> None:
 
 # ---------------------------------------------------------------- verbs
 
+def _grab_still(index: int, out_path: Path) -> bool:
+    """One warmed-up frame from the card (the C0 open-path). Fail-open -> False with guidance."""
+    try:
+        import cv2
+        cap = cv2.VideoCapture(index, getattr(cv2, "CAP_DSHOW", 0))
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(index)
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        frame = None
+        for _ in range(20):
+            ok, f = cap.read()
+            if ok and f is not None:
+                frame = f
+        cap.release()
+        if frame is None:
+            return False
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(out_path), frame)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _setup_stage_roi(cfg: dict) -> int:
+    """PKG-D-07: Stage 3 ROI ceremony -- still -> overlay -> operator y/N decision loop. The human
+    judgment ("does the green box sit on the feed?") is the product moment; the ack is persisted."""
+    import hashlib
+    sys.path.insert(0, str(_REPO / "scripts"))
+    from retina_crop_recalibrate import draw_overlay, parse_roi  # noqa: PLC0415
+    setup_dir = _HOME / "setup"
+    roi_s = str(cfg.get("killfeed_roi", _DEFAULTS["killfeed_roi"]))
+    while True:
+        stamp = int(time.time())
+        still = setup_dir / f"roi_still_{stamp}.png"
+        print("- Stage 3: KILLFEED ROI -- freezing one frame from the card...")
+        if not _grab_still(int(cfg.get("uvc_index", 1)), still):
+            print("  FAIL: no frame. Card busy (OBS/Camera open?) or wrong index -- re-run stage 1.")
+            return 1
+        overlay = setup_dir / f"roi_overlay_{stamp}.png"
+        roi = parse_roi(roi_s)
+        if roi is None:
+            print(f"  invalid ROI {roi_s!r}; resetting to default")
+            roi_s = _DEFAULTS["killfeed_roi"]
+            roi = parse_roi(roi_s)
+        draw_overlay(str(still), str(overlay), [("killfeed", roi)])
+        try:
+            os.startfile(str(overlay))  # noqa: S606 -- Windows default viewer (operator machine)
+        except Exception:  # noqa: BLE001
+            pass
+        print(f"  overlay -> {overlay}")
+        print("  Look at the GREEN box. Does it sit on the killfeed text?")
+        ans = input("  [y] correct  [n] enter new fractions  [r] re-capture  [q] quit stage: ").strip().lower()
+        if ans == "y":
+            cfg["killfeed_roi"] = roi_s
+            write_flat_toml(_NODE_TOML, cfg)
+            pass_rec = {"roi": roi_s, "still_sha256": hashlib.sha256(still.read_bytes()).hexdigest(),
+                        "ts": stamp, "operator_ack": True}
+            (setup_dir / "stage3_roi_pass.json").write_text(json.dumps(pass_rec, indent=2), encoding="utf-8")
+            print(f"  ROI acked + persisted -> {_NODE_TOML}")
+            return 0
+        if ans == "n":
+            roi_s = input("  new ROI 'fx,fy,fw,fh' (fractions 0..1): ").strip()
+        elif ans == "q":
+            print("  stage aborted; node.toml unchanged")
+            return 1
+
+
 def cmd_setup(a) -> int:
-    print("QorTroller node provisioning (v0: stages 0-1; ROI/controller stages land next increment)")
+    if getattr(a, "stage", "all") == "roi":
+        return _setup_stage_roi(read_node_config())
+    print("QorTroller node provisioning (v0: stages 0-1 + `--stage roi`; controller/drill stages next)")
     print("- Stage 0: HOST PREFLIGHT")
     try:
         out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=20).stdout
@@ -227,14 +627,53 @@ def cmd_setup(a) -> int:
     cfg.update({"uvc_index": int(idx), "pack": a.pack})
     if a.killfeed_roi:
         cfg["killfeed_roi"] = a.killfeed_roi
+    # PKG-D-14: explicit dogfood telemetry flip (default remains off / prior value)
+    if getattr(a, "dogfood_telemetry", None) == "on":
+        cfg["dogfood_telemetry"] = True
+        print("- dogfood telemetry: ON (local ~/.qortroller/dogfood_events.jsonl only; no upload)")
+    elif getattr(a, "dogfood_telemetry", None) == "off":
+        cfg["dogfood_telemetry"] = False
+        print("- dogfood telemetry: OFF")
     write_flat_toml(_NODE_TOML, cfg)
     print(f"- node config written -> {_NODE_TOML}")
     print("  Reminders: PS5 HDCP OFF (Settings > System > HDMI); OBS/Camera CLOSED (single-holder).")
+    print("  Next: setup --stage roi  ->  drill (or drill --path B)  ->  receipt --share")
     return 0
+
+
+def _rp5_gate(*, capture_dir: str | None = None, force: bool = False) -> int:
+    """PKG-D-11: wire RP-5 (match_preflight) before capture. Exit 0=GO/GO_WITH_WARNINGS, 1=NO_GO.
+
+    Never silent-skip. --i-know (force=True) logs override and proceeds (operator only).
+    """
+    cmd = [sys.executable, str(_REPO / "scripts" / "match_preflight.py")]
+    if capture_dir:
+        cmd += ["--capture-dir", capture_dir]
+    try:
+        rc = subprocess.call(cmd, cwd=str(_REPO))
+    except Exception as e:  # noqa: BLE001
+        print(f"RP-5 preflight unavailable ({e!r}) -- treating as UNVERIFIABLE/NO_GO")
+        rc = 2
+    # match_preflight: 0=GO, 1=GO_WITH_WARNINGS, 2=NO_GO
+    if rc in (0, 1):
+        if rc == 1:
+            print("RP-5: GO_WITH_WARNINGS -- proceed with eyes open")
+        return 0
+    print("RP-5: NO_GO -- contention hygiene failed (OBS/zombie python/CPU/DB/stale ring).")
+    print("  Fix blockers above, or re-run with --i-know if you accept the risk (logged).")
+    if force:
+        print("  OVERRIDE: --i-know accepted; proceeding anyway (operator ack).")
+        append_dogfood_event(_HOME, {"event": "rp5_override", "preflight_code": "NO_GO_FORCE"},
+                             enabled=dogfood_enabled(read_node_config()))
+        return 0
+    append_dogfood_event(_HOME, {"event": "rp5_block", "preflight_code": "NO_GO"},
+                         enabled=dogfood_enabled(read_node_config()))
+    return 1
 
 
 def cmd_play(a) -> int:
     cfg = read_node_config()
+    force = bool(getattr(a, "i_know", False))
     # friction #1: refuse to start behind a phantom port-holder
     try:
         out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=20).stdout
@@ -246,6 +685,9 @@ def cmd_play(a) -> int:
         print("A stale holder here answers /health while the new bridge captures NOTHING (T6.6b lesson).")
         print(f"Fix: taskkill /F /T /PID {owners[0]}   then re-run `play`.")
         return 1
+    # PKG-D-11: RP-5 contention gate (CLEAR required unless --i-know)
+    if _rp5_gate(force=force) != 0:
+        return 1
     stamp = int(time.time())
     label = a.label or f"{cfg.get('label_prefix', 'session')}"
     capture_dir = f"retina_kf_crops/{label}_{stamp}"          # friction #2: session-scoped ring
@@ -255,6 +697,8 @@ def cmd_play(a) -> int:
            "--label", label, "--killfeed", "--killfeed-roi", str(cfg.get("killfeed_roi")),
            "--capture", "--capture-dir", capture_dir, "--session-anchor"]
     print(f"[qortroller] pack={cfg.get('pack')} label={label} capture_dir={capture_dir}")
+    append_dogfood_event(_HOME, {"event": "play_start", "pack": str(cfg.get("pack")), "play_ok": True},
+                         enabled=dogfood_enabled(cfg))
     return subprocess.call(cmd, cwd=str(_REPO))
 
 
@@ -264,15 +708,49 @@ def cmd_status(a) -> int:  # noqa: ARG001
         owners = parse_netstat_owners(out, 8080)
         print(f"port 8080 owner(s): {owners or 'none'}")
     except Exception:  # noqa: BLE001
+        owners = []
         print("port 8080 owner(s): (netstat unavailable)")
-    subprocess.call([sys.executable, str(_DAEMON), "status"], cwd=str(_REPO))
     st = load_session_state()
+    capture_live = False
     if st:
         n, age = ring_freshness(_REPO / st["capture_dir"], time.time())
         fresh = "LIVE" if age < 120 else ("STALE" if n else "EMPTY")
+        capture_live = fresh == "LIVE"
         print(f"session ring: {st['capture_dir']}  crops={n}  newest_age={age:.0f}s  [{fresh}]")
         print("  (freshness, not counts, proves capture -- a full ring can be a previous session)")
+    # PKG-D-11: birth / provisioning product state
+    ns = compute_node_state(_HOME, session=st, port_owners=owners, capture_live=capture_live)
+    print(f"node state: {ns['state']}  -- {ns['detail']}")
+    subprocess.call([sys.executable, str(_DAEMON), "status"], cwd=str(_REPO))
     return 0
+
+
+def _maybe_complete_path_b_birth(label: str, stamp, cfg: dict) -> None:
+    """Path B birth: first successful stop after stage5_deferred writes birth_receipt."""
+    birth_path = _HOME / "birth_receipt.json"
+    if birth_path.exists():
+        return
+    if not cfg.get("stage5_deferred", False):
+        return
+    kas, posp, v3, _m = _collect_artifacts(label)
+    birth = {"stages_passed": ["preflight", "path_b_match", "stop", "receipt"],
+             "path": "B",
+             "first_session_id": f"{label}_{stamp}",
+             "verdicts_as_is": {"kas": (kas or {}).get("verdict"),
+                                "posp": (posp or {}).get("verdict"),
+                                "v3": "present" if v3 else "honest-null"},
+             "f_t66b1_disclosed": True, "ts": int(time.time())}
+    _HOME.mkdir(parents=True, exist_ok=True)
+    birth_path.write_text(json.dumps(birth, indent=2), encoding="utf-8")
+    # Clear deferred flag so status flips to NODE_BORN
+    cfg = dict(cfg)
+    cfg["stage5_deferred"] = False
+    try:
+        write_flat_toml(_NODE_TOML, cfg)
+    except ValueError:
+        pass
+    print(f"[qortroller] Path B BIRTH complete -> {birth_path}")
+    print("  (honest verdicts pass the birth; SYNCHRONIZED is earned, not required)")
 
 
 def cmd_stop(a) -> int:
@@ -285,6 +763,10 @@ def cmd_stop(a) -> int:
     rc = subprocess.call([sys.executable, str(_DAEMON), "stop", "--label", st["label"], "--kas"],
                          cwd=str(_REPO))
     _print_and_write_receipt(st["label"], cfg, stranger_verified=None)
+    _maybe_complete_path_b_birth(st["label"], st.get("stamp", "?"), cfg)
+    append_dogfood_event(_HOME, {"event": "stop", "stop_ok": rc == 0, "receipt_ok": True,
+                                 "pack": str(cfg.get("pack"))},
+                         enabled=dogfood_enabled(cfg))
     return rc
 
 
@@ -301,14 +783,35 @@ def _collect_artifacts(label: str):
     return kas, posp, v3, manifest
 
 
-def _print_and_write_receipt(label: str, cfg: dict, stranger_verified) -> Path:
+def _print_and_write_receipt(label: str, cfg: dict, stranger_verified, *,
+                             share: bool = False, html: bool = False) -> Path:
     kas, posp, v3, manifest = _collect_artifacts(label)
+    pack = str(cfg.get("pack", "?"))
     text = render_receipt(label, kas, posp, v3, manifest,
-                          stranger_verified=stranger_verified, pack=str(cfg.get("pack", "?")))
+                          stranger_verified=stranger_verified, pack=pack)
     out = _REPO / "audits" / f"session_receipt_{label}.md"
     out.write_text(text + "\n", encoding="utf-8")
     print(text)
     print(f"[qortroller] receipt -> {out.relative_to(_REPO)}")
+    if html:
+        h = _REPO / "audits" / f"session_receipt_{label}.html"
+        h.write_text(html_wrap(f"QorTroller Session Receipt - {label}", text), encoding="utf-8")
+        print(f"[qortroller] receipt html -> {h.relative_to(_REPO)}")
+    if share:                                             # PKG-D-09: NEVER overwrites the local full file
+        st = load_session_state() or {}
+        age = None
+        if st.get("capture_dir"):
+            _, age = ring_freshness(_REPO / st["capture_dir"], time.time())
+        card = render_share_postcard(label, kas, posp, v3, manifest,
+                                     stranger_verified=stranger_verified, pack=pack, ring_age_s=age)
+        sh = _REPO / "audits" / f"session_receipt_{label}.share.md"
+        sh.write_text(card + "\n", encoding="utf-8")
+        print(card)
+        print(f"[qortroller] SHARE postcard -> {sh.relative_to(_REPO)} (redacted; full stays local)")
+        if html:
+            shh = _REPO / "audits" / f"session_receipt_{label}.share.html"
+            shh.write_text(html_wrap(f"QorTroller Proof Postcard - {label}", card), encoding="utf-8")
+            print(f"[qortroller] SHARE html -> {shh.relative_to(_REPO)}")
     return out
 
 
@@ -318,15 +821,130 @@ def cmd_receipt(a) -> int:
     if not label:
         print("no session known -- pass a label: qortroller receipt --label <label>")
         return 1
-    _print_and_write_receipt(label, read_node_config(), stranger_verified=None)
+    _print_and_write_receipt(label, read_node_config(), stranger_verified=None,
+                             share=getattr(a, "share", False), html=getattr(a, "html", False))
     return 0
 
 
+def cmd_drill(a) -> int:
+    """PKG-D-08 + PKG-D-11: Proof Drill birth ceremony.
+
+    Path A (default): 90s scripted timeline -> auto-stop -> birth_receipt.
+    Path B: RP-5 + port preflight only; stage5_deferred=true; operator plays a real match;
+            first stop completes birth. Honest PASS = pack + receipt (never requires SYNCHRONIZED).
+    """
+    cfg = read_node_config()
+    path = str(getattr(a, "path", "A") or "A").upper()
+    force = bool(getattr(a, "i_know", False))
+
+    class _A:  # play/stop take argparse-shaped objects
+        pass
+
+    # ----- Path B: provision for full-match first proof (no auto-stop) -----
+    if path == "B":
+        print("=" * 60)
+        print("  PROOF DRILL Path B -- skip mini-session; first REAL match is birth")
+        print("=" * 60)
+        # Port + RP-5 only (do not start capture)
+        try:
+            out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=20).stdout
+            owners = parse_netstat_owners(out, 8080)
+        except Exception:  # noqa: BLE001
+            owners = []
+        if owners:
+            print(f"  REFUSING: port 8080 LISTENING (pid={owners}). Clear before Path B.")
+            return 1
+        if _rp5_gate(force=force) != 0:
+            return 1
+        cfg = dict(cfg)
+        cfg["stage5_deferred"] = True
+        write_flat_toml(_NODE_TOML, cfg)
+        print("  stage5_deferred=true written to node.toml")
+        print("  node state will show: FIRST_PROOF_PENDING (provisioned, first proof pending)")
+        print("  Next:  qortroller play --label <match>")
+        print("         ... play your real match ...")
+        print("         qortroller stop")
+        print("  Birth completes on first stop that writes a receipt (honest-null OK).")
+        append_dogfood_event(_HOME, {"event": "drill_path_b", "path": "B", "pack": str(cfg.get("pack"))},
+                             enabled=dogfood_enabled(cfg))
+        return 0
+
+    # ----- Path A: 90s scripted drill -----
+    label = f"proof_drill_{time.strftime('%Y%m%d_%H%M')}"
+    print("=" * 60)
+    print("  PROOF DRILL Path A -- your node's first proof (about 90 seconds)")
+    print("=" * 60)
+    pa = _A()
+    pa.label = label
+    pa.i_know = force
+    if cmd_play(pa) != 0:
+        print("  drill aborted at preflight (fix the port/card/RP-5 issue and re-run)")
+        return 1
+    script = [(15, "OPEN THE GAME -- get game pixels on the HDMI path (lobby or match)"),
+              (30, "MAKE THE FEED MOVE -- scoreboard open ~5s, or play normally; no alt-tab"),
+              (30, "CONTROLLER PRESENCE -- one L2/R2 press or stick wiggle on the USB pad"),
+              (15, "HOLD ON -- stopping + rendering your receipt...")]
+    for secs, line in script:
+        print(f"  >> {line}  ({secs}s)")
+        time.sleep(secs)
+    sa = _A()
+    rc = cmd_stop(sa)
+    st = load_session_state() or {}
+    kas, posp, v3, _m = _collect_artifacts(label)
+    birth = {"stages_passed": ["preflight", "rp5", "capture", "stop", "receipt"],
+             "path": "A",
+             "first_session_id": f"{label}_{st.get('stamp', '?')}",
+             "verdicts_as_is": {"kas": (kas or {}).get("verdict"), "posp": (posp or {}).get("verdict"),
+                                "v3": "present" if v3 else "honest-null"},
+             "f_t66b1_disclosed": True, "ts": int(time.time())}
+    _HOME.mkdir(parents=True, exist_ok=True)
+    (_HOME / "birth_receipt.json").write_text(json.dumps(birth, indent=2), encoding="utf-8")
+    print(f"[qortroller] node BIRTH complete -> {_HOME / 'birth_receipt.json'}")
+    print("  (honest verdicts pass the birth; SYNCHRONIZED is earned in real matches)")
+    append_dogfood_event(_HOME, {"event": "drill_path_a", "path": "A", "pack": str(cfg.get("pack")),
+                                 "stop_ok": rc == 0},
+                         enabled=dogfood_enabled(cfg))
+    return rc
+
+
 def cmd_verify(a) -> int:
+    """Offline stranger-check. PKG-D-12: --share postcard tier; optional --pack for STRANGER_OK."""
+    share_file = getattr(a, "share_file", "") or ""
+    pack_dir = getattr(a, "pack_dir", "") or ""
+
+    if share_file:
+        p = Path(share_file)
+        if not p.exists():
+            print(f"share postcard not found: {p}")
+            return 1
+        text = p.read_text(encoding="utf-8")
+        kas = posp = v3 = None
+        pack_provided = bool(pack_dir)
+        label = getattr(a, "label", "") or ""
+        if not label:
+            name = p.name
+            if name.startswith("session_receipt_") and ".share" in name:
+                label = name[len("session_receipt_"):].split(".share")[0]
+        if pack_provided and label:
+            kas, posp, v3, _m = _collect_artifacts(label)
+        result = verify_share_postcard(text, kas=kas, posp=posp, v3=v3, pack_provided=pack_provided)
+        print(f"tier: {result['tier']}")
+        print(f"verdict: {result['verdict']}")
+        print(f"note: {result['note']}")
+        for c in result.get("checks") or []:
+            mark = "OK" if c.get("ok") else "FAIL"
+            print(f"  [{mark}] {c.get('name')}: {c.get('detail')}")
+        if result["verdict"] == "INDICATIVE":
+            return 0  # informative, not an error
+        if result["verdict"] == "STRANGER_OK":
+            return 0
+        return 2
+
     st = load_session_state()
     label = a.label or (st and st.get("label"))
     if not label:
         print("no session known -- pass a label: qortroller verify --label <label>")
+        print("  or: qortroller verify --share <postcard.share.md> [--pack <session_or_audits>]")
         return 1
     _, _, v3, _ = _collect_artifacts(label)
     if not v3:
@@ -347,21 +965,38 @@ def main() -> int:
         pass
     ap = argparse.ArgumentParser(prog="qortroller", description="QorTroller pilot-kit CLI (Phase D)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("setup", help="node provisioning v0 (port preflight + card probe -> node.toml)")
+    s = sub.add_parser("setup", help="node provisioning (stages 0-1; --stage roi = the R2 ROI ceremony)")
     s.add_argument("--uvc-index", type=int, default=None)
     s.add_argument("--killfeed-roi", default="")
-    s.add_argument("--pack", default="observer-only", choices=["observer-only", "developer-full"])
+    s.add_argument("--pack", default="observer-only", choices=sorted(PACKS))
+    s.add_argument("--stage", default="all", choices=["all", "roi"])
+    s.add_argument("--dogfood-telemetry", choices=["on", "off"], default=None,
+                   help="PKG-D-14: explicit local friction telemetry (default off)")
     s.set_defaults(fn=cmd_setup)
     p = sub.add_parser("play", help="start a capture session (persisted config, session-scoped dirs)")
     p.add_argument("--label", default="")
+    p.add_argument("--i-know", dest="i_know", action="store_true",
+                   help="operator override for RP-5 NO_GO (logged)")
     p.set_defaults(fn=cmd_play)
-    sub.add_parser("status", help="honest liveness (port owner + daemon + ring freshness)").set_defaults(fn=cmd_status)
+    sub.add_parser("status", help="honest liveness + node birth/provisioning state").set_defaults(fn=cmd_status)
     sub.add_parser("stop", help="end session + write the Proof Receipt").set_defaults(fn=cmd_stop)
+    d = sub.add_parser("drill", help="Proof Drill birth (Path A=90s scripted; Path B=defer to real match)")
+    d.add_argument("--path", default="A", choices=["A", "B", "a", "b"],
+                   help="A=scripted mini-session (default); B=skip to full match (first-proof pending)")
+    d.add_argument("--i-know", dest="i_know", action="store_true",
+                   help="operator override for RP-5 NO_GO (logged)")
+    d.set_defaults(fn=cmd_drill)
     r = sub.add_parser("receipt", help="(re)render the session receipt")
     r.add_argument("--label", default="")
+    r.add_argument("--share", action="store_true", help="also write the SHARE-redacted postcard (*.share.md)")
+    r.add_argument("--html", action="store_true", help="also write offline HTML surfaces")
     r.set_defaults(fn=cmd_receipt)
-    v = sub.add_parser("verify", help="offline stranger-check of the session's v3 record")
+    v = sub.add_parser("verify", help="offline stranger-check (v3 crypto OR --share postcard tiers)")
     v.add_argument("--label", default="")
+    v.add_argument("--share", dest="share_file", default="",
+                   help="path to *.share.md postcard (INDICATIVE alone; STRANGER_OK with --pack)")
+    v.add_argument("--pack", dest="pack_dir", default="",
+                   help="optional session/audits context for prefix+verdict stranger check")
     v.set_defaults(fn=cmd_verify)
     a = ap.parse_args()
     return a.fn(a)

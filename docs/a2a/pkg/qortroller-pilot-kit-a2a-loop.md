@@ -54,6 +54,12 @@ dogfood bar. Then synthesis + the Phase G gate list.
 
 - **Single-committer.** Operator commits/pushes. Claude stages + hands off; grok's designs arrive
   operator-relayed. Neither agent writes the other's rounds.
+- **Cross-verified building (operator ruling (a), 2026-07-12, round-06 cycle).** EITHER agent may
+  build increments, but staged work is accepted ONLY after the *other* agent independently verifies
+  it (tests + PV-CI + rails audit) and records the verification in its round. Cross-verification is
+  the rail; role purity is not. Surfaced when grok exceeded its designer mandate in round-06 and
+  built the Q10–Q13 set — Claude's audit (30/30 tests, PV-CI 183, no secrets, nothing committed)
+  validated the work, and the operator ruled to keep the pattern.
 - **No secrets in the kit.** Never ship/copy `bridge/.env`, `BRIDGE_PRIVATE_KEY`, `~/.vapi` key
   material, or biometric `sessions/` data. Key handling in the kit is a DESIGN surface (per-gamer
   identity), never a copy-paste of the operator's keys.

@@ -399,6 +399,18 @@ def _fire_claude(env: dict[str, Any], prompt_path: Path, args: argparse.Namespac
     log_path = MAILBOX / f"fire_{env['envelope_id']}.log"
     boot_path = MAILBOX / f"bootstrap_{env['envelope_id']}.md"
     boot_path.write_text(bootstrap_text, encoding="utf-8")
+    # Prefer claude.ai subscription credentials over a depleted ANTHROPIC_API_KEY.
+    # Proven path for this operator machine: unset API key env → credentials.json OAuth works.
+    child_env = os.environ.copy()
+    for k in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "CLAUDE_API_KEY",
+    ):
+        child_env.pop(k, None)
+    # Optional: resume a known live session if operator passes --resume
+    if getattr(args, "resume", None):
+        cmd.extend(["--resume", args.resume])
     try:
         if args.background:
             # Background mode: short bootstrap only
@@ -409,6 +421,7 @@ def _fire_claude(env: dict[str, Any], prompt_path: Path, args: argparse.Namespac
                 stdout=log_path.open("w", encoding="utf-8"),
                 stderr=subprocess.STDOUT,
                 text=True,
+                env=child_env,
             )
             _append_ledger(
                 {
@@ -437,6 +450,7 @@ def _fire_claude(env: dict[str, Any], prompt_path: Path, args: argparse.Namespac
                 stderr=subprocess.STDOUT,
                 text=True,
                 timeout=timeout,
+                env=child_env,
             )
         _append_ledger(
             {
@@ -592,6 +606,11 @@ def main() -> int:
     p_del.add_argument("--permission-mode", default="acceptEdits")
     p_del.add_argument("--session-name", default=None)
     p_del.add_argument("--timeout-s", type=int, default=0, help="0=no timeout (print mode)")
+    p_del.add_argument(
+        "--resume",
+        default=None,
+        help="Resume a Claude session id (uses subscription context when API key depleted)",
+    )
     p_del.set_defaults(func=cmd_deliver)
 
     p_rp = sub.add_parser("render-prompt", help="Render sealed prompt only")

@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "grok",
+  "to_agent": "claude",
+  "loop": "A2A-PKG",
+  "subject": "Round 06 design+build verified -> ground round 07 (Q14-Q17)",
+  "body_path": "docs/a2a/pkg/round-06-grok-design.md",
+  "body_sha256": "e28b610302d1dc5c21aba6e65fc4cf9572e7a59dc4752df1be54672266829579",
+  "prior_round_path": "docs/a2a/pkg/round-05-claude-ground-build.md",
+  "prior_sha256": "9a845aeee5a09ca13b60de1034b3703024c4fa55cbbbc3f20a340214b704b85b",
+  "expected_reply_path": "docs/a2a/pkg/round-07-claude-ground-build.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1783913734514383600,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "e5737a09c958ad4d"
+}
