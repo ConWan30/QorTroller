@@ -31,8 +31,12 @@ from bridge.vapi_bridge.retina_w3bstream import (  # noqa: E402
     EXIT_OK,
     EXIT_CADENCE,
     EXIT_RETINA,
+    EXIT_NODE_SESSION,
     _VALID_PQ_PLACEHOLDER,
+    _VALID_NODE_ID_PLACEHOLDER,
+    _VALID_SESSION_ROOT_PLACEHOLDER,
     build_evm_log_payload,
+    resolve_node_session,
     validate_evm_log_payload,
 )
 
@@ -141,6 +145,98 @@ def run_ingestion_test():
         print("[!] FAILURE: events_root verify payload rejected.")
         return False
     print("[+] Phase 3 events_root mechanical verify passed.")
+
+    # ------------------------------------------------------------------
+    # DEPIN-1 LEG 2 — node_id + session_root mechanical gate (desk mirror)
+    # Mechanical format/presence only; NOT a truth oracle.
+    # ------------------------------------------------------------------
+    # PASS: gate OFF + empty fields → byte-identical EXIT_OK (legacy path)
+    legacy = build_evm_log_payload(
+        device_id="device_edge",
+        block_number=64,
+        payload_hash="aa" * 32,
+        signature="sig",
+        pq_commitment=_VALID_PQ_PLACEHOLDER,
+    )
+    if validate_evm_log_payload(legacy) != EXIT_OK:
+        print("[!] FAILURE: legacy payload without node fields rejected.")
+        return False
+    print("[+] LEG2: legacy payload (node_session_verify default OFF) accepted.")
+
+    # PASS: gate ON + well-formed node_id + session_root
+    ok_node = build_evm_log_payload(
+        device_id="device_edge",
+        block_number=64,
+        payload_hash="aa" * 32,
+        signature="sig",
+        pq_commitment=_VALID_PQ_PLACEHOLDER,
+        node_id=_VALID_NODE_ID_PLACEHOLDER,
+        session_root=_VALID_SESSION_ROOT_PLACEHOLDER,
+        node_session_verify=True,
+    )
+    if validate_evm_log_payload(ok_node) != EXIT_OK:
+        print("[!] FAILURE: valid node_session_verify payload rejected.")
+        return False
+    print("[+] LEG2: node_session_verify with valid node_id+session_root accepted.")
+
+    # FAIL-CLOSED: gate ON + missing node_id
+    missing_node = build_evm_log_payload(
+        device_id="device_edge",
+        block_number=64,
+        payload_hash="aa" * 32,
+        signature="sig",
+        pq_commitment=_VALID_PQ_PLACEHOLDER,
+        node_id="",
+        session_root=_VALID_SESSION_ROOT_PLACEHOLDER,
+        node_session_verify=True,
+    )
+    if validate_evm_log_payload(missing_node) != EXIT_NODE_SESSION:
+        print("[!] FAILURE: missing node_id under verify did not return EXIT_NODE_SESSION.")
+        return False
+    print("[+] LEG2: missing node_id fail-closed (exit 8).")
+
+    # FAIL-CLOSED: gate ON + zero-padded session_root
+    zero_root = build_evm_log_payload(
+        device_id="device_edge",
+        block_number=64,
+        payload_hash="aa" * 32,
+        signature="sig",
+        pq_commitment=_VALID_PQ_PLACEHOLDER,
+        node_id=_VALID_NODE_ID_PLACEHOLDER,
+        session_root="0" * 64,
+        node_session_verify=True,
+    )
+    if validate_evm_log_payload(zero_root) != EXIT_NODE_SESSION:
+        print("[!] FAILURE: zero session_root under verify did not return EXIT_NODE_SESSION.")
+        return False
+    print("[+] LEG2: zero-padded session_root fail-closed (exit 8).")
+
+    # FAIL-CLOSED: gate OFF but malformed nonempty node_id (garbage not ignored)
+    garbage_node = build_evm_log_payload(
+        device_id="device_edge",
+        block_number=64,
+        payload_hash="aa" * 32,
+        signature="sig",
+        pq_commitment=_VALID_PQ_PLACEHOLDER,
+        node_id="not-a-hex-commitment",
+        session_root="",
+        node_session_verify=False,
+    )
+    if validate_evm_log_payload(garbage_node) != EXIT_NODE_SESSION:
+        print("[!] FAILURE: malformed node_id (gate OFF) not rejected.")
+        return False
+    print("[+] LEG2: malformed nonempty node_id fail-closed even when gate OFF.")
+
+    # resolve_node_session direct resolution shape
+    res, err = resolve_node_session(
+        _VALID_NODE_ID_PLACEHOLDER,
+        _VALID_SESSION_ROOT_PLACEHOLDER,
+        node_session_verify=True,
+    )
+    if err or not res.get("node_session_gate_ok"):
+        print(f"[!] FAILURE: resolve_node_session happy path failed: {err!r} {res!r}")
+        return False
+    print("[+] LEG2: resolve_node_session resolution shape ok.")
 
     print("[SUCCESS] All W3bstream ingestion test conditions satisfied.")
     return True
