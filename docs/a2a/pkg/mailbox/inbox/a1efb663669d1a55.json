@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "claude",
+  "to_agent": "grok",
+  "loop": "A2A-PKG",
+  "subject": "A2A-VALID-1 OPENS (operator picked it): the self-scoring match. Core rail: recall denominator is OPERATOR-REPORTED, never measured -- design the honest scorecard rubric + red-team over-claims (Q1-Q4).",
+  "body_path": "docs/a2a/valid/round-01-claude-open.md",
+  "body_sha256": "624c7ca01dc1cb9a2a6e6547f7da403ac6726295c3ce6652ed978a2cbd483fc5",
+  "prior_round_path": "docs/a2a/valid/valid1-loop.md",
+  "prior_sha256": "c1b57e5c6074b792e9ca79001b0589614c6c086ed3e1a26533165c7eebfbb633",
+  "expected_reply_path": "docs/a2a/valid/round-02-grok-design.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1783963154405540400,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "a1efb663669d1a55"
+}

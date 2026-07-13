@@ -10,6 +10,7 @@ the tribal shell knowledge measured live in T6.6b:
     python scripts/qortroller.py status --json  # PKG-UI-04 machine-readable snapshot for Stream UI
     python scripts/qortroller.py ui         # offline Stream shell (observes CLI JSON; no second plane)
     python scripts/qortroller.py stop       # end session (env re-applied from state) + write the Proof Receipt
+    python scripts/qortroller.py score      # A2A-VALID-1 honest match self-scorecard (optional --kills-scored)
     python scripts/qortroller.py receipt    # (re)render the receipt for the last / a named session
     python scripts/qortroller.py verify     # offline stranger-check of the session's v3 record
 
@@ -1083,6 +1084,516 @@ def _load_json(path: Path | None) -> dict | None:
         return None
 
 
+# ---------------------------------------------------------------- A2A-VALID-1 match self-scorecard (honest recall)
+
+# One scorecard binds ONE session_id. Every number carries a source tag. Recall's denominator is
+# OPERATOR-REPORTED only — never killfeed row counts, never C-3.3 cluster counts, never fabricated 0.
+MATCH_SCORECARD_SCHEMA = "qortroller-match-scorecard-v1"
+SRC_MEASURED = "MEASURED"
+SRC_OPERATOR = "OPERATOR-REPORTED"
+SRC_DERIVED = "DERIVED"
+SRC_ABSENT = "ABSENT"  # honest-null: artifact / value not available
+
+RECALL_STATUS_SCORED = "SCORED"                 # D reported; ratio may be derived
+RECALL_STATUS_UNSCORED = "UNSCORED"             # D not supplied (default; not zero)
+RECALL_STATUS_UNSCORED_DECLINED = "UNSCORED_DECLINED"  # operator explicitly declined
+
+SESSION_BIND_OK = "OK"
+SESSION_BIND_MISMATCH = "MISMATCH"
+SESSION_BIND_PARTIAL = "PARTIAL"  # some surfaces lack session_id; no hard conflict
+SESSION_BIND_ABSENT = "ABSENT"    # no session_id on any surface
+
+# Fixed language rails (Q2). Scorer may emit MAY lines; MUST_NOT strings are banned from render.
+FALSE_AUTH_MAY_LINES = (
+    "A2/A3 structural guards CLOSED (exact-token killer match + leftmost-killer death path)",
+    "authored kills are R2-bound on the KAS path (design invariant of the authorship chain)",
+    "zero-false-read *design*: this scorecard never invents authored kills from OCR alone",
+)
+FALSE_AUTH_MUST_NOT_LINES = (
+    "zero false-authorship proven this match",
+    "0 false positives proven",
+    "100% accurate authorship",
+    "false-authorship rate = 0",
+    "precision = 100%",
+)
+
+# Over-claim red-team denials (fields the scorer must refuse to compute as "ground truth").
+REFUTED_RECALL_DENOMINATORS = frozenset({
+    "killfeed_rows_seen",       # OCR-seen rows for ANY killer — not operator kills scored
+    "c33_cluster_count",        # offline archive study denominator — not match scoreboard
+    "deferred_authored",        # deferred path count is not live authored without label
+    "fabricated_zero",          # missing D must never become 0
+})
+
+
+def _field(value, source: str, *, may_claim: str, must_not_claim: list | None = None) -> dict:
+    """Atomic scorecard cell: value + provenance + claim envelope."""
+    return {
+        "value": value,
+        "source": source,
+        "may_claim": may_claim,
+        "must_not_claim": list(must_not_claim or []),
+    }
+
+
+def extract_authored_kills(kas: dict | None) -> dict:
+    """MEASURED authored count from live KAS; deferred path is labeled, never silently promoted.
+
+    Live KAS uses `authored_kills`. Deferred records use `deferred_authored` — different artifact
+    class; scorer surfaces it as measured-but-deferred, never as unlabelled authored_kills.
+    """
+    if not kas:
+        return _field(None, SRC_ABSENT,
+                      may_claim="no KAS record for this session",
+                      must_not_claim=["authored_kills=0 as measured absence of play"])
+    if "authored_kills" in kas and kas.get("authored_kills") is not None:
+        try:
+            n = int(kas["authored_kills"])
+        except (TypeError, ValueError):
+            n = None
+        return _field(n, SRC_MEASURED,
+                      may_claim="KAS-measured authored kill count (R2-bound path)",
+                      must_not_claim=["kills you scored on the scoreboard",
+                                      "ground-truth kill count"])
+    if "deferred_authored" in kas and kas.get("deferred_authored") is not None:
+        try:
+            n = int(kas["deferred_authored"])
+        except (TypeError, ValueError):
+            n = None
+        return _field(n, SRC_MEASURED,
+                      may_claim="deferred-KAS authored count (qortroller-kas-deferred-v0); not live KAS",
+                      must_not_claim=["live AUTHORED_SESSION kill count without deferred label"])
+    return _field(None, SRC_ABSENT,
+                  may_claim="KAS present but no authored_kills / deferred_authored field",
+                  must_not_claim=["authored=0 invented"])
+
+
+def bind_session_ids(*, kas: dict | None, posp: dict | None, v3: dict | None,
+                     pin: str | None = None) -> dict:
+    """Q4: one card, one session_id. Flag disagreement; never mix surfaces across sessions."""
+    surfaces: dict[str, str | None] = {
+        "kas": (kas or {}).get("session_id") if kas else None,
+        "posp": (posp or {}).get("session_id") if posp else None,
+        # v3 historically may omit session_id — treat missing as unbound, not mismatch alone
+        "v3": (v3 or {}).get("session_id") if v3 else None,
+    }
+    present = {k: v for k, v in surfaces.items() if v}
+    if pin:
+        present["pin"] = pin
+    unique = {str(v) for v in present.values()}
+    if not unique:
+        status = SESSION_BIND_ABSENT
+        session_id = None
+    elif len(unique) == 1:
+        status = SESSION_BIND_OK
+        session_id = next(iter(unique))
+        # partial if some expected surfaces missing id while others agree
+        if (kas and not surfaces["kas"]) or (posp and not surfaces["posp"]):
+            status = SESSION_BIND_PARTIAL
+    else:
+        status = SESSION_BIND_MISMATCH
+        session_id = None  # refuse a single binding when conflicted
+    return {
+        "status": status,
+        "session_id": session_id,
+        "surfaces": surfaces,
+        "may_claim": ("all bound surfaces share one session_id" if status == SESSION_BIND_OK
+                      else "session binding incomplete or conflicted — do not cross-mix"),
+        "must_not_claim": ["artifacts from different sessions joined as one match"],
+    }
+
+
+def compute_recall_cell(*, authored: dict, kills_scored: int | None,
+                        declined: bool = False) -> dict:
+    """Q1: authored N (MEASURED) / reported D (OPERATOR-REPORTED). Missing D = UNSCORED, never 0.
+
+    Ratio is DERIVED only when D is a non-null non-negative int. Division by zero is refused
+    (ratio stays null; status still SCORED with D=0 so the operator report is preserved honestly).
+    """
+    n = authored.get("value")
+    if declined:
+        return {
+            "status": RECALL_STATUS_UNSCORED_DECLINED,
+            "authored": authored,
+            "reported": _field(None, SRC_OPERATOR,
+                               may_claim="operator explicitly declined to report kills scored",
+                               must_not_claim=["reported=0", "recall=0%"]),
+            "ratio": _field(None, SRC_ABSENT,
+                            may_claim="no ratio without a reported denominator",
+                            must_not_claim=list(REFUTED_RECALL_DENOMINATORS) + ["recall=0"]),
+            "display": f"authored {n if n is not None else '?'} / reported UNSCORED (operator declined)",
+        }
+    if kills_scored is None:
+        return {
+            "status": RECALL_STATUS_UNSCORED,
+            "authored": authored,
+            "reported": _field(None, SRC_OPERATOR,
+                               may_claim="kills scored not supplied this run",
+                               must_not_claim=["reported=0 as default", "we counted your kills"]),
+            "ratio": _field(None, SRC_ABSENT,
+                            may_claim="recall unscored until operator reports D",
+                            must_not_claim=list(REFUTED_RECALL_DENOMINATORS) + ["recall=0%"]),
+            "display": f"authored {n if n is not None else '?'} / reported UNSCORED",
+        }
+    try:
+        d = int(kills_scored)
+    except (TypeError, ValueError):
+        d = None
+    if d is None or d < 0:
+        return {
+            "status": RECALL_STATUS_UNSCORED,
+            "authored": authored,
+            "reported": _field(None, SRC_OPERATOR,
+                               may_claim="invalid operator report ignored (fail-open to UNSCORED)",
+                               must_not_claim=["fabricated denominator"]),
+            "ratio": _field(None, SRC_ABSENT,
+                            may_claim="no ratio",
+                            must_not_claim=["recall from invalid D"]),
+            "display": f"authored {n if n is not None else '?'} / reported UNSCORED (invalid D)",
+        }
+    reported = _field(d, SRC_OPERATOR,
+                      may_claim="operator-reported kills scored this match (scoreboard / memory)",
+                      must_not_claim=["HID-measured kill count", "killfeed-derived scoreboard",
+                                      "c33 archive cluster count"])
+    ratio_val = None
+    ratio_src = SRC_ABSENT
+    if n is not None and d > 0:
+        ratio_val = float(n) / float(d)  # never round up; callers may format, not inflate
+        ratio_src = SRC_DERIVED
+    ratio = _field(ratio_val, ratio_src,
+                   may_claim=("measured authored / operator-reported scored"
+                              if ratio_val is not None
+                              else "ratio undefined when D=0 or N absent"),
+                   must_not_claim=["measured ground-truth recall", "precision",
+                                   "we counted your kills"])
+    return {
+        "status": RECALL_STATUS_SCORED,
+        "authored": authored,
+        "reported": reported,
+        "ratio": ratio,
+        "display": (
+            f"authored {n if n is not None else '?'} [MEASURED] / "
+            f"reported {d} [OPERATOR-REPORTED]"
+            + (f"  (= {ratio_val:.4f} DERIVED, unrounded)" if ratio_val is not None else
+               "  (ratio undefined)")
+        ),
+    }
+
+
+def dignity_tone_for_scorecard(*, authored_n, posp_verdict: str | None,
+                               recall_status: str, session_bind: str) -> dict:
+    """Q3: honest-null / partial / zero-authored are legitimate observations, not red failures."""
+    notes: list[str] = []
+    if authored_n == 0:
+        notes.append(
+            "authored=0 is a legitimate observation (no R2-bound authored kills this session), "
+            "not a player failure")
+    if authored_n is None:
+        notes.append("authored absent (no KAS) — honest-null, not zero")
+    pv = (posp_verdict or "").upper()
+    if pv in ("PARTIAL_SURFACES", "PARTIAL"):
+        notes.append(
+            "PoSP PARTIAL_SURFACES is incomplete presence evidence — dignified truth, not a red fail")
+    if pv == "UNVERIFIABLE":
+        notes.append("PoSP UNVERIFIABLE: surfaces disagree or missing — observation, not shame")
+    if recall_status in (RECALL_STATUS_UNSCORED, RECALL_STATUS_UNSCORED_DECLINED):
+        notes.append(
+            "recall UNSCORED: denominator is operator-only; declining or omitting D is valid")
+    if session_bind == SESSION_BIND_MISMATCH:
+        notes.append(
+            "session_id MISMATCH: scorecard refuses a single binding — fix artifacts before claim")
+    return {
+        "tone": (VERDICT_TONE_HONEST_NULL if (authored_n in (0, None)
+                                              or recall_status != RECALL_STATUS_SCORED
+                                              or pv in ("PARTIAL_SURFACES", "UNVERIFIABLE", ""))
+                 else VERDICT_TONE_EARNED),
+        "notes": notes,
+    }
+
+
+def build_match_scorecard(
+    label: str,
+    *,
+    kas: dict | None,
+    posp: dict | None,
+    v3: dict | None,
+    manifest: dict | None = None,
+    birth: dict | None = None,
+    dogfood: dict | None = None,
+    kills_scored: int | None = None,
+    kills_scored_declined: bool = False,
+    killfeed_rows_seen: int | None = None,
+    session_id_pin: str | None = None,
+    pack: str = "?",
+) -> dict:
+    """A2A-VALID-1 pure builder: one honest scorecard over real artifacts + optional operator D.
+
+    Never fabricates kills_scored. Never treats killfeed_rows_seen as recall denominator.
+    Never claims zero false-authorship proven. Binds to a single session_id or flags MISMATCH.
+    """
+    authored = extract_authored_kills(kas)
+    bind = bind_session_ids(kas=kas, posp=posp, v3=v3, pin=session_id_pin)
+    recall = compute_recall_cell(authored=authored, kills_scored=kills_scored,
+                                 declined=kills_scored_declined)
+    posp_verdict = (posp or {}).get("verdict") if posp else None
+    fusion_n = None
+    if posp and isinstance(posp.get("fusion"), dict):
+        fusion_n = posp["fusion"].get("n_id_verified")
+    v3_n = (v3 or {}).get("n_events") if v3 else None
+    v3_commit = (v3 or {}).get("commitment") if v3 else None
+    dignity = dignity_tone_for_scorecard(
+        authored_n=authored.get("value"),
+        posp_verdict=posp_verdict,
+        recall_status=recall["status"],
+        session_bind=bind["status"],
+    )
+    # Sink rows are MEASURED observations of OCR killfeed lines — explicitly NOT "kills scored".
+    seen = _field(
+        killfeed_rows_seen, SRC_MEASURED if killfeed_rows_seen is not None else SRC_ABSENT,
+        may_claim="OCR killfeed rows observed (any killer) — presence of feed activity",
+        must_not_claim=["operator kills scored", "recall denominator", "your kill count"],
+    )
+    dogfood_cell = _field(
+        None if not dogfood else {
+            "schema": dogfood.get("schema"),
+            "friction_n": len(dogfood.get("friction_events") or []),
+            "stages_completed": dogfood.get("stages_completed"),
+            "node_state_at_end": dogfood.get("node_state_at_end"),
+            "operator_would_rerun_without_chat": dogfood.get("operator_would_rerun_without_chat"),
+        },
+        SRC_OPERATOR if dogfood else SRC_ABSENT,
+        may_claim="PKG dogfood friction log (operator-filled) when present",
+        must_not_claim=["automatic proof of zero friction"],
+    )
+    birth_cell = _field(
+        None if not birth else {
+            "first_session_id": birth.get("first_session_id"),
+            "path": birth.get("path"),
+        },
+        SRC_MEASURED if birth else SRC_ABSENT,
+        may_claim="node birth receipt state when present on this host",
+        must_not_claim=["this match minted birth unless first_session_id matches"],
+    )
+    card = {
+        "schema": MATCH_SCORECARD_SCHEMA,
+        "label": label,
+        "pack": pack,
+        "ts": int(time.time()),
+        "session_bind": bind,
+        "fields": {
+            "kas_verdict": _field(
+                (kas or {}).get("verdict") if kas else None,
+                SRC_MEASURED if kas else SRC_ABSENT,
+                may_claim="KAS verdict AS-IS for this session",
+                must_not_claim=["upgraded to AUTHORED_SESSION", "SYNCHRONIZED authorship"],
+            ),
+            "authored_kills": authored,
+            "posp_verdict": _field(
+                posp_verdict, SRC_MEASURED if posp else SRC_ABSENT,
+                may_claim="PoSP verdict AS-IS (SYNCHRONIZED/PARTIAL_SURFACES/UNVERIFIABLE)",
+                must_not_claim=["rounded up to SYNCHRONIZED"],
+            ),
+            "fusion_n_id_verified": _field(
+                fusion_n, SRC_MEASURED if fusion_n is not None else SRC_ABSENT,
+                may_claim="NQPV fusion rows id-verified this session",
+                must_not_claim=["proof of humanity alone"],
+            ),
+            "v3_n_events": _field(
+                v3_n, SRC_MEASURED if v3_n is not None else SRC_ABSENT,
+                may_claim="RETINA-STATE-v3 event count when record present",
+                must_not_claim=["absence means capture failed (honest-null is valid)"],
+            ),
+            "v3_commitment": _field(
+                v3_commit, SRC_MEASURED if v3_commit else SRC_ABSENT,
+                may_claim="v3 commitment prefix-joinable to local preimage",
+                must_not_claim=["on-chain anchor without separate registry proof"],
+            ),
+            "archive_crop_count": _field(
+                (manifest or {}).get("count") if manifest else None,
+                SRC_MEASURED if manifest and manifest.get("count") is not None else SRC_ABSENT,
+                may_claim="archive crop count from session manifest",
+                must_not_claim=["liveness without freshness class"],
+            ),
+            "killfeed_rows_seen": seen,
+            "kills_scored": recall["reported"],
+            "recall": recall,
+            "birth": birth_cell,
+            "dogfood": dogfood_cell,
+            "false_authorship_language": {
+                "may": list(FALSE_AUTH_MAY_LINES),
+                "must_not": list(FALSE_AUTH_MUST_NOT_LINES),
+                "source": SRC_DERIVED,
+                "may_claim": "structural guards + design invariants only",
+                "must_not_claim": list(FALSE_AUTH_MUST_NOT_LINES),
+            },
+        },
+        "dignity": dignity,
+        "refuted_overclaims": sorted(REFUTED_RECALL_DENOMINATORS),
+        "rails": {
+            "no_poac_edit": True,
+            "no_frozen_edit": True,
+            "no_secrets": True,
+            "source_tags_required": True,
+            "session_id_bound": True,
+        },
+    }
+    return card
+
+
+def render_match_scorecard(card: dict) -> str:
+    """Human scorecard: every number tagged; recall never pretends to measure D; dignity notes."""
+    f = card.get("fields") or {}
+    bind = card.get("session_bind") or {}
+    recall = f.get("recall") or {}
+    authored = f.get("authored_kills") or {}
+    L = [
+        "=" * 64,
+        "  QorTroller Match Self-Scorecard  (VALID-1)",
+        "=" * 64,
+        f"  Schema   : {card.get('schema')}",
+        f"  Label    : {card.get('label')}",
+        f"  Pack     : {card.get('pack')}",
+        f"  Session  : {bind.get('session_id') or '(unbound)'}  [{bind.get('status')}]",
+        "-" * 64,
+        "  RECALL (load-bearing rail)",
+        f"  status   : {recall.get('status')}",
+        f"  display  : {recall.get('display')}",
+        f"  authored : {authored.get('value')}  [{authored.get('source')}]",
+        f"  reported : {(recall.get('reported') or {}).get('value')}  "
+        f"[{(recall.get('reported') or {}).get('source')}]",
+        f"  ratio    : {(recall.get('ratio') or {}).get('value')}  "
+        f"[{(recall.get('ratio') or {}).get('source')}]",
+        "  note     : denominator is OPERATOR-REPORTED only — never killfeed / c33 / invented 0",
+        "-" * 64,
+        f"  KAS      : {(f.get('kas_verdict') or {}).get('value')}  "
+        f"[{(f.get('kas_verdict') or {}).get('source')}]",
+        f"  PoSP     : {(f.get('posp_verdict') or {}).get('value')}  "
+        f"[{(f.get('posp_verdict') or {}).get('source')}]",
+        f"  fusion_n : {(f.get('fusion_n_id_verified') or {}).get('value')}  "
+        f"[{(f.get('fusion_n_id_verified') or {}).get('source')}]",
+        f"  v3 events: {(f.get('v3_n_events') or {}).get('value')}  "
+        f"[{(f.get('v3_n_events') or {}).get('source')}]",
+        f"  sink rows: {(f.get('killfeed_rows_seen') or {}).get('value')}  "
+        f"[{(f.get('killfeed_rows_seen') or {}).get('source')}]  (NOT scored kills)",
+        "-" * 64,
+        "  False-authorship language (MAY only):",
+    ]
+    for line in ((f.get("false_authorship_language") or {}).get("may") or []):
+        L.append(f"   + {line}")
+    L.append("  MUST NOT claim:")
+    for line in ((f.get("false_authorship_language") or {}).get("must_not") or []):
+        L.append(f"   - {line}")
+    L.append("-" * 64)
+    L.append(f"  Dignity tone: {(card.get('dignity') or {}).get('tone')}")
+    for n in (card.get("dignity") or {}).get("notes") or []:
+        L.append(f"   * {n}")
+    dog = (f.get("dogfood") or {}).get("value")
+    if dog:
+        L.append(f"  Dogfood     : frictions={dog.get('friction_n')}  "
+                 f"stages={dog.get('stages_completed')}  "
+                 f"rerun_bar={dog.get('operator_would_rerun_without_chat')}")
+    else:
+        L.append("  Dogfood     : ABSENT (honest-null — not a fail)")
+    birth = (f.get("birth") or {}).get("value")
+    if birth:
+        L.append(f"  Birth       : path={birth.get('path')}  "
+                 f"first_session_id={birth.get('first_session_id')}")
+    else:
+        L.append("  Birth       : ABSENT (honest-null)")
+    L += ["-" * 64,
+          "  Provenance: MEASURED = our instruments; OPERATOR-REPORTED = only they know;",
+          "  DERIVED = arithmetic over tagged inputs; ABSENT = honest-null.",
+          "  A match self-score that over-claims is worse than no score.",
+          "=" * 64]
+    text = "\n".join(L)
+    # Belt-and-suspenders: ban must-not phrases from the rendered card body.
+    low = text.lower()
+    for banned in FALSE_AUTH_MUST_NOT_LINES:
+        # The MUST NOT section lists the phrases as prohibitions — allow only under that header.
+        pass
+    # Ensure we never assert proven-zero-false as a positive claim line.
+    for bad in ("zero false-authorship proven", "precision = 100%", "false-authorship rate = 0"):
+        # Positive claim would look like "  false-authorship rate = 0" without MUST NOT context.
+        if f"\n  {bad}" in low:
+            raise ValueError(f"over-claim leaked into scorecard render: {bad}")
+    return text
+
+
+def count_killfeed_rows(path: Path | None) -> int | None:
+    """MEASURED count of killfeed JSONL rows (any killer). None if file missing."""
+    if not path or not path.exists():
+        return None
+    try:
+        n = 0
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if line.strip():
+                    n += 1
+        return n
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def cmd_score(a) -> int:
+    """A2A-VALID-1: build + write match self-scorecard (additive; optional operator D)."""
+    st = load_session_state()
+    label = getattr(a, "label", "") or (st and st.get("label"))
+    if not label:
+        print("no session known -- pass --label <label>")
+        return 1
+    cfg = read_node_config()
+    pack = str(cfg.get("pack", "?"))
+    kas, posp, v3, manifest = _collect_artifacts(label)
+    # Prefer live KAS; if missing, try deferred record for the same label (still MEASURED+labeled).
+    if kas is None:
+        audits = _REPO / "audits"
+        kas = _load_json(find_latest(f"kas_deferred_record_{label}_*.json", audits))
+    birth = _load_json(_HOME / "birth_receipt.json")
+    dogfood = _load_json(_HOME / "dogfood_report.json")
+    # killfeed: session capture dir if known, else default crops file (MEASURED only)
+    kf_path = None
+    if st and st.get("capture_dir"):
+        cand = _REPO / st["capture_dir"] / "killfeed_events.jsonl"
+        if cand.exists():
+            kf_path = cand
+    if kf_path is None:
+        for cand in (
+            _REPO / "retina_kf_crops" / "killfeed_events.jsonl",
+            _REPO / "retina_kf_crops" / label / "killfeed_events.jsonl",
+        ):
+            if cand.exists():
+                kf_path = cand
+                break
+    rows_seen = count_killfeed_rows(kf_path)
+    declined = bool(getattr(a, "declined", False))
+    unscored = bool(getattr(a, "unscored", False))
+    kills_scored = getattr(a, "kills_scored", None)
+    if declined or unscored:
+        kills_scored = None
+    card = build_match_scorecard(
+        label,
+        kas=kas, posp=posp, v3=v3, manifest=manifest,
+        birth=birth, dogfood=dogfood,
+        kills_scored=kills_scored,
+        kills_scored_declined=declined,
+        killfeed_rows_seen=rows_seen,
+        session_id_pin=getattr(a, "session_id", None) or None,
+        pack=pack,
+    )
+    text = render_match_scorecard(card)
+    out_json = _REPO / "audits" / f"match_scorecard_{label}.json"
+    out_md = _REPO / "audits" / f"match_scorecard_{label}.md"
+    out_json.write_text(json.dumps(card, indent=2) + "\n", encoding="utf-8")
+    out_md.write_text(text + "\n", encoding="utf-8")
+    print(text)
+    print(f"[qortroller] scorecard json -> {out_json.relative_to(_REPO)}")
+    print(f"[qortroller] scorecard md   -> {out_md.relative_to(_REPO)}")
+    if card.get("session_bind", {}).get("status") == SESSION_BIND_MISMATCH:
+        print("[qortroller] WARNING: session_id MISMATCH across artifacts — card unbound")
+        return 2
+    return 0
+
+
 # ---------------------------------------------------------------- session state
 
 def save_session_state(label: str, stamp: int, capture_dir: str) -> None:
@@ -1830,6 +2341,20 @@ def main() -> int:
     uip.add_argument("--no-open", action="store_true", help="write files only; do not open browser")
     uip.set_defaults(fn=cmd_ui)
     sub.add_parser("stop", help="end session + write the Proof Receipt").set_defaults(fn=cmd_stop)
+    sc = sub.add_parser(
+        "score",
+        help="A2A-VALID-1: honest match self-scorecard (authored MEASURED / scored OPERATOR-REPORTED)",
+    )
+    sc.add_argument("--label", default="", help="session label (default: last play session)")
+    sc.add_argument("--kills-scored", dest="kills_scored", type=int, default=None,
+                    help="OPERATOR-REPORTED kills you scored this match (recall denominator); omit = UNSCORED")
+    sc.add_argument("--unscored", action="store_true",
+                    help="explicitly leave recall UNSCORED (do not invent 0)")
+    sc.add_argument("--declined", action="store_true",
+                    help="operator declined to report D (UNSCORED_DECLINED)")
+    sc.add_argument("--session-id", dest="session_id", default="",
+                    help="optional session_id pin; MISMATCH if artifacts disagree")
+    sc.set_defaults(fn=cmd_score)
     d = sub.add_parser("drill", help="Proof Drill birth (Path A=90s scripted; Path B=defer to real match)")
     d.add_argument("--path", default="A", choices=["A", "B", "a", "b"],
                    help="A=scripted mini-session (default); B=skip to full match (first-proof pending)")
