@@ -73,6 +73,44 @@ def conformant_events(events: Sequence[dict]) -> list[dict]:
     return [e for e in events if not (validate_event(e) + separation_law_problems(e))]
 
 
+def read_killfeed_event_sink(capture_dir: Optional[str]) -> list[dict]:
+    """Read the session's killfeed kill events from ``{capture_dir}/killfeed_events.jsonl`` (written by
+    the daemon's rapidocr tick, T6.6b) - the OBSERVATION source for the session v3 record, NOT the
+    controller-perception ``retina_event_log``. Deduped: the lingering feed repeats each kill across
+    ticks, so keep the FIRST occurrence of each (killer, victim) in t-order. (v1 limitation: an
+    identical re-kill of the same victim collapses; refine with real live timestamps.) Fail-open -> []."""
+    try:
+        if not capture_dir:
+            return []
+        sink = os.path.join(capture_dir, "killfeed_events.jsonl")
+        if not os.path.isfile(sink):
+            return []
+        raw: list[dict] = []
+        with open(sink, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                    if isinstance(e, dict):
+                        raw.append(e)
+                except json.JSONDecodeError:
+                    continue
+        raw.sort(key=lambda e: float(e.get("t", 0.0) or 0.0))
+        seen: set = set()
+        out: list[dict] = []
+        for e in raw:
+            key = (str(e.get("killer", "")), str(e.get("victim", "")))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(e)
+        return out
+    except Exception:  # noqa: BLE001 - fail-open
+        return []
+
+
 def emit_session_v3_record(events: Sequence[dict], *, device_id: str, ts_ns: int, label: str,
                            out_dir: Optional[Path] = None, controller_id: Any = None,
                            input_locus: Optional[Sequence[float]] = None, chain_fn=None) -> Optional[Path]:
@@ -98,9 +136,10 @@ def maybe_emit_session_v3(label: str, stamp, kas_rec: dict, db_path: Optional[st
     try:
         if not emit_enabled():
             return None
-        start_s = float(stamp) - _SPAN_PAD_S
-        end_s = time.time() + _SPAN_PAD_S
-        events = read_session_events(db_path, start_s, end_s)
+        capture_dir = os.environ.get("RETINA_KILLFEED_CAPTURE_DIR", "retina_kf_crops")
+        if not os.path.isabs(capture_dir):
+            capture_dir = str(_REPO / capture_dir)
+        events = read_killfeed_event_sink(capture_dir)   # T6.6b: killfeed sink, NOT retina_event_log
         device_id = str(kas_rec.get("device_id") or kas_rec.get("session_id") or "unknown")
         ts_ns = int(float(stamp) * 1e9)
         out = emit_session_v3_record(events, device_id=device_id, ts_ns=ts_ns, label=label, out_dir=out_dir)
