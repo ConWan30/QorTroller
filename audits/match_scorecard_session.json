@@ -2,7 +2,7 @@
   "schema": "qortroller-match-scorecard-v1",
   "label": "session",
   "pack": "observer-only",
-  "ts": 1783985626,
+  "ts": 1783986362,
   "session_bind": {
     "status": "OK",
     "session_id": "056ad30198556d8ad69e2fba4d2ce90155bd1f572674313c5a9c8a2f1cc953aa",
@@ -17,16 +17,21 @@
     ]
   },
   "node_id": {
-    "value": null,
-    "source": "ABSENT",
-    "may_claim": "node_id absent until birth has first_session_id AND a public device_id_hex",
+    "value": {
+      "node_id": "01a574e7ca7f2b4f4be8fe1ef40b309a693303b61f662525ee1fd30e557143e5",
+      "node_id_short": "01a574e7ca7f",
+      "device_id_hex": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "first_session_id": "proof_drill_20260713_1843_1783986208",
+      "domain": "QORTROLLER-NODE-v0"
+    },
+    "source": "DERIVED",
+    "may_claim": "node_id is DERIVED offline from device_id (on-chain device identity) + birth first_session_id; recomputable by any verifier with the preimage inputs",
     "must_not_claim": [
       "node_id is on-chain / minted / registered as a separate identity",
       "decentralized-verified node (requires leg-2 W3bstream attestation)",
       "VMDR registered the node_id (VMDR registered the DEVICE; node_id is derived)",
       "contribution ledger anchored (leg-3 is operator-fired, not automatic)",
-      "new FROZEN-v1 commitment family",
-      "null node_id means the kit is broken (honest pre-spine / unprovisioned)"
+      "new FROZEN-v1 commitment family"
     ]
   },
   "fields": {
@@ -89,7 +94,7 @@
       ]
     },
     "killfeed_rows_seen": {
-      "value": 426,
+      "value": 29,
       "source": "MEASURED",
       "may_claim": "OCR killfeed rows observed (any killer) \u2014 presence of feed activity",
       "must_not_claim": [
@@ -142,8 +147,13 @@
       "display": "authored 0 [MEASURED] / reported 17 [OPERATOR-REPORTED]  (= 0.0000 DERIVED, unrounded)"
     },
     "birth": {
-      "value": null,
-      "source": "ABSENT",
+      "value": {
+        "first_session_id": "proof_drill_20260713_1843_1783986208",
+        "path": "A",
+        "node_id": "01a574e7ca7f2b4f4be8fe1ef40b309a693303b61f662525ee1fd30e557143e5",
+        "device_id_hex": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"
+      },
+      "source": "MEASURED",
       "may_claim": "node birth receipt state when present on this host; node_id DERIVED when device_id known",
       "must_not_claim": [
         "this match minted birth unless first_session_id matches",
@@ -151,16 +161,21 @@
       ]
     },
     "node_id": {
-      "value": null,
-      "source": "ABSENT",
-      "may_claim": "node_id absent until birth has first_session_id AND a public device_id_hex",
+      "value": {
+        "node_id": "01a574e7ca7f2b4f4be8fe1ef40b309a693303b61f662525ee1fd30e557143e5",
+        "node_id_short": "01a574e7ca7f",
+        "device_id_hex": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+        "first_session_id": "proof_drill_20260713_1843_1783986208",
+        "domain": "QORTROLLER-NODE-v0"
+      },
+      "source": "DERIVED",
+      "may_claim": "node_id is DERIVED offline from device_id (on-chain device identity) + birth first_session_id; recomputable by any verifier with the preimage inputs",
       "must_not_claim": [
         "node_id is on-chain / minted / registered as a separate identity",
         "decentralized-verified node (requires leg-2 W3bstream attestation)",
         "VMDR registered the node_id (VMDR registered the DEVICE; node_id is derived)",
         "contribution ledger anchored (leg-3 is operator-fired, not automatic)",
-        "new FROZEN-v1 commitment family",
-        "null node_id means the kit is broken (honest pre-spine / unprovisioned)"
+        "new FROZEN-v1 commitment family"
       ]
     },
     "dogfood": {
