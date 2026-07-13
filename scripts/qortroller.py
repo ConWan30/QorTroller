@@ -11,6 +11,8 @@ the tribal shell knowledge measured live in T6.6b:
     python scripts/qortroller.py ui         # offline Stream shell (observes CLI JSON; no second plane)
     python scripts/qortroller.py stop       # end session (env re-applied from state) + write the Proof Receipt
     python scripts/qortroller.py score      # A2A-VALID-1 honest match self-scorecard (optional --kills-scored)
+    python scripts/qortroller.py ledger     # DEPIN-1 LEG3: list/append/verify node contribution chain
+    python scripts/qortroller.py anchor     # DEPIN-1 LEG3: estimate-first (operator-fired) ledger anchor
     python scripts/qortroller.py receipt    # (re)render the receipt for the last / a named session
     python scripts/qortroller.py verify     # offline stranger-check of the session's v3 record
 
@@ -2525,6 +2527,297 @@ def cmd_dogfood_report(a) -> int:
     return 1
 
 
+# ---------------------------------------------------------------- A2A-DEPIN-1 NODE-LEDGER-1
+
+
+def _import_ledger():
+    """Import pure ledger module (repo-root on sys.path when CLI is scripts/qortroller.py)."""
+    if str(_REPO) not in sys.path:
+        sys.path.insert(0, str(_REPO))
+    if str(_REPO / "bridge") not in sys.path:
+        sys.path.insert(0, str(_REPO / "bridge"))
+    from vapi_bridge.node_contribution_ledger import (  # type: ignore
+        ANCHOR_STATE_ANCHORED,
+        ANCHOR_STATE_PENDING,
+        LEDGER_DOMAIN,
+        LEDGER_MUST_NOT_CLAIM,
+        append_entry,
+        build_entry,
+        compute_scorecard_root,
+        default_ledger_path,
+        extract_scorecard_fields,
+        find_entry_by_session,
+        genesis_hash_hex,
+        latest_entry_hash,
+        load_ledger,
+        mark_anchored,
+        render_ledger_report,
+        verify_chain,
+    )
+    return {
+        "ANCHOR_STATE_ANCHORED": ANCHOR_STATE_ANCHORED,
+        "ANCHOR_STATE_PENDING": ANCHOR_STATE_PENDING,
+        "LEDGER_DOMAIN": LEDGER_DOMAIN,
+        "LEDGER_MUST_NOT_CLAIM": LEDGER_MUST_NOT_CLAIM,
+        "append_entry": append_entry,
+        "build_entry": build_entry,
+        "compute_scorecard_root": compute_scorecard_root,
+        "default_ledger_path": default_ledger_path,
+        "extract_scorecard_fields": extract_scorecard_fields,
+        "find_entry_by_session": find_entry_by_session,
+        "genesis_hash_hex": genesis_hash_hex,
+        "latest_entry_hash": latest_entry_hash,
+        "load_ledger": load_ledger,
+        "mark_anchored": mark_anchored,
+        "render_ledger_report": render_ledger_report,
+        "verify_chain": verify_chain,
+    }
+
+
+def cmd_ledger(a) -> int:
+    """DEPIN-1 LEG 3: list / append / verify the node contribution ledger (local JSONL)."""
+    L = _import_ledger()
+    _path_arg = (getattr(a, "path", None) or "").strip()
+    path = Path(_path_arg) if _path_arg else L["default_ledger_path"](_HOME)
+    if getattr(a, "append_scorecard", None):
+        sc_path = Path(a.append_scorecard)
+        if not sc_path.is_file():
+            print(f"ABORT: scorecard not found: {sc_path}", file=sys.stderr)
+            return 2
+        raw = sc_path.read_bytes()
+        try:
+            card = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            print(f"ABORT: scorecard JSON parse failed: {exc}", file=sys.stderr)
+            return 2
+        fields = L["extract_scorecard_fields"](card)
+        node_id = fields.get("node_id") or (getattr(a, "node_id", None) or "").strip() or ""
+        session_id = fields.get("session_id") or (getattr(a, "session_id", None) or "").strip() or ""
+        if not node_id:
+            print(
+                "ABORT: scorecard has no node_id (birth + public device_id required). "
+                "Pass --node-id only if you accept operator override.",
+                file=sys.stderr,
+            )
+            return 2
+        if not session_id:
+            print("ABORT: scorecard has no session_id (session_bind).", file=sys.stderr)
+            return 2
+        # Prefer file-byte digest when appending from path (stable with on-disk artifact).
+        root = L["compute_scorecard_root"](raw)
+        existing = L["load_ledger"](path)
+        tip = L["latest_entry_hash"](existing, node_id)
+        entry = L["build_entry"](
+            node_id_hex=node_id,
+            session_id=str(session_id),
+            scorecard_root_hex=root,
+            posp_verdict=fields.get("posp_verdict"),
+            w3s_attested=bool(getattr(a, "w3s_attested", False)),
+            prev_hash_hex=tip,
+        )
+        try:
+            entry = L["append_entry"](path, entry)
+        except ValueError as exc:
+            print(f"ABORT: {exc}", file=sys.stderr)
+            return 2
+        print(f"APPENDED session={entry['session_id']}")
+        print(f"  entry_hash     : {entry['entry_hash']}")
+        print(f"  scorecard_root : {entry['scorecard_root']}")
+        print(f"  posp_verdict   : {entry['posp_verdict']}")
+        print(f"  w3s_attested   : {entry['w3s_attested']}  (mechanical format/presence only)")
+        print(f"  anchor_state   : {entry['anchor_state']}  (local only — not on-chain)")
+        print(f"  ledger         : {path}")
+        return 0
+
+    entries = L["load_ledger"](path)
+    _nid = (getattr(a, "node_id", None) or "").strip()
+    node_filter = _nid or None
+    if getattr(a, "json", False):
+        report = L["verify_chain"](entries, node_id_hex=node_filter)
+        payload = {
+            "schema": "qortroller-node-ledger-status-v0",
+            "domain": L["LEDGER_DOMAIN"],
+            "path": str(path),
+            "chain_intact": report["chain_intact"],
+            "entry_count": report["entry_count"],
+            "breaks": report["breaks"],
+            "entries": (
+                [e for e in entries if not node_filter
+                 or str(e.get("node_id", "")).lower().removeprefix("0x")
+                 == str(node_filter).lower().removeprefix("0x")]
+                if node_filter else entries
+            ),
+            "must_not_claim": list(L["LEDGER_MUST_NOT_CLAIM"]),
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0 if report["chain_intact"] else 1
+    print(L["render_ledger_report"](entries, node_id_hex=node_filter, verify=True))
+    v = L["verify_chain"](entries, node_id_hex=node_filter)
+    return 0 if v["chain_intact"] else 1
+
+
+def cmd_anchor(a) -> int:
+    """DEPIN-1 LEG 3: estimate-first (default) or operator-fired anchor of entry_hash.
+
+    Triple-gate on --execute (process-scoped; never mutates bridge/.env):
+      1) CHAIN_SUBMISSION_PAUSED=false
+      2) NODE_LEDGER_ANCHOR_AUTHORIZED=true
+      3) --confirm
+    Plus hard cost cap. Until a real tx confirms, ledger.anchored stays false.
+    """
+    L = _import_ledger()
+    _path_arg = (getattr(a, "path", None) or "").strip()
+    path = Path(_path_arg) if _path_arg else L["default_ledger_path"](_HOME)
+    session_id = getattr(a, "session", None) or getattr(a, "session_id", None) or ""
+    if not session_id:
+        print("ABORT: --session <id> is required", file=sys.stderr)
+        return 2
+    entries = L["load_ledger"](path)
+    _nid = (getattr(a, "node_id", None) or "").strip()
+    node_filter = _nid or None
+    entry = L["find_entry_by_session"](entries, session_id, node_id_hex=node_filter)
+    if entry is None:
+        print(f"ABORT: no ledger entry for session={session_id!r} in {path}", file=sys.stderr)
+        return 2
+    if entry.get("anchored") and entry.get("anchor_tx"):
+        print(
+            f"ALREADY ANCHORED session={session_id} tx={entry.get('anchor_tx')} "
+            f"block={entry.get('anchor_block')}"
+        )
+        return 0
+
+    entry_hash = str(entry["entry_hash"])
+    node_id = str(entry["node_id"])
+    # Reuse AdjudicationRegistry.recordAdjudication — payload=entry_hash, key=node_id spine
+    # (NOT claiming node_id is a device; the registry's first arg is a 32-byte join key).
+    RPC = "https://babel-api.testnet.iotex.io"
+    ADJUDICATION_REGISTRY = "0x44CF981f46a52ADE56476Ce894255954a7776fb4"
+    WALLET = "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+    COST_BUDGET_IOTX = 0.50
+    _ABI = [{
+        "name": "recordAdjudication", "type": "function", "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "deviceIdHash", "type": "bytes32"},
+            {"name": "payload", "type": "bytes32"},
+            {"name": "flagged", "type": "bool"},
+        ],
+        "outputs": [],
+    }]
+
+    print(f"\n  Node ledger anchor -- session={session_id}")
+    print(f"  domain         : {L['LEDGER_DOMAIN']} (candidate)")
+    print(f"  node_id        : {node_id[:16]}…  (spine key; NOT an on-chain mint)")
+    print(f"  entry_hash     : {entry_hash}  <- bytes32 payload")
+    print(f"  posp_verdict   : {entry.get('posp_verdict')}")
+    print(f"  w3s_attested   : {entry.get('w3s_attested')}  (mechanical only)")
+    print(f"  anchor_state   : {entry.get('anchor_state', L['ANCHOR_STATE_PENDING'])} "
+          f"(stays PENDING until real tx confirms)")
+
+    try:
+        from web3 import Web3
+    except ImportError:
+        print("  ABORT: web3 not installed (estimate requires web3).", file=sys.stderr)
+        return 3
+
+    w3 = Web3(Web3.HTTPProvider(RPC, request_kwargs={
+        "timeout": 30,
+        "headers": {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+    }))
+    bal = w3.eth.get_balance(WALLET) / 1e18
+    reg = w3.eth.contract(address=ADJUDICATION_REGISTRY, abi=_ABI)
+    tx = reg.functions.recordAdjudication(
+        bytes.fromhex(node_id), bytes.fromhex(entry_hash), False
+    ).build_transaction({
+        "from": WALLET,
+        "nonce": w3.eth.get_transaction_count(WALLET),
+        "gasPrice": w3.eth.gas_price,
+        "chainId": 4690,
+    })
+    try:
+        gas_est = w3.eth.estimate_gas(tx)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ABORT: estimate_gas reverted -- call would fail, NOT sending: {exc}",
+              file=sys.stderr)
+        return 3
+    tx["gas"] = int(gas_est * 1.25)
+    cost = tx["gas"] * tx["gasPrice"] / 1e18
+    print(f"  wallet balance : {bal:.6f} IOTX (live)")
+    print(f"  estimate_gas   : {gas_est} -> gas {tx['gas']} | est cost ~{cost:.4f} IOTX "
+          f"(cap {COST_BUDGET_IOTX})")
+
+    if not getattr(a, "execute", False):
+        print("  MODE: estimate-only. Nothing sent. Ledger stays PENDING.")
+        print("  Re-run with --execute --confirm + process-scope gates to fire.\n")
+        return 0
+
+    # ---- execute path: triple gate (process-scoped; bridge/.env never touched) ----
+    if os.environ.get("CHAIN_SUBMISSION_PAUSED", "true").strip().lower() != "false":
+        print("  Gate 1 FAILED: set CHAIN_SUBMISSION_PAUSED=false in the SHELL "
+              "(process-scope; bridge/.env never changes).", file=sys.stderr)
+        return 3
+    if os.environ.get("NODE_LEDGER_ANCHOR_AUTHORIZED", "").strip().lower() != "true":
+        print("  Gate 2 FAILED: set NODE_LEDGER_ANCHOR_AUTHORIZED=true.", file=sys.stderr)
+        return 3
+    if not getattr(a, "confirm", False):
+        print("  Gate 3 FAILED: pass --confirm.", file=sys.stderr)
+        return 3
+    if cost > COST_BUDGET_IOTX:
+        print(f"  ABORT: est cost {cost:.4f} exceeds hard cap {COST_BUDGET_IOTX}.",
+              file=sys.stderr)
+        return 3
+
+    key = os.environ.get("OPERATOR_PRIVATE_KEY", "")
+    if not key:
+        env_path = _REPO / "bridge" / ".env"
+        if env_path.is_file():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("BRIDGE_PRIVATE_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if not key:
+        print("  ABORT: no signing key (OPERATOR_PRIVATE_KEY env or BRIDGE_PRIVATE_KEY "
+              "in bridge/.env).", file=sys.stderr)
+        return 3
+
+    signed = w3.eth.account.sign_transaction(tx, key)
+    txh = w3.eth.send_raw_transaction(signed.raw_transaction)
+    print(f"  sent {txh.hex()} -- waiting for receipt ...")
+    rcpt = w3.eth.wait_for_transaction_receipt(txh, timeout=120)
+    ok = rcpt.get("status") == 1
+    print(f"  status={rcpt.get('status')} block={rcpt.get('blockNumber')} "
+          f"gasUsed={rcpt.get('gasUsed')}")
+    if not ok:
+        print("  ABORT: tx failed — ledger remains PENDING (no fabricated anchor).",
+              file=sys.stderr)
+        return 1
+
+    updated = L["mark_anchored"](
+        path,
+        session_id=session_id,
+        tx_hash=txh.hex() if not str(txh.hex()).startswith("0x") else txh.hex(),
+        block_number=rcpt.get("blockNumber"),
+        node_id_hex=node_id,
+    )
+    # web3 may return HexBytes; normalize
+    tx_hex = txh.hex() if hasattr(txh, "hex") else str(txh)
+    if not tx_hex.startswith("0x"):
+        tx_hex = "0x" + tx_hex
+    # mark_anchored already set fields; re-assert if HexBytes path needed
+    if not updated.get("anchor_tx"):
+        updated = L["mark_anchored"](
+            path,
+            session_id=session_id,
+            tx_hash=tx_hex,
+            block_number=rcpt.get("blockNumber"),
+            node_id_hex=node_id,
+        )
+    print(f"  ANCHORED session={session_id} tx={updated.get('anchor_tx')} "
+          f"block={updated.get('anchor_block')}")
+    print(f"  ledger entry_hash unchanged (anchor fields not in preimage): {entry_hash}\n")
+    return 0
+
+
 def cmd_verify(a) -> int:
     """Offline stranger-check. PKG-D-12: --share postcard tier; optional --pack for STRANGER_OK."""
     share_file = getattr(a, "share_file", "") or ""
@@ -2631,6 +2924,32 @@ def main() -> int:
     sc.add_argument("--session-id", dest="session_id", default="",
                     help="optional session_id pin; MISMATCH if artifacts disagree")
     sc.set_defaults(fn=cmd_score)
+    lg = sub.add_parser(
+        "ledger",
+        help="DEPIN-1 LEG3: list/verify/append node contribution ledger (local JSONL, hash-chained)",
+    )
+    lg.add_argument("--path", default="",
+                    help="ledger JSONL path (default: ~/.qortroller/node_contribution_ledger.jsonl)")
+    lg.add_argument("--node-id", dest="node_id", default="",
+                    help="filter / override node_id (64 hex)")
+    lg.add_argument("--append-scorecard", dest="append_scorecard", default="",
+                    help="path to a VALID-1 scorecard JSON to append as a contribution entry")
+    lg.add_argument("--w3s-attested", dest="w3s_attested", action="store_true",
+                    help="mark leg-2 mechanical verify result true (format/presence only — not truth)")
+    lg.add_argument("--json", action="store_true", help="machine-readable ledger status")
+    lg.set_defaults(fn=cmd_ledger)
+    an = sub.add_parser(
+        "anchor",
+        help="DEPIN-1 LEG3: estimate-first (default) or operator-fired anchor of a ledger entry_hash",
+    )
+    an.add_argument("--session", required=True, help="session_id of the ledger entry to anchor")
+    an.add_argument("--path", default="",
+                    help="ledger JSONL path (default: ~/.qortroller/node_contribution_ledger.jsonl)")
+    an.add_argument("--node-id", dest="node_id", default="", help="disambiguate if needed")
+    an.add_argument("--execute", action="store_true",
+                    help="send tx (requires triple-gate); default is estimate-only DRY-RUN")
+    an.add_argument("--confirm", action="store_true", help="Gate 3 for --execute")
+    an.set_defaults(fn=cmd_anchor)
     d = sub.add_parser("drill", help="Proof Drill birth (Path A=90s scripted; Path B=defer to real match)")
     d.add_argument("--path", default="A", choices=["A", "B", "a", "b"],
                    help="A=scripted mini-session (default); B=skip to full match (first-proof pending)")
