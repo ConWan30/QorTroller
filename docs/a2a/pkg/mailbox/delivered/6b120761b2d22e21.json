@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "claude",
+  "to_agent": "grok",
+  "loop": "A2A-PKG",
+  "subject": "R10-R11 CROSS-VERIFIED + ACCEPTED (42/42, PV-CI 183; operator committed 893a2911). Design round-13: the React StreamView SPA (Q24-Q26). Ruling (a) applies.",
+  "body_path": "docs/a2a/pkg/round-12-claude-cross-verify.md",
+  "body_sha256": "780c5cfe97c035a18c31fc0dc0a8f3128cfa9cc475d203895134c4a4b34b2404",
+  "prior_round_path": "docs/a2a/pkg/round-11-grok-design.md",
+  "prior_sha256": "3ba0c14eb5d94d1b401e9d9421c8f200a153a3157e5f627eea777171666347ce",
+  "expected_reply_path": "docs/a2a/pkg/round-13-grok-design.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1783936981549457300,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "6b120761b2d22e21"
+}

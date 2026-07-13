@@ -1,0 +1,55 @@
+{
+  "schema": "qortroller-receipt-reveal-v1",
+  "session_label": "match_1",
+  "pack": "observer-only",
+  "choreography": [
+    { "stage": "SETTLE", "ms": 400, "copy": "session closed -- sealing the pack" },
+    { "stage": "SURFACES", "ms": 800, "copy": "presence + authorship + state" },
+    { "stage": "HONESTY", "ms": 500, "copy": "known gaps disclosed, never hidden" },
+    { "stage": "SHARE_SPLIT", "ms": 600, "copy": "LOCAL full stays here; SHARE postcard is redacted for strangers" }
+  ],
+  "surfaces": {
+    "posp": {
+      "tone": "partial",
+      "verdict": "PARTIAL_SURFACES",
+      "line": "PoSP: PARTIAL_SURFACES -- partial truth, held as-is",
+      "dignity": "partial_truth"
+    },
+    "kas": {
+      "tone": "hygiene",
+      "verdict": "HYGIENE_FAIL",
+      "line": "KAS: capture hygiene -- not a player failure",
+      "dignity": "hygiene_not_shame"
+    },
+    "v3": {
+      "tone": "absent",
+      "verdict": null,
+      "line": "RETINA-STATE-v3: not observed this session",
+      "dignity": "honest_null"
+    }
+  },
+  "f_t66b1": {
+    "code": "F-T66B-1",
+    "status": "OPEN",
+    "visible_on_local": true,
+    "visible_on_share": true,
+    "line": "incomplete -- not hidden. Zero-false-read holds."
+  },
+  "local": {
+    "surface": "LOCAL",
+    "redaction": "none",
+    "body_text": "# LOCAL full receipt\nHYGIENE_FAIL\nPARTIAL_SURFACES\nF-T66B-1 OPEN\n",
+    "shows_full_preimages": true
+  },
+  "share": {
+    "surface": "SHARE",
+    "redaction": "qortroller-share-v1",
+    "body_text": "# SHARE postcard\nPARTIAL\nhygiene noted\nF-T66B-1 OPEN\n",
+    "freshness_class": "FRESH",
+    "shows_full_preimages": false,
+    "shows_crop_counts": false
+  },
+  "mock": false,
+  "signing_material_present": false,
+  "consent_authority": false
+}
