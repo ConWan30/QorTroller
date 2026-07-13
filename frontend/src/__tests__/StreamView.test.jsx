@@ -1,5 +1,5 @@
 /**
- * StreamView SPA tests (A2A-PKG round-13 · PKG-UI React).
+ * StreamView SPA tests (A2A-PKG round-13 · PKG-UI React + STREAM-2 node face).
  *
  *   T-SV-1  normalizeStreamModel missing → UNKNOWN, never LIVE
  *   T-SV-2  normalizeStreamModel LIVE fixture → presence live + respiration
@@ -12,6 +12,10 @@
  *   T-SV-9  BirthCeremonyMap stages + ROI hint
  *   T-SV-10 StreamView with initial props: mode + noMock rails attributes
  *   T-SV-11 deliberately_absent discipline (no crop/fps on live model)
+ *   T-SV-12 STREAM-2 NodeIdentityMark derived-not-minted + unformed
+ *   T-SV-13 STREAM-2 ContributionPulse PENDING never paints early on-chain
+ *   T-SV-14 STREAM-2 ScoreMoment provenance tags MEASURED / OPERATOR-REPORTED
+ *   T-SV-15 STREAM-2 StreamView LIVE fixture paints node face + blink ABSENT fires
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -26,6 +30,10 @@ import {
   WitnessRespiration,
   ReceiptReveal,
   BirthCeremonyMap,
+  NodeIdentityMark,
+  ContributionPulse,
+  ScoreMoment,
+  WitnessBlink,
 } from '../stream'
 import { StreamView } from '../views/StreamView'
 import { EyebrowProvider } from '../design/Eyebrow'
@@ -54,8 +62,12 @@ describe('loadLocalSnapshot — noMock pure helpers', () => {
     expect(m.on_screen.presence_line).toBe('your witness is live')
     expect(m.on_screen.presence_tone).toBe('live')
     expect(m.on_screen.freshness_class).toBe('LIVE')
-    expect(m.novelty).toBe('witness_respiration')
+    expect(m.novelty).toMatch(/witness_respiration/)
     expect(m.fabricated_liveness).toBe(false)
+    // STREAM-2 pass-through
+    expect(m.on_screen.node_id_short).toBe('a1b2c3d4e5f6')
+    expect(m.on_screen.node_identity?.present).toBe(true)
+    expect(m.on_screen.kills_seen).toBe(3)
   })
 
   it('T-SV-3: loadStreamSnapshots 404 → fail-open UNKNOWN', async () => {
@@ -188,5 +200,131 @@ describe('StreamView integration', () => {
     const m = normalizeStreamModel(streamLive)
     expect(m.deliberately_absent).toContain('crop_counts')
     expect(m.deliberately_absent).toContain('fps')
+  })
+})
+
+describe('STREAM-2 node face surfaces', () => {
+  it('T-SV-12: NodeIdentityMark derived claim + unformed honesty', () => {
+    const { unmount } = render(
+      <NodeIdentityMark
+        identity={{
+          present: true,
+          node_id_short: 'deadbeefcafe',
+          claim_language: 'derived_not_minted',
+          device_id_short: '581a836c98b3',
+          device_on_chain_evidence: true,
+        }}
+      />,
+    )
+    expect(screen.getByTestId('node-id-short').textContent).toBe('deadbeefcafe')
+    expect(screen.getByTestId('node-claim').textContent).toMatch(/derived/i)
+    expect(screen.getByTestId('node-identity-mark').getAttribute('data-claim')).toBe(
+      'derived_not_minted',
+    )
+    unmount()
+    render(<NodeIdentityMark identity={{ present: false, line: 'node identity unformed' }} />)
+    expect(screen.getByTestId('node-id-unformed').textContent).toMatch(/unformed/i)
+    expect(screen.getByTestId('node-identity-mark').getAttribute('data-present')).toBe('false')
+  })
+
+  it('T-SV-13: ContributionPulse PENDING never claims on-chain without tx', () => {
+    render(
+      <ContributionPulse
+        contribution={{
+          present: true,
+          entry_count: 1,
+          chain_intact: true,
+          recent: [{
+            session_id_short: 'sess_a',
+            posp_verdict: 'SYNCHRONIZED',
+            w3s_attested: false,
+            lifecycle: 'PENDING',
+            anchored: false,
+            anchor_tx_short: null,
+          }],
+        }}
+      />,
+    )
+    const row = screen.getByTestId('contribution-row-0')
+    expect(row.getAttribute('data-lifecycle')).toBe('PENDING')
+    expect(row.getAttribute('data-anchored')).toBe('false')
+    expect(row.textContent).not.toMatch(/on-chain/i)
+    // Fake ANCHORED without tx demotes to PENDING in render honesty
+    const { unmount } = render(
+      <ContributionPulse
+        contribution={{
+          present: true,
+          entry_count: 1,
+          chain_intact: true,
+          recent: [{
+            session_id_short: 'sess_b',
+            lifecycle: 'ANCHORED',
+            anchored: true,
+            anchor_tx_short: null,
+          }],
+        }}
+      />,
+    )
+    // second mount — last contribution-row-0 is the demoted one
+    const rows = screen.getAllByTestId('contribution-row-0')
+    const demoted = rows[rows.length - 1]
+    expect(demoted.getAttribute('data-lifecycle')).toBe('PENDING')
+    unmount()
+  })
+
+  it('T-SV-14: ScoreMoment provenance tags + UNSCORED dignity', () => {
+    render(
+      <ScoreMoment
+        scorecard={{
+          present: true,
+          label: 'm13',
+          recall_status: 'UNSCORED',
+          authored: { value: 8, source: 'MEASURED' },
+          reported: { value: null, source: 'OPERATOR-REPORTED' },
+          kas_verdict: 'AUTHORED_SESSION',
+          posp_verdict: 'SYNCHRONIZED',
+          dignity_tone: 'honest_null',
+        }}
+      />,
+    )
+    expect(screen.getByTestId('tag-authored').getAttribute('data-source')).toBe('MEASURED')
+    expect(screen.getByTestId('tag-reported').getAttribute('data-source')).toBe('OPERATOR-REPORTED')
+    expect(screen.getByTestId('score-reported-value').textContent).toMatch(/UNSCORED/)
+    expect(screen.getByTestId('score-moment').getAttribute('data-recall-status')).toBe('UNSCORED')
+    expect(screen.getByTestId('score-authored-value').textContent).toMatch(/8/)
+  })
+
+  it('T-SV-15: StreamView LIVE paints node face + fresh_fires ABSENT', () => {
+    wrap(
+      <StreamView
+        initial={{
+          stream: normalizeStreamModel(streamLive),
+          status: {
+            freshness_class: 'LIVE',
+            witness_live: true,
+            node_identity: streamLive.on_screen.node_identity,
+            contribution: streamLive.on_screen.contribution,
+            scorecard: streamLive.on_screen.scorecard,
+            witness_blink: streamLive.on_screen.witness_blink,
+            _source: 'ok',
+          },
+          ceremony: { ...ceremonyProv, ceremony_complete: true, _present: true },
+          receipt: { _present: false },
+        }}
+        enabled={false}
+      />,
+    )
+    expect(screen.getByTestId('stream-node-face')).toBeTruthy()
+    expect(screen.getByTestId('node-id-short').textContent).toBe('a1b2c3d4e5f6')
+    expect(screen.getByTestId('contribution-pulse').getAttribute('data-present')).toBe('true')
+    expect(screen.getByTestId('score-moment').getAttribute('data-recall-status')).toBe('UNSCORED')
+    expect(screen.getByTestId('witness-blink').getAttribute('data-kills-seen')).toBe('3')
+    expect(screen.getByTestId('fresh-fires-absent').textContent).toMatch(/ABSENT/i)
+    expect(screen.getByTestId('witness-blink').getAttribute('data-fresh-fires')).toBe('ABSENT')
+  })
+
+  it('T-SV-15b: WitnessBlink absent sink stays honest', () => {
+    render(<WitnessBlink blink={{ kills_seen: null, fresh_fires_status: 'ABSENT', line: 'unknown' }} />)
+    expect(screen.getByTestId('witness-blink').getAttribute('data-kills-seen')).toBe('absent')
   })
 })

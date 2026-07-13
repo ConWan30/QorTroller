@@ -769,15 +769,294 @@ def freshness_for_share(age_s: float | None) -> str:
     return FRESHNESS_FRESH if age_s < 300 else FRESHNESS_STALE
 
 
+# ---------------------------------------------------------------- A2A-STREAM-2 node face helpers (additive)
+#
+# Extend status/stream snapshots so StreamView can paint: node identity, contribution
+# pulse, provenance-tagged score, kills-seen blink. fresh_fires stays ABSENT until the
+# daemon writes a durable counter (process-memory only today — HARD-1 GATED).
+
+
+def _trunc_hex_short(value: str | None, n: int = 12) -> str | None:
+    if not value:
+        return None
+    s = str(value).strip().lower().removeprefix("0x")
+    if not s:
+        return None
+    return s[: max(4, int(n))]
+
+
+def build_node_identity_face(
+    home: Path,
+    *,
+    birth: dict | None = None,
+    device_id_hex: str | None = None,
+) -> dict:
+    """Q1 pure: ambient node identity for UI (derived-not-minted honesty).
+
+    Missing birth / device_id → present=False, honest nulls (never fabricates a hex).
+    """
+    birth = birth if isinstance(birth, dict) else None
+    if birth is None:
+        birth = _load_json(Path(home) / "birth_receipt.json")
+    did = device_id_hex
+    if birth:
+        did = did or birth.get("device_id_hex")
+        try:
+            birth = enrich_birth_receipt(birth, device_id_hex=did)
+        except Exception:  # noqa: BLE001
+            pass
+    cell = extract_node_id_cell(birth, device_id_hex=did)
+    val = cell.get("value") if isinstance(cell, dict) else None
+    src = (cell.get("source") if isinstance(cell, dict) else None) or SRC_ABSENT
+    if isinstance(val, dict) and val.get("node_id"):
+        nid = str(val["node_id"]).strip().lower().removeprefix("0x")
+        did_n = val.get("device_id_hex")
+        return {
+            "present": True,
+            "node_id": nid,
+            "node_id_short": val.get("node_id_short") or node_id_short(nid),
+            "node_id_source": src,  # DERIVED
+            "node_id_domain": val.get("domain") or NODE_ID_DOMAIN,
+            "device_id_short": _trunc_hex_short(did_n, 12),
+            "device_on_chain_evidence": bool(did_n),
+            "claim_language": "derived_not_minted",
+            "may_claim": NODE_ID_MAY_CLAIM,
+            "must_not_claim": list(NODE_ID_MUST_NOT_CLAIM),
+            "line": (
+                f"node {node_id_short(nid)} · derived spine "
+                f"(device {(_trunc_hex_short(did_n, 8) or '?')}… may be on-chain; node_id is not)"
+            ),
+        }
+    return {
+        "present": False,
+        "node_id": None,
+        "node_id_short": None,
+        "node_id_source": SRC_ABSENT,
+        "node_id_domain": NODE_ID_DOMAIN,
+        "device_id_short": _trunc_hex_short(did, 12) if did else None,
+        "device_on_chain_evidence": bool(did),
+        "claim_language": "derived_not_minted",
+        "may_claim": "node_id absent until birth + public device_id",
+        "must_not_claim": list(NODE_ID_MUST_NOT_CLAIM),
+        "line": "node identity unformed — birth + public device_id required",
+    }
+
+
+def build_contribution_pulse(
+    home: Path,
+    *,
+    node_id_hex: str | None = None,
+    limit: int = 5,
+) -> dict:
+    """Q2 pure: ledger as earned history (LOCAL / PENDING / ANCHORED-with-tx honesty).
+
+    Never paints 'on-chain' unless anchored=True AND anchor_tx is a non-empty string.
+    """
+    try:
+        from vapi_bridge.node_contribution_ledger import (  # type: ignore
+            default_ledger_path,
+            load_ledger,
+            entries_for_node,
+            verify_chain,
+            ANCHOR_STATE_PENDING,
+            ANCHOR_STATE_ANCHORED,
+        )
+    except Exception:  # noqa: BLE001
+        # Fail-open when bridge package not importable (tests may still inject via home files)
+        return {
+            "present": False,
+            "entry_count": 0,
+            "chain_intact": None,
+            "recent": [],
+            "line": "contribution ledger unavailable",
+            "must_not_claim": ["on-chain contribution without anchor_tx"],
+        }
+    path = default_ledger_path(Path(home))
+    rows = load_ledger(path)
+    if node_id_hex:
+        try:
+            rows = entries_for_node(rows, node_id_hex)
+        except ValueError:
+            rows = []
+    if not rows:
+        return {
+            "present": False,
+            "entry_count": 0,
+            "chain_intact": None,
+            "recent": [],
+            "line": "no contributions logged yet — local ledger empty",
+            "must_not_claim": ["on-chain contribution without anchor_tx"],
+        }
+    v = verify_chain(rows, node_id_hex=node_id_hex)
+    recent: list[dict] = []
+    for e in rows[-max(1, int(limit)):]:
+        anchored = bool(e.get("anchored")) and bool(e.get("anchor_tx"))
+        state = e.get("anchor_state") or (
+            ANCHOR_STATE_ANCHORED if anchored else ANCHOR_STATE_PENDING
+        )
+        # Honesty rail: never claim ANCHORED without a real tx string
+        if state == ANCHOR_STATE_ANCHORED and not e.get("anchor_tx"):
+            state = ANCHOR_STATE_PENDING
+            anchored = False
+        if not anchored and state == ANCHOR_STATE_ANCHORED:
+            state = ANCHOR_STATE_PENDING
+        # Lifecycle for pixels: LOCAL (written) → PENDING (awaiting tx) → ANCHORED
+        lifecycle = "ANCHORED" if anchored else "PENDING"
+        sid = str(e.get("session_id") or "")
+        recent.append({
+            "session_id_short": sid[:18] + ("…" if len(sid) > 18 else ""),
+            "posp_verdict": e.get("posp_verdict") or "ABSENT",
+            "w3s_attested": bool(e.get("w3s_attested")),
+            "lifecycle": lifecycle,
+            "anchor_state": state,
+            "anchored": anchored,
+            "anchor_tx_short": _trunc_hex_short(e.get("anchor_tx"), 10) if anchored else None,
+            "ts_ns": e.get("ts_ns"),
+        })
+    return {
+        "present": True,
+        "entry_count": len(rows),
+        "chain_intact": bool(v.get("chain_intact")),
+        "recent": recent,
+        "line": (
+            f"{len(rows)} contribution{'s' if len(rows) != 1 else ''} · "
+            f"chain {'intact' if v.get('chain_intact') else 'broken'} · "
+            "LOCAL until a real tx anchors"
+        ),
+        "must_not_claim": [
+            "on-chain contribution while anchored=false",
+            "fabricated anchor_tx",
+            "w3s_attested means decentralized identity truth",
+        ],
+    }
+
+
+def summarize_scorecard_for_ui(card: dict | None) -> dict:
+    """Q3 pure: provenance-tagged score pixels from a VALID-1 match_scorecard dict.
+
+    Tags MEASURED / OPERATOR-REPORTED stay first-class. UNSCORED is dignified, not zero.
+    """
+    if not isinstance(card, dict) or not card:
+        return {
+            "present": False,
+            "recall_status": "UNSCORED",
+            "display": "score unscored — no scorecard artifact",
+            "authored": {"value": None, "source": SRC_ABSENT},
+            "reported": {"value": None, "source": SRC_ABSENT},
+            "kas_verdict": None,
+            "posp_verdict": None,
+            "label": None,
+            "dignity_tone": VERDICT_TONE_HONEST_NULL,
+        }
+    fields = card.get("fields") if isinstance(card.get("fields"), dict) else {}
+    recall = fields.get("recall") if isinstance(fields.get("recall"), dict) else {}
+    # scorecard may nest recall under fields or top-level depending on version
+    if not recall and isinstance(card.get("recall"), dict):
+        recall = card["recall"]
+    authored = recall.get("authored") if isinstance(recall.get("authored"), dict) else {}
+    reported = recall.get("reported") if isinstance(recall.get("reported"), dict) else {}
+    # Also accept flat fields.authored_kills style from older cards
+    if not authored and isinstance(fields.get("authored"), dict):
+        authored = fields["authored"]
+    status = recall.get("status") or "UNSCORED"
+    display = recall.get("display") or (
+        f"authored {authored.get('value')} / reported "
+        f"{'UNSCORED' if reported.get('value') is None else reported.get('value')}"
+    )
+    kas_f = fields.get("kas_verdict") if isinstance(fields.get("kas_verdict"), dict) else {}
+    posp_f = fields.get("posp_verdict") if isinstance(fields.get("posp_verdict"), dict) else {}
+    dignity = card.get("dignity") if isinstance(card.get("dignity"), dict) else {}
+    return {
+        "present": True,
+        "label": card.get("label"),
+        "recall_status": status,
+        "display": display,
+        "authored": {
+            "value": authored.get("value"),
+            "source": authored.get("source") or SRC_MEASURED,
+        },
+        "reported": {
+            "value": reported.get("value"),
+            "source": reported.get("source") or SRC_OPERATOR,
+        },
+        "kas_verdict": kas_f.get("value"),
+        "posp_verdict": posp_f.get("value"),
+        "dignity_tone": dignity.get("tone") or VERDICT_TONE_HONEST_NULL,
+        "f_t66b1_visible": True,
+    }
+
+
+def load_scorecard_summary(
+    *,
+    home: Path,
+    session: dict | None = None,
+    audits_dir: Path | None = None,
+) -> dict:
+    """Load scorecard summary for UI: prefer ~/.qortroller/ui/scorecard.json, else audits."""
+    ui_card = _load_json(Path(home) / "ui" / "scorecard.json")
+    if isinstance(ui_card, dict) and ui_card.get("schema"):
+        return summarize_scorecard_for_ui(ui_card)
+    label = (session or {}).get("label")
+    if label and audits_dir is not None:
+        p = Path(audits_dir) / f"match_scorecard_{label}.json"
+        card = _load_json(p)
+        if isinstance(card, dict):
+            return summarize_scorecard_for_ui(card)
+    return summarize_scorecard_for_ui(None)
+
+
+def build_witness_blink(
+    *,
+    capture_dir: Path | None = None,
+    kills_seen: int | None = None,
+) -> dict:
+    """Q4 pure: ambient killfeed activity signal (not a score, not mid-match clutter).
+
+    kills_seen = MEASURED OCR rows (any killer). fresh_fires = ABSENT until daemon
+    persists _kf_fresh_fires (HARD-1 process memory only today).
+    """
+    seen = kills_seen
+    if seen is None and capture_dir is not None:
+        seen = count_killfeed_rows(Path(capture_dir) / "killfeed_events.jsonl")
+    return {
+        "kills_seen": seen,
+        "kills_seen_source": SRC_MEASURED if seen is not None else SRC_ABSENT,
+        "kills_seen_may_claim": (
+            "OCR killfeed rows observed (any killer) — feed activity, not your score"
+        ),
+        "kills_seen_must_not_claim": [
+            "operator kills scored",
+            "recall denominator",
+            "your kill count",
+        ],
+        # HARD-1 GATED: counter lives in capture process memory, not a durable file.
+        "fresh_fires": None,
+        "fresh_fires_status": SRC_ABSENT,
+        "fresh_fires_note": (
+            "GATED:HARD-1 — _kf_fresh_fires is process-memory only; "
+            "snapshot stays ABSENT until daemon writes a durable counter"
+        ),
+        "line": (
+            f"witness saw {seen} killfeed row{'s' if seen != 1 else ''}"
+            if seen is not None else
+            "killfeed activity unknown (no sink file)"
+        ),
+    }
+
+
 def build_status_snapshot(*, home: Path, session: dict | None = None,
                           port_owners: list | None = None,
                           capture_dir: Path | None = None,
                           now_s: float | None = None,
-                          pack: str = "observer-only") -> dict:
+                          pack: str = "observer-only",
+                          audits_dir: Path | None = None) -> dict:
     """PKG-UI-04 pure: machine-readable status for the gamer UI (CLI-written truth).
 
     No secret-shaped keys. No crop counts as primary liveness (freshness_class only).
     No keys, no consent authority, no fabricated liveness.
+
+    STREAM-2 additive keys (old shells ignore; missing → UNKNOWN in React):
+      node_identity, contribution, scorecard, witness_blink
     """
     now = float(now_s if now_s is not None else time.time())
     owners = list(port_owners or [])
@@ -799,6 +1078,18 @@ def build_status_snapshot(*, home: Path, session: dict | None = None,
     label = (session or {}).get("label")
     stamp = (session or {}).get("stamp")
     sid = f"{label}_{stamp}" if label and stamp else (label or None)
+
+    # STREAM-2 node face fields (additive; fail-open)
+    identity = build_node_identity_face(home)
+    contrib = build_contribution_pulse(
+        home, node_id_hex=identity.get("node_id") if identity.get("present") else None,
+    )
+    score = load_scorecard_summary(
+        home=home, session=session,
+        audits_dir=audits_dir if audits_dir is not None else (_REPO / "audits"),
+    )
+    blink = build_witness_blink(capture_dir=capture_dir)
+
     snap = {
         "schema": STATUS_SNAPSHOT_SCHEMA,
         "ts": int(now),
@@ -811,6 +1102,16 @@ def build_status_snapshot(*, home: Path, session: dict | None = None,
         "port_8080_owners": owners,
         "freshness_class": fclass,
         "witness_live": fclass == FRESHNESS_LIVE,
+        # STREAM-2 additive face contract (Q1–Q5)
+        "node_identity": identity,
+        "contribution": contrib,
+        "scorecard": score,
+        "witness_blink": blink,
+        # Flat convenience keys (UI short-circuit; still honest-null when absent)
+        "node_id": identity.get("node_id"),
+        "node_id_short": identity.get("node_id_short"),
+        "kills_seen": blink.get("kills_seen"),
+        "fresh_fires": blink.get("fresh_fires"),
         # Explicit absences -- UI must not invent these.
         # Field names avoid secret_shaped markers (no "key"/"secret"/"token" substrings).
         "signing_material_present": False,
@@ -830,6 +1131,9 @@ def build_stream_view_model(snapshot: dict) -> dict:
 
     Novelty: 'your witness is live' -- a single presence respiration from freshness_class,
     not an FPS-counter clone. Deliberately absent: counts, biometrics, green-check theater.
+
+    STREAM-2 extends on_screen with node face fields (identity / contribution / score /
+    blink) so the StreamView can paint the DePIN node without inventing truth.
     """
     if not isinstance(snapshot, dict):
         snapshot = {}
@@ -851,7 +1155,11 @@ def build_stream_view_model(snapshot: dict) -> dict:
     else:
         presence_line = "witness state unknown"
         presence_tone = "unknown"
-    # Mid-match: minimal HUD only
+    identity = snapshot.get("node_identity") if isinstance(snapshot.get("node_identity"), dict) else None
+    contrib = snapshot.get("contribution") if isinstance(snapshot.get("contribution"), dict) else None
+    score = snapshot.get("scorecard") if isinstance(snapshot.get("scorecard"), dict) else None
+    blink = snapshot.get("witness_blink") if isinstance(snapshot.get("witness_blink"), dict) else None
+    # Mid-match: minimal HUD + STREAM-2 ambient node face (not a dashboard clone)
     on_screen = {
         "presence_line": presence_line,
         "presence_tone": presence_tone,
@@ -861,15 +1169,24 @@ def build_stream_view_model(snapshot: dict) -> dict:
         "session_label": snapshot.get("session_label"),
         "pack": snapshot.get("pack"),
         "f_t66b1_disclosure_visible": True,  # wherever authorship will later render
+        # STREAM-2 face fields (pass-through; React renders UNKNOWN when missing)
+        "node_identity": identity,
+        "contribution": contrib,
+        "scorecard": score,
+        "witness_blink": blink,
+        "node_id_short": (identity or {}).get("node_id_short") if identity else snapshot.get("node_id_short"),
+        "kills_seen": (blink or {}).get("kills_seen") if blink else snapshot.get("kills_seen"),
     }
     return {
         "schema": STREAM_VIEW_SCHEMA,
         "surface": "stream",
         "on_screen": on_screen,
         "deliberately_absent": sorted(STREAM_DELIBERATELY_ABSENT),
-        "novelty": "witness_respiration",
-        "novelty_note": ("Single presence indicator from capture-ring freshness-class; "
-                         "not FPS, not crop counts, not biometric theater."),
+        "novelty": "node_face_witness_respiration",
+        "novelty_note": (
+            "STREAM-2: witness respiration + node identity mark + contribution pulse + "
+            "provenance-tagged score + killfeed blink; not FPS, not crop counts, not theater."
+        ),
         "mock": False,
         "fabricated_liveness": False,
         "signing_material_present": False,
@@ -1851,6 +2168,16 @@ def cmd_score(a) -> int:
     out_md = _REPO / "audits" / f"match_scorecard_{label}.md"
     out_json.write_text(json.dumps(card, indent=2) + "\n", encoding="utf-8")
     out_md.write_text(text + "\n", encoding="utf-8")
+    # STREAM-2: also land scorecard under ui/ so status --write-ui / StreamView can paint
+    # provenance-tagged score pixels without re-running score mid-match.
+    try:
+        ui_dir = _HOME / "ui"
+        ui_dir.mkdir(parents=True, exist_ok=True)
+        (ui_dir / "scorecard.json").write_text(
+            json.dumps(card, indent=2) + "\n", encoding="utf-8")
+        print(f"[qortroller] scorecard ui  -> {ui_dir / 'scorecard.json'}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[qortroller] scorecard ui write skipped: {exc!r}")
     print(text)
     print(f"[qortroller] scorecard json -> {out_json.relative_to(_REPO)}")
     print(f"[qortroller] scorecard md   -> {out_md.relative_to(_REPO)}")
