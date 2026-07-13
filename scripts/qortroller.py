@@ -7,6 +7,8 @@ the tribal shell knowledge measured live in T6.6b:
     python scripts/qortroller.py setup      # node provisioning v0: port preflight + card probe -> node.toml
     python scripts/qortroller.py play       # start a session (persisted config; session-scoped dirs)
     python scripts/qortroller.py status     # honest liveness: port owner, daemon state, ring freshness
+    python scripts/qortroller.py status --json  # PKG-UI-04 machine-readable snapshot for Stream UI
+    python scripts/qortroller.py ui         # offline Stream shell (observes CLI JSON; no second plane)
     python scripts/qortroller.py stop       # end session (env re-applied from state) + write the Proof Receipt
     python scripts/qortroller.py receipt    # (re)render the receipt for the last / a named session
     python scripts/qortroller.py verify     # offline stranger-check of the session's v3 record
@@ -469,6 +471,357 @@ def format_honesty_notes(notes: list, *, share: bool = False) -> list[str]:
     return lines
 
 
+# ---------------------------------------------------------------- PKG-UI Stream UX pure helpers (round-11)
+
+# Status / stream / receipt-reveal / birth-ceremony schemas for the gamer UI track.
+# UI observes these models; it never invents capture state (PKG-D-06 held).
+STATUS_SNAPSHOT_SCHEMA = "qortroller-status-snapshot-v1"
+STREAM_VIEW_SCHEMA = "qortroller-stream-view-v1"
+RECEIPT_REVEAL_SCHEMA = "qortroller-receipt-reveal-v1"
+BIRTH_CEREMONY_SCHEMA = "qortroller-birth-ceremony-v1"
+
+# Stream freshness taxonomy (gamer surface). Share postcard keeps coarser FRESH|STALE|UNKNOWN.
+FRESHNESS_LIVE = "LIVE"       # age < 120s -- witness pulse active
+FRESHNESS_FRESH = "FRESH"     # 120s <= age < 300s -- recent, not mid-pulse
+FRESHNESS_STALE = "STALE"     # age >= 300s
+FRESHNESS_EMPTY = "EMPTY"     # no crops in session ring
+FRESHNESS_UNKNOWN = "UNKNOWN" # age not observed
+
+# Verdict dignity tones -- honest, never green-check theater (PKG-UI-02).
+VERDICT_TONE_EARNED = "earned"           # SYNCHRONIZED / clear presence
+VERDICT_TONE_PARTIAL = "partial"         # PARTIAL / PARTIAL_SURFACES -- dignified truth
+VERDICT_TONE_HONEST_NULL = "honest_null" # missing / UNVERIFIABLE -- not a failure
+VERDICT_TONE_HYGIENE = "hygiene"         # HYGIENE_FAIL -- capture hygiene, not "you failed"
+VERDICT_TONE_ABSENT = "absent"           # no artifact at all
+
+# Stream view: fields deliberately ABSENT from the gamer mid-match surface.
+STREAM_DELIBERATELY_ABSENT = frozenset({
+    "crop_counts", "fps", "frame_rate", "raw_biometric", "scrolling_hashes",
+    "grind_bar", "green_check_theater", "mock_liveness", "consent_controls",
+    "keys", "operator_drawers", "mlga", "fleet_coherence",
+})
+
+
+def classify_freshness_class(age_s: float | None, *, n_crops: int | None = None) -> str:
+    """PKG-UI-01 pure: stream freshness-class (never raw counts as the liveness signal).
+
+    LIVE   age < 120
+    FRESH  120 <= age < 300
+    STALE  age >= 300
+    EMPTY  n_crops == 0 or age is +inf
+    UNKNOWN age is None
+    """
+    if age_s is None:
+        return FRESHNESS_UNKNOWN
+    if n_crops is not None and n_crops == 0:
+        return FRESHNESS_EMPTY
+    try:
+        if age_s == float("inf") or age_s != age_s:  # inf or NaN
+            return FRESHNESS_EMPTY
+    except Exception:  # noqa: BLE001
+        return FRESHNESS_UNKNOWN
+    if age_s < 120:
+        return FRESHNESS_LIVE
+    if age_s < 300:
+        return FRESHNESS_FRESH
+    return FRESHNESS_STALE
+
+
+def freshness_for_share(age_s: float | None) -> str:
+    """Share postcard taxonomy (FROZEN PKG-D-09 redaction): FRESH | STALE | UNKNOWN only."""
+    if age_s is None:
+        return FRESHNESS_UNKNOWN
+    try:
+        if age_s == float("inf") or age_s != age_s:
+            return FRESHNESS_STALE
+    except Exception:  # noqa: BLE001
+        return FRESHNESS_UNKNOWN
+    return FRESHNESS_FRESH if age_s < 300 else FRESHNESS_STALE
+
+
+def build_status_snapshot(*, home: Path, session: dict | None = None,
+                          port_owners: list | None = None,
+                          capture_dir: Path | None = None,
+                          now_s: float | None = None,
+                          pack: str = "observer-only") -> dict:
+    """PKG-UI-04 pure: machine-readable status for the gamer UI (CLI-written truth).
+
+    No secret-shaped keys. No crop counts as primary liveness (freshness_class only).
+    No keys, no consent authority, no fabricated liveness.
+    """
+    now = float(now_s if now_s is not None else time.time())
+    owners = list(port_owners or [])
+    n_crops, age = (0, float("inf"))
+    if capture_dir is not None:
+        n_crops, age = ring_freshness(capture_dir, now)
+    elif session and session.get("capture_dir"):
+        # Relative capture_dir is resolved by the caller when possible; fail-soft to EMPTY.
+        try:
+            n_crops, age = ring_freshness(Path(session["capture_dir"]), now)
+        except Exception:  # noqa: BLE001
+            n_crops, age = 0, float("inf")
+    fclass = classify_freshness_class(None if age == float("inf") and n_crops == 0 else age,
+                                      n_crops=n_crops)
+    if n_crops == 0:
+        fclass = FRESHNESS_EMPTY
+    capture_live = fclass == FRESHNESS_LIVE
+    ns = compute_node_state(home, session=session, port_owners=owners, capture_live=capture_live)
+    label = (session or {}).get("label")
+    stamp = (session or {}).get("stamp")
+    sid = f"{label}_{stamp}" if label and stamp else (label or None)
+    snap = {
+        "schema": STATUS_SNAPSHOT_SCHEMA,
+        "ts": int(now),
+        "node_state": ns.get("state"),
+        "node_detail": ns.get("detail"),
+        "pack": pack,
+        "session_label": label,
+        "session_stamp": stamp,
+        "session_id_display": _trunc_session_id(sid) if sid else None,
+        "port_8080_owners": owners,
+        "freshness_class": fclass,
+        "witness_live": fclass == FRESHNESS_LIVE,
+        # Explicit absences -- UI must not invent these.
+        # Field names avoid secret_shaped markers (no "key"/"secret"/"token" substrings).
+        "signing_material_present": False,
+        "consent_authority": False,
+        "mock": False,
+        "fabricated_liveness": False,
+    }
+    # Refuse secret-shaped keys (pack boundary rail)
+    bad = [k for k in snap if secret_shaped(str(k))]
+    if bad:
+        raise ValueError(f"status snapshot refused secret-shaped key(s): {bad}")
+    return snap
+
+
+def build_stream_view_model(snapshot: dict) -> dict:
+    """PKG-UI-01 pure: what the gamer Stream View shows mid-match (and what it hides).
+
+    Novelty: 'your witness is live' -- a single presence respiration from freshness_class,
+    not an FPS-counter clone. Deliberately absent: counts, biometrics, green-check theater.
+    """
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    fclass = snapshot.get("freshness_class") or FRESHNESS_UNKNOWN
+    node = snapshot.get("node_state") or NODE_STATE_UNPROVISIONED
+    witness_live = bool(snapshot.get("witness_live")) or fclass == FRESHNESS_LIVE
+    if witness_live and node == NODE_STATE_LIVE:
+        presence_line = "your witness is live"
+        presence_tone = "live"
+    elif fclass == FRESHNESS_FRESH:
+        presence_line = "witness recent -- not mid-pulse"
+        presence_tone = "recent"
+    elif fclass == FRESHNESS_STALE:
+        presence_line = "witness quiet -- ring not advancing"
+        presence_tone = "quiet"
+    elif fclass == FRESHNESS_EMPTY:
+        presence_line = "no capture in this session ring yet"
+        presence_tone = "empty"
+    else:
+        presence_line = "witness state unknown"
+        presence_tone = "unknown"
+    # Mid-match: minimal HUD only
+    on_screen = {
+        "presence_line": presence_line,
+        "presence_tone": presence_tone,
+        "node_state": node,
+        "freshness_class": fclass,
+        "session_id_display": snapshot.get("session_id_display"),
+        "session_label": snapshot.get("session_label"),
+        "pack": snapshot.get("pack"),
+        "f_t66b1_disclosure_visible": True,  # wherever authorship will later render
+    }
+    return {
+        "schema": STREAM_VIEW_SCHEMA,
+        "surface": "stream",
+        "on_screen": on_screen,
+        "deliberately_absent": sorted(STREAM_DELIBERATELY_ABSENT),
+        "novelty": "witness_respiration",
+        "novelty_note": ("Single presence indicator from capture-ring freshness-class; "
+                         "not FPS, not crop counts, not biometric theater."),
+        "mock": False,
+        "fabricated_liveness": False,
+        "signing_material_present": False,
+        "consent_authority": False,
+    }
+
+
+def _verdict_tone(surface: str, verdict: str | None, *, present: bool) -> dict:
+    """Map an artifact verdict to a dignified tone + gamer-facing line (never failure-shaming)."""
+    v = (verdict or "").upper() if verdict else ""
+    if not present:
+        return {"tone": VERDICT_TONE_ABSENT, "verdict": None,
+                "line": f"{surface}: not observed this session",
+                "dignity": "honest_null"}
+    if v in ("SYNCHRONIZED", "AUTHORED", "CERTIFY", "CLEAR", "PRESENT"):
+        return {"tone": VERDICT_TONE_EARNED, "verdict": verdict,
+                "line": f"{surface}: {verdict} (earned)",
+                "dignity": "earned"}
+    if v in ("PARTIAL", "PARTIAL_SURFACES"):
+        return {"tone": VERDICT_TONE_PARTIAL, "verdict": verdict,
+                "line": f"{surface}: {verdict} -- partial truth, held as-is",
+                "dignity": "partial_truth"}
+    if v in ("HYGIENE_FAIL",):
+        return {"tone": VERDICT_TONE_HYGIENE, "verdict": verdict,
+                "line": f"{surface}: capture hygiene -- not a player failure",
+                "dignity": "hygiene_not_shame"}
+    if v in ("UNVERIFIABLE", "NONE", "HONEST-NULL", "HONEST_NULL"):
+        return {"tone": VERDICT_TONE_HONEST_NULL, "verdict": verdict,
+                "line": f"{surface}: {verdict or 'honest-null'} -- not yet joinable",
+                "dignity": "honest_null"}
+    # Unknown verdict string: still AS-IS, never upgrade
+    return {"tone": VERDICT_TONE_PARTIAL, "verdict": verdict,
+            "line": f"{surface}: {verdict} (as-is)",
+            "dignity": "as_is"}
+
+
+def build_receipt_reveal_model(label: str, kas: dict | None, posp: dict | None,
+                               v3: dict | None, manifest: dict | None, *,
+                               pack: str = "?", stranger_verified: bool | None = None,
+                               ring_age_s: float | None = None,
+                               honesty_notes: list | None = None) -> dict:
+    """PKG-UI-02 pure: stop-moment Receipt Reveal (LOCAL full + SHARE postcard) as data.
+
+    Choreography stages are declarative (UI animates them); verdicts stay AS-IS.
+    Honest-null / PARTIAL / HYGIENE_FAIL render as dignified truth, not red failure states.
+    """
+    notes = honesty_notes if honesty_notes is not None else build_honesty_notes()
+    gap = next((n for n in notes if n.get("code") == "F-T66B-1"), None)
+    surfaces = {
+        "posp": _verdict_tone("PoSP", (posp or {}).get("verdict"), present=bool(posp)),
+        "kas": _verdict_tone("KAS", (kas or {}).get("verdict"), present=bool(kas)),
+        "v3": (_verdict_tone("RETINA-STATE-v3", "present", present=True) if v3
+               else _verdict_tone("RETINA-STATE-v3", "honest-null", present=False)),
+    }
+    # Share surface uses coarser freshness; never crop counts
+    share_fresh = freshness_for_share(ring_age_s)
+    local_text = render_receipt(label, kas, posp, v3, manifest,
+                                stranger_verified=stranger_verified, pack=pack,
+                                honesty_notes=notes)
+    share_text = render_share_postcard(label, kas, posp, v3, manifest,
+                                       stranger_verified=stranger_verified, pack=pack,
+                                       ring_age_s=ring_age_s, honesty_notes=notes)
+    return {
+        "schema": RECEIPT_REVEAL_SCHEMA,
+        "session_label": label,
+        "pack": pack,
+        "choreography": [
+            {"stage": "SETTLE", "ms": 400, "copy": "session closed -- sealing the pack"},
+            {"stage": "SURFACES", "ms": 800, "copy": "presence + authorship + state"},
+            {"stage": "HONESTY", "ms": 500, "copy": "known gaps disclosed, never hidden"},
+            {"stage": "SHARE_SPLIT", "ms": 600,
+             "copy": "LOCAL full stays here; SHARE postcard is redacted for strangers"},
+        ],
+        "surfaces": surfaces,
+        "f_t66b1": {
+            "code": "F-T66B-1",
+            "status": (gap or {}).get("status", "OPEN"),
+            "visible_on_local": True,
+            "visible_on_share": True,
+            "line": "incomplete -- not hidden. Zero-false-read holds.",
+        },
+        "local": {
+            "surface": "LOCAL",
+            "redaction": "none",
+            "body_text": local_text,
+            "shows_full_preimages": True,
+        },
+        "share": {
+            "surface": "SHARE",
+            "redaction": "qortroller-share-v1",
+            "body_text": share_text,
+            "freshness_class": share_fresh,
+            "shows_full_preimages": False,
+            "shows_crop_counts": False,
+        },
+        "stranger_verified": stranger_verified,
+        "mock": False,
+        "signing_material_present": False,
+        "consent_authority": False,
+    }
+
+
+def build_birth_ceremony_map(home: Path) -> dict:
+    """PKG-UI-03 pure: setup wizard stages as a guided visual flow map.
+
+    ROI is the inherently visual y/N moment (check.png). Node-birth FEELS like a
+    staged witness provisioning, not an app installer progress bar.
+    """
+    home = Path(home)
+    node = home / "node.toml"
+    roi_pass = home / "setup" / "stage3_roi_pass.json"
+    roi_png = home / "setup" / "stage3_roi_check.png"
+    stage4 = home / "setup" / "stage4_controller_pass.json"
+    birth = home / "birth_receipt.json"
+    cfg = read_node_config(node) if node.exists() else {}
+
+    def _st(done: bool, current: bool) -> str:
+        if done:
+            return "done"
+        if current:
+            return "current"
+        return "pending"
+
+    has_node = node.exists()
+    has_roi = roi_pass.exists()
+    has_s4 = stage4.exists()
+    has_birth = birth.exists()
+    # First incomplete stage is current
+    stages = []
+    stages.append({
+        "id": "port", "n": 0, "title": "Host preflight",
+        "verb": "qortroller setup",
+        "feel": "clear the channel -- no phantom port owns the witness seat",
+        "visual": "port_owner_list",
+        "status": _st(has_node, not has_node),
+    })
+    stages.append({
+        "id": "card", "n": 1, "title": "Capture card",
+        "verb": "qortroller setup",
+        "feel": "pick the game HDMI frame, not the webcam",
+        "visual": "uvc_frame_pick",
+        "status": _st(has_node, has_node and not has_roi and not has_s4 and not has_birth),
+    })
+    stages.append({
+        "id": "roi", "n": 3, "title": "Killfeed ROI",
+        "verb": "qortroller setup --stage roi",
+        "feel": "the y/N judgment -- does this box frame the killfeed?",
+        "visual": "roi_overlay_png",
+        "overlay_path": str(roi_png) if roi_png.exists() else None,
+        "overlay_exists": roi_png.exists(),
+        "status": _st(has_roi, has_node and not has_roi),
+    })
+    stages.append({
+        "id": "controller", "n": 4, "title": "Controller presence",
+        "verb": "qortroller setup --stage controller",
+        "feel": "Edge on USB -- dual-connection note (USB laptop + BT PS5)",
+        "visual": "hid_presence",
+        "status": _st(has_s4, has_roi and not has_s4),
+    })
+    path_b = bool(cfg.get("stage5_deferred", False))
+    stages.append({
+        "id": "drill", "n": 5, "title": "First proof (birth)",
+        "verb": "qortroller drill" + (" --path B" if path_b else ""),
+        "feel": "your node is born when the first honest pack seals -- SYNCHRONIZED not required",
+        "visual": "receipt_reveal",
+        "path_b_deferred": path_b,
+        "status": _st(has_birth, has_s4 and not has_birth),
+    })
+    ns = compute_node_state(home)
+    return {
+        "schema": BIRTH_CEREMONY_SCHEMA,
+        "node_state": ns.get("state"),
+        "node_detail": ns.get("detail"),
+        "stages": stages,
+        "ceremony_complete": has_birth,
+        "feel_summary": ("Witness-node birth: staged provisioning with a visual ROI judgment "
+                         "and an honest first pack -- not an installer progress bar."),
+        "signing_material_present": False,
+        "consent_authority": False,
+    }
+
+
 def parse_share_claims(text: str) -> dict:
     """PKG-D-12: extract claimed labels from a SHARE postcard (markdown or plain). Fail-soft."""
     claims: dict = {"posp": None, "kas": None, "v3": None, "f_t66b1": False,
@@ -656,10 +1009,7 @@ def render_share_postcard(label: str, kas: dict | None, posp: dict | None, v3: d
     verdicts AS-IS (never rounded up) + F-T66B-1 disclosure ALWAYS; session_id truncated; device ids /
     absolute paths / usernames NEVER; roots truncated to 16-hex prefix; crop counts -> freshness CLASS
     only (counts without age mislead -- the T6.6b lesson)."""
-    if ring_age_s is None:
-        fresh_class = "UNKNOWN"
-    else:
-        fresh_class = "FRESH" if ring_age_s < 300 else "STALE"
+    fresh_class = freshness_for_share(ring_age_s)
     er = (posp or {}).get("events_roots") or {}
     notes = honesty_notes if honesty_notes is not None else build_honesty_notes()
     # Always surface F-T66B-1 line on SHARE (trust requires the gap) even if notes evolve.
@@ -983,27 +1333,158 @@ def cmd_play(a) -> int:
     return subprocess.call(cmd, cwd=str(_REPO))
 
 
-def cmd_status(a) -> int:  # noqa: ARG001
+def cmd_status(a) -> int:
+    """Honest liveness + node birth state. PKG-UI-04: --json emits the status snapshot."""
+    as_json = bool(getattr(a, "json", False))
+    write_ui = bool(getattr(a, "write_ui", False))
     try:
         out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=20).stdout
         owners = parse_netstat_owners(out, 8080)
-        print(f"port 8080 owner(s): {owners or 'none'}")
     except Exception:  # noqa: BLE001
         owners = []
-        print("port 8080 owner(s): (netstat unavailable)")
     st = load_session_state()
-    capture_live = False
+    cfg = read_node_config()
+    cap_path = None
+    n, age = 0, float("inf")
+    if st and st.get("capture_dir"):
+        cap_path = _REPO / st["capture_dir"]
+        n, age = ring_freshness(cap_path, time.time())
+    snap = build_status_snapshot(
+        home=_HOME, session=st, port_owners=owners, capture_dir=cap_path,
+        pack=str(cfg.get("pack", "observer-only")),
+    )
+    # Stream model always available for UI consumers (never printed unless --json)
+    stream = build_stream_view_model(snap)
+    if write_ui or as_json:
+        ui_dir = _HOME / "ui"
+        ui_dir.mkdir(parents=True, exist_ok=True)
+        (ui_dir / "status.json").write_text(json.dumps(snap, indent=2), encoding="utf-8")
+        (ui_dir / "stream.json").write_text(json.dumps(stream, indent=2), encoding="utf-8")
+    if as_json:
+        print(json.dumps({"status": snap, "stream": stream}, indent=2))
+        return 0
+    # Human terminal path (unchanged honesty; still notes freshness vs counts)
+    print(f"port 8080 owner(s): {owners or 'none'}")
     if st:
-        n, age = ring_freshness(_REPO / st["capture_dir"], time.time())
-        fresh = "LIVE" if age < 120 else ("STALE" if n else "EMPTY")
-        capture_live = fresh == "LIVE"
+        fresh = snap.get("freshness_class", "?")
         print(f"session ring: {st['capture_dir']}  crops={n}  newest_age={age:.0f}s  [{fresh}]")
         print("  (freshness, not counts, proves capture -- a full ring can be a previous session)")
-    # PKG-D-11: birth / provisioning product state
-    ns = compute_node_state(_HOME, session=st, port_owners=owners, capture_live=capture_live)
-    print(f"node state: {ns['state']}  -- {ns['detail']}")
+    print(f"node state: {snap.get('node_state')}  -- {snap.get('node_detail')}")
+    print(f"witness: {stream['on_screen']['presence_line']}")
     subprocess.call([sys.executable, str(_DAEMON), "status"], cwd=str(_REPO))
     return 0
+
+
+def cmd_ui(a) -> int:
+    """PKG-UI-04 thin: open/write the offline Stream shell (observes CLI JSON; no second plane).
+
+    Does NOT start capture, hold keys, or talk to bridge auth. Serves only static files under
+    ~/.qortroller/ui/ (status.json + stream.json + offline shell.html). Full SPA is GATED.
+    """
+    # Refresh snapshot first (best-effort)
+    class _A:
+        json = False
+        write_ui = True
+    cmd_status(_A())
+    ui_dir = _HOME / "ui"
+    ui_dir.mkdir(parents=True, exist_ok=True)
+    shell = ui_dir / "stream_shell.html"
+    shell.write_text(_stream_shell_html(), encoding="utf-8")
+    # Also write birth ceremony map for setup wizard consumers
+    ceremony = build_birth_ceremony_map(_HOME)
+    (ui_dir / "ceremony.json").write_text(json.dumps(ceremony, indent=2), encoding="utf-8")
+    print(f"[qortroller] ui shell -> {shell}")
+    print(f"[qortroller] ui status -> {ui_dir / 'status.json'}")
+    print(f"[qortroller] ui stream -> {ui_dir / 'stream.json'}")
+    print(f"[qortroller] ui ceremony -> {ui_dir / 'ceremony.json'}")
+    print("  Rails: offline shell reads local JSON only; no keys; no consent authority;")
+    print("  noMock: if status.json is missing, shell shows UNKNOWN -- never fabricates LIVE.")
+    if not getattr(a, "no_open", False):
+        try:
+            import webbrowser
+            webbrowser.open(shell.resolve().as_uri())
+        except Exception as e:  # noqa: BLE001
+            print(f"  (browser open skipped: {e!r})")
+    return 0
+
+
+def _stream_shell_html() -> str:
+    """Minimal offline Stream shell -- brand tokens, reads sibling status/stream JSON via file://
+    is restricted by browsers; shell embeds a note to open via `qortroller ui` after status write,
+    and shows last-known values from a same-dir fetch when served, else a static placeholder.
+
+    Honesty: never paints LIVE without a freshness_class==LIVE reading.
+    """
+    return """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/>
+<title>QorTroller — Stream</title>
+<style>
+  :root { --void:#04060a; --amber:#f0a868; --cyan:#00e5ff; --ink:#e8e8e8; --dim:#6a7380; }
+  html,body{margin:0;background:var(--void);color:var(--ink);
+    font-family: 'JetBrains Mono', Consolas, monospace; min-height:100vh;}
+  .wrap{max-width:520px;margin:0 auto;padding:2.5rem 1.5rem;}
+  h1{color:var(--amber);font-size:0.95rem;letter-spacing:0.12em;text-transform:uppercase;
+    font-weight:500;margin:0 0 2rem;}
+  .pulse{width:14px;height:14px;border-radius:50%;display:inline-block;margin-right:0.6rem;
+    background:var(--dim); box-shadow:0 0 0 0 transparent;}
+  .pulse.live{background:var(--cyan); box-shadow:0 0 12px var(--cyan);
+    animation: breath 2s ease-in-out infinite;}
+  .pulse.recent{background:var(--amber);}
+  .pulse.quiet,.pulse.empty,.pulse.unknown{background:var(--dim);}
+  @keyframes breath{0%,100%{opacity:0.55}50%{opacity:1}}
+  @media (prefers-reduced-motion: reduce){.pulse.live{animation:none}}
+  .presence{font-size:1.25rem;line-height:1.4;margin:0.5rem 0 1.5rem;}
+  .meta{color:var(--dim);font-size:0.8rem;line-height:1.7;}
+  .meta b{color:var(--ink);font-weight:500;}
+  .note{margin-top:2rem;padding:0.9rem 1rem;border:1px solid #1a2030;border-radius:6px;
+    color:var(--dim);font-size:0.75rem;}
+  .note em{color:var(--cyan);font-style:normal;}
+</style></head>
+<body><div class="wrap">
+  <h1>QorTroller · Stream</h1>
+  <div id="row"><span id="dot" class="pulse unknown"></span>
+    <span class="presence" id="presence">loading local witness state…</span></div>
+  <div class="meta">
+    <div>node <b id="node">—</b></div>
+    <div>freshness <b id="fresh">—</b></div>
+    <div>session <b id="sid">—</b></div>
+    <div>pack <b id="pack">—</b></div>
+  </div>
+  <div class="note">
+    Offline shell · reads <em>stream.json / status.json</em> written by
+    <em>qortroller status --json</em> or <em>qortroller ui</em>.
+    Never fabricates LIVE. No keys. No consent authority. F-T66B-1 disclosed on receipt surfaces.
+  </div>
+</div>
+<script>
+/* noMock discipline: missing JSON => UNKNOWN, never LIVE */
+async function load() {
+  const set = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+  const dot = document.getElementById('dot');
+  try {
+    const r = await fetch('stream.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error('no stream.json');
+    const m = await r.json();
+    const on = m.on_screen || {};
+    set('presence', on.presence_line || 'witness state unknown');
+    set('node', on.node_state || '—');
+    set('fresh', on.freshness_class || 'UNKNOWN');
+    set('sid', on.session_id_display || on.session_label || '—');
+    set('pack', on.pack || '—');
+    const tone = on.presence_tone || 'unknown';
+    dot.className = 'pulse ' + tone;
+  } catch (e) {
+    set('presence', 'witness state unknown');
+    set('fresh', 'UNKNOWN');
+    set('node', '—');
+    dot.className = 'pulse unknown';
+  }
+}
+load();
+setInterval(load, 3000);
+</script>
+</body></html>
+"""
 
 
 def _maybe_complete_path_b_birth(label: str, stamp, cfg: dict) -> None:
@@ -1307,7 +1788,15 @@ def main() -> int:
     p.add_argument("--i-know", dest="i_know", action="store_true",
                    help="operator override for RP-5 NO_GO (logged)")
     p.set_defaults(fn=cmd_play)
-    sub.add_parser("status", help="honest liveness + node birth/provisioning state").set_defaults(fn=cmd_status)
+    stt = sub.add_parser("status", help="honest liveness + node birth/provisioning state")
+    stt.add_argument("--json", action="store_true",
+                     help="PKG-UI-04: emit qortroller-status-snapshot-v1 + stream model as JSON")
+    stt.add_argument("--write-ui", action="store_true",
+                     help="write ~/.qortroller/ui/status.json + stream.json for the Stream shell")
+    stt.set_defaults(fn=cmd_status)
+    uip = sub.add_parser("ui", help="open offline Stream shell (observes CLI JSON; no second plane)")
+    uip.add_argument("--no-open", action="store_true", help="write files only; do not open browser")
+    uip.set_defaults(fn=cmd_ui)
     sub.add_parser("stop", help="end session + write the Proof Receipt").set_defaults(fn=cmd_stop)
     d = sub.add_parser("drill", help="Proof Drill birth (Path A=90s scripted; Path B=defer to real match)")
     d.add_argument("--path", default="A", choices=["A", "B", "a", "b"],
