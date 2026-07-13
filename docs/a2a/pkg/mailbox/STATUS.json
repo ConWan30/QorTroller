@@ -1,0 +1,21 @@
+{
+  "schema": "qortroller-a2a-status-v1",
+  "loop": "A2A-PKG",
+  "rounds_10_11": "SOLO_CLOSED",
+  "claude_session_limit_until": "2026-07-13T03:10:00-05:00",
+  "pending_for": "operator_dogfood_or_claude_reack_after_3_10",
+  "tests": "42 passed",
+  "pv_ci": "183 PASS",
+  "docs": [
+    "docs/a2a/pkg/round-10-claude-open-ui.md",
+    "docs/a2a/pkg/round-10c-solo-answers.md",
+    "docs/a2a/pkg/round-11-grok-design.md",
+    "docs/a2a/pkg/round-11-solo-verify.md",
+    "docs/a2a/pkg/round-10-11-solo-close.md"
+  ],
+  "product_verbs": "setup play status --json ui stop receipt verify drill",
+  "ui_path": "~/.qortroller/ui/stream_shell.html",
+  "envelopes_queued_for_claude": ["32c38c1c3edf3021", "04529eb064f734b2", "9b2e2c54342182f5"],
+  "watch": true,
+  "ts": "2026-07-12T23:20:00-05:00"
+}

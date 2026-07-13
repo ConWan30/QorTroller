@@ -50,7 +50,12 @@ slh-dsa==0.2.2
 # and 6.4 tests; pytest.ini line 8 already configures asyncio_mode = strict)
 pytest-asyncio>=0.23.0
 
-# Trio-Retina advisory perception sidecar (optional; gated by RETINA_PERCEPTION_ENABLED)
+# Trio-Retina (machinefi/trio-retina; import name `retina`; Apache-2.0). Two uses, both optional:
+#   1. advisory perception sidecar (gated by RETINA_PERCEPTION_ENABLED);
+#   2. the T6.5 encoder-interop bridge (retina_encoder_bridge.py) — cross-validates our
+#      retina.event/0.1 against the REAL retina.validate() + routes encoder Event/WorldState through
+#      our commit boundary; installed so CI exercises test_retina_encoder_bridge.py (not skip).
+# Core is numpy-only; the heavy [yolo]/[dino]/[vjepa] extras are card-gated (NOT installed here).
 trio-retina>=0.3.0
 
 # Parallel test execution — Store.__init__ runs a 370-statement SQLite

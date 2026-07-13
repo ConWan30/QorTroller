@@ -317,6 +317,16 @@ def _issue_posp(label: str, stamp, kas_rec: dict) -> None:
         for note in rec.notes:
             print(f"[daemon] PoSP NOTE: {note}")
 
+    # T6.6a (default-off, additive): emit the FROZEN VAPI-RETINA-STATE-v3 record from the session's
+    # conformant retina.event/0.1 events. Gated by RETINA_STATE_V3_EMIT_ENABLED; fail-open; does NOT
+    # modify the PoSP or the M14-anchored LUMEN-4a retina_perception_root (switching to the standard
+    # ordered root is a separate operator decision under the dual-consumer regression discipline).
+    try:
+        from retina_state_v3_emit import maybe_emit_session_v3
+        maybe_emit_session_v3(label, stamp, kas_rec, db_path)
+    except Exception as e:  # noqa: BLE001 — v3 emit must never block PoSP issuance
+        print(f"[daemon] retina-state-v3 emit hook failed (non-fatal): {e!r}")
+
 
 def _archive_ring(label, started_at):
     """R3 fix (2026-07-03, 2nd archive-loss): copy the dense ring into a per-session archive at STOP so the

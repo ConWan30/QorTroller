@@ -747,6 +747,10 @@ class RetinaGameCapture:
                                           monitor_index=monitor_index, **_shared_kw)
         self._killfeed_enabled = bool(killfeed_enabled)
         self._kf_logged = False
+        # D-CARD-1 (2026-07-12): kill-feed OCR engine. Default "tesseract" (hud_ocr; byte-identical prior
+        # behavior); "rapidocr" uses killfeed_raw_reader for feeds the tesseract template path abstains on
+        # (this operator's left-middle Warzone HUD, proven live on the card). Set via RETINA_KF_ENGINE.
+        self._kf_engine = (os.environ.get("RETINA_KF_ENGINE", "tesseract") or "tesseract").lower()
         self._capture_dir = str(capture_dir)
         self._capture_max = int(capture_max)
         self._capture_n = 0
@@ -1019,6 +1023,9 @@ class RetinaGameCapture:
         bgr = getattr(self._source, "_kf_bgr", None)
         if bgr is None:
             return
+        if getattr(self, "_kf_engine", "tesseract") == "rapidocr":
+            self._ocr_killfeed_tick_rapidocr(bgr)
+            return
         try:
             from l9_presence import hud_ocr
             if not getattr(self, "_kf_logged", False):
@@ -1033,6 +1040,52 @@ class RetinaGameCapture:
                 log.info("kf OCR: %r", text.replace("\n", " | ")[:200])   # diagnostic: what the ROI reads
                 self.core.feed_killfeed_text(getattr(self._source, "_kf_ts", None) or 0.0, text)
         except Exception:  # noqa: BLE001 — OCR must never break capture
+            pass
+
+    def _ocr_killfeed_tick_rapidocr(self, bgr) -> None:
+        """RapidOCR kill-feed read (D-CARD-1, 2026-07-12) — reads the left-middle feed the tesseract
+        template path abstains on (this operator's Warzone HUD). _kf_bgr is already the _kf_roi crop, so
+        roi=full. Feeds the SAME authorship oracle via feed_killfeed_text. Fail-open -> no-op (capture
+        never breaks). Selected by RETINA_KF_ENGINE=rapidocr; the tesseract path above is unchanged."""
+        try:
+            from l9_presence import killfeed_raw_reader as krr
+            if not getattr(self, "_kf_logged", False):
+                self._kf_logged = True
+                log.info("RetinaGameCapture: kill-feed authorship ON (engine=rapidocr, roi=%s, handle=%s)",
+                         getattr(self._source, "_kf_roi", None),
+                         getattr(getattr(self.core, "_kf_oracle", None), "own_canon", None))
+            ts = getattr(self._source, "_kf_ts", None) or 0.0
+            rows = krr.read_rows(bgr, roi=(0.0, 0.0, 1.0, 1.0))
+            text = "\n".join(krr.rows_to_lines(rows))
+            if text:
+                log.info("kf OCR[rapidocr]: %r", text.replace("\n", " | ")[:200])
+                self.core.feed_killfeed_text(ts, text)
+            # T6.6b: persist this tick's kill events (retina.event/0.1) to a session sink so the
+            # session-close v3 emit reads YOUR kills — retina_event_log is controller-perception, NOT
+            # the killfeed. Gated by RETINA_STATE_V3_EMIT_ENABLED; fail-open; never touches retina_event_log.
+            if os.environ.get("RETINA_STATE_V3_EMIT_ENABLED", "").strip().lower() in ("1", "true", "yes", "on"):
+                self._append_killfeed_event_sink(rows, ts)
+        except Exception:  # noqa: BLE001 — OCR must never break capture
+            pass
+
+    def _append_killfeed_event_sink(self, rows, ts) -> None:
+        """T6.6b sink: append this tick's x_qortroller.kill events to
+        ``{capture_dir}/killfeed_events.jsonl`` for the session-close v3 emit. Fail-open -> no-op
+        (never breaks capture)."""
+        try:
+            from .killfeed_retina_events import kill_events_from_rows
+            events = kill_events_from_rows(rows, ts)
+            if not events:
+                return
+            # Write to RETINA_KILLFEED_CAPTURE_DIR (the daemon's capture-dir convention, default
+            # retina_kf_crops) so the session-close emit reads the SAME location (retina_state_v3_emit).
+            cap_dir = os.environ.get("RETINA_KILLFEED_CAPTURE_DIR", "retina_kf_crops")
+            os.makedirs(cap_dir, exist_ok=True)
+            sink = os.path.join(cap_dir, "killfeed_events.jsonl")
+            with open(sink, "a", encoding="utf-8") as fh:
+                for e in events:
+                    fh.write(json.dumps(e) + "\n")
+        except Exception:  # noqa: BLE001
             pass
 
     def save_capture_crops(self) -> Optional[str]:
