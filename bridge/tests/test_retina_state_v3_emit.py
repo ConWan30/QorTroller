@@ -95,12 +95,27 @@ def test_maybe_emit_flag_off_is_noop(monkeypatch):
     assert emit.maybe_emit_session_v3("x", 100.0, {"session_id": "s"}, None) is None
 
 
-def test_maybe_emit_flag_on_end_to_end(tmp_path, monkeypatch):
-    db = tmp_path / "s.db"
-    _seed_db(db, created_at=time.time())
+def test_read_killfeed_event_sink_dedup(tmp_path):
+    # the lingering feed repeats each kill across ticks -> dedup to distinct (killer, victim)
+    lines = [_events()[0], _events()[0], _events()[1], _events()[0], _events()[1]]
+    (tmp_path / "killfeed_events.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in lines), encoding="utf-8")
+    got = emit.read_killfeed_event_sink(str(tmp_path))
+    assert len(got) == 2
+    assert {(e["killer"], e["victim"]) for e in got} == {("Qortrola30", "A"), ("rosa sparks", "B")}
+
+
+def test_read_killfeed_event_sink_missing():
+    assert emit.read_killfeed_event_sink("/no/such/dir") == []
+
+
+def test_maybe_emit_flag_on_reads_killfeed_sink(tmp_path, monkeypatch):
+    (tmp_path / "killfeed_events.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in _events()), encoding="utf-8")
     monkeypatch.setenv("RETINA_STATE_V3_EMIT_ENABLED", "1")
-    out = emit.maybe_emit_session_v3("livesess", time.time(),
-                                     {"device_id": "aa" * 32, "session_id": "s"}, str(db),
-                                     out_dir=tmp_path)
+    monkeypatch.setenv("RETINA_KILLFEED_CAPTURE_DIR", str(tmp_path))
+    out = emit.maybe_emit_session_v3("livesess", 1000.0,
+                                     {"device_id": "aa" * 32, "session_id": "s"}, None, out_dir=tmp_path)
     assert out is not None and out.exists()
-    assert verify_retina_state_v3_record(json.loads(out.read_text(encoding="utf-8")))
+    rec = json.loads(out.read_text(encoding="utf-8"))
+    assert rec["n_events"] == 2 and verify_retina_state_v3_record(rec)
