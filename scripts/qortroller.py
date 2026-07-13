@@ -25,6 +25,7 @@ PARTIAL never rounded up; F-T66B-1 disclosed); kill-switch untouched. ASCII-only
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -90,6 +91,213 @@ def apply_pack_env(pack: str, env: dict) -> dict:
 def secret_shaped(key: str) -> bool:
     k = key.lower()
     return any(m in k for m in _SECRET_MARKERS)
+
+
+# ---------------------------------------------------------------- A2A-DEPIN-1 NODE-ID-1 (derived spine)
+#
+# node_id is DERIVED (no chain write to compute), not minted. Candidate domain tag only —
+# NOT a new FROZEN-v1 family (PoSP REFERENCE-AND-BIND posture: references device_id + birth).
+# VMDR address is EVIDENCE of device registration, never part of the preimage (registry-agnostic).
+#
+#   node_id = SHA-256( b"QORTROLLER-NODE-v0" || device_id_32b || utf8(first_session_id) )
+#
+NODE_ID_DOMAIN_TAG = b"QORTROLLER-NODE-v0"
+NODE_ID_DOMAIN = "QORTROLLER-NODE-v0"
+NODE_ID_SCHEMA = "qortroller-node-id-v0"
+# Public evidence only (not hashed into node_id):
+VMDR_ADDRESS_EVIDENCE = "0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0"
+VMDR_REF_REGISTRATION_TX = (
+    "0x68f6cf49564ed2b193d00e881e5cc9488111a8bc05951c2f2af55e25050ac9c0"
+)
+# Default Path-A cert location (device_id_hex is public on-chain identity — not a secret).
+_DEFAULT_DEVICE_CERT = Path.home() / ".vapi" / "device_birth_cert.json"
+
+NODE_ID_MAY_CLAIM = (
+    "node_id is DERIVED offline from device_id (on-chain device identity) + "
+    "birth first_session_id; recomputable by any verifier with the preimage inputs"
+)
+NODE_ID_MUST_NOT_CLAIM = (
+    "node_id is on-chain / minted / registered as a separate identity",
+    "decentralized-verified node (requires leg-2 W3bstream attestation)",
+    "VMDR registered the node_id (VMDR registered the DEVICE; node_id is derived)",
+    "contribution ledger anchored (leg-3 is operator-fired, not automatic)",
+    "new FROZEN-v1 commitment family",
+)
+
+
+def normalize_device_id_hex(device_id_hex: str) -> str:
+    """Canonical 64 lowercase hex chars (no 0x). Raises ValueError if malformed."""
+    if device_id_hex is None:
+        raise ValueError("device_id_hex is required")
+    h = str(device_id_hex).strip().lower().removeprefix("0x")
+    if len(h) != 64:
+        raise ValueError(f"device_id_hex must be 32 bytes (64 hex), got len={len(h)}")
+    try:
+        bytes.fromhex(h)
+    except ValueError as exc:
+        raise ValueError(f"device_id_hex is not valid hex: {exc}") from exc
+    return h
+
+
+def derive_node_id(device_id_hex: str, first_session_id: str) -> str:
+    """Derive the DEPIN-1 node_id spine (hex SHA-256). Pure, no I/O, no spend.
+
+    Preimage (FROZEN for NODE-v0 candidate until a v1 promotion ceremony):
+      SHA-256( b"QORTROLLER-NODE-v0" || device_id_32b || utf8(first_session_id) )
+
+    first_session_id is the birth-receipt string as stored (display form label_stamp),
+    not the SHA-256 session_id used by PoSP — birth is the binding ceremony, not the
+    match-join key. Sessions federate later under (node_id, session_id).
+    """
+    if not first_session_id or not isinstance(first_session_id, str):
+        raise ValueError("first_session_id must be a non-empty str")
+    did = normalize_device_id_hex(device_id_hex)
+    preimage = (
+        NODE_ID_DOMAIN_TAG
+        + bytes.fromhex(did)
+        + first_session_id.encode("utf-8")
+    )
+    return hashlib.sha256(preimage).hexdigest()
+
+
+def verify_node_id(node_id: str, device_id_hex: str, first_session_id: str) -> bool:
+    """True iff node_id recomputes exactly from the preimage inputs."""
+    try:
+        expected = derive_node_id(device_id_hex, first_session_id)
+    except (ValueError, TypeError):
+        return False
+    claimed = str(node_id or "").strip().lower().removeprefix("0x")
+    return claimed == expected
+
+
+def node_id_short(node_id: str | None, n: int = 12) -> str:
+    """Human short form; '(null)' when absent (honest-null for pre-spine artifacts)."""
+    if not node_id:
+        return "(null)"
+    s = str(node_id).strip().lower().removeprefix("0x")
+    return s[: max(4, int(n))]
+
+
+def resolve_device_id_hex(
+    *,
+    birth: dict | None = None,
+    cfg: dict | None = None,
+    cert_path: Path | None = None,
+) -> str | None:
+    """Public device_id sources only (fail-open). Never reads private keys.
+
+    Order: birth.device_id_hex → node.toml device_id_hex → device_birth_cert.json.
+    """
+    if birth and birth.get("device_id_hex"):
+        try:
+            return normalize_device_id_hex(birth["device_id_hex"])
+        except ValueError:
+            pass
+    if cfg and cfg.get("device_id_hex"):
+        try:
+            return normalize_device_id_hex(cfg["device_id_hex"])
+        except ValueError:
+            pass
+    path = cert_path if cert_path is not None else _DEFAULT_DEVICE_CERT
+    try:
+        if path and Path(path).exists():
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("device_id_hex"):
+                return normalize_device_id_hex(data["device_id_hex"])
+    except Exception:  # noqa: BLE001 -- fail-open
+        pass
+    return None
+
+
+def enrich_birth_receipt(birth: dict | None, *, device_id_hex: str | None = None) -> dict:
+    """Additive NODE-ID-1 fields on a birth_receipt dict. Old artifacts stay valid.
+
+    When device_id + first_session_id are both present → node_id is DERIVED and written.
+    When either is missing → node_id=null (honest), domain tag still stamped for schema clarity.
+    Never invents device_id. Never claims on-chain mint.
+    """
+    out = dict(birth or {})
+    fsid = out.get("first_session_id")
+    did = device_id_hex or out.get("device_id_hex")
+    out["node_id_domain"] = NODE_ID_DOMAIN
+    out["node_id_schema"] = NODE_ID_SCHEMA
+    if not did or not fsid:
+        # Preserve an already-present verified node_id; else honest null.
+        if out.get("node_id") and did and fsid and verify_node_id(
+            out["node_id"], did, str(fsid)
+        ):
+            return out
+        if not out.get("node_id"):
+            out["node_id"] = None
+        return out
+    try:
+        did_n = normalize_device_id_hex(did)
+        nid = derive_node_id(did_n, str(fsid))
+    except ValueError:
+        out["node_id"] = None
+        return out
+    out["device_id_hex"] = did_n
+    out["node_id"] = nid
+    # Evidence-only pointers (NOT in preimage) — optional transparency for scorecards.
+    out.setdefault("vmdr_address_evidence", VMDR_ADDRESS_EVIDENCE)
+    out.setdefault("vmdr_registration_tx_evidence", VMDR_REF_REGISTRATION_TX)
+    out["node_id_may_claim"] = NODE_ID_MAY_CLAIM
+    out["node_id_must_not_claim"] = list(NODE_ID_MUST_NOT_CLAIM)
+    return out
+
+
+def extract_node_id_cell(
+    birth: dict | None,
+    *,
+    device_id_hex: str | None = None,
+) -> dict:
+    """Scorecard/spine cell for node_id — DERIVED when computable, ABSENT otherwise."""
+    did = device_id_hex
+    fsid = None
+    existing = None
+    if birth:
+        fsid = birth.get("first_session_id")
+        did = did or birth.get("device_id_hex")
+        existing = birth.get("node_id")
+    if existing and did and fsid and verify_node_id(existing, did, str(fsid)):
+        nid = str(existing).strip().lower().removeprefix("0x")
+        return _field(
+            {
+                "node_id": nid,
+                "node_id_short": node_id_short(nid),
+                "device_id_hex": normalize_device_id_hex(did),
+                "first_session_id": fsid,
+                "domain": NODE_ID_DOMAIN,
+            },
+            SRC_DERIVED,
+            may_claim=NODE_ID_MAY_CLAIM,
+            must_not_claim=list(NODE_ID_MUST_NOT_CLAIM),
+        )
+    if did and fsid:
+        try:
+            nid = derive_node_id(did, str(fsid))
+            return _field(
+                {
+                    "node_id": nid,
+                    "node_id_short": node_id_short(nid),
+                    "device_id_hex": normalize_device_id_hex(did),
+                    "first_session_id": fsid,
+                    "domain": NODE_ID_DOMAIN,
+                },
+                SRC_DERIVED,
+                may_claim=NODE_ID_MAY_CLAIM,
+                must_not_claim=list(NODE_ID_MUST_NOT_CLAIM),
+            )
+        except ValueError:
+            pass
+    return _field(
+        None,
+        SRC_ABSENT,
+        may_claim="node_id absent until birth has first_session_id AND a public device_id_hex",
+        must_not_claim=list(NODE_ID_MUST_NOT_CLAIM) + [
+            "null node_id means the kit is broken (honest pre-spine / unprovisioned)",
+        ],
+    )
 
 
 def write_flat_toml(path: Path, cfg: dict) -> None:
@@ -209,8 +417,12 @@ def compute_node_state(home: Path, *, session: dict | None = None,
         return {"state": NODE_STATE_FIRST_PROOF_PENDING, "detail": detail,
                 "stage5_deferred": path_b}
     return {"state": NODE_STATE_NODE_BORN,
-            "detail": f"first_session_id={birth.get('first_session_id', '?')}",
+            "detail": f"first_session_id={birth.get('first_session_id', '?')}"
+                      + (f" node_id={node_id_short(birth.get('node_id'))}"
+                         if birth.get("node_id") else " node_id=(null)"),
             "first_session_id": birth.get("first_session_id"),
+            "node_id": birth.get("node_id"),
+            "device_id_hex": birth.get("device_id_hex"),
             "birth_path": "path_b" if birth.get("path") == "B" else birth.get("path", "A")}
 
 
@@ -1365,14 +1577,28 @@ def build_match_scorecard(
         may_claim="PKG dogfood friction log (operator-filled) when present",
         must_not_claim=["automatic proof of zero friction"],
     )
-    birth_cell = _field(
-        None if not birth else {
+    # DEPIN-1: derive node_id at score time when birth + public device_id allow it
+    # (recomputable; does not require birth_receipt rewrite).
+    node_cell = extract_node_id_cell(birth)
+    node_val = node_cell.get("value") if isinstance(node_cell, dict) else None
+    birth_payload = None
+    if birth:
+        birth_payload = {
             "first_session_id": birth.get("first_session_id"),
             "path": birth.get("path"),
-        },
+            "node_id": (node_val or {}).get("node_id") if isinstance(node_val, dict)
+                       else birth.get("node_id"),
+            "device_id_hex": (node_val or {}).get("device_id_hex") if isinstance(node_val, dict)
+                            else birth.get("device_id_hex"),
+        }
+    birth_cell = _field(
+        birth_payload,
         SRC_MEASURED if birth else SRC_ABSENT,
-        may_claim="node birth receipt state when present on this host",
-        must_not_claim=["this match minted birth unless first_session_id matches"],
+        may_claim="node birth receipt state when present on this host; node_id DERIVED when device_id known",
+        must_not_claim=[
+            "this match minted birth unless first_session_id matches",
+            "node_id is on-chain",
+        ],
     )
     card = {
         "schema": MATCH_SCORECARD_SCHEMA,
@@ -1380,6 +1606,8 @@ def build_match_scorecard(
         "pack": pack,
         "ts": int(time.time()),
         "session_bind": bind,
+        # Spine join-key for DEPIN legs 2/3 — top-level for easy ledger/applet binding.
+        "node_id": node_cell,
         "fields": {
             "kas_verdict": _field(
                 (kas or {}).get("verdict") if kas else None,
@@ -1418,6 +1646,7 @@ def build_match_scorecard(
             "kills_scored": recall["reported"],
             "recall": recall,
             "birth": birth_cell,
+            "node_id": node_cell,
             "dogfood": dogfood_cell,
             "false_authorship_language": {
                 "may": list(FALSE_AUTH_MAY_LINES),
@@ -1428,13 +1657,21 @@ def build_match_scorecard(
             },
         },
         "dignity": dignity,
-        "refuted_overclaims": sorted(REFUTED_RECALL_DENOMINATORS),
+        "refuted_overclaims": sorted(
+            set(REFUTED_RECALL_DENOMINATORS) | {
+                "node_id_on_chain",
+                "node_id_minted",
+                "decentralized_verified_node_pre_leg2",
+                "vmdr_registered_node_id",
+            }
+        ),
         "rails": {
             "no_poac_edit": True,
             "no_frozen_edit": True,
             "no_secrets": True,
             "source_tags_required": True,
             "session_id_bound": True,
+            "node_id_derived_not_minted": True,
         },
     }
     return card
@@ -1454,6 +1691,24 @@ def render_match_scorecard(card: dict) -> str:
         f"  Label    : {card.get('label')}",
         f"  Pack     : {card.get('pack')}",
         f"  Session  : {bind.get('session_id') or '(unbound)'}  [{bind.get('status')}]",
+    ]
+    node_cell = card.get("node_id") or (card.get("fields") or {}).get("node_id") or {}
+    node_v = node_cell.get("value") if isinstance(node_cell, dict) else None
+    if isinstance(node_v, dict) and node_v.get("node_id"):
+        L.append(
+            f"  Node     : {node_v.get('node_id_short') or node_id_short(node_v.get('node_id'))}  "
+            f"[{node_cell.get('source', SRC_DERIVED)}]  domain={node_v.get('domain', NODE_ID_DOMAIN)}"
+        )
+        L.append(
+            f"             (full node_id DERIVED -- not on-chain; device "
+            f"{(node_v.get('device_id_hex') or '')[:12]}... + birth)"
+        )
+    else:
+        L.append(
+            f"  Node     : (null)  [{(node_cell or {}).get('source', SRC_ABSENT)}]  "
+            f"(honest -- node_id needs birth + public device_id)"
+        )
+    L += [
         "-" * 64,
         "  RECALL (load-bearing rail)",
         f"  status   : {recall.get('status')}",
@@ -1498,11 +1753,15 @@ def render_match_scorecard(card: dict) -> str:
     if birth:
         L.append(f"  Birth       : path={birth.get('path')}  "
                  f"first_session_id={birth.get('first_session_id')}")
+        if birth.get("node_id"):
+            L.append(f"               node_id={node_id_short(birth.get('node_id'))}... "
+                     f"(DERIVED, not minted)")
     else:
         L.append("  Birth       : ABSENT (honest-null)")
     L += ["-" * 64,
           "  Provenance: MEASURED = our instruments; OPERATOR-REPORTED = only they know;",
           "  DERIVED = arithmetic over tagged inputs; ABSENT = honest-null.",
+          "  node_id = DERIVED spine (device_id + birth); DEVICE may be on-chain, node_id is not.",
           "  A match self-score that over-claims is worse than no score.",
           "=" * 64]
     text = "\n".join(L)
@@ -1549,6 +1808,11 @@ def cmd_score(a) -> int:
         audits = _REPO / "audits"
         kas = _load_json(find_latest(f"kas_deferred_record_{label}_*.json", audits))
     birth = _load_json(_HOME / "birth_receipt.json")
+    # DEPIN-1: recompute/enrich node_id at score time from public device_id sources (fail-open).
+    if birth:
+        cfg_for_node = cfg
+        did = resolve_device_id_hex(birth=birth, cfg=cfg_for_node)
+        birth = enrich_birth_receipt(birth, device_id_hex=did)
     dogfood = _load_json(_HOME / "dogfood_report.json")
     # killfeed: session capture dir if known, else default crops file (MEASURED only)
     kf_path = None
@@ -2028,6 +2292,9 @@ def _maybe_complete_path_b_birth(label: str, stamp, cfg: dict) -> None:
                                 "posp": (posp or {}).get("verdict"),
                                 "v3": "present" if v3 else "honest-null"},
              "f_t66b1_disclosed": True, "ts": int(time.time())}
+    # DEPIN-1: bind derived node_id when public device_id is resolvable (no spend).
+    birth = enrich_birth_receipt(
+        birth, device_id_hex=resolve_device_id_hex(birth=birth, cfg=cfg))
     _HOME.mkdir(parents=True, exist_ok=True)
     birth_path.write_text(json.dumps(birth, indent=2), encoding="utf-8")
     # Clear deferred flag so status flips to NODE_BORN
@@ -2202,9 +2469,18 @@ def cmd_drill(a) -> int:
              "verdicts_as_is": {"kas": (kas or {}).get("verdict"), "posp": (posp or {}).get("verdict"),
                                 "v3": "present" if v3 else "honest-null"},
              "f_t66b1_disclosed": True, "ts": int(time.time())}
+    # DEPIN-1: bind derived node_id when public device_id is resolvable (no spend).
+    birth = enrich_birth_receipt(
+        birth, device_id_hex=resolve_device_id_hex(birth=birth, cfg=cfg))
     _HOME.mkdir(parents=True, exist_ok=True)
     (_HOME / "birth_receipt.json").write_text(json.dumps(birth, indent=2), encoding="utf-8")
     print(f"[qortroller] node BIRTH complete -> {_HOME / 'birth_receipt.json'}")
+    if birth.get("node_id"):
+        print(f"  node_id={node_id_short(birth['node_id'])}... "
+              f"(DERIVED from device_id + first_session_id; not on-chain)")
+    else:
+        print("  node_id=(null) honest -- supply public device_id_hex (node.toml or "
+              "device_birth_cert) to bind the DEPIN spine")
     print("  (honest verdicts pass the birth; SYNCHRONIZED is earned in real matches)")
     append_dogfood_event(_HOME, {"event": "drill_path_a", "path": "A", "pack": str(cfg.get("pack")),
                                  "stop_ok": rc == 0},
