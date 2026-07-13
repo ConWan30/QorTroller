@@ -2,13 +2,13 @@
   "schema": "qortroller-match-scorecard-v1",
   "label": "session",
   "pack": "observer-only",
-  "ts": 1783983058,
+  "ts": 1783985626,
   "session_bind": {
     "status": "OK",
-    "session_id": "d07b169f4985da9aafb73b3e79b97fd60233940b36cea8d7e48c74155c5ca298",
+    "session_id": "056ad30198556d8ad69e2fba4d2ce90155bd1f572674313c5a9c8a2f1cc953aa",
     "surfaces": {
-      "kas": "d07b169f4985da9aafb73b3e79b97fd60233940b36cea8d7e48c74155c5ca298",
-      "posp": "d07b169f4985da9aafb73b3e79b97fd60233940b36cea8d7e48c74155c5ca298",
+      "kas": "056ad30198556d8ad69e2fba4d2ce90155bd1f572674313c5a9c8a2f1cc953aa",
+      "posp": "056ad30198556d8ad69e2fba4d2ce90155bd1f572674313c5a9c8a2f1cc953aa",
       "v3": null
     },
     "may_claim": "all bound surfaces share one session_id",
@@ -57,7 +57,7 @@
       ]
     },
     "fusion_n_id_verified": {
-      "value": 72,
+      "value": 140,
       "source": "MEASURED",
       "may_claim": "NQPV fusion rows id-verified this session",
       "must_not_claim": [
@@ -65,7 +65,7 @@
       ]
     },
     "v3_n_events": {
-      "value": 5,
+      "value": 205,
       "source": "MEASURED",
       "may_claim": "RETINA-STATE-v3 event count when record present",
       "must_not_claim": [
@@ -73,7 +73,7 @@
       ]
     },
     "v3_commitment": {
-      "value": "c2c8c97b90530cb913c81ee7ed6dde6bfeaa54b1c8a5e08a112285d9979b2c37",
+      "value": "b8264c292d7a27e3d5aa937fb4251e6681107c4952efe012d316b6c6e980f277",
       "source": "MEASURED",
       "may_claim": "v3 commitment prefix-joinable to local preimage",
       "must_not_claim": [
@@ -81,7 +81,7 @@
       ]
     },
     "archive_crop_count": {
-      "value": 76,
+      "value": 149,
       "source": "MEASURED",
       "may_claim": "archive crop count from session manifest",
       "must_not_claim": [
@@ -89,7 +89,7 @@
       ]
     },
     "killfeed_rows_seen": {
-      "value": 5,
+      "value": 426,
       "source": "MEASURED",
       "may_claim": "OCR killfeed rows observed (any killer) \u2014 presence of feed activity",
       "must_not_claim": [
@@ -99,7 +99,7 @@
       ]
     },
     "kills_scored": {
-      "value": 2,
+      "value": 17,
       "source": "OPERATOR-REPORTED",
       "may_claim": "operator-reported kills scored this match (scoreboard / memory)",
       "must_not_claim": [
@@ -120,7 +120,7 @@
         ]
       },
       "reported": {
-        "value": 2,
+        "value": 17,
         "source": "OPERATOR-REPORTED",
         "may_claim": "operator-reported kills scored this match (scoreboard / memory)",
         "must_not_claim": [
@@ -139,7 +139,7 @@
           "we counted your kills"
         ]
       },
-      "display": "authored 0 [MEASURED] / reported 2 [OPERATOR-REPORTED]  (= 0.0000 DERIVED, unrounded)"
+      "display": "authored 0 [MEASURED] / reported 17 [OPERATOR-REPORTED]  (= 0.0000 DERIVED, unrounded)"
     },
     "birth": {
       "value": null,

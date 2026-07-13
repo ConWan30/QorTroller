@@ -4,22 +4,22 @@
   Schema   : qortroller-match-scorecard-v1
   Label    : session
   Pack     : observer-only
-  Session  : d07b169f4985da9aafb73b3e79b97fd60233940b36cea8d7e48c74155c5ca298  [OK]
+  Session  : 056ad30198556d8ad69e2fba4d2ce90155bd1f572674313c5a9c8a2f1cc953aa  [OK]
   Node     : (null)  [ABSENT]  (honest -- node_id needs birth + public device_id)
 ----------------------------------------------------------------
   RECALL (load-bearing rail)
   status   : SCORED
-  display  : authored 0 [MEASURED] / reported 2 [OPERATOR-REPORTED]  (= 0.0000 DERIVED, unrounded)
+  display  : authored 0 [MEASURED] / reported 17 [OPERATOR-REPORTED]  (= 0.0000 DERIVED, unrounded)
   authored : 0  [MEASURED]
-  reported : 2  [OPERATOR-REPORTED]
+  reported : 17  [OPERATOR-REPORTED]
   ratio    : 0.0  [DERIVED]
   note     : denominator is OPERATOR-REPORTED only — never killfeed / c33 / invented 0
 ----------------------------------------------------------------
   KAS      : HYGIENE_FAIL  [MEASURED]
   PoSP     : SYNCHRONIZED  [MEASURED]
-  fusion_n : 72  [MEASURED]
-  v3 events: 5  [MEASURED]
-  sink rows: 5  [MEASURED]  (NOT scored kills)
+  fusion_n : 140  [MEASURED]
+  v3 events: 205  [MEASURED]
+  sink rows: 426  [MEASURED]  (NOT scored kills)
 ----------------------------------------------------------------
   False-authorship language (MAY only):
    + A2/A3 structural guards CLOSED (exact-token killer match + leftmost-killer death path)
