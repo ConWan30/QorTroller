@@ -224,3 +224,61 @@ def test_desk_match13_with_operator_d():
     assert abs(card["fields"]["recall"]["ratio"]["value"] - (8 / 21)) < 1e-12
     assert card["fields"]["recall"]["ratio"]["source"] == q.SRC_DERIVED
 
+
+
+# --- A2A-WA-01/03/04: the WITNESSED ⊂ BOUND ⊂ AUTHORED three-layer panel ------
+def _v3(*killer_victims):
+    return {"n_events": len(killer_victims),
+            "events": [{"type": "x_qortroller.kill", "killer": k, "victim": v}
+                       for k, v in killer_victims]}
+
+
+def test_wa01_witnessed_exact_token_distinct_victims():
+    v3 = _v3(("Qortrola30", "AbyssWatcher"), ("Qortrola30", "AbyssWatcher"),  # dup victim -> 1
+             ("Qortrola30", "SadShark"), ("Efram1", "Qortrola30"))            # a death -> not counted
+    assert q.count_witnessed_own_kills(v3, "Qortrola30") == 2                 # 2 distinct victims
+
+
+def test_wa01_witnessed_rejects_substring_poison():
+    # HARD-1 exact-token: a longer handle that CONTAINS yours never counts as you
+    v3 = _v3(("QorTro1a300", "victim"))
+    assert q.count_witnessed_own_kills(v3, "Qortrola30") == 0
+
+
+def test_wa01_witnessed_honest_null_no_events():
+    assert q.count_witnessed_own_kills({"n_events": 0, "events": []}, "Qortrola30") is None
+    assert q.count_witnessed_own_kills(None, "Qortrola30") is None
+
+
+def test_wa04_topology_dual_connection_from_wall_fallback():
+    t = q.topology_from_hygiene({"hygiene": {"ts_source": "wall_fallback"}})
+    assert t["topology"] == "DUAL_CONNECTION_USB_PC" and t["authorship_reachable"] == "WITNESSED_ONLY"
+
+
+def test_wa04_topology_usb_direct_from_timespan():
+    t = q.topology_from_hygiene({"hygiene": {"ts_source": "timespan"}})
+    assert t["authorship_reachable"] == "FULL_AUTHORED"
+
+
+def test_wa03_observation_verdict_witnessed_not_authored():
+    assert q.observation_verdict(17, 0, 2) == "WITNESSED_SESSION"   # saw kills, none authored
+    assert q.observation_verdict(17, 5, 2) is None                  # authored earned -> not this tier
+    assert q.observation_verdict(1, 0, 2) is None                   # below min_kills floor
+    assert q.observation_verdict(None, 0, 2) is None                # no observation -> None
+
+
+def test_wa01_scorecard_never_collapses_layers():
+    v3 = _v3(("Qortrola30", "vic1"), ("Qortrola30", "vic2"))
+    card = q.build_match_scorecard("s", kas={"verdict": "HYGIENE_FAIL", "min_kills": 2,
+                                             "authored_kills": 0,
+                                             "hygiene": {"ts_source": "wall_fallback"}},
+                                   posp=None, v3=v3, kills_scored=17)
+    f = card["fields"]
+    # witnessed is MEASURED and distinct from authored; observation_verdict surfaces; never upgrades authored
+    assert f["witnessed_own_kills"]["value"] == 2
+    assert f["witnessed_own_kills"]["source"] == "MEASURED"
+    assert f["authored_kills"]["value"] == 0
+    assert f["observation_verdict"]["value"] == "WITNESSED_SESSION"
+    assert f["topology"]["authorship_reachable"] == "WITNESSED_ONLY"
+    # rails: never claims AUTHORED from witnessed
+    assert "AUTHORED kills" in f["witnessed_own_kills"]["must_not_claim"]

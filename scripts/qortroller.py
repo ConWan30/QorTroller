@@ -36,6 +36,11 @@ import time
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
+# When run as the CLI (__main__), only scripts/ is on sys.path -- put the repo root on it so
+# `l9_presence` / `bridge` imports resolve (A2A-WA-01 bug: the swallowed import in
+# count_witnessed_own_kills silently returned None for witnessed via the CLI while working in-process).
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
 _HOME = Path(os.environ.get("QORTROLLER_HOME", "")) if os.environ.get("QORTROLLER_HOME") else (Path.home() / ".qortroller")
 _NODE_TOML = _HOME / "node.toml"
 _SESSION_JSON = _HOME / "session.json"
@@ -1842,6 +1847,67 @@ def dignity_tone_for_scorecard(*, authored_n, posp_verdict: str | None,
     }
 
 
+# A2A-WA-01: the WITNESSED ⊂ BOUND ⊂ AUTHORED three-layer vocabulary. WITNESSED is the observation
+# tier (the retina saw your handle in the killer slot); AUTHORED is the strict causal+hygiene tier.
+# Never collapsed. Promotion is additive evidence, never a narrative upgrade of a failed hygiene bar.
+def count_witnessed_own_kills(v3: dict | None, own_handle: str | None = None) -> int | None:
+    """A2A-WA-01 (pure): distinct exact-canon own-killer victims from the v3 kill events. Uses the
+    HARD-1 boundary-aware `is_own_killer_token` (exact canon equality — NO substring), so a longer
+    handle that merely CONTAINS yours never counts. Returns None when v3 has no events (honest-null,
+    not 0). This is OBSERVATION recall — the node SAW your name in the killer slot — never AUTHORED."""
+    if not v3:
+        return None
+    events = v3.get("events") or v3.get("conformant_events") or []
+    if not events:
+        return None
+    try:
+        from l9_presence.killfeed_authorship import canon, default_handle, is_own_killer_token
+    except Exception:  # noqa: BLE001
+        return None
+    own = canon(own_handle if own_handle is not None else default_handle())
+    victims = set()
+    for e in events:
+        d = e.get("data", e) if isinstance(e, dict) else {}
+        killer = str(d.get("killer", ""))
+        victim = str(d.get("victim", ""))
+        if is_own_killer_token(killer, own) and victim.strip():
+            victims.add(canon(victim))
+    return len(victims)
+
+
+def topology_from_hygiene(kas: dict | None) -> dict:
+    """A2A-WA-04 (pure): infer capture topology + authorship reachability from the KAS hygiene field.
+    `ts_source == 'wall_fallback'` is the dual-connection signature (controller BT→PS5 for play, USB→
+    bridge for attestation) — the PS5 R2 onset stream is not visible on the capture-PC HID, so the
+    AUTHORED tier is structurally WITNESSED_ONLY until a USB-only-to-PS5 session or a PoEP presence
+    path supplies the causal bind. Surfaced so the operator is never surprised by a 17-kill banger
+    reading authored=0. DERIVED from the honest hygiene readout — asserts topology, never authorship."""
+    hy = (kas or {}).get("hygiene") or {}
+    ts_source = hy.get("ts_source")
+    if ts_source == "wall_fallback":
+        return {"topology": "DUAL_CONNECTION_USB_PC", "authorship_reachable": "WITNESSED_ONLY",
+                "reason": "R2 onsets not visible on capture-PC HID (ts_source=wall_fallback); "
+                          "AUTHORED needs USB-only-to-PS5 or a PoEP presence path"}
+    if ts_source in ("timespan", "hid_timespan"):
+        return {"topology": "USB_DIRECT", "authorship_reachable": "FULL_AUTHORED",
+                "reason": "HID timespan present — causal R2 binding reachable"}
+    return {"topology": "UNKNOWN", "authorship_reachable": "UNKNOWN",
+            "reason": "no ts_source in KAS hygiene (pre-hygiene record or KAS absent)"}
+
+
+def observation_verdict(witnessed: int | None, authored: int | None, min_kills: int | None) -> str | None:
+    """A2A-WA-03 at the PRODUCT layer (scorecard field ONLY — NOT a KAS record/commitment change, so
+    zero FROZEN surface touched): 'WITNESSED_SESSION' when the node observed your kills but the strict
+    AUTHORED tier was not earned. Separates observation proof from causal-bind proof. Never upgrades
+    AUTHORED; never rides the KAS commitment (the KAS-record verdict is untouched)."""
+    if witnessed is None:
+        return None
+    floor = min_kills if isinstance(min_kills, int) and min_kills > 0 else 1
+    if witnessed >= floor and (authored or 0) == 0:
+        return "WITNESSED_SESSION"
+    return None
+
+
 def build_match_scorecard(
     label: str,
     *,
@@ -1854,6 +1920,7 @@ def build_match_scorecard(
     kills_scored: int | None = None,
     kills_scored_declined: bool = False,
     killfeed_rows_seen: int | None = None,
+    witnessed_own_kills: int | None = None,
     session_id_pin: str | None = None,
     pack: str = "?",
 ) -> dict:
@@ -1962,6 +2029,38 @@ def build_match_scorecard(
                 must_not_claim=["liveness without freshness class"],
             ),
             "killfeed_rows_seen": seen,
+            # A2A-WA-01: the three-layer recall panel. WITNESSED (retina saw your name in the killer
+            # slot) ⊂ BOUND (R2-window bound) ⊂ AUTHORED (strict). Each tier is a distinct claim class.
+            "witnessed_own_kills": _field(
+                witnessed_own_kills if witnessed_own_kills is not None
+                else count_witnessed_own_kills(v3),
+                SRC_MEASURED if (witnessed_own_kills is not None or (v3 and (v3.get("events") or v3.get("conformant_events"))))
+                else SRC_ABSENT,
+                may_claim="distinct exact-canon own-killer victims OBSERVED on the feed (HARD-1 exact token)",
+                must_not_claim=["AUTHORED kills", "causally bound to your trigger", "kills scored"],
+            ),
+            "bound_own_kills": _field(
+                None,  # NOT persisted to the KAS record (live-oracle kf_bound_kills only) — Q-WA2 finding
+                SRC_ABSENT,
+                may_claim="R2-window bound own-kills when persisted",
+                must_not_claim=["witnessed count", "authored count"],
+            ),
+            # (authored_kills is the strict tier — defined once above; the three-layer panel reads it)
+            "observation_verdict": _field(
+                observation_verdict(
+                    witnessed_own_kills if witnessed_own_kills is not None
+                    else count_witnessed_own_kills(v3),
+                    authored.get("value"), (kas or {}).get("min_kills") if kas else None),
+                SRC_DERIVED,
+                may_claim="WITNESSED_SESSION product tier when observed but AUTHORED not earned (scorecard-only; NOT the KAS commitment)",
+                must_not_claim=["a KAS verdict", "upgraded AUTHORED", "rides the KAS commitment bytes"],
+            ),
+            "topology": {
+                **topology_from_hygiene(kas),
+                "source": SRC_DERIVED,
+                "may_claim": "capture topology inferred from KAS hygiene ts_source",
+                "must_not_claim": ["a network/pairing readout", "authorship credit"],
+            },
             "kills_scored": recall["reported"],
             "recall": recall,
             "birth": birth_cell,
@@ -2038,6 +2137,20 @@ def render_match_scorecard(card: dict) -> str:
         f"  ratio    : {(recall.get('ratio') or {}).get('value')}  "
         f"[{(recall.get('ratio') or {}).get('source')}]",
         "  note     : denominator is OPERATOR-REPORTED only — never killfeed / c33 / invented 0",
+        "-" * 64,
+        "  AUTHORSHIP LAYERS (WA-01: WITNESSED ⊂ BOUND ⊂ AUTHORED — never collapsed)",
+        f"  witnessed: {(f.get('witnessed_own_kills') or {}).get('value')}  "
+        f"[{(f.get('witnessed_own_kills') or {}).get('source')}]  (node saw your name in the killer slot)",
+        f"  bound    : {(f.get('bound_own_kills') or {}).get('value')}  "
+        f"[{(f.get('bound_own_kills') or {}).get('source')}]  (R2-window — not persisted to KAS record yet)",
+        f"  authored : {authored.get('value')}  [{authored.get('source')}]  (strict causal + hygiene)",
+        f"  observation_verdict : {(f.get('observation_verdict') or {}).get('value')}  "
+        f"[{(f.get('observation_verdict') or {}).get('source')}]  (product tier; NOT a KAS commitment)",
+        f"  topology : {(f.get('topology') or {}).get('topology')}  ->  "
+        f"authorship_reachable={(f.get('topology') or {}).get('authorship_reachable')}",
+        f"             {(f.get('topology') or {}).get('reason')}",
+        "  note     : witnessed 17 · bound 3 · authored 0 is an HONEST STOP POINT, not '0 kills' —",
+        "             the chain shows exactly where dual-connection blocks causal promotion.",
         "-" * 64,
         f"  KAS      : {(f.get('kas_verdict') or {}).get('value')}  "
         f"[{(f.get('kas_verdict') or {}).get('source')}]",
@@ -2439,7 +2552,10 @@ def cmd_play(a) -> int:
     if _rp5_gate(force=force) != 0:
         return 1
     stamp = int(time.time())
-    label = a.label or f"{cfg.get('label_prefix', 'session')}"
+    # A2A-WA-05 (F-MATCH-5): default label carries the stamp so same-day KAS/PoSP/v3 artifacts never
+    # overwrite (the 2-kill vs 17-kill science was nearly lost to `session`-vs-`session` collision).
+    # An explicit --label is respected verbatim (operator intent). stop/score follow via session.json.
+    label = a.label or f"{cfg.get('label_prefix', 'session')}_{stamp}"
     capture_dir = f"retina_kf_crops/{label}_{stamp}"          # friction #2: session-scoped ring
     _session_env(cfg, capture_dir)
     save_session_state(label, stamp, capture_dir)
