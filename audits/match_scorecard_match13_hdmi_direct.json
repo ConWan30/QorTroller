@@ -1,0 +1,188 @@
+{
+  "schema": "qortroller-match-scorecard-v1",
+  "label": "match13_hdmi_direct",
+  "pack": "observer-only",
+  "ts": 1783963421,
+  "session_bind": {
+    "status": "OK",
+    "session_id": "0283fc1e400999426c6af613325579b577c73d3ede5ce79abaeeb2fd80509b86",
+    "surfaces": {
+      "kas": "0283fc1e400999426c6af613325579b577c73d3ede5ce79abaeeb2fd80509b86",
+      "posp": "0283fc1e400999426c6af613325579b577c73d3ede5ce79abaeeb2fd80509b86",
+      "v3": null
+    },
+    "may_claim": "all bound surfaces share one session_id",
+    "must_not_claim": [
+      "artifacts from different sessions joined as one match"
+    ]
+  },
+  "fields": {
+    "kas_verdict": {
+      "value": "AUTHORED_SESSION",
+      "source": "MEASURED",
+      "may_claim": "KAS verdict AS-IS for this session",
+      "must_not_claim": [
+        "upgraded to AUTHORED_SESSION",
+        "SYNCHRONIZED authorship"
+      ]
+    },
+    "authored_kills": {
+      "value": 8,
+      "source": "MEASURED",
+      "may_claim": "KAS-measured authored kill count (R2-bound path)",
+      "must_not_claim": [
+        "kills you scored on the scoreboard",
+        "ground-truth kill count"
+      ]
+    },
+    "posp_verdict": {
+      "value": "SYNCHRONIZED",
+      "source": "MEASURED",
+      "may_claim": "PoSP verdict AS-IS (SYNCHRONIZED/PARTIAL_SURFACES/UNVERIFIABLE)",
+      "must_not_claim": [
+        "rounded up to SYNCHRONIZED"
+      ]
+    },
+    "fusion_n_id_verified": {
+      "value": 358,
+      "source": "MEASURED",
+      "may_claim": "NQPV fusion rows id-verified this session",
+      "must_not_claim": [
+        "proof of humanity alone"
+      ]
+    },
+    "v3_n_events": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "RETINA-STATE-v3 event count when record present",
+      "must_not_claim": [
+        "absence means capture failed (honest-null is valid)"
+      ]
+    },
+    "v3_commitment": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "v3 commitment prefix-joinable to local preimage",
+      "must_not_claim": [
+        "on-chain anchor without separate registry proof"
+      ]
+    },
+    "archive_crop_count": {
+      "value": 524,
+      "source": "MEASURED",
+      "may_claim": "archive crop count from session manifest",
+      "must_not_claim": [
+        "liveness without freshness class"
+      ]
+    },
+    "killfeed_rows_seen": {
+      "value": 2,
+      "source": "MEASURED",
+      "may_claim": "OCR killfeed rows observed (any killer) \u2014 presence of feed activity",
+      "must_not_claim": [
+        "operator kills scored",
+        "recall denominator",
+        "your kill count"
+      ]
+    },
+    "kills_scored": {
+      "value": 21,
+      "source": "OPERATOR-REPORTED",
+      "may_claim": "operator-reported kills scored this match (scoreboard / memory)",
+      "must_not_claim": [
+        "HID-measured kill count",
+        "killfeed-derived scoreboard",
+        "c33 archive cluster count"
+      ]
+    },
+    "recall": {
+      "status": "SCORED",
+      "authored": {
+        "value": 8,
+        "source": "MEASURED",
+        "may_claim": "KAS-measured authored kill count (R2-bound path)",
+        "must_not_claim": [
+          "kills you scored on the scoreboard",
+          "ground-truth kill count"
+        ]
+      },
+      "reported": {
+        "value": 21,
+        "source": "OPERATOR-REPORTED",
+        "may_claim": "operator-reported kills scored this match (scoreboard / memory)",
+        "must_not_claim": [
+          "HID-measured kill count",
+          "killfeed-derived scoreboard",
+          "c33 archive cluster count"
+        ]
+      },
+      "ratio": {
+        "value": 0.38095238095238093,
+        "source": "DERIVED",
+        "may_claim": "measured authored / operator-reported scored",
+        "must_not_claim": [
+          "measured ground-truth recall",
+          "precision",
+          "we counted your kills"
+        ]
+      },
+      "display": "authored 8 [MEASURED] / reported 21 [OPERATOR-REPORTED]  (= 0.3810 DERIVED, unrounded)"
+    },
+    "birth": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "node birth receipt state when present on this host",
+      "must_not_claim": [
+        "this match minted birth unless first_session_id matches"
+      ]
+    },
+    "dogfood": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "PKG dogfood friction log (operator-filled) when present",
+      "must_not_claim": [
+        "automatic proof of zero friction"
+      ]
+    },
+    "false_authorship_language": {
+      "may": [
+        "A2/A3 structural guards CLOSED (exact-token killer match + leftmost-killer death path)",
+        "authored kills are R2-bound on the KAS path (design invariant of the authorship chain)",
+        "zero-false-read *design*: this scorecard never invents authored kills from OCR alone"
+      ],
+      "must_not": [
+        "zero false-authorship proven this match",
+        "0 false positives proven",
+        "100% accurate authorship",
+        "false-authorship rate = 0",
+        "precision = 100%"
+      ],
+      "source": "DERIVED",
+      "may_claim": "structural guards + design invariants only",
+      "must_not_claim": [
+        "zero false-authorship proven this match",
+        "0 false positives proven",
+        "100% accurate authorship",
+        "false-authorship rate = 0",
+        "precision = 100%"
+      ]
+    }
+  },
+  "dignity": {
+    "tone": "earned",
+    "notes": []
+  },
+  "refuted_overclaims": [
+    "c33_cluster_count",
+    "deferred_authored",
+    "fabricated_zero",
+    "killfeed_rows_seen"
+  ],
+  "rails": {
+    "no_poac_edit": true,
+    "no_frozen_edit": true,
+    "no_secrets": true,
+    "source_tags_required": true,
+    "session_id_bound": true
+  }
+}

@@ -10,6 +10,9 @@ the tribal shell knowledge measured live in T6.6b:
     python scripts/qortroller.py status --json  # PKG-UI-04 machine-readable snapshot for Stream UI
     python scripts/qortroller.py ui         # offline Stream shell (observes CLI JSON; no second plane)
     python scripts/qortroller.py stop       # end session (env re-applied from state) + write the Proof Receipt
+    python scripts/qortroller.py score      # A2A-VALID-1 honest match self-scorecard (optional --kills-scored)
+    python scripts/qortroller.py ledger     # DEPIN-1 LEG3: list/append/verify node contribution chain
+    python scripts/qortroller.py anchor     # DEPIN-1 LEG3: estimate-first (operator-fired) ledger anchor
     python scripts/qortroller.py receipt    # (re)render the receipt for the last / a named session
     python scripts/qortroller.py verify     # offline stranger-check of the session's v3 record
 
@@ -24,6 +27,7 @@ PARTIAL never rounded up; F-T66B-1 disclosed); kill-switch untouched. ASCII-only
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -59,6 +63,7 @@ _DEFAULTS = {
 PACKS: dict[str, dict[str, str]] = {
     "observer-only": {
         "RETINA_CAPTURE_SOURCE": "uvc",
+        "RETINA_KF_FRESH_TRIGGER": "true",       # HARD-1: fresh-feed OCR watcher (F-T66B-1 fix)
         "RETINA_PERCEPTION_ENABLED": "true",     # observation plane on for the pilot
         "RETINA_DA_WITNESS_ENABLED": "false",    # DePIN DA side-path off until opt-in
         "CHAIN_SUBMISSION_PAUSED": "true",       # HARD: the kit never spends/deploys
@@ -88,6 +93,213 @@ def apply_pack_env(pack: str, env: dict) -> dict:
 def secret_shaped(key: str) -> bool:
     k = key.lower()
     return any(m in k for m in _SECRET_MARKERS)
+
+
+# ---------------------------------------------------------------- A2A-DEPIN-1 NODE-ID-1 (derived spine)
+#
+# node_id is DERIVED (no chain write to compute), not minted. Candidate domain tag only —
+# NOT a new FROZEN-v1 family (PoSP REFERENCE-AND-BIND posture: references device_id + birth).
+# VMDR address is EVIDENCE of device registration, never part of the preimage (registry-agnostic).
+#
+#   node_id = SHA-256( b"QORTROLLER-NODE-v0" || device_id_32b || utf8(first_session_id) )
+#
+NODE_ID_DOMAIN_TAG = b"QORTROLLER-NODE-v0"
+NODE_ID_DOMAIN = "QORTROLLER-NODE-v0"
+NODE_ID_SCHEMA = "qortroller-node-id-v0"
+# Public evidence only (not hashed into node_id):
+VMDR_ADDRESS_EVIDENCE = "0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0"
+VMDR_REF_REGISTRATION_TX = (
+    "0x68f6cf49564ed2b193d00e881e5cc9488111a8bc05951c2f2af55e25050ac9c0"
+)
+# Default Path-A cert location (device_id_hex is public on-chain identity — not a secret).
+_DEFAULT_DEVICE_CERT = Path.home() / ".vapi" / "device_birth_cert.json"
+
+NODE_ID_MAY_CLAIM = (
+    "node_id is DERIVED offline from device_id (on-chain device identity) + "
+    "birth first_session_id; recomputable by any verifier with the preimage inputs"
+)
+NODE_ID_MUST_NOT_CLAIM = (
+    "node_id is on-chain / minted / registered as a separate identity",
+    "decentralized-verified node (requires leg-2 W3bstream attestation)",
+    "VMDR registered the node_id (VMDR registered the DEVICE; node_id is derived)",
+    "contribution ledger anchored (leg-3 is operator-fired, not automatic)",
+    "new FROZEN-v1 commitment family",
+)
+
+
+def normalize_device_id_hex(device_id_hex: str) -> str:
+    """Canonical 64 lowercase hex chars (no 0x). Raises ValueError if malformed."""
+    if device_id_hex is None:
+        raise ValueError("device_id_hex is required")
+    h = str(device_id_hex).strip().lower().removeprefix("0x")
+    if len(h) != 64:
+        raise ValueError(f"device_id_hex must be 32 bytes (64 hex), got len={len(h)}")
+    try:
+        bytes.fromhex(h)
+    except ValueError as exc:
+        raise ValueError(f"device_id_hex is not valid hex: {exc}") from exc
+    return h
+
+
+def derive_node_id(device_id_hex: str, first_session_id: str) -> str:
+    """Derive the DEPIN-1 node_id spine (hex SHA-256). Pure, no I/O, no spend.
+
+    Preimage (FROZEN for NODE-v0 candidate until a v1 promotion ceremony):
+      SHA-256( b"QORTROLLER-NODE-v0" || device_id_32b || utf8(first_session_id) )
+
+    first_session_id is the birth-receipt string as stored (display form label_stamp),
+    not the SHA-256 session_id used by PoSP — birth is the binding ceremony, not the
+    match-join key. Sessions federate later under (node_id, session_id).
+    """
+    if not first_session_id or not isinstance(first_session_id, str):
+        raise ValueError("first_session_id must be a non-empty str")
+    did = normalize_device_id_hex(device_id_hex)
+    preimage = (
+        NODE_ID_DOMAIN_TAG
+        + bytes.fromhex(did)
+        + first_session_id.encode("utf-8")
+    )
+    return hashlib.sha256(preimage).hexdigest()
+
+
+def verify_node_id(node_id: str, device_id_hex: str, first_session_id: str) -> bool:
+    """True iff node_id recomputes exactly from the preimage inputs."""
+    try:
+        expected = derive_node_id(device_id_hex, first_session_id)
+    except (ValueError, TypeError):
+        return False
+    claimed = str(node_id or "").strip().lower().removeprefix("0x")
+    return claimed == expected
+
+
+def node_id_short(node_id: str | None, n: int = 12) -> str:
+    """Human short form; '(null)' when absent (honest-null for pre-spine artifacts)."""
+    if not node_id:
+        return "(null)"
+    s = str(node_id).strip().lower().removeprefix("0x")
+    return s[: max(4, int(n))]
+
+
+def resolve_device_id_hex(
+    *,
+    birth: dict | None = None,
+    cfg: dict | None = None,
+    cert_path: Path | None = None,
+) -> str | None:
+    """Public device_id sources only (fail-open). Never reads private keys.
+
+    Order: birth.device_id_hex → node.toml device_id_hex → device_birth_cert.json.
+    """
+    if birth and birth.get("device_id_hex"):
+        try:
+            return normalize_device_id_hex(birth["device_id_hex"])
+        except ValueError:
+            pass
+    if cfg and cfg.get("device_id_hex"):
+        try:
+            return normalize_device_id_hex(cfg["device_id_hex"])
+        except ValueError:
+            pass
+    path = cert_path if cert_path is not None else _DEFAULT_DEVICE_CERT
+    try:
+        if path and Path(path).exists():
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("device_id_hex"):
+                return normalize_device_id_hex(data["device_id_hex"])
+    except Exception:  # noqa: BLE001 -- fail-open
+        pass
+    return None
+
+
+def enrich_birth_receipt(birth: dict | None, *, device_id_hex: str | None = None) -> dict:
+    """Additive NODE-ID-1 fields on a birth_receipt dict. Old artifacts stay valid.
+
+    When device_id + first_session_id are both present → node_id is DERIVED and written.
+    When either is missing → node_id=null (honest), domain tag still stamped for schema clarity.
+    Never invents device_id. Never claims on-chain mint.
+    """
+    out = dict(birth or {})
+    fsid = out.get("first_session_id")
+    did = device_id_hex or out.get("device_id_hex")
+    out["node_id_domain"] = NODE_ID_DOMAIN
+    out["node_id_schema"] = NODE_ID_SCHEMA
+    if not did or not fsid:
+        # Preserve an already-present verified node_id; else honest null.
+        if out.get("node_id") and did and fsid and verify_node_id(
+            out["node_id"], did, str(fsid)
+        ):
+            return out
+        if not out.get("node_id"):
+            out["node_id"] = None
+        return out
+    try:
+        did_n = normalize_device_id_hex(did)
+        nid = derive_node_id(did_n, str(fsid))
+    except ValueError:
+        out["node_id"] = None
+        return out
+    out["device_id_hex"] = did_n
+    out["node_id"] = nid
+    # Evidence-only pointers (NOT in preimage) — optional transparency for scorecards.
+    out.setdefault("vmdr_address_evidence", VMDR_ADDRESS_EVIDENCE)
+    out.setdefault("vmdr_registration_tx_evidence", VMDR_REF_REGISTRATION_TX)
+    out["node_id_may_claim"] = NODE_ID_MAY_CLAIM
+    out["node_id_must_not_claim"] = list(NODE_ID_MUST_NOT_CLAIM)
+    return out
+
+
+def extract_node_id_cell(
+    birth: dict | None,
+    *,
+    device_id_hex: str | None = None,
+) -> dict:
+    """Scorecard/spine cell for node_id — DERIVED when computable, ABSENT otherwise."""
+    did = device_id_hex
+    fsid = None
+    existing = None
+    if birth:
+        fsid = birth.get("first_session_id")
+        did = did or birth.get("device_id_hex")
+        existing = birth.get("node_id")
+    if existing and did and fsid and verify_node_id(existing, did, str(fsid)):
+        nid = str(existing).strip().lower().removeprefix("0x")
+        return _field(
+            {
+                "node_id": nid,
+                "node_id_short": node_id_short(nid),
+                "device_id_hex": normalize_device_id_hex(did),
+                "first_session_id": fsid,
+                "domain": NODE_ID_DOMAIN,
+            },
+            SRC_DERIVED,
+            may_claim=NODE_ID_MAY_CLAIM,
+            must_not_claim=list(NODE_ID_MUST_NOT_CLAIM),
+        )
+    if did and fsid:
+        try:
+            nid = derive_node_id(did, str(fsid))
+            return _field(
+                {
+                    "node_id": nid,
+                    "node_id_short": node_id_short(nid),
+                    "device_id_hex": normalize_device_id_hex(did),
+                    "first_session_id": fsid,
+                    "domain": NODE_ID_DOMAIN,
+                },
+                SRC_DERIVED,
+                may_claim=NODE_ID_MAY_CLAIM,
+                must_not_claim=list(NODE_ID_MUST_NOT_CLAIM),
+            )
+        except ValueError:
+            pass
+    return _field(
+        None,
+        SRC_ABSENT,
+        may_claim="node_id absent until birth has first_session_id AND a public device_id_hex",
+        must_not_claim=list(NODE_ID_MUST_NOT_CLAIM) + [
+            "null node_id means the kit is broken (honest pre-spine / unprovisioned)",
+        ],
+    )
 
 
 def write_flat_toml(path: Path, cfg: dict) -> None:
@@ -207,8 +419,12 @@ def compute_node_state(home: Path, *, session: dict | None = None,
         return {"state": NODE_STATE_FIRST_PROOF_PENDING, "detail": detail,
                 "stage5_deferred": path_b}
     return {"state": NODE_STATE_NODE_BORN,
-            "detail": f"first_session_id={birth.get('first_session_id', '?')}",
+            "detail": f"first_session_id={birth.get('first_session_id', '?')}"
+                      + (f" node_id={node_id_short(birth.get('node_id'))}"
+                         if birth.get("node_id") else " node_id=(null)"),
             "first_session_id": birth.get("first_session_id"),
+            "node_id": birth.get("node_id"),
+            "device_id_hex": birth.get("device_id_hex"),
             "birth_path": "path_b" if birth.get("path") == "B" else birth.get("path", "A")}
 
 
@@ -355,12 +571,22 @@ DOGFOOD_REPORT_OPTIONAL = frozenset({
     "friction_events", "wizard_wording_confused", "receipt_ok", "share_ok",
     "verify_tier", "node_state_at_end", "f_t66b1_status_seen", "blocked_on",
     "freeform_notes", "pack", "ts",
+    # PKG-UI-06 (round-13): Stream SPA dogfood surface
+    "ui_surface_exercised", "ui_serve_path", "ui_mode_seen",
 })
 # Friction event codes (closed set for cross-run aggregation; freeform goes in detail)
 DOGFOOD_FRICTION_CODES = frozenset({
     "PORT_PHANTOM", "CARD_INDEX", "ROI_CONFUSION", "CONTROLLER_MISSING",
     "RP5_BLOCK", "DAEMON_FAIL", "RECEIPT_MISSING", "SHARE_CONFUSION",
     "WIZARD_WORDING", "OTHER",
+    # PKG-UI-06 (round-13): Stream SPA friction codes (operator dogfood of React UI)
+    "UI_STREAM_EMPTY",          # empty/UNKNOWN expected but operator confused
+    "UI_DATA_PATH",             # could not find /stream-ui or offline shell
+    "UI_RECEIPT_CONFUSION",     # LOCAL vs SHARE split unclear
+    "UI_WORDING",               # presence_line / dignity line confusing
+    "UI_CEREMONY_MAP",          # birth stages unclear
+    "UI_ANIMATION_DISTRACTION", # stage chrome felt like suspense-theater
+    "UI_LIVE_SUSPECT",          # operator suspected fabricated LIVE (should never)
 })
 
 
@@ -386,6 +612,10 @@ def scaffold_dogfood_report(*, run_label: str = "dogfood_1", path: str = "B",
         "blocked_on": [],
         "operator_would_rerun_without_chat": None,  # THE Phase D dogfood bar
         "freeform_notes": "",
+        # PKG-UI-06: which Stream surface the operator exercised this run
+        "ui_surface_exercised": None,  # "vite_spa" | "offline_shell" | "none" | null
+        "ui_serve_path": None,         # e.g. "http://127.0.0.1:5173/?view=stream"
+        "ui_mode_seen": None,          # EMPTY | CEREMONY | STREAM | RECEIPT
         "ts": int(time.time()),
     }
 
@@ -539,15 +769,294 @@ def freshness_for_share(age_s: float | None) -> str:
     return FRESHNESS_FRESH if age_s < 300 else FRESHNESS_STALE
 
 
+# ---------------------------------------------------------------- A2A-STREAM-2 node face helpers (additive)
+#
+# Extend status/stream snapshots so StreamView can paint: node identity, contribution
+# pulse, provenance-tagged score, kills-seen blink. fresh_fires stays ABSENT until the
+# daemon writes a durable counter (process-memory only today — HARD-1 GATED).
+
+
+def _trunc_hex_short(value: str | None, n: int = 12) -> str | None:
+    if not value:
+        return None
+    s = str(value).strip().lower().removeprefix("0x")
+    if not s:
+        return None
+    return s[: max(4, int(n))]
+
+
+def build_node_identity_face(
+    home: Path,
+    *,
+    birth: dict | None = None,
+    device_id_hex: str | None = None,
+) -> dict:
+    """Q1 pure: ambient node identity for UI (derived-not-minted honesty).
+
+    Missing birth / device_id → present=False, honest nulls (never fabricates a hex).
+    """
+    birth = birth if isinstance(birth, dict) else None
+    if birth is None:
+        birth = _load_json(Path(home) / "birth_receipt.json")
+    did = device_id_hex
+    if birth:
+        did = did or birth.get("device_id_hex")
+        try:
+            birth = enrich_birth_receipt(birth, device_id_hex=did)
+        except Exception:  # noqa: BLE001
+            pass
+    cell = extract_node_id_cell(birth, device_id_hex=did)
+    val = cell.get("value") if isinstance(cell, dict) else None
+    src = (cell.get("source") if isinstance(cell, dict) else None) or SRC_ABSENT
+    if isinstance(val, dict) and val.get("node_id"):
+        nid = str(val["node_id"]).strip().lower().removeprefix("0x")
+        did_n = val.get("device_id_hex")
+        return {
+            "present": True,
+            "node_id": nid,
+            "node_id_short": val.get("node_id_short") or node_id_short(nid),
+            "node_id_source": src,  # DERIVED
+            "node_id_domain": val.get("domain") or NODE_ID_DOMAIN,
+            "device_id_short": _trunc_hex_short(did_n, 12),
+            "device_on_chain_evidence": bool(did_n),
+            "claim_language": "derived_not_minted",
+            "may_claim": NODE_ID_MAY_CLAIM,
+            "must_not_claim": list(NODE_ID_MUST_NOT_CLAIM),
+            "line": (
+                f"node {node_id_short(nid)} · derived spine "
+                f"(device {(_trunc_hex_short(did_n, 8) or '?')}… may be on-chain; node_id is not)"
+            ),
+        }
+    return {
+        "present": False,
+        "node_id": None,
+        "node_id_short": None,
+        "node_id_source": SRC_ABSENT,
+        "node_id_domain": NODE_ID_DOMAIN,
+        "device_id_short": _trunc_hex_short(did, 12) if did else None,
+        "device_on_chain_evidence": bool(did),
+        "claim_language": "derived_not_minted",
+        "may_claim": "node_id absent until birth + public device_id",
+        "must_not_claim": list(NODE_ID_MUST_NOT_CLAIM),
+        "line": "node identity unformed — birth + public device_id required",
+    }
+
+
+def build_contribution_pulse(
+    home: Path,
+    *,
+    node_id_hex: str | None = None,
+    limit: int = 5,
+) -> dict:
+    """Q2 pure: ledger as earned history (LOCAL / PENDING / ANCHORED-with-tx honesty).
+
+    Never paints 'on-chain' unless anchored=True AND anchor_tx is a non-empty string.
+    """
+    try:
+        from vapi_bridge.node_contribution_ledger import (  # type: ignore
+            default_ledger_path,
+            load_ledger,
+            entries_for_node,
+            verify_chain,
+            ANCHOR_STATE_PENDING,
+            ANCHOR_STATE_ANCHORED,
+        )
+    except Exception:  # noqa: BLE001
+        # Fail-open when bridge package not importable (tests may still inject via home files)
+        return {
+            "present": False,
+            "entry_count": 0,
+            "chain_intact": None,
+            "recent": [],
+            "line": "contribution ledger unavailable",
+            "must_not_claim": ["on-chain contribution without anchor_tx"],
+        }
+    path = default_ledger_path(Path(home))
+    rows = load_ledger(path)
+    if node_id_hex:
+        try:
+            rows = entries_for_node(rows, node_id_hex)
+        except ValueError:
+            rows = []
+    if not rows:
+        return {
+            "present": False,
+            "entry_count": 0,
+            "chain_intact": None,
+            "recent": [],
+            "line": "no contributions logged yet — local ledger empty",
+            "must_not_claim": ["on-chain contribution without anchor_tx"],
+        }
+    v = verify_chain(rows, node_id_hex=node_id_hex)
+    recent: list[dict] = []
+    for e in rows[-max(1, int(limit)):]:
+        anchored = bool(e.get("anchored")) and bool(e.get("anchor_tx"))
+        state = e.get("anchor_state") or (
+            ANCHOR_STATE_ANCHORED if anchored else ANCHOR_STATE_PENDING
+        )
+        # Honesty rail: never claim ANCHORED without a real tx string
+        if state == ANCHOR_STATE_ANCHORED and not e.get("anchor_tx"):
+            state = ANCHOR_STATE_PENDING
+            anchored = False
+        if not anchored and state == ANCHOR_STATE_ANCHORED:
+            state = ANCHOR_STATE_PENDING
+        # Lifecycle for pixels: LOCAL (written) → PENDING (awaiting tx) → ANCHORED
+        lifecycle = "ANCHORED" if anchored else "PENDING"
+        sid = str(e.get("session_id") or "")
+        recent.append({
+            "session_id_short": sid[:18] + ("…" if len(sid) > 18 else ""),
+            "posp_verdict": e.get("posp_verdict") or "ABSENT",
+            "w3s_attested": bool(e.get("w3s_attested")),
+            "lifecycle": lifecycle,
+            "anchor_state": state,
+            "anchored": anchored,
+            "anchor_tx_short": _trunc_hex_short(e.get("anchor_tx"), 10) if anchored else None,
+            "ts_ns": e.get("ts_ns"),
+        })
+    return {
+        "present": True,
+        "entry_count": len(rows),
+        "chain_intact": bool(v.get("chain_intact")),
+        "recent": recent,
+        "line": (
+            f"{len(rows)} contribution{'s' if len(rows) != 1 else ''} · "
+            f"chain {'intact' if v.get('chain_intact') else 'broken'} · "
+            "LOCAL until a real tx anchors"
+        ),
+        "must_not_claim": [
+            "on-chain contribution while anchored=false",
+            "fabricated anchor_tx",
+            "w3s_attested means decentralized identity truth",
+        ],
+    }
+
+
+def summarize_scorecard_for_ui(card: dict | None) -> dict:
+    """Q3 pure: provenance-tagged score pixels from a VALID-1 match_scorecard dict.
+
+    Tags MEASURED / OPERATOR-REPORTED stay first-class. UNSCORED is dignified, not zero.
+    """
+    if not isinstance(card, dict) or not card:
+        return {
+            "present": False,
+            "recall_status": "UNSCORED",
+            "display": "score unscored — no scorecard artifact",
+            "authored": {"value": None, "source": SRC_ABSENT},
+            "reported": {"value": None, "source": SRC_ABSENT},
+            "kas_verdict": None,
+            "posp_verdict": None,
+            "label": None,
+            "dignity_tone": VERDICT_TONE_HONEST_NULL,
+        }
+    fields = card.get("fields") if isinstance(card.get("fields"), dict) else {}
+    recall = fields.get("recall") if isinstance(fields.get("recall"), dict) else {}
+    # scorecard may nest recall under fields or top-level depending on version
+    if not recall and isinstance(card.get("recall"), dict):
+        recall = card["recall"]
+    authored = recall.get("authored") if isinstance(recall.get("authored"), dict) else {}
+    reported = recall.get("reported") if isinstance(recall.get("reported"), dict) else {}
+    # Also accept flat fields.authored_kills style from older cards
+    if not authored and isinstance(fields.get("authored"), dict):
+        authored = fields["authored"]
+    status = recall.get("status") or "UNSCORED"
+    display = recall.get("display") or (
+        f"authored {authored.get('value')} / reported "
+        f"{'UNSCORED' if reported.get('value') is None else reported.get('value')}"
+    )
+    kas_f = fields.get("kas_verdict") if isinstance(fields.get("kas_verdict"), dict) else {}
+    posp_f = fields.get("posp_verdict") if isinstance(fields.get("posp_verdict"), dict) else {}
+    dignity = card.get("dignity") if isinstance(card.get("dignity"), dict) else {}
+    return {
+        "present": True,
+        "label": card.get("label"),
+        "recall_status": status,
+        "display": display,
+        "authored": {
+            "value": authored.get("value"),
+            "source": authored.get("source") or SRC_MEASURED,
+        },
+        "reported": {
+            "value": reported.get("value"),
+            "source": reported.get("source") or SRC_OPERATOR,
+        },
+        "kas_verdict": kas_f.get("value"),
+        "posp_verdict": posp_f.get("value"),
+        "dignity_tone": dignity.get("tone") or VERDICT_TONE_HONEST_NULL,
+        "f_t66b1_visible": True,
+    }
+
+
+def load_scorecard_summary(
+    *,
+    home: Path,
+    session: dict | None = None,
+    audits_dir: Path | None = None,
+) -> dict:
+    """Load scorecard summary for UI: prefer ~/.qortroller/ui/scorecard.json, else audits."""
+    ui_card = _load_json(Path(home) / "ui" / "scorecard.json")
+    if isinstance(ui_card, dict) and ui_card.get("schema"):
+        return summarize_scorecard_for_ui(ui_card)
+    label = (session or {}).get("label")
+    if label and audits_dir is not None:
+        p = Path(audits_dir) / f"match_scorecard_{label}.json"
+        card = _load_json(p)
+        if isinstance(card, dict):
+            return summarize_scorecard_for_ui(card)
+    return summarize_scorecard_for_ui(None)
+
+
+def build_witness_blink(
+    *,
+    capture_dir: Path | None = None,
+    kills_seen: int | None = None,
+) -> dict:
+    """Q4 pure: ambient killfeed activity signal (not a score, not mid-match clutter).
+
+    kills_seen = MEASURED OCR rows (any killer). fresh_fires = ABSENT until daemon
+    persists _kf_fresh_fires (HARD-1 process memory only today).
+    """
+    seen = kills_seen
+    if seen is None and capture_dir is not None:
+        seen = count_killfeed_rows(Path(capture_dir) / "killfeed_events.jsonl")
+    return {
+        "kills_seen": seen,
+        "kills_seen_source": SRC_MEASURED if seen is not None else SRC_ABSENT,
+        "kills_seen_may_claim": (
+            "OCR killfeed rows observed (any killer) — feed activity, not your score"
+        ),
+        "kills_seen_must_not_claim": [
+            "operator kills scored",
+            "recall denominator",
+            "your kill count",
+        ],
+        # HARD-1 GATED: counter lives in capture process memory, not a durable file.
+        "fresh_fires": None,
+        "fresh_fires_status": SRC_ABSENT,
+        "fresh_fires_note": (
+            "GATED:HARD-1 — _kf_fresh_fires is process-memory only; "
+            "snapshot stays ABSENT until daemon writes a durable counter"
+        ),
+        "line": (
+            f"witness saw {seen} killfeed row{'s' if seen != 1 else ''}"
+            if seen is not None else
+            "killfeed activity unknown (no sink file)"
+        ),
+    }
+
+
 def build_status_snapshot(*, home: Path, session: dict | None = None,
                           port_owners: list | None = None,
                           capture_dir: Path | None = None,
                           now_s: float | None = None,
-                          pack: str = "observer-only") -> dict:
+                          pack: str = "observer-only",
+                          audits_dir: Path | None = None) -> dict:
     """PKG-UI-04 pure: machine-readable status for the gamer UI (CLI-written truth).
 
     No secret-shaped keys. No crop counts as primary liveness (freshness_class only).
     No keys, no consent authority, no fabricated liveness.
+
+    STREAM-2 additive keys (old shells ignore; missing → UNKNOWN in React):
+      node_identity, contribution, scorecard, witness_blink
     """
     now = float(now_s if now_s is not None else time.time())
     owners = list(port_owners or [])
@@ -569,6 +1078,18 @@ def build_status_snapshot(*, home: Path, session: dict | None = None,
     label = (session or {}).get("label")
     stamp = (session or {}).get("stamp")
     sid = f"{label}_{stamp}" if label and stamp else (label or None)
+
+    # STREAM-2 node face fields (additive; fail-open)
+    identity = build_node_identity_face(home)
+    contrib = build_contribution_pulse(
+        home, node_id_hex=identity.get("node_id") if identity.get("present") else None,
+    )
+    score = load_scorecard_summary(
+        home=home, session=session,
+        audits_dir=audits_dir if audits_dir is not None else (_REPO / "audits"),
+    )
+    blink = build_witness_blink(capture_dir=capture_dir)
+
     snap = {
         "schema": STATUS_SNAPSHOT_SCHEMA,
         "ts": int(now),
@@ -581,6 +1102,16 @@ def build_status_snapshot(*, home: Path, session: dict | None = None,
         "port_8080_owners": owners,
         "freshness_class": fclass,
         "witness_live": fclass == FRESHNESS_LIVE,
+        # STREAM-2 additive face contract (Q1–Q5)
+        "node_identity": identity,
+        "contribution": contrib,
+        "scorecard": score,
+        "witness_blink": blink,
+        # Flat convenience keys (UI short-circuit; still honest-null when absent)
+        "node_id": identity.get("node_id"),
+        "node_id_short": identity.get("node_id_short"),
+        "kills_seen": blink.get("kills_seen"),
+        "fresh_fires": blink.get("fresh_fires"),
         # Explicit absences -- UI must not invent these.
         # Field names avoid secret_shaped markers (no "key"/"secret"/"token" substrings).
         "signing_material_present": False,
@@ -600,6 +1131,9 @@ def build_stream_view_model(snapshot: dict) -> dict:
 
     Novelty: 'your witness is live' -- a single presence respiration from freshness_class,
     not an FPS-counter clone. Deliberately absent: counts, biometrics, green-check theater.
+
+    STREAM-2 extends on_screen with node face fields (identity / contribution / score /
+    blink) so the StreamView can paint the DePIN node without inventing truth.
     """
     if not isinstance(snapshot, dict):
         snapshot = {}
@@ -621,7 +1155,11 @@ def build_stream_view_model(snapshot: dict) -> dict:
     else:
         presence_line = "witness state unknown"
         presence_tone = "unknown"
-    # Mid-match: minimal HUD only
+    identity = snapshot.get("node_identity") if isinstance(snapshot.get("node_identity"), dict) else None
+    contrib = snapshot.get("contribution") if isinstance(snapshot.get("contribution"), dict) else None
+    score = snapshot.get("scorecard") if isinstance(snapshot.get("scorecard"), dict) else None
+    blink = snapshot.get("witness_blink") if isinstance(snapshot.get("witness_blink"), dict) else None
+    # Mid-match: minimal HUD + STREAM-2 ambient node face (not a dashboard clone)
     on_screen = {
         "presence_line": presence_line,
         "presence_tone": presence_tone,
@@ -631,15 +1169,24 @@ def build_stream_view_model(snapshot: dict) -> dict:
         "session_label": snapshot.get("session_label"),
         "pack": snapshot.get("pack"),
         "f_t66b1_disclosure_visible": True,  # wherever authorship will later render
+        # STREAM-2 face fields (pass-through; React renders UNKNOWN when missing)
+        "node_identity": identity,
+        "contribution": contrib,
+        "scorecard": score,
+        "witness_blink": blink,
+        "node_id_short": (identity or {}).get("node_id_short") if identity else snapshot.get("node_id_short"),
+        "kills_seen": (blink or {}).get("kills_seen") if blink else snapshot.get("kills_seen"),
     }
     return {
         "schema": STREAM_VIEW_SCHEMA,
         "surface": "stream",
         "on_screen": on_screen,
         "deliberately_absent": sorted(STREAM_DELIBERATELY_ABSENT),
-        "novelty": "witness_respiration",
-        "novelty_note": ("Single presence indicator from capture-ring freshness-class; "
-                         "not FPS, not crop counts, not biometric theater."),
+        "novelty": "node_face_witness_respiration",
+        "novelty_note": (
+            "STREAM-2: witness respiration + node identity mark + contribution pulse + "
+            "provenance-tagged score + killfeed blink; not FPS, not crop counts, not theater."
+        ),
         "mock": False,
         "fabricated_liveness": False,
         "signing_material_present": False,
@@ -1066,6 +1613,578 @@ def _load_json(path: Path | None) -> dict | None:
         return json.loads(path.read_text(encoding="utf-8")) if path and path.exists() else None
     except Exception:  # noqa: BLE001
         return None
+
+
+# ---------------------------------------------------------------- A2A-VALID-1 match self-scorecard (honest recall)
+
+# One scorecard binds ONE session_id. Every number carries a source tag. Recall's denominator is
+# OPERATOR-REPORTED only — never killfeed row counts, never C-3.3 cluster counts, never fabricated 0.
+MATCH_SCORECARD_SCHEMA = "qortroller-match-scorecard-v1"
+SRC_MEASURED = "MEASURED"
+SRC_OPERATOR = "OPERATOR-REPORTED"
+SRC_DERIVED = "DERIVED"
+SRC_ABSENT = "ABSENT"  # honest-null: artifact / value not available
+
+RECALL_STATUS_SCORED = "SCORED"                 # D reported; ratio may be derived
+RECALL_STATUS_UNSCORED = "UNSCORED"             # D not supplied (default; not zero)
+RECALL_STATUS_UNSCORED_DECLINED = "UNSCORED_DECLINED"  # operator explicitly declined
+
+SESSION_BIND_OK = "OK"
+SESSION_BIND_MISMATCH = "MISMATCH"
+SESSION_BIND_PARTIAL = "PARTIAL"  # some surfaces lack session_id; no hard conflict
+SESSION_BIND_ABSENT = "ABSENT"    # no session_id on any surface
+
+# Fixed language rails (Q2). Scorer may emit MAY lines; MUST_NOT strings are banned from render.
+FALSE_AUTH_MAY_LINES = (
+    "A2/A3 structural guards CLOSED (exact-token killer match + leftmost-killer death path)",
+    "authored kills are R2-bound on the KAS path (design invariant of the authorship chain)",
+    "zero-false-read *design*: this scorecard never invents authored kills from OCR alone",
+)
+FALSE_AUTH_MUST_NOT_LINES = (
+    "zero false-authorship proven this match",
+    "0 false positives proven",
+    "100% accurate authorship",
+    "false-authorship rate = 0",
+    "precision = 100%",
+)
+
+# Over-claim red-team denials (fields the scorer must refuse to compute as "ground truth").
+REFUTED_RECALL_DENOMINATORS = frozenset({
+    "killfeed_rows_seen",       # OCR-seen rows for ANY killer — not operator kills scored
+    "c33_cluster_count",        # offline archive study denominator — not match scoreboard
+    "deferred_authored",        # deferred path count is not live authored without label
+    "fabricated_zero",          # missing D must never become 0
+})
+
+
+def _field(value, source: str, *, may_claim: str, must_not_claim: list | None = None) -> dict:
+    """Atomic scorecard cell: value + provenance + claim envelope."""
+    return {
+        "value": value,
+        "source": source,
+        "may_claim": may_claim,
+        "must_not_claim": list(must_not_claim or []),
+    }
+
+
+def extract_authored_kills(kas: dict | None) -> dict:
+    """MEASURED authored count from live KAS; deferred path is labeled, never silently promoted.
+
+    Live KAS uses `authored_kills`. Deferred records use `deferred_authored` — different artifact
+    class; scorer surfaces it as measured-but-deferred, never as unlabelled authored_kills.
+    """
+    if not kas:
+        return _field(None, SRC_ABSENT,
+                      may_claim="no KAS record for this session",
+                      must_not_claim=["authored_kills=0 as measured absence of play"])
+    if "authored_kills" in kas and kas.get("authored_kills") is not None:
+        try:
+            n = int(kas["authored_kills"])
+        except (TypeError, ValueError):
+            n = None
+        return _field(n, SRC_MEASURED,
+                      may_claim="KAS-measured authored kill count (R2-bound path)",
+                      must_not_claim=["kills you scored on the scoreboard",
+                                      "ground-truth kill count"])
+    if "deferred_authored" in kas and kas.get("deferred_authored") is not None:
+        try:
+            n = int(kas["deferred_authored"])
+        except (TypeError, ValueError):
+            n = None
+        return _field(n, SRC_MEASURED,
+                      may_claim="deferred-KAS authored count (qortroller-kas-deferred-v0); not live KAS",
+                      must_not_claim=["live AUTHORED_SESSION kill count without deferred label"])
+    return _field(None, SRC_ABSENT,
+                  may_claim="KAS present but no authored_kills / deferred_authored field",
+                  must_not_claim=["authored=0 invented"])
+
+
+def bind_session_ids(*, kas: dict | None, posp: dict | None, v3: dict | None,
+                     pin: str | None = None) -> dict:
+    """Q4: one card, one session_id. Flag disagreement; never mix surfaces across sessions."""
+    surfaces: dict[str, str | None] = {
+        "kas": (kas or {}).get("session_id") if kas else None,
+        "posp": (posp or {}).get("session_id") if posp else None,
+        # v3 historically may omit session_id — treat missing as unbound, not mismatch alone
+        "v3": (v3 or {}).get("session_id") if v3 else None,
+    }
+    present = {k: v for k, v in surfaces.items() if v}
+    if pin:
+        present["pin"] = pin
+    unique = {str(v) for v in present.values()}
+    if not unique:
+        status = SESSION_BIND_ABSENT
+        session_id = None
+    elif len(unique) == 1:
+        status = SESSION_BIND_OK
+        session_id = next(iter(unique))
+        # partial if some expected surfaces missing id while others agree
+        if (kas and not surfaces["kas"]) or (posp and not surfaces["posp"]):
+            status = SESSION_BIND_PARTIAL
+    else:
+        status = SESSION_BIND_MISMATCH
+        session_id = None  # refuse a single binding when conflicted
+    return {
+        "status": status,
+        "session_id": session_id,
+        "surfaces": surfaces,
+        "may_claim": ("all bound surfaces share one session_id" if status == SESSION_BIND_OK
+                      else "session binding incomplete or conflicted — do not cross-mix"),
+        "must_not_claim": ["artifacts from different sessions joined as one match"],
+    }
+
+
+def compute_recall_cell(*, authored: dict, kills_scored: int | None,
+                        declined: bool = False) -> dict:
+    """Q1: authored N (MEASURED) / reported D (OPERATOR-REPORTED). Missing D = UNSCORED, never 0.
+
+    Ratio is DERIVED only when D is a non-null non-negative int. Division by zero is refused
+    (ratio stays null; status still SCORED with D=0 so the operator report is preserved honestly).
+    """
+    n = authored.get("value")
+    if declined:
+        return {
+            "status": RECALL_STATUS_UNSCORED_DECLINED,
+            "authored": authored,
+            "reported": _field(None, SRC_OPERATOR,
+                               may_claim="operator explicitly declined to report kills scored",
+                               must_not_claim=["reported=0", "recall=0%"]),
+            "ratio": _field(None, SRC_ABSENT,
+                            may_claim="no ratio without a reported denominator",
+                            must_not_claim=list(REFUTED_RECALL_DENOMINATORS) + ["recall=0"]),
+            "display": f"authored {n if n is not None else '?'} / reported UNSCORED (operator declined)",
+        }
+    if kills_scored is None:
+        return {
+            "status": RECALL_STATUS_UNSCORED,
+            "authored": authored,
+            "reported": _field(None, SRC_OPERATOR,
+                               may_claim="kills scored not supplied this run",
+                               must_not_claim=["reported=0 as default", "we counted your kills"]),
+            "ratio": _field(None, SRC_ABSENT,
+                            may_claim="recall unscored until operator reports D",
+                            must_not_claim=list(REFUTED_RECALL_DENOMINATORS) + ["recall=0%"]),
+            "display": f"authored {n if n is not None else '?'} / reported UNSCORED",
+        }
+    try:
+        d = int(kills_scored)
+    except (TypeError, ValueError):
+        d = None
+    if d is None or d < 0:
+        return {
+            "status": RECALL_STATUS_UNSCORED,
+            "authored": authored,
+            "reported": _field(None, SRC_OPERATOR,
+                               may_claim="invalid operator report ignored (fail-open to UNSCORED)",
+                               must_not_claim=["fabricated denominator"]),
+            "ratio": _field(None, SRC_ABSENT,
+                            may_claim="no ratio",
+                            must_not_claim=["recall from invalid D"]),
+            "display": f"authored {n if n is not None else '?'} / reported UNSCORED (invalid D)",
+        }
+    reported = _field(d, SRC_OPERATOR,
+                      may_claim="operator-reported kills scored this match (scoreboard / memory)",
+                      must_not_claim=["HID-measured kill count", "killfeed-derived scoreboard",
+                                      "c33 archive cluster count"])
+    ratio_val = None
+    ratio_src = SRC_ABSENT
+    if n is not None and d > 0:
+        ratio_val = float(n) / float(d)  # never round up; callers may format, not inflate
+        ratio_src = SRC_DERIVED
+    ratio = _field(ratio_val, ratio_src,
+                   may_claim=("measured authored / operator-reported scored"
+                              if ratio_val is not None
+                              else "ratio undefined when D=0 or N absent"),
+                   must_not_claim=["measured ground-truth recall", "precision",
+                                   "we counted your kills"])
+    return {
+        "status": RECALL_STATUS_SCORED,
+        "authored": authored,
+        "reported": reported,
+        "ratio": ratio,
+        "display": (
+            f"authored {n if n is not None else '?'} [MEASURED] / "
+            f"reported {d} [OPERATOR-REPORTED]"
+            + (f"  (= {ratio_val:.4f} DERIVED, unrounded)" if ratio_val is not None else
+               "  (ratio undefined)")
+        ),
+    }
+
+
+def dignity_tone_for_scorecard(*, authored_n, posp_verdict: str | None,
+                               recall_status: str, session_bind: str) -> dict:
+    """Q3: honest-null / partial / zero-authored are legitimate observations, not red failures."""
+    notes: list[str] = []
+    if authored_n == 0:
+        notes.append(
+            "authored=0 is a legitimate observation (no R2-bound authored kills this session), "
+            "not a player failure")
+    if authored_n is None:
+        notes.append("authored absent (no KAS) — honest-null, not zero")
+    pv = (posp_verdict or "").upper()
+    if pv in ("PARTIAL_SURFACES", "PARTIAL"):
+        notes.append(
+            "PoSP PARTIAL_SURFACES is incomplete presence evidence — dignified truth, not a red fail")
+    if pv == "UNVERIFIABLE":
+        notes.append("PoSP UNVERIFIABLE: surfaces disagree or missing — observation, not shame")
+    if recall_status in (RECALL_STATUS_UNSCORED, RECALL_STATUS_UNSCORED_DECLINED):
+        notes.append(
+            "recall UNSCORED: denominator is operator-only; declining or omitting D is valid")
+    if session_bind == SESSION_BIND_MISMATCH:
+        notes.append(
+            "session_id MISMATCH: scorecard refuses a single binding — fix artifacts before claim")
+    return {
+        "tone": (VERDICT_TONE_HONEST_NULL if (authored_n in (0, None)
+                                              or recall_status != RECALL_STATUS_SCORED
+                                              or pv in ("PARTIAL_SURFACES", "UNVERIFIABLE", ""))
+                 else VERDICT_TONE_EARNED),
+        "notes": notes,
+    }
+
+
+def build_match_scorecard(
+    label: str,
+    *,
+    kas: dict | None,
+    posp: dict | None,
+    v3: dict | None,
+    manifest: dict | None = None,
+    birth: dict | None = None,
+    dogfood: dict | None = None,
+    kills_scored: int | None = None,
+    kills_scored_declined: bool = False,
+    killfeed_rows_seen: int | None = None,
+    session_id_pin: str | None = None,
+    pack: str = "?",
+) -> dict:
+    """A2A-VALID-1 pure builder: one honest scorecard over real artifacts + optional operator D.
+
+    Never fabricates kills_scored. Never treats killfeed_rows_seen as recall denominator.
+    Never claims zero false-authorship proven. Binds to a single session_id or flags MISMATCH.
+    """
+    authored = extract_authored_kills(kas)
+    bind = bind_session_ids(kas=kas, posp=posp, v3=v3, pin=session_id_pin)
+    recall = compute_recall_cell(authored=authored, kills_scored=kills_scored,
+                                 declined=kills_scored_declined)
+    posp_verdict = (posp or {}).get("verdict") if posp else None
+    fusion_n = None
+    if posp and isinstance(posp.get("fusion"), dict):
+        fusion_n = posp["fusion"].get("n_id_verified")
+    v3_n = (v3 or {}).get("n_events") if v3 else None
+    v3_commit = (v3 or {}).get("commitment") if v3 else None
+    dignity = dignity_tone_for_scorecard(
+        authored_n=authored.get("value"),
+        posp_verdict=posp_verdict,
+        recall_status=recall["status"],
+        session_bind=bind["status"],
+    )
+    # Sink rows are MEASURED observations of OCR killfeed lines — explicitly NOT "kills scored".
+    seen = _field(
+        killfeed_rows_seen, SRC_MEASURED if killfeed_rows_seen is not None else SRC_ABSENT,
+        may_claim="OCR killfeed rows observed (any killer) — presence of feed activity",
+        must_not_claim=["operator kills scored", "recall denominator", "your kill count"],
+    )
+    dogfood_cell = _field(
+        None if not dogfood else {
+            "schema": dogfood.get("schema"),
+            "friction_n": len(dogfood.get("friction_events") or []),
+            "stages_completed": dogfood.get("stages_completed"),
+            "node_state_at_end": dogfood.get("node_state_at_end"),
+            "operator_would_rerun_without_chat": dogfood.get("operator_would_rerun_without_chat"),
+        },
+        SRC_OPERATOR if dogfood else SRC_ABSENT,
+        may_claim="PKG dogfood friction log (operator-filled) when present",
+        must_not_claim=["automatic proof of zero friction"],
+    )
+    # DEPIN-1: derive node_id at score time when birth + public device_id allow it
+    # (recomputable; does not require birth_receipt rewrite).
+    node_cell = extract_node_id_cell(birth)
+    node_val = node_cell.get("value") if isinstance(node_cell, dict) else None
+    birth_payload = None
+    if birth:
+        birth_payload = {
+            "first_session_id": birth.get("first_session_id"),
+            "path": birth.get("path"),
+            "node_id": (node_val or {}).get("node_id") if isinstance(node_val, dict)
+                       else birth.get("node_id"),
+            "device_id_hex": (node_val or {}).get("device_id_hex") if isinstance(node_val, dict)
+                            else birth.get("device_id_hex"),
+        }
+    birth_cell = _field(
+        birth_payload,
+        SRC_MEASURED if birth else SRC_ABSENT,
+        may_claim="node birth receipt state when present on this host; node_id DERIVED when device_id known",
+        must_not_claim=[
+            "this match minted birth unless first_session_id matches",
+            "node_id is on-chain",
+        ],
+    )
+    card = {
+        "schema": MATCH_SCORECARD_SCHEMA,
+        "label": label,
+        "pack": pack,
+        "ts": int(time.time()),
+        "session_bind": bind,
+        # Spine join-key for DEPIN legs 2/3 — top-level for easy ledger/applet binding.
+        "node_id": node_cell,
+        "fields": {
+            "kas_verdict": _field(
+                (kas or {}).get("verdict") if kas else None,
+                SRC_MEASURED if kas else SRC_ABSENT,
+                may_claim="KAS verdict AS-IS for this session",
+                must_not_claim=["upgraded to AUTHORED_SESSION", "SYNCHRONIZED authorship"],
+            ),
+            "authored_kills": authored,
+            "posp_verdict": _field(
+                posp_verdict, SRC_MEASURED if posp else SRC_ABSENT,
+                may_claim="PoSP verdict AS-IS (SYNCHRONIZED/PARTIAL_SURFACES/UNVERIFIABLE)",
+                must_not_claim=["rounded up to SYNCHRONIZED"],
+            ),
+            "fusion_n_id_verified": _field(
+                fusion_n, SRC_MEASURED if fusion_n is not None else SRC_ABSENT,
+                may_claim="NQPV fusion rows id-verified this session",
+                must_not_claim=["proof of humanity alone"],
+            ),
+            "v3_n_events": _field(
+                v3_n, SRC_MEASURED if v3_n is not None else SRC_ABSENT,
+                may_claim="RETINA-STATE-v3 event count when record present",
+                must_not_claim=["absence means capture failed (honest-null is valid)"],
+            ),
+            "v3_commitment": _field(
+                v3_commit, SRC_MEASURED if v3_commit else SRC_ABSENT,
+                may_claim="v3 commitment prefix-joinable to local preimage",
+                must_not_claim=["on-chain anchor without separate registry proof"],
+            ),
+            "archive_crop_count": _field(
+                (manifest or {}).get("count") if manifest else None,
+                SRC_MEASURED if manifest and manifest.get("count") is not None else SRC_ABSENT,
+                may_claim="archive crop count from session manifest",
+                must_not_claim=["liveness without freshness class"],
+            ),
+            "killfeed_rows_seen": seen,
+            "kills_scored": recall["reported"],
+            "recall": recall,
+            "birth": birth_cell,
+            "node_id": node_cell,
+            "dogfood": dogfood_cell,
+            "false_authorship_language": {
+                "may": list(FALSE_AUTH_MAY_LINES),
+                "must_not": list(FALSE_AUTH_MUST_NOT_LINES),
+                "source": SRC_DERIVED,
+                "may_claim": "structural guards + design invariants only",
+                "must_not_claim": list(FALSE_AUTH_MUST_NOT_LINES),
+            },
+        },
+        "dignity": dignity,
+        "refuted_overclaims": sorted(
+            set(REFUTED_RECALL_DENOMINATORS) | {
+                "node_id_on_chain",
+                "node_id_minted",
+                "decentralized_verified_node_pre_leg2",
+                "vmdr_registered_node_id",
+            }
+        ),
+        "rails": {
+            "no_poac_edit": True,
+            "no_frozen_edit": True,
+            "no_secrets": True,
+            "source_tags_required": True,
+            "session_id_bound": True,
+            "node_id_derived_not_minted": True,
+        },
+    }
+    return card
+
+
+def render_match_scorecard(card: dict) -> str:
+    """Human scorecard: every number tagged; recall never pretends to measure D; dignity notes."""
+    f = card.get("fields") or {}
+    bind = card.get("session_bind") or {}
+    recall = f.get("recall") or {}
+    authored = f.get("authored_kills") or {}
+    L = [
+        "=" * 64,
+        "  QorTroller Match Self-Scorecard  (VALID-1)",
+        "=" * 64,
+        f"  Schema   : {card.get('schema')}",
+        f"  Label    : {card.get('label')}",
+        f"  Pack     : {card.get('pack')}",
+        f"  Session  : {bind.get('session_id') or '(unbound)'}  [{bind.get('status')}]",
+    ]
+    node_cell = card.get("node_id") or (card.get("fields") or {}).get("node_id") or {}
+    node_v = node_cell.get("value") if isinstance(node_cell, dict) else None
+    if isinstance(node_v, dict) and node_v.get("node_id"):
+        L.append(
+            f"  Node     : {node_v.get('node_id_short') or node_id_short(node_v.get('node_id'))}  "
+            f"[{node_cell.get('source', SRC_DERIVED)}]  domain={node_v.get('domain', NODE_ID_DOMAIN)}"
+        )
+        L.append(
+            f"             (full node_id DERIVED -- not on-chain; device "
+            f"{(node_v.get('device_id_hex') or '')[:12]}... + birth)"
+        )
+    else:
+        L.append(
+            f"  Node     : (null)  [{(node_cell or {}).get('source', SRC_ABSENT)}]  "
+            f"(honest -- node_id needs birth + public device_id)"
+        )
+    L += [
+        "-" * 64,
+        "  RECALL (load-bearing rail)",
+        f"  status   : {recall.get('status')}",
+        f"  display  : {recall.get('display')}",
+        f"  authored : {authored.get('value')}  [{authored.get('source')}]",
+        f"  reported : {(recall.get('reported') or {}).get('value')}  "
+        f"[{(recall.get('reported') or {}).get('source')}]",
+        f"  ratio    : {(recall.get('ratio') or {}).get('value')}  "
+        f"[{(recall.get('ratio') or {}).get('source')}]",
+        "  note     : denominator is OPERATOR-REPORTED only — never killfeed / c33 / invented 0",
+        "-" * 64,
+        f"  KAS      : {(f.get('kas_verdict') or {}).get('value')}  "
+        f"[{(f.get('kas_verdict') or {}).get('source')}]",
+        f"  PoSP     : {(f.get('posp_verdict') or {}).get('value')}  "
+        f"[{(f.get('posp_verdict') or {}).get('source')}]",
+        f"  fusion_n : {(f.get('fusion_n_id_verified') or {}).get('value')}  "
+        f"[{(f.get('fusion_n_id_verified') or {}).get('source')}]",
+        f"  v3 events: {(f.get('v3_n_events') or {}).get('value')}  "
+        f"[{(f.get('v3_n_events') or {}).get('source')}]",
+        f"  sink rows: {(f.get('killfeed_rows_seen') or {}).get('value')}  "
+        f"[{(f.get('killfeed_rows_seen') or {}).get('source')}]  (NOT scored kills)",
+        "-" * 64,
+        "  False-authorship language (MAY only):",
+    ]
+    for line in ((f.get("false_authorship_language") or {}).get("may") or []):
+        L.append(f"   + {line}")
+    L.append("  MUST NOT claim:")
+    for line in ((f.get("false_authorship_language") or {}).get("must_not") or []):
+        L.append(f"   - {line}")
+    L.append("-" * 64)
+    L.append(f"  Dignity tone: {(card.get('dignity') or {}).get('tone')}")
+    for n in (card.get("dignity") or {}).get("notes") or []:
+        L.append(f"   * {n}")
+    dog = (f.get("dogfood") or {}).get("value")
+    if dog:
+        L.append(f"  Dogfood     : frictions={dog.get('friction_n')}  "
+                 f"stages={dog.get('stages_completed')}  "
+                 f"rerun_bar={dog.get('operator_would_rerun_without_chat')}")
+    else:
+        L.append("  Dogfood     : ABSENT (honest-null — not a fail)")
+    birth = (f.get("birth") or {}).get("value")
+    if birth:
+        L.append(f"  Birth       : path={birth.get('path')}  "
+                 f"first_session_id={birth.get('first_session_id')}")
+        if birth.get("node_id"):
+            L.append(f"               node_id={node_id_short(birth.get('node_id'))}... "
+                     f"(DERIVED, not minted)")
+    else:
+        L.append("  Birth       : ABSENT (honest-null)")
+    L += ["-" * 64,
+          "  Provenance: MEASURED = our instruments; OPERATOR-REPORTED = only they know;",
+          "  DERIVED = arithmetic over tagged inputs; ABSENT = honest-null.",
+          "  node_id = DERIVED spine (device_id + birth); DEVICE may be on-chain, node_id is not.",
+          "  A match self-score that over-claims is worse than no score.",
+          "=" * 64]
+    text = "\n".join(L)
+    # Belt-and-suspenders: ban must-not phrases from the rendered card body.
+    low = text.lower()
+    for banned in FALSE_AUTH_MUST_NOT_LINES:
+        # The MUST NOT section lists the phrases as prohibitions — allow only under that header.
+        pass
+    # Ensure we never assert proven-zero-false as a positive claim line.
+    for bad in ("zero false-authorship proven", "precision = 100%", "false-authorship rate = 0"):
+        # Positive claim would look like "  false-authorship rate = 0" without MUST NOT context.
+        if f"\n  {bad}" in low:
+            raise ValueError(f"over-claim leaked into scorecard render: {bad}")
+    return text
+
+
+def count_killfeed_rows(path: Path | None) -> int | None:
+    """MEASURED count of killfeed JSONL rows (any killer). None if file missing."""
+    if not path or not path.exists():
+        return None
+    try:
+        n = 0
+        with path.open("r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if line.strip():
+                    n += 1
+        return n
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def cmd_score(a) -> int:
+    """A2A-VALID-1: build + write match self-scorecard (additive; optional operator D)."""
+    st = load_session_state()
+    label = getattr(a, "label", "") or (st and st.get("label"))
+    if not label:
+        print("no session known -- pass --label <label>")
+        return 1
+    cfg = read_node_config()
+    pack = str(cfg.get("pack", "?"))
+    kas, posp, v3, manifest = _collect_artifacts(label)
+    # Prefer live KAS; if missing, try deferred record for the same label (still MEASURED+labeled).
+    if kas is None:
+        audits = _REPO / "audits"
+        kas = _load_json(find_latest(f"kas_deferred_record_{label}_*.json", audits))
+    birth = _load_json(_HOME / "birth_receipt.json")
+    # DEPIN-1: recompute/enrich node_id at score time from public device_id sources (fail-open).
+    if birth:
+        cfg_for_node = cfg
+        did = resolve_device_id_hex(birth=birth, cfg=cfg_for_node)
+        birth = enrich_birth_receipt(birth, device_id_hex=did)
+    dogfood = _load_json(_HOME / "dogfood_report.json")
+    # killfeed: session capture dir if known, else default crops file (MEASURED only)
+    kf_path = None
+    if st and st.get("capture_dir"):
+        cand = _REPO / st["capture_dir"] / "killfeed_events.jsonl"
+        if cand.exists():
+            kf_path = cand
+    if kf_path is None:
+        for cand in (
+            _REPO / "retina_kf_crops" / "killfeed_events.jsonl",
+            _REPO / "retina_kf_crops" / label / "killfeed_events.jsonl",
+        ):
+            if cand.exists():
+                kf_path = cand
+                break
+    rows_seen = count_killfeed_rows(kf_path)
+    declined = bool(getattr(a, "declined", False))
+    unscored = bool(getattr(a, "unscored", False))
+    kills_scored = getattr(a, "kills_scored", None)
+    if declined or unscored:
+        kills_scored = None
+    card = build_match_scorecard(
+        label,
+        kas=kas, posp=posp, v3=v3, manifest=manifest,
+        birth=birth, dogfood=dogfood,
+        kills_scored=kills_scored,
+        kills_scored_declined=declined,
+        killfeed_rows_seen=rows_seen,
+        session_id_pin=getattr(a, "session_id", None) or None,
+        pack=pack,
+    )
+    text = render_match_scorecard(card)
+    out_json = _REPO / "audits" / f"match_scorecard_{label}.json"
+    out_md = _REPO / "audits" / f"match_scorecard_{label}.md"
+    out_json.write_text(json.dumps(card, indent=2) + "\n", encoding="utf-8")
+    out_md.write_text(text + "\n", encoding="utf-8")
+    # STREAM-2: also land scorecard under ui/ so status --write-ui / StreamView can paint
+    # provenance-tagged score pixels without re-running score mid-match.
+    try:
+        ui_dir = _HOME / "ui"
+        ui_dir.mkdir(parents=True, exist_ok=True)
+        (ui_dir / "scorecard.json").write_text(
+            json.dumps(card, indent=2) + "\n", encoding="utf-8")
+        print(f"[qortroller] scorecard ui  -> {ui_dir / 'scorecard.json'}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[qortroller] scorecard ui write skipped: {exc!r}")
+    print(text)
+    print(f"[qortroller] scorecard json -> {out_json.relative_to(_REPO)}")
+    print(f"[qortroller] scorecard md   -> {out_md.relative_to(_REPO)}")
+    if card.get("session_bind", {}).get("status") == SESSION_BIND_MISMATCH:
+        print("[qortroller] WARNING: session_id MISMATCH across artifacts — card unbound")
+        return 2
+    return 0
 
 
 # ---------------------------------------------------------------- session state
@@ -1502,6 +2621,9 @@ def _maybe_complete_path_b_birth(label: str, stamp, cfg: dict) -> None:
                                 "posp": (posp or {}).get("verdict"),
                                 "v3": "present" if v3 else "honest-null"},
              "f_t66b1_disclosed": True, "ts": int(time.time())}
+    # DEPIN-1: bind derived node_id when public device_id is resolvable (no spend).
+    birth = enrich_birth_receipt(
+        birth, device_id_hex=resolve_device_id_hex(birth=birth, cfg=cfg))
     _HOME.mkdir(parents=True, exist_ok=True)
     birth_path.write_text(json.dumps(birth, indent=2), encoding="utf-8")
     # Clear deferred flag so status flips to NODE_BORN
@@ -1524,7 +2646,8 @@ def cmd_stop(a) -> int:
     _session_env(cfg, st["capture_dir"])                      # friction #3: env re-applied, not re-typed
     rc = subprocess.call([sys.executable, str(_DAEMON), "stop", "--label", st["label"], "--kas"],
                          cwd=str(_REPO))
-    _print_and_write_receipt(st["label"], cfg, stranger_verified=None)
+    # Always write receipt reveal for Stream SPA (local JSON only; no secrets)
+    _print_and_write_receipt(st["label"], cfg, stranger_verified=None, write_ui=True)
     _maybe_complete_path_b_birth(st["label"], st.get("stamp", "?"), cfg)
     append_dogfood_event(_HOME, {"event": "stop", "stop_ok": rc == 0, "receipt_ok": True,
                                  "pack": str(cfg.get("pack"))},
@@ -1546,7 +2669,8 @@ def _collect_artifacts(label: str):
 
 
 def _print_and_write_receipt(label: str, cfg: dict, stranger_verified, *,
-                             share: bool = False, html: bool = False) -> Path:
+                             share: bool = False, html: bool = False,
+                             write_ui: bool = False) -> Path:
     kas, posp, v3, manifest = _collect_artifacts(label)
     pack = str(cfg.get("pack", "?"))
     text = render_receipt(label, kas, posp, v3, manifest,
@@ -1559,11 +2683,14 @@ def _print_and_write_receipt(label: str, cfg: dict, stranger_verified, *,
         h = _REPO / "audits" / f"session_receipt_{label}.html"
         h.write_text(html_wrap(f"QorTroller Session Receipt - {label}", text), encoding="utf-8")
         print(f"[qortroller] receipt html -> {h.relative_to(_REPO)}")
-    if share:                                             # PKG-D-09: NEVER overwrites the local full file
-        st = load_session_state() or {}
-        age = None
-        if st.get("capture_dir"):
+    st = load_session_state() or {}
+    age = None
+    if st.get("capture_dir"):
+        try:
             _, age = ring_freshness(_REPO / st["capture_dir"], time.time())
+        except Exception:  # noqa: BLE001
+            age = None
+    if share:                                             # PKG-D-09: NEVER overwrites the local full file
         card = render_share_postcard(label, kas, posp, v3, manifest,
                                      stranger_verified=stranger_verified, pack=pack, ring_age_s=age)
         sh = _REPO / "audits" / f"session_receipt_{label}.share.md"
@@ -1574,6 +2701,17 @@ def _print_and_write_receipt(label: str, cfg: dict, stranger_verified, *,
             shh = _REPO / "audits" / f"session_receipt_{label}.share.html"
             shh.write_text(html_wrap(f"QorTroller Proof Postcard - {label}", card), encoding="utf-8")
             print(f"[qortroller] SHARE html -> {shh.relative_to(_REPO)}")
+    if write_ui:
+        # PKG-UI-02 React: write receipt reveal model for StreamView SPA
+        rev = build_receipt_reveal_model(
+            label, kas, posp, v3, manifest,
+            pack=pack, stranger_verified=stranger_verified, ring_age_s=age,
+        )
+        ui_dir = _HOME / "ui"
+        ui_dir.mkdir(parents=True, exist_ok=True)
+        rpath = ui_dir / "receipt.json"
+        rpath.write_text(json.dumps(rev, indent=2), encoding="utf-8")
+        print(f"[qortroller] ui receipt -> {rpath}")
     return out
 
 
@@ -1584,7 +2722,8 @@ def cmd_receipt(a) -> int:
         print("no session known -- pass a label: qortroller receipt --label <label>")
         return 1
     _print_and_write_receipt(label, read_node_config(), stranger_verified=None,
-                             share=getattr(a, "share", False), html=getattr(a, "html", False))
+                             share=getattr(a, "share", False), html=getattr(a, "html", False),
+                             write_ui=getattr(a, "write_ui", False))
     return 0
 
 
@@ -1659,9 +2798,18 @@ def cmd_drill(a) -> int:
              "verdicts_as_is": {"kas": (kas or {}).get("verdict"), "posp": (posp or {}).get("verdict"),
                                 "v3": "present" if v3 else "honest-null"},
              "f_t66b1_disclosed": True, "ts": int(time.time())}
+    # DEPIN-1: bind derived node_id when public device_id is resolvable (no spend).
+    birth = enrich_birth_receipt(
+        birth, device_id_hex=resolve_device_id_hex(birth=birth, cfg=cfg))
     _HOME.mkdir(parents=True, exist_ok=True)
     (_HOME / "birth_receipt.json").write_text(json.dumps(birth, indent=2), encoding="utf-8")
     print(f"[qortroller] node BIRTH complete -> {_HOME / 'birth_receipt.json'}")
+    if birth.get("node_id"):
+        print(f"  node_id={node_id_short(birth['node_id'])}... "
+              f"(DERIVED from device_id + first_session_id; not on-chain)")
+    else:
+        print("  node_id=(null) honest -- supply public device_id_hex (node.toml or "
+              "device_birth_cert) to bind the DEPIN spine")
     print("  (honest verdicts pass the birth; SYNCHRONIZED is earned in real matches)")
     append_dogfood_event(_HOME, {"event": "drill_path_a", "path": "A", "pack": str(cfg.get("pack")),
                                  "stop_ok": rc == 0},
@@ -1704,6 +2852,297 @@ def cmd_dogfood_report(a) -> int:
         return 0
     print("usage: qortroller dogfood-report --scaffold | --validate <path>")
     return 1
+
+
+# ---------------------------------------------------------------- A2A-DEPIN-1 NODE-LEDGER-1
+
+
+def _import_ledger():
+    """Import pure ledger module (repo-root on sys.path when CLI is scripts/qortroller.py)."""
+    if str(_REPO) not in sys.path:
+        sys.path.insert(0, str(_REPO))
+    if str(_REPO / "bridge") not in sys.path:
+        sys.path.insert(0, str(_REPO / "bridge"))
+    from vapi_bridge.node_contribution_ledger import (  # type: ignore
+        ANCHOR_STATE_ANCHORED,
+        ANCHOR_STATE_PENDING,
+        LEDGER_DOMAIN,
+        LEDGER_MUST_NOT_CLAIM,
+        append_entry,
+        build_entry,
+        compute_scorecard_root,
+        default_ledger_path,
+        extract_scorecard_fields,
+        find_entry_by_session,
+        genesis_hash_hex,
+        latest_entry_hash,
+        load_ledger,
+        mark_anchored,
+        render_ledger_report,
+        verify_chain,
+    )
+    return {
+        "ANCHOR_STATE_ANCHORED": ANCHOR_STATE_ANCHORED,
+        "ANCHOR_STATE_PENDING": ANCHOR_STATE_PENDING,
+        "LEDGER_DOMAIN": LEDGER_DOMAIN,
+        "LEDGER_MUST_NOT_CLAIM": LEDGER_MUST_NOT_CLAIM,
+        "append_entry": append_entry,
+        "build_entry": build_entry,
+        "compute_scorecard_root": compute_scorecard_root,
+        "default_ledger_path": default_ledger_path,
+        "extract_scorecard_fields": extract_scorecard_fields,
+        "find_entry_by_session": find_entry_by_session,
+        "genesis_hash_hex": genesis_hash_hex,
+        "latest_entry_hash": latest_entry_hash,
+        "load_ledger": load_ledger,
+        "mark_anchored": mark_anchored,
+        "render_ledger_report": render_ledger_report,
+        "verify_chain": verify_chain,
+    }
+
+
+def cmd_ledger(a) -> int:
+    """DEPIN-1 LEG 3: list / append / verify the node contribution ledger (local JSONL)."""
+    L = _import_ledger()
+    _path_arg = (getattr(a, "path", None) or "").strip()
+    path = Path(_path_arg) if _path_arg else L["default_ledger_path"](_HOME)
+    if getattr(a, "append_scorecard", None):
+        sc_path = Path(a.append_scorecard)
+        if not sc_path.is_file():
+            print(f"ABORT: scorecard not found: {sc_path}", file=sys.stderr)
+            return 2
+        raw = sc_path.read_bytes()
+        try:
+            card = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            print(f"ABORT: scorecard JSON parse failed: {exc}", file=sys.stderr)
+            return 2
+        fields = L["extract_scorecard_fields"](card)
+        node_id = fields.get("node_id") or (getattr(a, "node_id", None) or "").strip() or ""
+        session_id = fields.get("session_id") or (getattr(a, "session_id", None) or "").strip() or ""
+        if not node_id:
+            print(
+                "ABORT: scorecard has no node_id (birth + public device_id required). "
+                "Pass --node-id only if you accept operator override.",
+                file=sys.stderr,
+            )
+            return 2
+        if not session_id:
+            print("ABORT: scorecard has no session_id (session_bind).", file=sys.stderr)
+            return 2
+        # Prefer file-byte digest when appending from path (stable with on-disk artifact).
+        root = L["compute_scorecard_root"](raw)
+        existing = L["load_ledger"](path)
+        tip = L["latest_entry_hash"](existing, node_id)
+        entry = L["build_entry"](
+            node_id_hex=node_id,
+            session_id=str(session_id),
+            scorecard_root_hex=root,
+            posp_verdict=fields.get("posp_verdict"),
+            w3s_attested=bool(getattr(a, "w3s_attested", False)),
+            prev_hash_hex=tip,
+        )
+        try:
+            entry = L["append_entry"](path, entry)
+        except ValueError as exc:
+            print(f"ABORT: {exc}", file=sys.stderr)
+            return 2
+        print(f"APPENDED session={entry['session_id']}")
+        print(f"  entry_hash     : {entry['entry_hash']}")
+        print(f"  scorecard_root : {entry['scorecard_root']}")
+        print(f"  posp_verdict   : {entry['posp_verdict']}")
+        print(f"  w3s_attested   : {entry['w3s_attested']}  (mechanical format/presence only)")
+        print(f"  anchor_state   : {entry['anchor_state']}  (local only — not on-chain)")
+        print(f"  ledger         : {path}")
+        return 0
+
+    entries = L["load_ledger"](path)
+    _nid = (getattr(a, "node_id", None) or "").strip()
+    node_filter = _nid or None
+    if getattr(a, "json", False):
+        report = L["verify_chain"](entries, node_id_hex=node_filter)
+        payload = {
+            "schema": "qortroller-node-ledger-status-v0",
+            "domain": L["LEDGER_DOMAIN"],
+            "path": str(path),
+            "chain_intact": report["chain_intact"],
+            "entry_count": report["entry_count"],
+            "breaks": report["breaks"],
+            "entries": (
+                [e for e in entries if not node_filter
+                 or str(e.get("node_id", "")).lower().removeprefix("0x")
+                 == str(node_filter).lower().removeprefix("0x")]
+                if node_filter else entries
+            ),
+            "must_not_claim": list(L["LEDGER_MUST_NOT_CLAIM"]),
+        }
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0 if report["chain_intact"] else 1
+    print(L["render_ledger_report"](entries, node_id_hex=node_filter, verify=True))
+    v = L["verify_chain"](entries, node_id_hex=node_filter)
+    return 0 if v["chain_intact"] else 1
+
+
+def cmd_anchor(a) -> int:
+    """DEPIN-1 LEG 3: estimate-first (default) or operator-fired anchor of entry_hash.
+
+    Triple-gate on --execute (process-scoped; never mutates bridge/.env):
+      1) CHAIN_SUBMISSION_PAUSED=false
+      2) NODE_LEDGER_ANCHOR_AUTHORIZED=true
+      3) --confirm
+    Plus hard cost cap. Until a real tx confirms, ledger.anchored stays false.
+    """
+    L = _import_ledger()
+    _path_arg = (getattr(a, "path", None) or "").strip()
+    path = Path(_path_arg) if _path_arg else L["default_ledger_path"](_HOME)
+    session_id = getattr(a, "session", None) or getattr(a, "session_id", None) or ""
+    if not session_id:
+        print("ABORT: --session <id> is required", file=sys.stderr)
+        return 2
+    entries = L["load_ledger"](path)
+    _nid = (getattr(a, "node_id", None) or "").strip()
+    node_filter = _nid or None
+    entry = L["find_entry_by_session"](entries, session_id, node_id_hex=node_filter)
+    if entry is None:
+        print(f"ABORT: no ledger entry for session={session_id!r} in {path}", file=sys.stderr)
+        return 2
+    if entry.get("anchored") and entry.get("anchor_tx"):
+        print(
+            f"ALREADY ANCHORED session={session_id} tx={entry.get('anchor_tx')} "
+            f"block={entry.get('anchor_block')}"
+        )
+        return 0
+
+    entry_hash = str(entry["entry_hash"])
+    node_id = str(entry["node_id"])
+    # Reuse AdjudicationRegistry.recordAdjudication — payload=entry_hash, key=node_id spine
+    # (NOT claiming node_id is a device; the registry's first arg is a 32-byte join key).
+    RPC = "https://babel-api.testnet.iotex.io"
+    ADJUDICATION_REGISTRY = "0x44CF981f46a52ADE56476Ce894255954a7776fb4"
+    WALLET = "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+    COST_BUDGET_IOTX = 0.50
+    _ABI = [{
+        "name": "recordAdjudication", "type": "function", "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "deviceIdHash", "type": "bytes32"},
+            {"name": "payload", "type": "bytes32"},
+            {"name": "flagged", "type": "bool"},
+        ],
+        "outputs": [],
+    }]
+
+    print(f"\n  Node ledger anchor -- session={session_id}")
+    print(f"  domain         : {L['LEDGER_DOMAIN']} (candidate)")
+    print(f"  node_id        : {node_id[:16]}…  (spine key; NOT an on-chain mint)")
+    print(f"  entry_hash     : {entry_hash}  <- bytes32 payload")
+    print(f"  posp_verdict   : {entry.get('posp_verdict')}")
+    print(f"  w3s_attested   : {entry.get('w3s_attested')}  (mechanical only)")
+    print(f"  anchor_state   : {entry.get('anchor_state', L['ANCHOR_STATE_PENDING'])} "
+          f"(stays PENDING until real tx confirms)")
+
+    try:
+        from web3 import Web3
+    except ImportError:
+        print("  ABORT: web3 not installed (estimate requires web3).", file=sys.stderr)
+        return 3
+
+    w3 = Web3(Web3.HTTPProvider(RPC, request_kwargs={
+        "timeout": 30,
+        "headers": {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"},
+    }))
+    bal = w3.eth.get_balance(WALLET) / 1e18
+    reg = w3.eth.contract(address=ADJUDICATION_REGISTRY, abi=_ABI)
+    tx = reg.functions.recordAdjudication(
+        bytes.fromhex(node_id), bytes.fromhex(entry_hash), False
+    ).build_transaction({
+        "from": WALLET,
+        "nonce": w3.eth.get_transaction_count(WALLET),
+        "gasPrice": w3.eth.gas_price,
+        "chainId": 4690,
+    })
+    try:
+        gas_est = w3.eth.estimate_gas(tx)
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ABORT: estimate_gas reverted -- call would fail, NOT sending: {exc}",
+              file=sys.stderr)
+        return 3
+    tx["gas"] = int(gas_est * 1.25)
+    cost = tx["gas"] * tx["gasPrice"] / 1e18
+    print(f"  wallet balance : {bal:.6f} IOTX (live)")
+    print(f"  estimate_gas   : {gas_est} -> gas {tx['gas']} | est cost ~{cost:.4f} IOTX "
+          f"(cap {COST_BUDGET_IOTX})")
+
+    if not getattr(a, "execute", False):
+        print("  MODE: estimate-only. Nothing sent. Ledger stays PENDING.")
+        print("  Re-run with --execute --confirm + process-scope gates to fire.\n")
+        return 0
+
+    # ---- execute path: triple gate (process-scoped; bridge/.env never touched) ----
+    if os.environ.get("CHAIN_SUBMISSION_PAUSED", "true").strip().lower() != "false":
+        print("  Gate 1 FAILED: set CHAIN_SUBMISSION_PAUSED=false in the SHELL "
+              "(process-scope; bridge/.env never changes).", file=sys.stderr)
+        return 3
+    if os.environ.get("NODE_LEDGER_ANCHOR_AUTHORIZED", "").strip().lower() != "true":
+        print("  Gate 2 FAILED: set NODE_LEDGER_ANCHOR_AUTHORIZED=true.", file=sys.stderr)
+        return 3
+    if not getattr(a, "confirm", False):
+        print("  Gate 3 FAILED: pass --confirm.", file=sys.stderr)
+        return 3
+    if cost > COST_BUDGET_IOTX:
+        print(f"  ABORT: est cost {cost:.4f} exceeds hard cap {COST_BUDGET_IOTX}.",
+              file=sys.stderr)
+        return 3
+
+    key = os.environ.get("OPERATOR_PRIVATE_KEY", "")
+    if not key:
+        env_path = _REPO / "bridge" / ".env"
+        if env_path.is_file():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("BRIDGE_PRIVATE_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if not key:
+        print("  ABORT: no signing key (OPERATOR_PRIVATE_KEY env or BRIDGE_PRIVATE_KEY "
+              "in bridge/.env).", file=sys.stderr)
+        return 3
+
+    signed = w3.eth.account.sign_transaction(tx, key)
+    txh = w3.eth.send_raw_transaction(signed.raw_transaction)
+    print(f"  sent {txh.hex()} -- waiting for receipt ...")
+    rcpt = w3.eth.wait_for_transaction_receipt(txh, timeout=120)
+    ok = rcpt.get("status") == 1
+    print(f"  status={rcpt.get('status')} block={rcpt.get('blockNumber')} "
+          f"gasUsed={rcpt.get('gasUsed')}")
+    if not ok:
+        print("  ABORT: tx failed — ledger remains PENDING (no fabricated anchor).",
+              file=sys.stderr)
+        return 1
+
+    updated = L["mark_anchored"](
+        path,
+        session_id=session_id,
+        tx_hash=txh.hex() if not str(txh.hex()).startswith("0x") else txh.hex(),
+        block_number=rcpt.get("blockNumber"),
+        node_id_hex=node_id,
+    )
+    # web3 may return HexBytes; normalize
+    tx_hex = txh.hex() if hasattr(txh, "hex") else str(txh)
+    if not tx_hex.startswith("0x"):
+        tx_hex = "0x" + tx_hex
+    # mark_anchored already set fields; re-assert if HexBytes path needed
+    if not updated.get("anchor_tx"):
+        updated = L["mark_anchored"](
+            path,
+            session_id=session_id,
+            tx_hash=tx_hex,
+            block_number=rcpt.get("blockNumber"),
+            node_id_hex=node_id,
+        )
+    print(f"  ANCHORED session={session_id} tx={updated.get('anchor_tx')} "
+          f"block={updated.get('anchor_block')}")
+    print(f"  ledger entry_hash unchanged (anchor fields not in preimage): {entry_hash}\n")
+    return 0
 
 
 def cmd_verify(a) -> int:
@@ -1798,6 +3237,46 @@ def main() -> int:
     uip.add_argument("--no-open", action="store_true", help="write files only; do not open browser")
     uip.set_defaults(fn=cmd_ui)
     sub.add_parser("stop", help="end session + write the Proof Receipt").set_defaults(fn=cmd_stop)
+    sc = sub.add_parser(
+        "score",
+        help="A2A-VALID-1: honest match self-scorecard (authored MEASURED / scored OPERATOR-REPORTED)",
+    )
+    sc.add_argument("--label", default="", help="session label (default: last play session)")
+    sc.add_argument("--kills-scored", dest="kills_scored", type=int, default=None,
+                    help="OPERATOR-REPORTED kills you scored this match (recall denominator); omit = UNSCORED")
+    sc.add_argument("--unscored", action="store_true",
+                    help="explicitly leave recall UNSCORED (do not invent 0)")
+    sc.add_argument("--declined", action="store_true",
+                    help="operator declined to report D (UNSCORED_DECLINED)")
+    sc.add_argument("--session-id", dest="session_id", default="",
+                    help="optional session_id pin; MISMATCH if artifacts disagree")
+    sc.set_defaults(fn=cmd_score)
+    lg = sub.add_parser(
+        "ledger",
+        help="DEPIN-1 LEG3: list/verify/append node contribution ledger (local JSONL, hash-chained)",
+    )
+    lg.add_argument("--path", default="",
+                    help="ledger JSONL path (default: ~/.qortroller/node_contribution_ledger.jsonl)")
+    lg.add_argument("--node-id", dest="node_id", default="",
+                    help="filter / override node_id (64 hex)")
+    lg.add_argument("--append-scorecard", dest="append_scorecard", default="",
+                    help="path to a VALID-1 scorecard JSON to append as a contribution entry")
+    lg.add_argument("--w3s-attested", dest="w3s_attested", action="store_true",
+                    help="mark leg-2 mechanical verify result true (format/presence only — not truth)")
+    lg.add_argument("--json", action="store_true", help="machine-readable ledger status")
+    lg.set_defaults(fn=cmd_ledger)
+    an = sub.add_parser(
+        "anchor",
+        help="DEPIN-1 LEG3: estimate-first (default) or operator-fired anchor of a ledger entry_hash",
+    )
+    an.add_argument("--session", required=True, help="session_id of the ledger entry to anchor")
+    an.add_argument("--path", default="",
+                    help="ledger JSONL path (default: ~/.qortroller/node_contribution_ledger.jsonl)")
+    an.add_argument("--node-id", dest="node_id", default="", help="disambiguate if needed")
+    an.add_argument("--execute", action="store_true",
+                    help="send tx (requires triple-gate); default is estimate-only DRY-RUN")
+    an.add_argument("--confirm", action="store_true", help="Gate 3 for --execute")
+    an.set_defaults(fn=cmd_anchor)
     d = sub.add_parser("drill", help="Proof Drill birth (Path A=90s scripted; Path B=defer to real match)")
     d.add_argument("--path", default="A", choices=["A", "B", "a", "b"],
                    help="A=scripted mini-session (default); B=skip to full match (first-proof pending)")
@@ -1808,6 +3287,8 @@ def main() -> int:
     r.add_argument("--label", default="")
     r.add_argument("--share", action="store_true", help="also write the SHARE-redacted postcard (*.share.md)")
     r.add_argument("--html", action="store_true", help="also write offline HTML surfaces")
+    r.add_argument("--write-ui", action="store_true",
+                   help="PKG-UI-02: write ~/.qortroller/ui/receipt.json for Stream SPA")
     r.set_defaults(fn=cmd_receipt)
     v = sub.add_parser("verify", help="offline stranger-check (v3 crypto OR --share postcard tiers)")
     v.add_argument("--label", default="")

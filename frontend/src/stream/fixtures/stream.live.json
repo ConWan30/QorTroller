@@ -1,0 +1,85 @@
+{
+  "schema": "qortroller-stream-view-v1",
+  "surface": "stream",
+  "on_screen": {
+    "presence_line": "your witness is live",
+    "presence_tone": "live",
+    "node_state": "LIVE",
+    "freshness_class": "LIVE",
+    "session_id_display": "m13_..._x",
+    "session_label": "m13",
+    "pack": "observer-only",
+    "f_t66b1_disclosure_visible": true,
+    "node_id_short": "a1b2c3d4e5f6",
+    "kills_seen": 3,
+    "node_identity": {
+      "present": true,
+      "node_id": "a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01",
+      "node_id_short": "a1b2c3d4e5f6",
+      "node_id_source": "DERIVED",
+      "device_id_short": "581a836c98b3",
+      "device_on_chain_evidence": true,
+      "claim_language": "derived_not_minted",
+      "line": "node a1b2c3d4e5f6 · derived spine (device 581a836c… may be on-chain; node_id is not)"
+    },
+    "contribution": {
+      "present": true,
+      "entry_count": 2,
+      "chain_intact": true,
+      "recent": [
+        {
+          "session_id_short": "match_demo_1",
+          "posp_verdict": "SYNCHRONIZED",
+          "w3s_attested": true,
+          "lifecycle": "PENDING",
+          "anchor_state": "PENDING",
+          "anchored": false,
+          "anchor_tx_short": null
+        },
+        {
+          "session_id_short": "match_demo_2",
+          "posp_verdict": "PARTIAL_SURFACES",
+          "w3s_attested": false,
+          "lifecycle": "PENDING",
+          "anchor_state": "PENDING",
+          "anchored": false,
+          "anchor_tx_short": null
+        }
+      ],
+      "line": "2 contributions · chain intact · LOCAL until a real tx anchors"
+    },
+    "scorecard": {
+      "present": true,
+      "label": "m13",
+      "recall_status": "UNSCORED",
+      "display": "authored 8 / reported UNSCORED",
+      "authored": { "value": 8, "source": "MEASURED" },
+      "reported": { "value": null, "source": "OPERATOR-REPORTED" },
+      "kas_verdict": "AUTHORED_SESSION",
+      "posp_verdict": "SYNCHRONIZED",
+      "dignity_tone": "honest_null"
+    },
+    "witness_blink": {
+      "kills_seen": 3,
+      "kills_seen_source": "MEASURED",
+      "fresh_fires": null,
+      "fresh_fires_status": "ABSENT",
+      "line": "witness saw 3 killfeed rows"
+    }
+  },
+  "deliberately_absent": [
+    "crop_counts",
+    "fps",
+    "raw_biometric",
+    "grind_bar",
+    "green_check_theater",
+    "mock_liveness",
+    "keys",
+    "consent"
+  ],
+  "novelty": "node_face_witness_respiration",
+  "mock": false,
+  "fabricated_liveness": false,
+  "signing_material_present": false,
+  "consent_authority": false
+}

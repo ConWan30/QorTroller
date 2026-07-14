@@ -130,6 +130,9 @@ class RetinaGameCaptureCore:
         # onset -> AUTHORED; others' kills -> SPECTATED. Correlation can't separate these (cycle-56); this can.
         self._kf_oracle = None
         self._kf_prev_r2 = 0
+        self._kf_last_read_ts = None                       # H1-A4/A7: last stash OCR'd (cross-driver de-dup key)
+        import threading as _thr
+        self._kf_read_lock = _thr.Lock()                   # H1-A7: atomic claim of a stash (no TOCTOU double-OCR)
         try:
             from l9_presence.killfeed_authorship import KillfeedAuthorshipOracle
             self._kf_oracle = KillfeedAuthorshipOracle()   # handle from env QORTROLLER_HANDLE (QorTrola30)
@@ -341,6 +344,59 @@ def _parse_roi(s: str):
     return None
 
 
+def kf_fresh_decision(diff: float, now_ms: float, last_ocr_ms: float, *,
+                      min_gap_ms: float = 1200.0,
+                      threshold: float = _SESSION_ANCHOR_FRESH_DIFF) -> bool:
+    """HARD-1 (F-T66B-1) pure trigger rule: fire an OCR read iff the feed REGION CHANGED
+    (mean-abs gray diff > threshold — same tuned constant as the fresh-row test) AND the
+    min-gap since the last OCR has elapsed (single-flight is enforced by the caller thread;
+    the gap bounds worst-case OCR rate at ~1/1.2s vs the feed's ~5s row lifetime)."""
+    if diff <= threshold:
+        return False
+    return (now_ms - last_ocr_ms) >= min_gap_ms
+
+
+def kf_watch_step(diff: float, now_ms: float, last_ocr_ms: float, has_pending: bool, *,
+                  threshold: float = _SESSION_ANCHOR_FRESH_DIFF,
+                  min_gap_ms: float = 1200.0) -> tuple[str, bool, bool]:
+    """HARD-1 pure watcher step -> (action, advance_baseline, latch).
+
+    A change is LATCHED (the first high-diff crop is frozen) the moment it appears, and fired once
+    the min-gap opens -- even if the row has since gone static or faded. This closes both:
+      * H1-A1 (gap-consumed continuous high-diff): the change is held, not absorbed, until it fires.
+      * H1-A6 (fade-before-gap starve): a kill that appears inside the refractory then fades no
+        longer lets the empty post-fade frame become the baseline -- the FROZEN crop fires when the
+        gap opens, so the kill is still OCR'd.
+
+    Returns:
+      ``action`` in {"fire_pending", "none"} -- "fire_pending" => OCR the latched crop now.
+      ``advance_baseline`` -- absorb the current frame into prev_gray (only when we fire, or when
+        nothing is pending and the frame is below threshold; NEVER while a latched change waits).
+      ``latch`` -- capture the current crop as the pending one (first high-diff frame only)."""
+    gap_open = (now_ms - last_ocr_ms) >= min_gap_ms
+    latch = (diff > threshold) and not has_pending
+    will_pend = has_pending or latch
+    if will_pend and gap_open:
+        return "fire_pending", True, latch
+    if (not will_pend) and diff <= threshold:
+        return "none", True, False
+    return "none", False, latch
+
+
+def _kf_gray_diff(bgr, prev_gray):
+    """Cheap change signal for the watcher: downscaled gray mean-abs diff vs the previous crop.
+    Returns (diff, new_gray); diff=0.0 on first frame / shape change (no spurious fire)."""
+    import cv2
+    import numpy as np
+    g = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY) if bgr.ndim == 3 else bgr
+    if g.shape[1] > 128:                                    # ~128px wide is plenty for a change signal
+        scale = 128.0 / g.shape[1]
+        g = cv2.resize(g, (128, max(1, int(g.shape[0] * scale))), interpolation=cv2.INTER_AREA)
+    if prev_gray is None or prev_gray.shape != g.shape:
+        return 0.0, g
+    return float(np.mean(np.abs(g.astype(np.int16) - prev_gray.astype(np.int16)))), g
+
+
 def _roi_px(shape, roi):
     """Fractional (fx,fy,fw,fh) -> integer (y0,y1,x0,x1) pixel box on an HxW[xC] array."""
     h, w = shape[:2]
@@ -531,8 +587,14 @@ class WgcFrameSource:
                         screen_ts, self._burst_dense_until_ms) == 0:
                     try:
                         if self._kf_roi is not None:
-                            _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
-                            self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
+                            # F-MATCH-3 ROOT FIX (2026-07-13 recall mining): crop from the FULL-RES
+                            # buf, NOT buf_small -- under GPU-pressure downscale (measured 5x live)
+                            # the small-buf kf crop is unreadable garbage ('iwer'/'sha dy'/CJK noise)
+                            # while the SAME feed at full-res reads the handle EXACTLY
+                            # ('Qortrola30 -> Megaooo1234'). Mirrors the _panel_roi_crop fix, which
+                            # documented this identical failure for the handle detector.
+                            _y0, _y1, _x0, _x1 = _roi_px(buf.shape, self._kf_roi)
+                            self._kf_bgr = _u8_from_scale(buf[_y0:_y1, _x0:_x1], self._lum_scale)
                             self._kf_ts = screen_ts
                         # Dense corpus: stash the left HUD panel (feed+roster) crop for the saver
                         # tick — from the FULL-RES buf (see _panel_roi_crop; buf_small would be
@@ -971,6 +1033,54 @@ class RetinaGameCapture:
             _th.Thread(target=_flush_loop, daemon=True,
                        name="qt-burst-flush").start()
             log.info("RetinaGameCapture: dedicated burst-flush thread ON (F-FIXB-1)")
+        # HARD-1 (F-T66B-1): qt-kf-fresh — screen-driven fresh-feed OCR watcher (flag-gated, DEFAULT-OFF;
+        # the observer-only pack pins it ON). The tune-tick's throttle (~2 reads/several min) cannot catch
+        # the ~5s transient kill feed (measured 0/21 own-kill recall, T6.6b). This watcher polls the
+        # EXISTING _kf_bgr stash at 150ms on its OWN thread (zero hot-path risk — mirrors qt-burst-flush),
+        # gray-diffs it, and fires the shared rapidocr read when the feed CHANGES (single-flight by
+        # construction: one thread, sequential; kf_fresh_decision bounds the rate). Works despite the
+        # dual-connection-blind HID (screen-driven, not R2-driven).
+        if (self.started and self._kf_engine == "rapidocr"
+                and os.environ.get("RETINA_KF_FRESH_TRIGGER", "").strip().lower() in ("1", "true", "yes", "on")):
+            import threading as _thf
+            import time as _tf
+            self._kf_fresh_stop = False
+            self._kf_fresh_fires = 0
+
+            def _kf_fresh_loop() -> None:
+                prev_gray = None
+                last_ts = None
+                last_ocr_ms = 0.0
+                pending_bgr = None                         # H1-A6: frozen first-high-diff crop awaiting the gap
+                pending_ts = None
+                while not getattr(self, "_kf_fresh_stop", True):
+                    _tf.sleep(0.15)
+                    if getattr(self, "_kf_fresh_stop", True):
+                        break
+                    try:
+                        bgr = getattr(self._source, "_kf_bgr", None)
+                        ts = getattr(self._source, "_kf_ts", None)
+                        if bgr is None or ts is None or ts == last_ts:
+                            continue                       # no NEW stash since the last look
+                        last_ts = ts
+                        diff, cur_gray = _kf_gray_diff(bgr, prev_gray)
+                        now_ms = _tf.time() * 1000.0
+                        action, advance, latch = kf_watch_step(
+                            diff, now_ms, last_ocr_ms, pending_bgr is not None)
+                        if latch:                          # freeze the first crop of a new change
+                            pending_bgr, pending_ts = bgr, ts
+                        if action == "fire_pending":
+                            last_ocr_ms = now_ms
+                            self._kf_fresh_fires += 1
+                            self._rapidocr_read_and_feed(pending_bgr, pending_ts)
+                            pending_bgr = pending_ts = None
+                        if advance:                        # only when fired or idle-static (never while latched)
+                            prev_gray = cur_gray
+                    except Exception:  # noqa: BLE001 — watcher must never die loudly
+                        pass
+
+            _thf.Thread(target=_kf_fresh_loop, daemon=True, name="qt-kf-fresh").start()
+            log.info("RetinaGameCapture: fresh-feed OCR watcher ON (HARD-1; 150ms poll, min-gap 1.2s)")
         # Option 3 — dedicated off-loop dense-candidate worker (flag-gated, DEFAULT-OFF). C2: NOT hooked into
         # save_capture_crops (that runs on the event-loop tune() tick) and NOT window-gated (window-only would
         # recreate the sparse-observation bug). Mirrors the qt-burst-flush pattern: polls the latest panel
@@ -1042,29 +1152,45 @@ class RetinaGameCapture:
         except Exception:  # noqa: BLE001 — OCR must never break capture
             pass
 
+    def _rapidocr_read_and_feed(self, bgr, ts) -> None:
+        """HARD-1 shared read path: rapidocr the killfeed crop -> oracle + sink. Called from the
+        throttled tune() tick AND the qt-kf-fresh watcher thread (F-T66B-1 fix). Fail-open."""
+        try:
+            # H1-A4/A7: per-stash de-dup with an ATOMIC claim. Both drivers poll the SAME _kf_bgr
+            # stash keyed by _kf_ts; the lock makes check-and-set atomic so a TOCTOU race can't let
+            # both threads pass, and the guard uses `is not None` (not truthiness) so a legit ts of
+            # 0.0 still de-dups. One OCR per stash -> a kill can't be double-counted into _own_kills
+            # or the sink just because two drivers (tune tick + qt-kf-fresh) ran.
+            lock = getattr(self, "_kf_read_lock", None)
+            if lock is not None:
+                with lock:
+                    if ts is not None and ts == getattr(self, "_kf_last_read_ts", None):
+                        return
+                    self._kf_last_read_ts = ts
+            from l9_presence import killfeed_raw_reader as krr
+            rows = krr.read_rows(bgr, roi=(0.0, 0.0, 1.0, 1.0))
+            text = "\n".join(krr.rows_to_lines(rows))
+            if text:
+                log.info("kf OCR[rapidocr]: %r", text.replace("\n", " | ")[:200])
+                self.core.feed_killfeed_text(ts, text)
+            if os.environ.get("RETINA_STATE_V3_EMIT_ENABLED", "").strip().lower() in ("1", "true", "yes", "on"):
+                self._append_killfeed_event_sink(rows, ts)
+        except Exception:  # noqa: BLE001 — OCR must never break capture
+            pass
+
     def _ocr_killfeed_tick_rapidocr(self, bgr) -> None:
         """RapidOCR kill-feed read (D-CARD-1, 2026-07-12) — reads the left-middle feed the tesseract
         template path abstains on (this operator's Warzone HUD). _kf_bgr is already the _kf_roi crop, so
         roi=full. Feeds the SAME authorship oracle via feed_killfeed_text. Fail-open -> no-op (capture
         never breaks). Selected by RETINA_KF_ENGINE=rapidocr; the tesseract path above is unchanged."""
         try:
-            from l9_presence import killfeed_raw_reader as krr
             if not getattr(self, "_kf_logged", False):
                 self._kf_logged = True
                 log.info("RetinaGameCapture: kill-feed authorship ON (engine=rapidocr, roi=%s, handle=%s)",
                          getattr(self._source, "_kf_roi", None),
                          getattr(getattr(self.core, "_kf_oracle", None), "own_canon", None))
-            ts = getattr(self._source, "_kf_ts", None) or 0.0
-            rows = krr.read_rows(bgr, roi=(0.0, 0.0, 1.0, 1.0))
-            text = "\n".join(krr.rows_to_lines(rows))
-            if text:
-                log.info("kf OCR[rapidocr]: %r", text.replace("\n", " | ")[:200])
-                self.core.feed_killfeed_text(ts, text)
-            # T6.6b: persist this tick's kill events (retina.event/0.1) to a session sink so the
-            # session-close v3 emit reads YOUR kills — retina_event_log is controller-perception, NOT
-            # the killfeed. Gated by RETINA_STATE_V3_EMIT_ENABLED; fail-open; never touches retina_event_log.
-            if os.environ.get("RETINA_STATE_V3_EMIT_ENABLED", "").strip().lower() in ("1", "true", "yes", "on"):
-                self._append_killfeed_event_sink(rows, ts)
+            # HARD-1: delegated to the shared read path (also driven by the qt-kf-fresh watcher).
+            self._rapidocr_read_and_feed(bgr, getattr(self._source, "_kf_ts", None) or 0.0)
         except Exception:  # noqa: BLE001 — OCR must never break capture
             pass
 
@@ -1880,6 +2006,7 @@ class RetinaGameCapture:
     def stop(self) -> None:
         self._burst_flush_stop = True      # F-FIXB-1: end the dedicated flush thread
         self._dense_cand_stop = True       # Option 3: end the dense-candidate worker
+        self._kf_fresh_stop = True         # HARD-1: end the fresh-feed OCR watcher
         if self._match_state is not None:  # LUMEN-2b: flush the final MATCH_ENDED (manifest seal > 240s gap)
             try:
                 self._emit_match_state(self._match_state.close_session(time.time() * 1000.0))

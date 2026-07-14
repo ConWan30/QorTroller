@@ -396,7 +396,8 @@ def test_stream_view_model_witness_live_and_absences(tmp_path):
     assert m["schema"] == q.STREAM_VIEW_SCHEMA
     assert m["on_screen"]["presence_line"] == "your witness is live"
     assert m["on_screen"]["presence_tone"] == "live"
-    assert m["novelty"] == "witness_respiration"
+    # STREAM-2 novelty supersedes pure witness_respiration (still contains the phrase)
+    assert "witness_respiration" in m["novelty"]
     assert "crop_counts" in m["deliberately_absent"]
     assert "fps" in m["deliberately_absent"]
     assert m["mock"] is False and m["signing_material_present"] is False
@@ -466,6 +467,19 @@ def test_dogfood_report_scaffold_and_validate():
     ok, errs = q.validate_dogfood_report(r)
     assert ok
 
+    # PKG-UI-06: Stream SPA friction codes + optional UI fields accepted
+    r["ui_surface_exercised"] = "vite_spa"
+    r["ui_serve_path"] = "http://127.0.0.1:5173/?view=stream"
+    r["ui_mode_seen"] = "STREAM"
+    r["friction_events"] = [
+        {"code": "UI_RECEIPT_CONFUSION", "stage": "receipt", "detail": "LOCAL vs SHARE"},
+        {"code": "UI_WORDING", "stage": "stream", "detail": "presence_line"},
+    ]
+    ok, errs = q.validate_dogfood_report(r)
+    assert ok, errs
+    assert "UI_RECEIPT_CONFUSION" in q.DOGFOOD_FRICTION_CODES
+    assert "UI_LIVE_SUSPECT" in q.DOGFOOD_FRICTION_CODES
+
     bad = dict(r)
     bad["path"] = "C"
     bad["friction_events"] = [{"code": "NOT_A_CODE"}]
@@ -475,3 +489,29 @@ def test_dogfood_report_scaffold_and_validate():
     joined = " ".join(errs)
     assert "path" in joined and "friction" in joined.lower() or "NOT_A_CODE" in joined
     assert any("secret" in e for e in errs)
+
+
+def test_receipt_write_ui_writes_reveal_model(tmp_path, monkeypatch):
+    """PKG-UI-02: receipt --write-ui emits qortroller-receipt-reveal-v1 under home/ui/."""
+    monkeypatch.setattr(q, "_HOME", tmp_path)
+    monkeypatch.setattr(q, "_REPO", tmp_path)
+    (tmp_path / "audits").mkdir()
+    # Minimal artifacts so collect + reveal succeed
+    kas = {"verdict": "PARTIAL", "commitment": "ab" * 32}
+    posp = {"verdict": "SYNCHRONIZED", "events_roots": {}}
+    (tmp_path / "audits" / "kas_record_m_test.json").write_text(
+        __import__("json").dumps(kas), encoding="utf-8")
+    (tmp_path / "audits" / "posp_record_m_test.json").write_text(
+        __import__("json").dumps(posp), encoding="utf-8")
+    cfg = {"pack": "observer-only"}
+    q._print_and_write_receipt("m", cfg, stranger_verified=None, write_ui=True)
+    rpath = tmp_path / "ui" / "receipt.json"
+    assert rpath.exists()
+    rev = __import__("json").loads(rpath.read_text(encoding="utf-8"))
+    assert rev["schema"] == q.RECEIPT_REVEAL_SCHEMA
+    assert rev["session_label"] == "m"
+    assert [c["stage"] for c in rev["choreography"]] == [
+        "SETTLE", "SURFACES", "HONESTY", "SHARE_SPLIT"]
+    assert rev["signing_material_present"] is False
+    assert rev["consent_authority"] is False
+    assert rev["mock"] is False

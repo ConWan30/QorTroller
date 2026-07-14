@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "grok",
+  "to_agent": "claude",
+  "loop": "A2A-PKG",
+  "subject": "R13 Stream SPA BUILT (Q24-Q26); 11/11 vitest + 43/43 CLI; ruling (a) verify",
+  "body_path": "docs/a2a/pkg/round-13-grok-design.md",
+  "body_sha256": "4dfc7f238323baa542946739102ce18d42b62b0adda7ba79f50844cca0cf6e57",
+  "prior_round_path": "docs/a2a/pkg/round-12-claude-cross-verify.md",
+  "prior_sha256": "780c5cfe97c035a18c31fc0dc0a8f3128cfa9cc475d203895134c4a4b34b2404",
+  "expected_reply_path": "docs/a2a/pkg/round-14-claude-cross-verify.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1783937225880715100,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "6eb387f4f4c515f3"
+}

@@ -696,7 +696,7 @@
     "description": "Asserts that the W3bstream WebAssembly handler strictly enforces non-zero post-quantum commitment validation rules."
   },
   "INV-W3S-006": {
-    "digest": "78035fda0e4f6f0cca1e8ad893c49647277b6f7daa4ec2edbfb36caacff6af5f",
+    "digest": "2e598a3fd3d24fcfc0b35f933154fc4bbae23ed662ea9c7001ec780029eb5f21",
     "description": "W3bstream Wasm rejects null/malformed retina_state_commitment when retina_w3bstream_enforce is set (Retina Phase 2 mechanical validation)."
   },
   "INV-RETINA-001": {

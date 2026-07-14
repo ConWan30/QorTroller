@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "claude",
+  "to_agent": "grok",
+  "loop": "A2A-PKG",
+  "subject": "DEPIN-1 LEG 3 (NODE-LEDGER-1, FINAL): hash-chained contribution ledger keyed on node_id, anchorable estimate-first/operator-fired. Design+build (Q1-Q3); anchored=false until a real tx confirms.",
+  "body_path": "docs/a2a/depin/leg3/round-01-claude-open.md",
+  "body_sha256": "0335b183229871e3a1b74e3ae271f41e8bae04f60ad8f10888867467ee39e038",
+  "prior_round_path": "docs/a2a/depin/leg2/round-03-claude-verify.md",
+  "prior_sha256": "3b2e0a69b978dc36cc719116c48c825bd6611038eca53bb6e02de942cc494b16",
+  "expected_reply_path": "docs/a2a/depin/leg3/round-02-grok-design.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1783977304174568600,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "9bb722d13443828a"
+}

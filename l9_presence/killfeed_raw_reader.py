@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional, Sequence
 
-from l9_presence.killfeed_authorship import canon, default_handle
+from l9_presence.killfeed_authorship import canon, default_handle, is_own_killer_token
 from l9_presence.killfeed_ocr_bootstrap import OTHER_ROW, OWN_DEATH, OWN_KILL
 
 # Measured + overlay-verified on the card 2026-07-12 (fx, fy, fw, fh), fractions of the frame.
@@ -88,7 +88,7 @@ def classify_rows(rows: Sequence[Sequence[str]], own_handle: Optional[str] = Non
         if not toks:
             continue
         killer = toks[0]
-        if own and own in canon(killer):
+        if is_own_killer_token(killer, own):                          # H1-A2: boundary-aware, not substring
             out.append((OWN_KILL, killer, list(toks)))
         elif own and any(own in canon(t) for t in toks[1:]):
             out.append((OWN_DEATH, killer, list(toks)))

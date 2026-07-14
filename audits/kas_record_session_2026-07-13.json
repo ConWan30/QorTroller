@@ -1,0 +1,65 @@
+{
+  "session_label": "session",
+  "handle": "QorTrola30",
+  "verdict": "HYGIENE_FAIL",
+  "authored_kills": 0,
+  "authored_scores": [],
+  "anchor_tags": [],
+  "windows_total": 2,
+  "composites_total": 2,
+  "own_deaths": 0,
+  "event_trail": [
+    {
+      "ts": "2026-07-13 18:18:29",
+      "event": "candidate_cut",
+      "regime": "CANDIDATE",
+      "sha": "277327480ee33f7e",
+      "engine": "rapidocr_ppocrv6_small",
+      "match_kind": "exact",
+      "raw_read": "Qortrola30"
+    },
+    {
+      "ts": "2026-07-13 18:24:56",
+      "event": "candidate_demoted_stall",
+      "regime": "BOOTSTRAP",
+      "sha": "277327480ee33f7e"
+    }
+  ],
+  "coupling_corroboration": {
+    "th2_coupled_true_ticks": 0,
+    "inline_classifications": 8,
+    "inline_composite_windows": 2
+  },
+  "hygiene": {
+    "frame_errs": 0,
+    "frame_stall_s": 0.1,
+    "ts_source": "wall_fallback"
+  },
+  "span_ms": [
+    1783985017984.8,
+    1783985101217.9
+  ],
+  "min_kills": 2,
+  "notes": [
+    "hygiene: ts_source 'wall_fallback' not in ('timespan',)"
+  ],
+  "events_root": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "events_root_scheme": "sha256_v1",
+  "events_root_lobes": [],
+  "kas_domain_tag": "QORTROLLER-KAS-v0",
+  "commitment": "05dc8496c47c97ce4bca6335707bcca424260cf5e11c16452ab26b1e2d9d8567",
+  "cross_lobe_coherence": {
+    "schema": "vapi-retina-causal-coherence-v1",
+    "calibration": "UNCALIBRATED",
+    "verdict": "INSUFFICIENT",
+    "coherence_ratio": 0.0,
+    "n_outcomes_required": 0,
+    "n_matched": 0,
+    "n_orphan_outcomes": 0,
+    "n_inputs": 0,
+    "nearest_preceding_latency_s": [],
+    "n_hid_inputs": 0
+  },
+  "session_id": "056ad30198556d8ad69e2fba4d2ce90155bd1f572674313c5a9c8a2f1cc953aa",
+  "session_display": "session_1783984486"
+}

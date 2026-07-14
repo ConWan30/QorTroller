@@ -1,0 +1,58 @@
+{
+  "schema": "qortroller-birth-ceremony-v1",
+  "node_state": "PROVISIONING",
+  "node_detail": "controller presence pending",
+  "stages": [
+    {
+      "id": "port",
+      "n": 0,
+      "title": "Host preflight",
+      "verb": "qortroller setup",
+      "feel": "clear the channel -- no phantom port owns the witness seat",
+      "visual": "port_owner_list",
+      "status": "done"
+    },
+    {
+      "id": "card",
+      "n": 1,
+      "title": "Capture card",
+      "verb": "qortroller setup",
+      "feel": "pick the game HDMI frame, not the webcam",
+      "visual": "uvc_frame_pick",
+      "status": "done"
+    },
+    {
+      "id": "roi",
+      "n": 3,
+      "title": "Killfeed ROI",
+      "verb": "qortroller setup --stage roi",
+      "feel": "the y/N judgment -- does this box frame the killfeed?",
+      "visual": "roi_overlay_png",
+      "overlay_path": "C:/Users/example/.qortroller/setup/stage3_roi_check.png",
+      "overlay_exists": true,
+      "status": "done"
+    },
+    {
+      "id": "controller",
+      "n": 4,
+      "title": "Controller presence",
+      "verb": "qortroller setup --stage controller",
+      "feel": "Edge on USB -- dual-connection note (USB laptop + BT PS5)",
+      "visual": "hid_presence",
+      "status": "current"
+    },
+    {
+      "id": "drill",
+      "n": 5,
+      "title": "First proof (birth)",
+      "verb": "qortroller drill --path B",
+      "feel": "your node is born when the first honest pack seals -- SYNCHRONIZED not required",
+      "visual": "receipt_reveal",
+      "path_b_deferred": true,
+      "status": "pending"
+    }
+  ],
+  "ceremony_complete": false,
+  "feel_summary": "Witness-node birth: staged provisioning with a visual ROI judgment and an honest first pack -- not an installer progress bar.",
+  "signing_material_present": false
+}

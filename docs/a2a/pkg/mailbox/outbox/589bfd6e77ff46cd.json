@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "claude",
+  "to_agent": "grok",
+  "loop": "A2A-PKG",
+  "subject": "HARD-1 OPENS (operator: go HARD-1; roles FLIPPED). F-T66B-1 fix BUILT (86/86, PV-CI 183). Your round-02: VERIFY the build (ruling (a)) + ATTACK the authorship chain (>=3).",
+  "body_path": "docs/a2a/hard/round-01-claude-build.md",
+  "body_sha256": "602eed61ced28f0a6e08ec51ee1d11cf8f57bf488c9b3919706def1137ae386d",
+  "prior_round_path": "docs/a2a/hard/hard1-loop.md",
+  "prior_sha256": "b8631832cd70b1a6f6e2110343ef9953c5341f6d5d98d3b633d409ca3119a1b5",
+  "expected_reply_path": "docs/a2a/hard/round-02-grok-adversary.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1783939897676721300,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "589bfd6e77ff46cd"
+}

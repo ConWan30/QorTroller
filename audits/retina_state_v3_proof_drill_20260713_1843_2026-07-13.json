@@ -1,0 +1,86 @@
+{
+  "schema": "qortroller-retina-state-v3",
+  "domain": "VAPI-RETINA-STATE-v3",
+  "device_id": "f3ef8a6fc7dc72451ba23418cccad1203942ba72446624aa19764de7953ecdc0",
+  "ts_ns": 1783986208000000000,
+  "ordered_events_root": "1ebd1526748264d26d617b136b235484c8035f14574016cf9dbdb7a2aeda22b9",
+  "worldstate_digest": "d8eba084e7f6a88211b8529669116a4e4e90960da7072a245c805bb4572c16fb",
+  "commitment": "b8ee957dd982c7402149f1039bf0feef6faa4ced9d14a8fab4bf292a1deb7af9",
+  "n_events": 10,
+  "events": [
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986213216.63,
+      "src": "retina.killfeed",
+      "killer": "R",
+      "victim": "NEXT"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986227792.512,
+      "src": "retina.killfeed",
+      "killer": "Challenges",
+      "victim": "4/6 10000"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986227792.512,
+      "src": "retina.killfeed",
+      "killer": "VIEW WEEKLY CHALLENGES",
+      "victim": "R NE"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986237850.491,
+      "src": "retina.killfeed",
+      "killer": "ALL CHALLENGES",
+      "victim": "NEXT"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986240347.8193,
+      "src": "retina.killfeed",
+      "killer": "ALL CHALLENGES",
+      "victim": "R NEXT"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986245116.7659,
+      "src": "retina.killfeed",
+      "killer": "VIEW BATTLE PASS",
+      "victim": "R NEXT"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986251701.7705,
+      "src": "retina.killfeed",
+      "killer": "TRACKED G NEAR COMPLETE",
+      "victim": "RN"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986255896.8806,
+      "src": "retina.killfeed",
+      "killer": "TRACKED G NEAR COMPLETE",
+      "victim": "R N"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986259668.15,
+      "src": "retina.killfeed",
+      "killer": "TRACKED & NEAR COMPLETE",
+      "victim": "R N"
+    },
+    {
+      "type": "x_qortroller.kill",
+      "t": 1783986286104.3782,
+      "src": "retina.killfeed",
+      "killer": "REROLL",
+      "victim": "ALL CHALLENGES"
+    }
+  ],
+  "worldstate": {
+    "src": "retina.session",
+    "t": 1783986208.0
+  }
+}

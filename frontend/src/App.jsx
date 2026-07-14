@@ -44,11 +44,14 @@ const ReferenceView    = lazy(() => import('./views/ReferenceView').then((m) => 
 // Tab 07 — Partner Brief (self-contained /qortroller-partner-pitch.html): the
 // manufacturer/partner pitch deck (Qorvo / Boréas / Battle Beaver). Public; no auth.
 const PartnerPitchView = lazy(() => import('./views/PartnerPitchView').then((m) => ({ default: m.PartnerPitchView })))
+// A2A-PKG round-13 — gamer Stream witness SPA (PKG-UI-01..03). URL-reachable only
+// (`/?view=stream`); observes CLI JSON under /stream-ui (never bridge mock liveness).
+const StreamView       = lazy(() => import('./views/StreamView').then((m) => ({ default: m.StreamView })))
 
 // Tab bar curated 2026-06-24 to the 4 external-facing surfaces (Gamer + IoTeX·Grant +
 // Partner·Pitch + Reference — see ViewSelector). Operator + AI-Chat removed from the app.
-// Forensic + VPM are NOT on the bar but stay URL-reachable (`/?view=forensic`, `/?view=vpm`) so
-// the "verify it yourself" cryptographic-proof surfaces remain linkable from the decks. The
+// Forensic + VPM + Stream are NOT on the bar but stay URL-reachable (`/?view=forensic`,
+// `/?view=vpm`, `/?view=stream`) so proof / witness surfaces remain linkable. The
 // remaining entries (developer/manufacturer/brp/marketplace) were already off the bar.
 const VIEW_MAP = {
   gamer:        GamerView,
@@ -61,6 +64,7 @@ const VIEW_MAP = {
   brp:          BrpView,
   marketplace:  MarketplaceView,
   vpm:          VpmProofView,    // URL-reachable only (/?view=vpm)
+  stream:       StreamView,      // URL-reachable only (/?view=stream) — PKG-UI SPA
 }
 
 function ViewLoader() {

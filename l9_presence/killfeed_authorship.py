@@ -37,6 +37,17 @@ def default_handle() -> str:
     return os.getenv("QORTROLLER_HANDLE", "QorTrola30")
 
 
+def is_own_killer_token(killer_token: str, own_canon: str) -> bool:
+    """HARD-1 H1-A2 fix: boundary-aware own-killer match. The KILLER token, canonicalized
+    (``canon`` already folds OCR confusables I->1 / O->0 / etc.), must EQUAL the own handle --
+    NOT merely contain it. So ``QorTrola30`` still matches its OCR confusables (``QorTroIa3O``
+    canonicalizes to the same string), but ``QorTro1a300`` / ``QorTrola300`` / ``xxQorTrola30``
+    (longer tokens that merely CONTAIN the handle as a substring) do NOT author. Exact equality
+    is the zero-false-read-safe choice: recall on OCR-mangled own tokens is intentionally
+    sacrificed and recovered by the fresh-feed trigger's higher read rate (HARD-1 subject #1)."""
+    return bool(own_canon) and canon(killer_token) == own_canon
+
+
 class AuthorshipVerdict(str, Enum):
     AUTHORED_PRESENT = "AUTHORED_PRESENT"            # own-handle kill causally bound to YOUR trigger
     SPECTATED_NOT_AUTHORED = "SPECTATED_NOT_AUTHORED"  # kills seen, none credit you -> watching others
@@ -84,18 +95,26 @@ class KillfeedAuthorshipOracle:
         self._triggers.append(float(ts_ms))
 
     def push_killfeed_line(self, ts_ms: float, ocr_line: str) -> None:
-        """One OCR'd kill-feed row (killer on the LEFT, victim on the RIGHT in Warzone-class feeds)."""
+        """One OCR'd kill-feed row (killer on the LEFT, victim on the RIGHT in Warzone-class feeds).
+
+        HARD-1 H1-A2/H1-A3 fix: TOKEN-based, not substring-find + offset-fraction. The killer is
+        the LEFTMOST token; own-authorship requires boundary-aware equality on that token
+        (``is_own_killer_token``). This kills two false-authorship surfaces the old heuristic had:
+        (A2) a longer killer that merely CONTAINS the handle (``QorTro1a300``) no longer authors;
+        (A3) a SHORT-killer death (``Efram1 QorTrola30`` -> you are the victim) is no longer counted
+        as a kill just because your handle fell left of the 0.5 offset fraction. Mirrors the
+        ``classify_rows`` token rule so oracle and token/sink paths agree."""
         self._lines_seen += 1
-        c = canon(ocr_line)
-        if not c:
+        toks = [t for t in str(ocr_line).split() if t.strip()]
+        if not toks or not self.own_canon:
             return
-        pos = c.find(self.own_canon) if self.own_canon else -1
-        if pos >= 0:
-            # own handle present: KILLER (left) -> your kill; VICTIM (right) -> your death (neutral)
-            if (pos / max(1, len(c))) < self.killer_max_frac:
-                self._own_kills.append(float(ts_ms))
+        killer = toks[0]
+        if is_own_killer_token(killer, self.own_canon):
+            self._own_kills.append(float(ts_ms))                       # your handle IS the killer -> your kill
+        elif any(self.own_canon in canon(t) for t in toks[1:]):
+            pass                                                       # your handle is a victim -> your death (neutral)
         else:
-            self._other_kills += 1   # a kill crediting someone else -> spectating signal
+            self._other_kills += 1                                    # a kill crediting someone else -> spectating
 
     def _bound_own_kills(self) -> int:
         n = 0

@@ -20,8 +20,12 @@ EXIT_CADENCE = 4
 EXIT_PQ = 5
 EXIT_RETINA = 6
 EXIT_EVENTS_ROOT = 7
+# DEPIN-1 LEG 2 — node_id + session_root mechanical gate (mirrors lib.rs exit 8)
+EXIT_NODE_SESSION = 8
 
 _VALID_PQ_PLACEHOLDER = "ab" * 32
+_VALID_NODE_ID_PLACEHOLDER = "cd" * 32
+_VALID_SESSION_ROOT_PLACEHOLDER = "ef" * 32
 
 
 def resolve_sidecar_commitment(commitment_hex: str) -> tuple[bool, str]:
@@ -35,6 +39,104 @@ def resolve_sidecar_commitment(commitment_hex: str) -> tuple[bool, str]:
     if len(stripped) != 64 or any(c not in "0123456789abcdefABCDEF" for c in stripped):
         return False, "invalid sidecar commitment format"
     return True, ""
+
+
+def resolve_node_session(
+    node_id: str,
+    session_root: str,
+    *,
+    node_session_verify: bool = False,
+) -> tuple[dict[str, bool], str]:
+    """Mirror ``resolve_node_session`` in lib.rs.
+
+    Mechanical format/presence only — does NOT re-derive node_id or recompute
+    session_root. Returns ``(resolution_dict, error_message)``; empty error on success.
+    """
+    node_raw = (node_id or "").strip()
+    root_raw = (session_root or "").strip()
+    node_empty = not node_raw
+    root_empty = not root_raw
+
+    if node_session_verify:
+        if node_empty:
+            return (
+                {
+                    "node_id_valid": False,
+                    "session_root_valid": not root_empty,
+                    "node_session_gate_ok": False,
+                },
+                "node_session_verify requires non-empty node_id",
+            )
+        if root_empty:
+            return (
+                {
+                    "node_id_valid": True,
+                    "session_root_valid": False,
+                    "node_session_gate_ok": False,
+                },
+                "node_session_verify requires non-empty session_root",
+            )
+        ok_n, err_n = resolve_sidecar_commitment(node_raw)
+        if not ok_n:
+            return (
+                {
+                    "node_id_valid": False,
+                    "session_root_valid": False,
+                    "node_session_gate_ok": False,
+                },
+                f"node_id: {err_n}",
+            )
+        ok_r, err_r = resolve_sidecar_commitment(root_raw)
+        if not ok_r:
+            return (
+                {
+                    "node_id_valid": True,
+                    "session_root_valid": False,
+                    "node_session_gate_ok": False,
+                },
+                f"session_root: {err_r}",
+            )
+        return (
+            {
+                "node_id_valid": True,
+                "session_root_valid": True,
+                "node_session_gate_ok": True,
+            },
+            "",
+        )
+
+    # Gate OFF: empty = skip; nonempty must be well-formed (fail-closed on garbage).
+    if not node_empty:
+        ok_n, err_n = resolve_sidecar_commitment(node_raw)
+        if not ok_n:
+            return (
+                {
+                    "node_id_valid": False,
+                    "session_root_valid": not root_empty,
+                    "node_session_gate_ok": False,
+                },
+                f"node_id: {err_n}",
+            )
+    if not root_empty:
+        ok_r, err_r = resolve_sidecar_commitment(root_raw)
+        if not ok_r:
+            return (
+                {
+                    "node_id_valid": not node_empty,
+                    "session_root_valid": False,
+                    "node_session_gate_ok": False,
+                },
+                f"session_root: {err_r}",
+            )
+
+    return (
+        {
+            "node_id_valid": not node_empty,
+            "session_root_valid": not root_empty,
+            "node_session_gate_ok": True,
+        },
+        "",
+    )
 
 
 def _normalize_hex64(value: str) -> str:
@@ -103,6 +205,15 @@ def validate_evm_log_payload(
             if not ok:
                 return EXIT_EVENTS_ROOT
 
+    # DEPIN-1 LEG 2 — node_id + session_root mechanical gate
+    _res, err = resolve_node_session(
+        str(payload.get("node_id") or ""),
+        str(payload.get("session_root") or ""),
+        node_session_verify=bool(payload.get("node_session_verify")),
+    )
+    if err:
+        return EXIT_NODE_SESSION
+
     return EXIT_OK
 
 
@@ -118,6 +229,9 @@ def build_evm_log_payload(
     events_root: str = "",
     retina_events: list[dict[str, Any]] | None = None,
     retina_events_root_verify: bool = False,
+    node_id: str = "",
+    session_root: str = "",
+    node_session_verify: bool = False,
 ) -> dict[str, Any]:
     """JSON-serializable payload aligned with ``EvmLogPayload`` in lib.rs."""
     out: dict[str, Any] = {
@@ -130,6 +244,9 @@ def build_evm_log_payload(
         "retina_w3bstream_enforce": bool(retina_w3bstream_enforce),
         "events_root": events_root or "",
         "retina_events_root_verify": bool(retina_events_root_verify),
+        "node_id": node_id or "",
+        "session_root": session_root or "",
+        "node_session_verify": bool(node_session_verify),
     }
     if retina_events is not None:
         out["retina_events"] = retina_events

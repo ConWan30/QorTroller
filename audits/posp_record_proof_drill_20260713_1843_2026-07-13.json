@@ -1,0 +1,50 @@
+{
+  "archive": {
+    "count": 12,
+    "id_verified": true,
+    "manifest_schema": "qortroller-session-archive-v1"
+  },
+  "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+  "events_roots": {
+    "kas_session_root": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "retina_perception_root": null
+  },
+  "fusion": {
+    "id_verified": true,
+    "n_id_verified": 12,
+    "n_rows": 12,
+    "record_hashes": [
+      "bf79f9867fa5efb7a9a7c21d4296fdb2cad23f5e73137ac51d4ec79c7250d2de",
+      "5cb9694a0ac7382eba35c68e89c272ce135a92a4872d7f22bcf9170025aa1748",
+      "39b2294e4211bd070e4f8f4ea9b6dee1f535ac8dca0b7f8debba770a1c899752",
+      "b3819d60981580823c392e85a1656bde9295b43c0883ba1a0a7fc6fe842bb30c",
+      "1f61fa6943b4caf3783adf5bc3f1ce64cc9fcbb2bb760799a42e86fc7b16295b",
+      "f3c2d9980e3ca3668a0e6d392577554592d5e5269cd872e89e69b03dd73ca10d",
+      "0ed3c8f5571168977bef99c0fcfe89b65f36fa71b6ad62de59f5cde7cd5dc4de",
+      "41bdd2cb93072eaa3df704ca2ed3c29f66ae44ffdbcea5f694ab519c79ab9fc5",
+      "b7a5e96135787b61fca3dd906288f0cb916cecd42b3b50d445e78341cffc57d5",
+      "ae88ef1a768f5bea16bc120400b145f30190afa9ece86c4b91a0fb8a47eec16f",
+      "35384c4f8d2c0ce4e94359ae5d06079662dbeb9f94d005a00a7bc3ed9f0e60ca",
+      "277e2c23afac09e51437fb02c270a5714c4e4af6c1fb32097c79f337d755bdbb"
+    ]
+  },
+  "kas": {
+    "authored_kills": 0,
+    "commitment": "f0477084036797133a07b98dd3f68e5fa4f0aa28881a3f5cde9368601abb21f8",
+    "id_verified": true,
+    "kas_domain_tag": "QORTROLLER-KAS-v0",
+    "verdict": "HYGIENE_FAIL"
+  },
+  "notes": [],
+  "schema": "qortroller-posp-v0",
+  "session_display": "proof_drill_20260713_1843_1783986208",
+  "session_id": "f3ef8a6fc7dc72451ba23418cccad1203942ba72446624aa19764de7953ecdc0",
+  "span_ms": null,
+  "temporal_beacon": {
+    "block_hash": "0xa8592690250feef2c54961e8e0d210d939b8bd4f052d6faf424d67421ed18468",
+    "block_number": 45026880,
+    "fetched_at": "2026-07-13 18:45:17",
+    "registry": "0x962440312a995b21d4E203bE6d93021CC22bA051"
+  },
+  "verdict": "SYNCHRONIZED"
+}
