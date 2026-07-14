@@ -8,7 +8,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
-**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated); Trio-Retina + CCO×PoEP Fusion + L9 coupled-retina presence BUILT (advisory, default-OFF); **PoSP synchronized presence + kill-authorship (live RP authored) + first real on-chain ZK replay proof + PORT-CERT full VERIFIED + organizer pilot package SHIPPED (2026-07); WMP data-economy Phase-2 LIVE — first certified-human action-demonstration bundle VERIFIED 5/5, the gamer's own wallet signing consent on-chain (2026-07-11)** — **public repo · IoTeX testnet** · **Date:** 2026-07-11
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated); Trio-Retina + CCO×PoEP Fusion + L9 coupled-retina presence BUILT (advisory, default-OFF); **PoSP synchronized presence + kill-authorship (live RP authored) + first real on-chain ZK replay proof + PORT-CERT full VERIFIED + organizer pilot package SHIPPED (2026-07); WMP data-economy Phase-2 LIVE — first certified-human action-demonstration bundle VERIFIED 5/5, the gamer's own wallet signing consent on-chain (2026-07-11); DEPIN NODE LIVE — node born from the registered controller, kill-feed recall proven ~17/17 witnessed live, first contribution ANCHORED on IoTeX block 45613440, operator-fired (2026-07-13)** — **public repo · IoTeX testnet** · **Date:** 2026-07-13
 
 ## In plain English — what this actually is
 
@@ -79,6 +79,9 @@ That same receipt has a second life. The proof that *a real human produced real 
 | 2026-07-10 | **Pilot package published** (organizer one-pager · ops runbook · plain-English walkthrough) | A tournament organizer can evaluate and run this without us re-explaining anything |
 | 2026-07-11 | **The inner data-economy ring shipped** (verified play-résumé → skill-strata → self-analytics) | The gamer can hold their own provable play history — and a page that *refuses to render* unless its evidence still verifies |
 | **2026-07-11** | **WMP data-economy Phase-2 LIVE — the first certified-human data bundle, VERIFIED 5/5** (consent registry `0x06836Fb8…`, gamer-signed consent `0x8f70bca3…`) | The second engine turned on: anti-cheat evidence became a *verifiable product* — a stranger confirms real-human + own-wallet consent + data-matches-proof with one command. **Gamers proven to be the Core Controllers of their Data.** |
+| 2026-07-12/13 | **The `qortroller` product + the autonomous A2A engineering engine** (six AI-to-AI loops: CLI + StreamView gamer UI + honest self-scorecard + adversarially-hardened kill authorship) | The developer rig became an installable product path — setup wizard, play, stop, receipt — designed and built by two AIs cross-verifying each other over a terminal bus, every honesty rail intact |
+| 2026-07-13 | **Kill-feed recall proven live: ~17/17 kills witnessed** (was 0/21) — after an honest 0-score led to a mined root cause and a one-line fix | The witness now *sees the gamer's kills as they happen*; the fix was proven on real match data before the claim was made — and the score that found it refused to round itself up |
+| **2026-07-13** | **DEPIN NODE LIVE — born + first contribution ANCHORED** (node from the registered Edge; ledger entry #000 = a real 17-kill match; tx `0xb985f035…` block 45613440, operator-fired, 0.143 IOTX) | A gamer's controller became a DePIN node with an on-chain history: identity derived from a registered device, a tamper-evident contribution ledger, and its first entry anchored on IoTeX — **re-verifiable by any stranger from the tx hash** |
 
 ---
 
@@ -143,6 +146,18 @@ The first time anti-cheat evidence became a **verifiable product**. One real mat
 | **First real WMP bundle VERIFIED 5/5 zero-stub** | `wmp_corpus_real/wmp_corpus.jsonl` (published) | `scripts/wmp_full_verify.py` → `VERIFIED` — real snarkjs Groth16 (the same proof accepted on-chain at block 45479067) + Poseidon matrix↔root (**closing the long-open Arc 5 off-circuit-root finding on REAL data**) + LIVE on-chain consent view-call, all un-stubbed; recency explicitly-deferred (one anchored beacon near M17; next keeper-anchored match = true 5/5). Matrix-swap tamper drill → REJECTED. |
 
 **Total session on-chain spend:** **0.247443 IOTX measured** (`eth_getBalance` 29.118262 → 28.870819). Report: `audits/wmp-phase2-first-real-bundle-2026-07-11.md`. Ceilings carried verbatim: action-only, macro-intent-not-biomechanics, `developer_self`, N=1 corpus, no buyer implied, TGE frozen. `CHAIN_SUBMISSION_PAUSED=true` held (direct hardhat/CLI, operator-fired).
+
+## 2026-07-13 milestone — DEPIN NODE LIVE (born, witnessed, anchored)
+
+The two-day arc that turned the protocol into a **product with a live DePIN node**. Six autonomous AI-to-AI engineering loops (Claude builds/grounds ↔ grok designs/attacks, cross-verifying each other over a sealed terminal bus) shipped the `qortroller` CLI, the StreamView gamer UI, an honest match self-scorecard, and an adversarially-hardened kill-authorship chain — then the operator validated it all live.
+
+| Milestone | Evidence | Significance |
+|---|---|---|
+| **Kill-feed recall closed live: ~17/17 witnessed** (was 0/21) | `audits/recall-closed-17kill-match-2026-07-13.md` — 205 conformant events, 117 exact-match own-kill reads in one real match | An honest 0-score triggered a desk mining pass that found the root cause (OCR was reading 5×-downscaled thumbnails), a one-line fix, and a live landslide — **zero false authorship across ~850 reads**, including 20 minutes accidentally pointed at a wall |
+| **Node BORN** — `node_id 01a574e7ca7f…` derived from the registered Edge | `audits/node-birth-and-first-anchor-2026-07-13.md` | The birth ceremony **refused an impostor controller** (a standard pad plugged in first) and bound identity only to the on-chain-registered device (VMDR tx `0x68f6cf49…`). The node_id is *derived, not minted* — and every surface says so |
+| **First contribution ANCHORED on IoTeX** | tx `0xb985f035ab24819d…` · block 45613440 · status 1 · **0.143115 IOTX measured** | Ledger entry #000 (the 17-kill match, PoSP SYNCHRONIZED) went from local `PENDING` → `ANCHORED` only after the real receipt — **fired by the operator in their own shell, four gates deep; the agent structurally declined the spend.** A gamer's controller now has a verifiable on-chain contribution history |
+
+Honest ceilings, stated everywhere: AUTHORED (causal R2-binding + hygiene) remains 0 on this match — the dual-connection HID constraint is a *separate, known seam*, not an OCR problem; the scorecard prints the strictest number, tagged `[MEASURED]`/`[OPERATOR-REPORTED]`, and never rounds up. One node, one operator, testnet, no token, nothing for sale.
 
 ## Consent Cockpit dApp — first standalone gamer-sovereign surface
 
