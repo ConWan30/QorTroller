@@ -6,8 +6,9 @@
 **Network:** IoTeX testnet (chain ID 4690)
 **Architecture anchor commit:** `e81e04aa` (Phase O4-VPM-INTEGRATION close, 2026-05-13)
 **Documentation revamp commit:** `9f8581cd` (README + Whitepaper v4 successor landing, 2026-05-13)
+**v4.1 accuracy revision:** 2026-07-14 — reconciles every quantitative register to live-measured state and adds §17 (the June–July arc: the observation plane, synchronized presence proofs, kill authorship proven live, the first real on-chain ZK replay proof, the certified-human data economy turning on, the `qortroller` product, and the first live DePIN node with an anchored contribution ledger). All numbers in this revision were measured at write time (`eth_getBalance`, `pytest --collect-only`, live gate runs), never carried forward.
 **Supersedes:** v3 (Zenodo DOI 10.5281/zenodo.18966169, Phase 68–70 baseline)
-**Citation:** DOI assignment pending Zenodo release. Until v4 minting: cite v3 + reference this file at architecture anchor `e81e04aa` (documentation revamp commit `9f8581cd`).
+**Citation:** DOI assignment pending Zenodo release. Until v4 minting: cite v3 + reference this file at the v4.1 revision on `main`.
 **License:** Copyright © 2026 Contravious Battle. All Rights Reserved.
 
 ---
@@ -16,9 +17,11 @@
 
 VAPI (Verified Autonomous Physical Intelligence) introduces a Decentralized Physical Infrastructure (DePIN) architecture on IoTeX for cryptographic human-gameplay verification in competitive gaming. Each controller input event produces a 228-byte Proof of Autonomous Cognition (PoAC) record binding raw sensor commitments (Inertial Measurement Unit dynamics, analog trigger dynamics, stick/button timing, biometric feature commitments) to a hardware-rooted ECDSA-P256 signature and a SHA-256 hash-chained sequence anchored on the IoTeX EVM. A nine-level Physical Input Trust (PITL) stack interprets each record through layered detectors — from hardware presence (L0) to active haptic challenge-response (L6) — and exposes the resulting per-session eligibility through a single composable on-chain view call, `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. The on-chain gate minimizes integrator trust by reducing eligibility to a public view call over previously anchored protocol state; integrators do not need to operate a private publisher API or inspect raw biometric data themselves.
 
-As of Phase O4-VPM-INTEGRATION close (2026-05-13), the protocol comprises 49 substantive live smart contracts on IoTeX testnet (51 contract registry slots), a 38-agent bridge runtime fleet including three on-chain registered Operator Initiative agents, 77 PV-CI invariants pinning load-bearing source-code regions at PR time, 26 FSCA (Fleet Signal Coherence Agent) contradiction rules, a 10-element family of FROZEN-v1 cryptographic primitives (PATTERN-017), seven shipped Zero-Knowledge Biometric Artifact (ZKBA) classes (AIT, GIC, VHP, HARDWARE, CONSENT, TOURNAMENT, MARKET) composing through one deterministic compiler pipeline, six active Verified Projection Media (VPM) compilers under a three-layer Anti-Hype Visual Grammar discipline, and a three-agent Operator Initiative fleet (Sentry, Guardian, Curator) at lifecycle O1_SHADOW with Cedar v2 lane authority bundles dual-anchored on AgentScope + AgentRegistry. Test coverage stands at 3344 bridge tests, 562 SDK tests, 528 Hardhat contract tests, and 26 Vitest frontend tests.
+As of the v4.1 accuracy revision (2026-07-14, all values live-measured), the protocol comprises 69 deployed contract addresses on IoTeX testnet (82 Solidity sources; ~61 currently-active after supersession classification), a 38-agent bridge runtime fleet including three on-chain registered Operator Initiative agents **at lifecycle O3_ACTING** (ceremony fired live 2026-05-17), **183 PV-CI invariants** pinning load-bearing source-code regions fail-closed in CI, 28 FSCA (Fleet Signal Coherence Agent) contradiction rules, a **15-family FROZEN-v1 cryptographic primitive set** (PATTERN-017; the 15th, `VAPI-RETINA-STATE-v3`, promoted candidate→FROZEN by operator governance seal 2026-07-12), seven shipped Zero-Knowledge Biometric Artifact (ZKBA) classes composing through one deterministic compiler pipeline, six active Verified Projection Media (VPM) compilers under a three-layer Anti-Hype Visual Grammar discipline, and — new since the v4 baseline — a **parallel observation plane** (HDMI capture → retina kill-feed OCR authorship, `machinefi/trio-retina` `retina.event/0.1`-conformant), a synchronized-presence proof (`QORTROLLER-POSP-v0`), an installable product path (`qortroller` CLI + StreamView gamer UI), and a **live DePIN node** whose first contribution is anchored on-chain (§17). Test coverage stands at 5795 collected bridge tests, 647 SDK tests, 674 Hardhat contract tests, and 195 Vitest frontend tests (measured 2026-07-13).
 
 The protocol's headline tournament gate — inter-person separation ratio > 1.0 with all-pairs separability — is empirically cleared for the Active Isometric Trigger (AIT) calibration battery at ratio 1.199 with N=37 sessions (Phase 229–231 breakthrough), sufficient as AIT-based testnet/demo eligibility evidence in the current corpus. The touchpad_corners battery remains an open blocker at ratio 0.728 for actual tournament BLOCK enforcement; corpus expansion work continues. The token launch invariant ("no Token Generation Event before separation_ratio > 1.0 confirmed and all_pairs_above_1=True") remains in force for legal/economic defensibility.
+
+Since the v4 baseline, the protocol has moved from built-and-tested to **proven live on real gameplay** (all `developer_self` scope — one gamer, who is also the operator; every claim ceiling stated in the artifacts): the first *real* Groth16 replay proof accepted by a public on-chain verifier (block 45479067); a three-surface synchronized presence proof over real matches; kill-feed authorship recall demonstrated at ~17/17 witnessed kills in a live match with zero false authorship across ~850 reads; the first certified-human action-demonstration data bundle verified 5/5 by a zero-trust script against the gamer's own on-chain consent signature; and a DePIN node — identity derived from the on-chain-registered controller — whose first ledger contribution is anchored at block 45613440 (§17).
 
 This whitepaper supersedes v3 in scope and currency. v3 captures Phase 68–70 (Ruling Registry + MPC ceremony) baseline; v4 captures the full architectural state through Phase O4 (Verified Projection Media output layer). v3's Zenodo DOI is preserved for historical continuity; v4 receives a new DOI at Zenodo release.
 
@@ -45,7 +48,7 @@ What the protocol provides instead of trust:
 - A FROZEN-v1 wire format (228 bytes; INV-001 pinned) that any external verifier can parse without protocol-specific tooling.
 - A FROZEN chain-link hash discipline (`SHA-256(raw[:164])`; INV-002 pinned) that any external verifier can recompute.
 - A FROZEN nine-level PITL stack of signals where layers L0–L3 are tournament-BLOCKING and layers L4–L7 are advisory but cryptographically logged.
-- A FROZEN domain-tag taxonomy (`b"VAPI-*-v1"`) under which ten distinct cryptographic primitives (PATTERN-017) compose without ambiguity.
+- A FROZEN domain-tag taxonomy (`b"VAPI-*-v1"` FROZEN + `QORTROLLER-*-v0` candidate tiers) under which fifteen FROZEN cryptographic primitive families (PATTERN-017) and their candidate REFERENCE-AND-BIND companions compose without ambiguity.
 - A FROZEN seven-class Zero-Knowledge Biometric Artifact (ZKBA) family that wraps the protocol's verified state into stakeholder-specific projections.
 - A FROZEN three-layer Anti-Hype Visual Grammar that surfaces overclaim attempts at compile time, audit time, and browser-render time.
 
@@ -187,9 +190,9 @@ The token launch invariant ("no TGE before separation_ratio > 1.0 confirmed empi
 
 ---
 
-## 5. The 10-element FROZEN-v1 primitive family (PATTERN-017)
+## 5. The FROZEN-v1 primitive family (PATTERN-017) — 15 families as of 2026-07-12
 
-The protocol's cryptographic surface composes through ten FROZEN-v1 primitives, each with a unique 21-character byte-literal domain tag and an INV-* PV-CI gate pin. The family is enumerated and pinned in `wiki/methodology/VBDIP-0002-zkba-visual-projections.md` Appendix B + `scripts/vapi_invariant_gate.py`.
+The protocol's cryptographic surface composes through FROZEN-v1 primitives, each with a byte-literal domain tag and an INV-* PV-CI gate pin. The family was 10 elements at the v4 baseline (table below, preserved); growth since — each by explicit operator governance ceremony — added **CONSENT** (`b"VAPI-CONSENT-v1"`, Phase 237), **BIOMETRIC-SNAPSHOT** (`b"VAPI-BIOMETRIC-SNAPSHOT-v1"`, Phase 237), **LISTING** (`b"VAPI-LISTING-v1"`, Phase 238), **O3-SUPERSEDE** (`b"VAPI-O3-SUPERSEDE-v1"`), **TEMPORAL-BEACON / PoSR** (`b"VAPI-TEMPORAL-BEACON-v1"`, Arc 6), and **RETINA-STATE-v3** (`b"VAPI-RETINA-STATE-v3"`, the observation plane's state commitment — promoted candidate→FROZEN 2026-07-12, the first FROZEN member of the retina family) = **15 FROZEN families**. A candidate tier (`QORTROLLER-*-v0`: POSP, NODE, NODE-LEDGER, POEP, IPACT…) composes by REFERENCE-AND-BIND — integrity derived entirely from the FROZEN commitments referenced, no new frozen formula until earned. The authoritative enumeration lives in `scripts/vapi_invariant_gate.py` (183 pinned invariants).
 
 | # | Primitive | Domain tag (FROZEN) | Output | Phase | PV-CI pin |
 |---|---|---|---|---|---|
@@ -242,9 +245,9 @@ The protocol deploys to IoTeX testnet (chain ID 4690) because IoTeX provides thr
 2. **ioID device identity stack.** Every certified controller can register a `did:io:` identifier with a deterministically-deployed ERC-6551 Token Bound Account, giving the controller itself an addressable identity separate from the player's wallet.
 3. **W3bstream DePIN data layer.** Off-chain biometric data processing happens in W3bstream applets (AssemblyScript compiled to WASM) before any on-chain commitment, keeping raw biometrics out of public-chain storage while preserving cryptographic verifiability.
 
-### 6.1 Contract registry (49 substantive live testnet contracts)
+### 6.1 Contract registry (69 deployed addresses as of 2026-07-13)
 
-The authoritative on-chain address registry is `contracts/deployed-addresses.json`. As of Phase O4 close, the registry contains **49 substantive live testnet contracts across 51 registry slots** organized by function. Selected highlights:
+The authoritative on-chain address registry is `contracts/deployed-addresses.json`. At the v4 baseline it held 49 substantive live contracts; **as of the v4.1 revision it holds 69 deployed addresses (~61 currently-active after supersession classification)** — growth spans Path A (VMDR + LensV2), the data-economy arcs (buyer registry/verifier, consent manifest, temporal beacons, marketplace listings), ZK verifiers (ZK-SEPPROOF + the replay-proof pair), and `VAPIWorldModelConsentRegistry` (2026-07-11). Selected v4-baseline highlights:
 
 **PITL stack + core protocol (5):**
 - `PoACVerifier` — ECDSA-P256 verification + chain integrity
@@ -328,7 +331,7 @@ VAPI's autonomous governance is distributed across a 38-agent asyncio fleet insi
 | **Guardian** | `guardian` | `0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1` | `did:io:0x9c577fb2162824565ef57edd1b55a8ec5f58c181` | 496 | `tool:zk-audit-trail` on `draft://zk_verifications/*` |
 | **Curator** | `curator` | `0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8` | `did:io:0x7BdB744c87c8f86e348246557BB58D60641312C2` | 497 | `tool:zk-marketplace-listing` on `draft://zk_listings/*` |
 
-All three agents are at lifecycle **O1_SHADOW** (Cedar v2 bundles anchored 2026-05-12 via the parallel Track 2 ceremony). They observe-only; their actions surface as drafts in the operator review queue rather than direct chain writes. Lifecycle advancement (O1 → O2_SUGGEST → O3_ACT) is gated by operator-runtime observation: 7-day window with ≥9/10 acceptance gate, plus N≥50 drafts accumulated, plus disagreement rate < 5% per agent.
+At the v4 baseline all three agents were at lifecycle **O1_SHADOW** (Cedar v2 bundles anchored 2026-05-12 via the parallel Track 2 ceremony), observe-only. **On 2026-05-17 the O3 ceremony fired live**: all three advanced to **O3_ACTING** on IoTeX (6 transactions; Fleet Readiness Root `0x54b4b698…`; the 504h calendar gate empirically superseded by the `VAPI-O3-SUPERSEDE-v1` attestation primitive). Live O3 capabilities: Sentry `pda-attestation-anchor`, Guardian `audit-drafting` (the only agent autonomous BY DESIGN — off-chain, 0-IOTX lane, with a live KMS-HSM signature anchored on-chain), Curator `marketplace-listing-suspend` (executor-disabled pending a deliberate two-key decision). FSCA now runs 28 contradiction rules.
 
 ### 7.2 Cross-Fleet Skill Separation (CFSS)
 
@@ -515,7 +518,7 @@ Eight of ten IDs are now at an active lifecycle stage. PROOF-TRAILER-v1 and DEV-
 
 ## 10. The PV-CI invariant gate + governance discipline
 
-The protocol's source-code-region integrity is enforced by a Persistent-Validation Continuous-Integration (PV-CI) gate. As of Phase O4 close, the gate pins **77 invariants** (66 protocol + 11 VPM family).
+The protocol's source-code-region integrity is enforced by a Persistent-Validation Continuous-Integration (PV-CI) gate. As of Phase O4 close, the gate pinned **77 invariants** at the v4 baseline (66 protocol + 11 VPM family); **183 as of 2026-07-13** (growth legs itemized below), enforced fail-closed in CI against `.github/INVARIANTS_ALLOWLIST.json`.
 
 ### 10.1 Mechanics
 
@@ -527,7 +530,7 @@ The protocol's source-code-region integrity is enforced by a Persistent-Validati
 4. Compares the digest against `.github/INVARIANTS_ALLOWLIST.json`
 5. Fails CI on any DIGEST DRIFT (digest mismatch on a previously-pinned invariant)
 
-The 77 invariants span eight namespaces:
+**183 invariants as of 2026-07-13** (77 at the v4 baseline; growth legs: 167 = w3bstream Rust sandbox + Arc 7 PQ; 174 = MFG/LENS Path A; 179 = firmware joypad-os + retina Phase 2/3 W3bstream + public-forensic; 182 = PoSR-phase1 novel-assurance; 183 = `INV-RETINA-STATE-V3` at the 2026-07-12 promotion — every leg registered gate + allowlist in the same commit or CI fails closed). The v4-baseline namespace table is preserved below as the structural map; counts per namespace have grown correspondingly:
 
 | Namespace | Count | Coverage |
 |---|---|---|
@@ -581,7 +584,7 @@ VBDIP-0002 (`wiki/methodology/VBDIP-0002-zkba-visual-projections.md`) v1.2 with 
 
 ## 11. FSCA — Fleet Signal Coherence Agent
 
-`bridge/vapi_bridge/fleet_signal_coherence_agent.py` runs a periodic (15-minute) poll across the 38-agent fleet's emitted state, evaluating each row against 26 contradiction rules + a set of orphan-detection + inversion-detection rules. The agent's role is cross-system coherence verification, not direct enforcement.
+`bridge/vapi_bridge/fleet_signal_coherence_agent.py` runs a periodic (15-minute) poll across the 38-agent fleet's emitted state, evaluating each row against 28 contradiction rules (26 at the v4 baseline) + a set of orphan-detection + inversion-detection rules. The agent's role is cross-system coherence verification, not direct enforcement.
 
 As of Phase O4 close, the 26 CONTRADICTION_RULES include:
 
@@ -689,7 +692,7 @@ All four are gated by calibration corpus expansion work. None is a security issu
 
 ### 14.3 Operator Initiative lifecycle gates
 
-All three Operator Initiative agents (Sentry / Guardian / Curator) are at lifecycle **O1_SHADOW**. Advancement to O2_SUGGEST requires:
+All three Operator Initiative agents (Sentry / Guardian / Curator) reached lifecycle **O3_ACTING** on 2026-05-17 (v4.1 correction; the v4-baseline text below described the O1→O2 gate that has since been passed). The advancement gates, preserved for the record, were:
 
 - shadow_age ≥ 504h (≈21 days; cumulative observation window per agent)
 - N ≥ 100 Cedar evaluations
@@ -725,6 +728,8 @@ The forward roadmap distilled from Phase O4 close. Ten tiers, priority + depende
 
 The 10 tiers are not mutually exclusive; some (e.g., #2 + #6 + #9) can proceed in parallel. Token launch (Phase 99 TGE) remains gated by the separation invariant; closing tier #2 unblocks the TGE consideration window.
 
+**v4.1 status note (2026-07-14):** this roadmap is preserved as the v4-baseline plan; since then the protocol has additionally shipped the entire §17 arc (observation plane, PoSP, real on-chain ZK proof, WMP data-economy Phase-2, the `qortroller` product, the live DePIN node). Newly open engineering items from §17: the WITNESSED→AUTHORED seam (HID-topology / PoEP presence layer for causal kill binding under dual-connection), the strict sink-seal tier (per-event crop-hash binding), the `play` source-content preflight gate, and the Phase D → Phase G product graduation (a second, non-developer installer).
+
 ---
 
 ## 16. What is architecturally exclusive to VAPI
@@ -748,7 +753,30 @@ After Phase O4 close, VAPI's reference implementation introduces the following a
 
 ---
 
-## 17. Citation, acknowledgments, license
+## 17. The June–July 2026 arc: the observation plane, presence proofs, the product, and the live DePIN node (v4.1 addition)
+
+Everything in §§1–16 concerns the ASSERTION plane — the controller's own cryptographically signed testimony. Between 2026-06 and 2026-07 the protocol gained a structurally parallel **OBSERVATION plane** and, on 2026-07-13, its first **live DePIN node**. The governing law across planes is the separation principle: *observation may suggest; only assertion may claim* — the planes federate under a shared `session_id` join key and named parallel roots (`kas_session_root` / `retina_perception_root`), never conflated.
+
+**17.1 The observation plane (retina).** An HDMI capture card (UVC, 1080p60, direct PS5→laptop — no Remote Play encode) feeds a retina pipeline conformant to the `machinefi/trio-retina` `retina.event/0.1` standard. A kill-feed OCR authorship chain (RapidOCR over a calibrated screen ROI) reads killer→victim rows live; a boundary-aware token rule (`canon(killer) == own`, OCR-confusable-folding, exact equality — adversarially hardened after two CRITICAL false-authorship bugs were found and closed by an AI red-team loop) decides whether a witnessed kill credits the operator's handle. The plane's state commits under `VAPI-RETINA-STATE-v3` (FROZEN 2026-07-12; on-chain governance-freeze anchor tx `0ecf2824…`). **Live result (2026-07-13):** kill recall went 0/21 → ~17/17 witnessed across three instrumented matches (root causes found honestly: a mis-persisted camera index caught by a content-verification eye-check, then OCR reading governor-downscaled thumbnails — fixed to full-resolution reads and proven on real match data before the claim was made). Zero false authorship across ~850 live reads, including 20 minutes accidentally pointed at a non-game scene.
+
+**17.2 Synchronized presence (PoSP) + kill authorship.** `QORTROLLER-POSP-v0` (candidate, REFERENCE-AND-BIND — its integrity derives entirely from the FROZEN commitments it references) binds three independent evidence surfaces — kill-authorship record, biometric co-capture rows, sealed crop archive — under one session identity, with verdicts SYNCHRONIZED / PARTIAL_SURFACES / UNVERIFIABLE rendered as-is. The strict AUTHORED tier (causal R2-trigger binding + HID hygiene) is deliberately harder than WITNESSED: in the dual-connection topology (controller BT→PS5 for play, USB→bridge for attestation) the HID carries fragments, so AUTHORED honestly reads 0 while WITNESSED reads ~17/17 — the artifacts always say which tier a number belongs to.
+
+**17.3 The first real on-chain ZK proof + the data economy turning on.** The Arc 5 replay-proof pipeline produced its first *real* Groth16 proof (a real match's sanitized post-φ action matrix), accepted by the deployed on-chain verifier at block 45479067. On 2026-07-11 the WMP (World Model Provenance) lane went Phase-2 LIVE: `VAPIWorldModelConsentRegistry` deployed (`0x06836Fb8…`), the gamer's own wallet signed `setWorldModelConsent(true)` (a `msg.sender == gamer` check the bridge structurally cannot satisfy), and the first certified-human action-demonstration bundle verified **5/5 zero-stub** by a pure-stdlib script any stranger can run. This is the protocol's second engine made literal: the same evidence that catches absent-human cheating mints provably-human training data, with consent held by the person holding the controller.
+
+**17.4 The `qortroller` product + the A2A engineering engine.** The developer rig became an installable product path: `qortroller setup` (a node-provisioning ceremony: port preflight, capture-card probe, ROI calibration with operator visual ack, controller-presence stage that binds only the registered device) / `play` / `stop` / `receipt` (dual-surface: full local + share-redacted postcard under a frozen redaction matrix) / `score` (an honest self-scorecard whose recall denominator is OPERATOR-REPORTED only and never fabricated) / `ledger` / `anchor`. A React StreamView gives the gamer a live node face — witness respiration, contribution pulse (whose renderer structurally demotes an unanchored entry to PENDING), provenance-tagged score pixels. Notably, this product layer was designed and built by **two AI agents cross-verifying each other over a sealed terminal bus** (six loops; a charter rule that either agent may build but the *other* must independently verify before work is accepted; the human operator as sole committer) — the protocol's verification-first discipline extended to its own construction.
+
+**17.5 The DePIN node — born and anchored (2026-07-13).** The completion of the DePIN thesis in miniature:
+
+- `node_id = SHA-256(b"QORTROLLER-NODE-v0" ‖ device_id ‖ utf8(first_session_id))` — **derived, not minted**; it references the controller already registered on-chain (VMDR tx `0x68f6cf49…`) and costs nothing to compute. The birth ceremony refused a non-registered controller presented in its place.
+- The W3bstream wasm applet mechanically verifies (format/presence, fail-closed, never a truth oracle) the node/session root pair — the canonical IoTeX device→W3bstream→L1 shape.
+- A hash-chained, tamper-evident **contribution ledger** (GIC/WEC-style; `QORTROLLER-NODE-LEDGER-v0`) records each session's scorecard root + PoSP verdict under the node_id. Entries are `PENDING` until a real transaction confirms — the ledger cannot claim an anchor it does not have.
+- **Entry #000** (a real 17-kill match, PoSP SYNCHRONIZED) was anchored at **tx `0xb985f035ab24819d…`, block 45613440, status 1, 0.143115 IOTX measured** — fired by the operator in their own shell through four explicit gates; the AI agent involved in the session declined to execute the spend. Chain writes are operator-fired down to the human finger.
+
+**17.6 Honest ceilings for §17** (carried in every artifact): single node, single operator-gamer (`developer_self` — presence and authorship proofs are not identity proofs); testnet only; WITNESSED ≠ AUTHORED and each number is tier-tagged; the killfeed sink is an observational log, not a sealed presence proof (per-event crop-hash binding is a designed, not-yet-built strictness tier); no buyer, no token, nothing for sale.
+
+---
+
+## 18. Citation, acknowledgments, license
 
 ### Citation
 
@@ -797,7 +825,9 @@ Patent claims and academic citation: reference the Zenodo DOI above (v3) plus th
 | Phase 235 GRIND LIVE | ~2447 | 521 | 502 | 36 | 45 |
 | Phase 238 Step I-FINAL (Curator LIVE) | 2779 | 539 | 528 | 49 | 49 |
 | Phase O3-ZKBA-TRACK1 close (Layer 7 7-of-7) | 3160 | 562 | 528 | 67 | 49 |
-| **Phase O4-VPM-INT close (this whitepaper anchor)** | **3344** | **562** | **528** | **77** | **49** substantive live (51 registry slots) |
+| **Phase O4-VPM-INT close (v4 whitepaper anchor)** | **3344** | **562** | **528** | **77** | **49** substantive live (51 registry slots) |
+| Phase 240 CI/CD baseline (2026-05-31) | 4330 | 604 | 674 | 174 | 66 |
+| **v4.1 accuracy revision (2026-07-13, measured)** | **5795 collected** | **647** | **674** (+781 regex-scan proxy) | **183** | **69** deployed (~61 active) |
 
 ### Phase O4 commit roster (10 commits)
 
@@ -834,7 +864,7 @@ ece17f4f  phase O3-ZKBA-TRACK1 Track 2 follow-up: 7th (final) ZKBA artifact — 
 
 **APOP (Active Play Occupancy Proof)** — Phase 241 5-state controller-native classifier replacing Phase 235-GAD's binary trigger-onset gate. Hybrid + shadow + strict gate modes.
 
-**Bridge wallet** — `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`. Operator-funded source of all on-chain ceremony work. ~15.03 IOTX as of Phase O4 close.
+**Bridge wallet** — `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`. Operator-funded source of all on-chain ceremony work. ~15.03 IOTX at Phase O4 close; 28.441474 IOTX measured 2026-07-13 (`eth_getBalance`).
 
 **CDRR DAG** — Cross-Domain Reasoning Record Directed Acyclic Graph. Phase O4 Stream A.1.c VPM projection of the 7-class composition lattice as inline SVG (7 nodes + 5 composition edges).
 
@@ -848,9 +878,9 @@ ece17f4f  phase O3-ZKBA-TRACK1 Track 2 follow-up: 7th (final) ZKBA artifact — 
 
 **GIC (Grind Integrity Chain)** — Phase 235-A cryptographic primitive. Per-session cognitive-integrity chain. GIC_100 milestone anchored on chain 2026-05-06.
 
-**Operator Initiative** — The three-agent autonomous governance fleet: Sentry (artifact anchoring), Guardian (audit trail), Curator (marketplace). All at O1_SHADOW lifecycle at Phase O4 close.
+**Operator Initiative** — The three-agent autonomous governance fleet: Sentry (artifact anchoring), Guardian (audit trail), Curator (marketplace). O1_SHADOW at Phase O4 close; **O3_ACTING since 2026-05-17**.
 
-**PATTERN-017** — The 10-element FROZEN-v1 cryptographic primitive family. Single source of truth for the protocol's commitment compositions.
+**PATTERN-017** — The FROZEN-v1 cryptographic primitive family (10 elements at v4 baseline; **15 families as of 2026-07-12**, the 15th being `VAPI-RETINA-STATE-v3`). Single source of truth for the protocol's commitment compositions.
 
 **PHG (Proof of Humanity Gating)** — Phase 99C ERC-4671 soulbound credential. 90-day TTL; minted when L4 / L5 / L2B / L2C all agree.
 
@@ -858,7 +888,7 @@ ece17f4f  phase O3-ZKBA-TRACK1 Track 2 follow-up: 7th (final) ZKBA artifact — 
 
 **PoAd (Proof of Adjudication)** — Phase 111 second composable primitive. Hash of sorted verdicts + quorum + ts_ns; anchored in AdjudicationRegistry.
 
-**PV-CI (Persistent-Validation Continuous-Integration)** — The protocol's source-code-region integrity gate. 77 invariants at Phase O4 close.
+**PV-CI (Persistent-Validation Continuous-Integration)** — The protocol's source-code-region integrity gate. 77 invariants at Phase O4 close; **183 as of 2026-07-13**, fail-closed in CI.
 
 **VAD (Verified Architectural Discipline)** — VBDIP-0001 FROZEN methodology framework. Three sub-disciplines: VSD / VED / VBD.
 
