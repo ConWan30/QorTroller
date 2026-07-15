@@ -148,19 +148,25 @@ class CalibrationMixin:
             # F-POEP-P0-2 was REFLEX_OBSERVED-only; that still counts null-route peak=0 junk (113 rows)
             # and CCO device-physics. B1+B2 (poep_reflex_gate) is the honest gate: policy allowlist AND
             # observed AND IMU-corroborated (peak>floor) AND in-band. Measured: 189 -> 76 usable.
+            independent = None
             try:
                 from l9_presence.poep_reflex_gate import (
                     L6B_REFLEX_POLICY_ALLOWLIST, DEFAULT_PEAK_FLOOR_LSB, DEFAULT_BAND_MS,
+                    dedup_bursts,
                 )
                 _allow = tuple(sorted(L6B_REFLEX_POLICY_ALLOWLIST))
                 _ph = "(" + ",".join("?" for _ in _allow) + ")"
                 lo, hi = DEFAULT_BAND_MS
-                _q = (f"SELECT COUNT(*) AS n FROM l6b_probe_log "
+                # Pull usable-reflex TIMESTAMPS (B1+B2) so we can burst-dedup for independence (grok DQ-6).
+                _q = (f"SELECT probe_ts_ms FROM l6b_probe_log "
                       f"WHERE reflex_verdict='REFLEX_OBSERVED' AND policy_ref IN {_ph} "
                       f"AND accel_delta_peak > ? AND latency_ms BETWEEN ? AND ?"
-                      + (" AND device_id=?" if device_id else ""))
+                      + (" AND device_id=?" if device_id else "")
+                      + " ORDER BY probe_ts_ms")
                 _p = _allow + (DEFAULT_PEAK_FLOOR_LSB, lo, hi) + ((device_id,) if device_id else ())
-                valid = int(conn.execute(_q, _p).fetchone()["n"])
+                _ts = [r["probe_ts_ms"] for r in conn.execute(_q, _p).fetchall() if r["probe_ts_ms"] is not None]
+                valid = len(_ts)                       # raw usable (transparency)
+                independent = dedup_bursts(_ts)        # burst-correlated collapse -> effective independent N
             except Exception:  # noqa: BLE001 -- gate import/exec failure -> fall back to observed-only (never crash the report)
                 valid = int(conn.execute(
                     "SELECT COUNT(*) AS n FROM l6b_probe_log WHERE reflex_verdict='REFLEX_OBSERVED'"
@@ -181,14 +187,17 @@ class CalibrationMixin:
             key = row["reflex_verdict"] if row["reflex_verdict"] is not None else "(null)"
             reflex_dist[key] = int(row["n"])
         latest_dict = dict(latest) if latest else None
+        # Independence (grok DQ-6): if the gate module was unavailable, fall back to usable == independent.
+        indep = valid if independent is None else independent
         return {
             "device_id": device_id,
             "probe_count": total,                       # raw rows (transparency; NOT the gate)
-            "valid_reflex_count": valid,                # B1+B2 usable reflexes -- the gate metric
+            "valid_reflex_count": valid,                # B1+B2 usable reflexes (raw, transparency)
+            "independent_reflex_count": indep,          # burst-deduped -- THE gate metric (grok DQ-6)
             "reflex_verdict_distribution": reflex_dist,
             "latest_probe": latest_dict,
             "target_n": 50,
-            "gate_reached": valid >= 50,                # B1+B2: usable reflexes, not raw REFLEX_OBSERVED
+            "gate_reached": indep >= 50,                # 50 INDEPENDENT usable reflexes, not raw
         }
 
     def get_cco_phase_g_corpus_progress(self, target_n: int = 50) -> dict:
