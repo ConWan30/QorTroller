@@ -29,12 +29,14 @@ TARGET_N = 50
 
 def _print_progress(progress: dict) -> None:
     valid = progress.get("valid_reflex_count", progress["probe_count"])
+    indep = progress.get("independent_reflex_count", valid)
     raw = progress["probe_count"]
     target = progress.get("target_n", TARGET_N)
-    # B1+B2 (poep_reflex_gate): the gate is USABLE reflexes (policy-allowlist AND IMU-corroborated AND
-    # in-band), not raw REFLEX_OBSERVED (which counts null-route peak=0 junk + CCO device-physics).
-    # Show both so the gap between "probes fired" and "usable reflexes" is never hidden.
-    print(f"L6B calibration corpus: N={valid} / {target} usable reflexes  ({raw} raw probes fired)")
+    # B1+B2 + independence (grok DQ-6): the gate is INDEPENDENT usable reflexes (policy-allowlist AND
+    # IMU-corroborated AND in-band, then burst-deduped >=5s). Show all three so the gap between probes
+    # fired, usable, and independent-usable is never hidden.
+    print(f"L6B calibration corpus: N={indep} / {target} INDEPENDENT usable reflexes  "
+          f"({valid} usable, {raw} raw probes fired)")
     dist = progress.get("reflex_verdict_distribution") or {}
     if dist:
         print("  reflex_verdict distribution:")
@@ -74,7 +76,8 @@ def main() -> int:
             print(f"Device filter: {args.device_id[:16]}...")
         _print_progress(progress)
 
-    return 0 if progress.get("valid_reflex_count", progress["probe_count"]) < TARGET_N else 2
+    return 0 if progress.get("independent_reflex_count",
+                             progress.get("valid_reflex_count", progress["probe_count"])) < TARGET_N else 2
 
 
 if __name__ == "__main__":
