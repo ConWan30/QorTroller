@@ -1,0 +1,52 @@
+{
+  "schema": "rbm-v0-adversarial-readiness-v1",
+  "date": "2026-07-15",
+  "per_attack": {
+    "A-CONST": {
+      "n": 200,
+      "n_accept": 152,
+      "far": 0.76,
+      "ceiling": 0.05,
+      "pass": false
+    },
+    "A-REPLAY": {
+      "n": 200,
+      "n_accept": 179,
+      "far": 0.895,
+      "ceiling": 0.05,
+      "pass": false
+    },
+    "A-RAND": {
+      "n": 300,
+      "n_accept": 130,
+      "far": 0.43333333333333335,
+      "ceiling": 0.05,
+      "pass": false
+    },
+    "A-JITTER": {
+      "n": 300,
+      "n_accept": 182,
+      "far": 0.6066666666666667,
+      "ceiling": 0.1,
+      "pass": false
+    },
+    "A-HYBRID": {
+      "n": 200,
+      "n_accept": 16,
+      "far": 0.08,
+      "ceiling": 0.1,
+      "pass": true
+    }
+  },
+  "failed_classes": [
+    "A-CONST",
+    "A-REPLAY",
+    "A-RAND",
+    "A-JITTER"
+  ],
+  "presence_ready": false,
+  "poep_enabled": false,
+  "finding": "RBM-v0's 2-feature (latency,peak) boolean is a BAND CHECK, not a presence detector: a constant-latency macro (FAR 0.76), replayed reflexes (0.90), random-in-band (0.43) and a Gaussian bot (0.61) all clear it. Latency+peak cannot distinguish a human reflex from a bot that outputs in-band values.",
+  "remediation": "presence needs (1) force-response CURVE-SHAPE features (a reflex is a biomechanical curve; a macro is a step/pulse) to defeat A-CONST/A-RAND/A-JITTER, AND (2) nonce-bound challenge-response to defeat A-REPLAY (a replayed trace cannot answer a fresh nonce). That is RBM-v1 + the full PoEP challenge stack, not RBM-v0.",
+  "verdict": "poep_enabled MUST stay False. The adversarial harness is now the permanent gate any future model must clear before P4."
+}
