@@ -128,6 +128,24 @@ def _fire_probe_sync(
     return probe_ts, pre_reports, post_reports, r2_at_probe
 
 
+def _resolve_registered_edge_device_id() -> str | None:
+    """A2A-POEP-P2: the registered Edge's on-chain device_id (bytes32 hex) from the device birth cert,
+    so the edge-reflex campaign stamps the certified device. Fail-open -> None (falls back to desk id)."""
+    import json as _json
+    import os as _os
+    for p in (_os.path.expanduser("~/.vapi/device_birth_cert.json"),
+              _os.path.expanduser("~/.vapi/qortroller_device_birth_cert.json")):
+        try:
+            if _os.path.exists(p):
+                d = _json.load(open(p, encoding="utf-8"))
+                did = d.get("device_id_hex") or d.get("device_id")
+                if did:
+                    return str(did).lower().removeprefix("0x")
+        except Exception:  # noqa: BLE001
+            pass
+    return None
+
+
 def run_session(args: argparse.Namespace) -> int:
     if not HAS_DUALSENSE:
         print("ERROR: pydualsense not installed — pip install pydualsense")
@@ -152,13 +170,21 @@ def run_session(args: argparse.Namespace) -> int:
         capture_window_ms=args.capture_ms,
         response_threshold_lsb=args.threshold,
     )
+    # A2A-POEP-P2: --campaign edge-reflex stamps policy_ref=edge_operator_reflex_v1 (the B1+B2 allowlist
+    # tag) + the REGISTERED Edge device_id (auto-resolved from the device birth cert), so these probes
+    # count toward the certified-device N>=50 gate -- not the desk_operator_still / desk-P1 defaults.
+    policy_ref_override = None
     device_id = desk_device_id(args.player)
+    if args.campaign == "edge-reflex":
+        policy_ref_override = "edge_operator_reflex_v1"
+        device_id = args.device_id or _resolve_registered_edge_device_id() or device_id
     store = None if args.no_store else Store(args.db or Config().db_path)
 
     print()
     print("=" * 60)
     print("  L6B DESK REACTION SESSION (operator-fired)")
     print("=" * 60)
+    print(f"  Campaign:  {args.campaign}" + (f"  policy_ref={policy_ref_override}" if policy_ref_override else ""))
     print(f"  Player:    {args.player}")
     print(f"  Device ID: {device_id}")
     print(f"  Protocol:  {args.protocol}")
@@ -219,6 +245,7 @@ def run_session(args: argparse.Namespace) -> int:
                     player=args.player,
                     r2_at_probe=r2_at_probe,
                     cco_profile_id=args.cco_profile_id,
+                    policy_ref_override=policy_ref_override,
                 )
 
             outcome = DeskProbeOutcome(
@@ -317,6 +344,12 @@ def main() -> int:
         help="Response threshold LSB (display + classifier; unchanged prod default)",
     )
     parser.add_argument("--db", default=None, help="Override bridge DB path")
+    parser.add_argument("--campaign", choices=["desk", "edge-reflex"], default="desk",
+                        help="edge-reflex: stamp policy_ref=edge_operator_reflex_v1 + registered "
+                             "Edge device_id so probes count toward the certified-device N>=50 gate")
+    parser.add_argument("--device-id", default=None,
+                        help="explicit device_id for --campaign edge-reflex (else auto-resolved from "
+                             "the device birth cert)")
     parser.add_argument(
         "--no-store",
         action="store_true",

@@ -207,14 +207,19 @@ def persist_desk_probe(
     player: str,
     r2_at_probe: int,
     cco_profile_id: str | None = None,
+    policy_ref_override: str | None = None,
 ) -> tuple[int | None, str]:
-    """Write l6b_probe_log + l6b_probe_diagnostic. Returns (row_id, enriched_json)."""
+    """Write l6b_probe_log + l6b_probe_diagnostic. Returns (row_id, enriched_json).
+
+    policy_ref_override (A2A-POEP-P2): stamp a campaign tag instead of desk_operator_{protocol} --
+    e.g. the registered-Edge reflex campaign passes `edge_operator_reflex_v1` (the B1+B2 allowlist tag)
+    so its probes count toward the certified-device N>=50 gate."""
     reflex_verdict = map_l6b_classification_to_reflex_verdict(result.classification)
-    policy_ref = f"{DESK_POLICY_PREFIX}_{protocol}"
+    policy_ref = policy_ref_override or f"{DESK_POLICY_PREFIX}_{protocol}"
     enriched = enrich_diagnostic_json(
         diagnostic_json,
         session_meta={
-            "session_kind": "desk_operator",
+            "session_kind": "edge_reflex_campaign" if policy_ref_override else "desk_operator",
             "protocol": protocol,
             "player": player,
             "policy_ref": policy_ref,
@@ -231,7 +236,7 @@ def persist_desk_probe(
             accel_delta_peak=result.accel_delta_peak,
             reflex_verdict=reflex_verdict,
             cco_profile_id=cco_profile_id,
-            policy_ref=policy_ref,
+            policy_ref=policy_ref,   # campaign tag when overridden (e.g. edge_operator_reflex_v1)
             trigger_r2_at_probe=r2_at_probe,
         )
         store.insert_l6b_probe_diagnostic(
