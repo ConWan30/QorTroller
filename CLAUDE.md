@@ -376,7 +376,7 @@ The six surface-tier assignments the Track 1 research established are: **Surface
 - E2E tests require running Hardhat node
 - L6_CHALLENGES_ENABLED=false is the correct default
 - GSR_ENABLED=false — never change without N≥30 GSR calibration sessions per player (current N=0)
-- L6B_ENABLED=false — never change without N≥50 neuromuscular reflex calibration (current N=0)
+- L6B_ENABLED=false — never change without N≥50 neuromuscular reflex calibration ON THE CERTIFIED DEVICE. **Corpus reality 2026-07-15 (A2A-POEP-P2 loop, `6a91951f`): usable N=76 desk-DualSense (~45 independent) / 0 on the registered Edge (`581a836c…`) — gate UNMET.** The prior "N=0" was stale-low; the raw REFLEX_OBSERVED count (189) is stale-high (it counted 113 null-route peak=0 junk + CCO device-physics). The honest gate is `l9_presence/poep_reflex_gate.is_usable_reflex` (B1+B2: allowlisted L6B-reflex policy AND IMU-corroborated AND in-band AND not-artifact), wired into `get_l6b_calibration_progress`. The certified Edge has ZERO human-reflex captures — its L6B rows are CCO device-physics (`CCO_T0_POLICY_v1_OPTION_C`, device-auth not reflex) or a broken null-route. **L6B_ENABLED stays false until a fresh Edge reflex campaign (`policy_ref=edge_operator_reflex_v1`) yields N≥50 usable — a rig gate, not a desk one.** poep_enabled=False; P2 model correctly NOT built (HOLD).
 - Per-player L4 thresholds can only tighten, never loosen (enforced by min())
 - Stable EMA track updates on NOMINAL sessions only
 - Whitepaper test counts: 1158 bridge, ~1,635 total, ~1,607 CI (stale; CLAUDE.md is authoritative: 2216 bridge, 426 SDK, 482 Hardhat)
