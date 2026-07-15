@@ -1,0 +1,13 @@
+{
+  "mu_latency": 177.589,
+  "sd_latency": 61.882,
+  "mu_peak": 1564.796,
+  "sd_peak": 372.905,
+  "operating_threshold": 0.104757,
+  "n_positives": 52,
+  "lat_floor": 80.0,
+  "lat_ceil": 300.0,
+  "peak_floor": 1000.0,
+  "scope": "single_operator_single_edge_N52",
+  "params_hash": "81b77284e8881149acc1ef21916dfcdeec080225abcfd0df881e0629f7f8d22a"
+}
