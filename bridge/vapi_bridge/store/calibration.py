@@ -128,9 +128,13 @@ class CalibrationMixin:
         }
 
     def get_l6b_calibration_progress(self, device_id: str | None = None) -> dict:
-        """CCO Phase B: corpus progress toward operator N>=50 gate.
+        """CCO Phase B: corpus progress toward the operator N>=50 gate.
 
-        Counts all rows in l6b_probe_log (optionally filtered by device_id).
+        F-POEP-P0-2 (2026-07-15): the gate now counts VALID reflexes only -- probes where a genuine
+        reflex was observed (reflex_verdict='REFLEX_OBSERVED') -- NOT the raw probe total. Counting
+        every row (the pre-fix behavior) let NO_RESPONSE + INCONCLUSIVE artifact rows satisfy the
+        calibration gate, so N>=50 could be "reached" with 50 garbage probes and no usable reflex
+        model. probe_count (raw) is still reported for transparency; gate_reached keys on valid only.
         """
         _where = "WHERE device_id=?" if device_id else ""
         _params: tuple = (device_id,) if device_id else ()
@@ -138,6 +142,14 @@ class CalibrationMixin:
             total = int(
                 conn.execute(
                     f"SELECT COUNT(*) AS n FROM l6b_probe_log {_where}",
+                    _params,
+                ).fetchone()["n"],
+            )
+            _vwhere = "WHERE reflex_verdict='REFLEX_OBSERVED'" + (
+                " AND device_id=?" if device_id else "")
+            valid = int(
+                conn.execute(
+                    f"SELECT COUNT(*) AS n FROM l6b_probe_log {_vwhere}",
                     _params,
                 ).fetchone()["n"],
             )
@@ -159,11 +171,12 @@ class CalibrationMixin:
         latest_dict = dict(latest) if latest else None
         return {
             "device_id": device_id,
-            "probe_count": total,
+            "probe_count": total,                       # raw rows (transparency; NOT the gate)
+            "valid_reflex_count": valid,                # REFLEX_OBSERVED only -- the gate metric
             "reflex_verdict_distribution": reflex_dist,
             "latest_probe": latest_dict,
             "target_n": 50,
-            "gate_reached": total >= 50,
+            "gate_reached": valid >= 50,                # F-POEP-P0-2: valid reflexes, not raw probes
         }
 
     def get_cco_phase_g_corpus_progress(self, target_n: int = 50) -> dict:

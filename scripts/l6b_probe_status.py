@@ -28,9 +28,12 @@ TARGET_N = 50
 
 
 def _print_progress(progress: dict) -> None:
-    n = progress["probe_count"]
+    valid = progress.get("valid_reflex_count", progress["probe_count"])
+    raw = progress["probe_count"]
     target = progress.get("target_n", TARGET_N)
-    print(f"L6B calibration corpus: N={n} / {target}")
+    # F-POEP-P0-2: the gate is VALID reflexes (REFLEX_OBSERVED), not raw probes. Show both so the
+    # gap between "probes fired" and "clean reflexes captured" is never hidden.
+    print(f"L6B calibration corpus: N={valid} / {target} valid reflexes  ({raw} raw probes fired)")
     dist = progress.get("reflex_verdict_distribution") or {}
     if dist:
         print("  reflex_verdict distribution:")
@@ -70,7 +73,7 @@ def main() -> int:
             print(f"Device filter: {args.device_id[:16]}...")
         _print_progress(progress)
 
-    return 0 if progress["probe_count"] < TARGET_N else 2
+    return 0 if progress.get("valid_reflex_count", progress["probe_count"]) < TARGET_N else 2
 
 
 if __name__ == "__main__":
