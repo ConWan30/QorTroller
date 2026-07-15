@@ -1,0 +1,35 @@
+{
+  "schema": "rbm-v0-calibration-v1",
+  "date": "2026-07-15",
+  "device": "registered_edge_581a836c",
+  "n_positives": 52,
+  "n_campaign_nulls": 22,
+  "moments": {
+    "mu_latency": 177.58868461532984,
+    "sd_latency": 61.882393174387126,
+    "mu_peak": 1564.7957734450613,
+    "sd_peak": 372.90534235438304
+  },
+  "operating_threshold": 0.10475659098103336,
+  "metrics": {
+    "tpr": 0.9038461538461539,
+    "far_campaign": 0.0,
+    "auc": 0.9711538461538461,
+    "dprime": 2.4588203713372625
+  },
+  "acceptance": {
+    "TPR>=0.90": true,
+    "FAR<=0.10": true,
+    "AUC>=0.85": true,
+    "dprime>=1.5": true
+  },
+  "separation_verdict": "CALIBRATED",
+  "params_hash": "81b77284e8881149acc1ef21916dfcdeec080225abcfd0df881e0629f7f8d22a",
+  "scope": "single_operator_single_edge_N52",
+  "poep_enabled": false,
+  "ship_surface": "boolean_only (band_member + operating_point_fire)",
+  "continuous_score": "deferred_v0_1 (nested-LOO CV 0.599 > 0.35)",
+  "boolean_loo_stability": "STABLE (flip-rate 0.019, 1/52)",
+  "claim": "RBM-v0 (single Edge, N=52 usable reflexes vs 22 nulls): band-membership + one frozen operating-point boolean only (full-fit TPR~0.90, FAR=0); continuous score deferred to v0.1 -- not a liveness verdict; poep_enabled=False.",
+  "claim_ceiling": "device-local population reflex-consistency; NOT identity/liveness/cross-device"
+}
