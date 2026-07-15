@@ -145,14 +145,26 @@ class CalibrationMixin:
                     _params,
                 ).fetchone()["n"],
             )
-            _vwhere = "WHERE reflex_verdict='REFLEX_OBSERVED'" + (
-                " AND device_id=?" if device_id else "")
-            valid = int(
-                conn.execute(
-                    f"SELECT COUNT(*) AS n FROM l6b_probe_log {_vwhere}",
-                    _params,
-                ).fetchone()["n"],
-            )
+            # F-POEP-P0-2 was REFLEX_OBSERVED-only; that still counts null-route peak=0 junk (113 rows)
+            # and CCO device-physics. B1+B2 (poep_reflex_gate) is the honest gate: policy allowlist AND
+            # observed AND IMU-corroborated (peak>floor) AND in-band. Measured: 189 -> 76 usable.
+            try:
+                from l9_presence.poep_reflex_gate import (
+                    L6B_REFLEX_POLICY_ALLOWLIST, DEFAULT_PEAK_FLOOR_LSB, DEFAULT_BAND_MS,
+                )
+                _allow = tuple(sorted(L6B_REFLEX_POLICY_ALLOWLIST))
+                _ph = "(" + ",".join("?" for _ in _allow) + ")"
+                lo, hi = DEFAULT_BAND_MS
+                _q = (f"SELECT COUNT(*) AS n FROM l6b_probe_log "
+                      f"WHERE reflex_verdict='REFLEX_OBSERVED' AND policy_ref IN {_ph} "
+                      f"AND accel_delta_peak > ? AND latency_ms BETWEEN ? AND ?"
+                      + (" AND device_id=?" if device_id else ""))
+                _p = _allow + (DEFAULT_PEAK_FLOOR_LSB, lo, hi) + ((device_id,) if device_id else ())
+                valid = int(conn.execute(_q, _p).fetchone()["n"])
+            except Exception:  # noqa: BLE001 -- gate import/exec failure -> fall back to observed-only (never crash the report)
+                valid = int(conn.execute(
+                    "SELECT COUNT(*) AS n FROM l6b_probe_log WHERE reflex_verdict='REFLEX_OBSERVED'"
+                    + (" AND device_id=?" if device_id else ""), _params).fetchone()["n"])
             reflex_rows = conn.execute(
                 f"SELECT reflex_verdict, COUNT(*) AS n FROM l6b_probe_log {_where} "
                 "GROUP BY reflex_verdict",
@@ -172,11 +184,11 @@ class CalibrationMixin:
         return {
             "device_id": device_id,
             "probe_count": total,                       # raw rows (transparency; NOT the gate)
-            "valid_reflex_count": valid,                # REFLEX_OBSERVED only -- the gate metric
+            "valid_reflex_count": valid,                # B1+B2 usable reflexes -- the gate metric
             "reflex_verdict_distribution": reflex_dist,
             "latest_probe": latest_dict,
             "target_n": 50,
-            "gate_reached": valid >= 50,                # F-POEP-P0-2: valid reflexes, not raw probes
+            "gate_reached": valid >= 50,                # B1+B2: usable reflexes, not raw REFLEX_OBSERVED
         }
 
     def get_cco_phase_g_corpus_progress(self, target_n: int = 50) -> dict:

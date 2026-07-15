@@ -25,26 +25,30 @@ def store():
     yield s
 
 
-def _probe(store, verdict, cls, dev="desk-P1", lat=200.0):
+def _probe(store, verdict, cls, dev="desk-P1", lat=200.0, peak=600.0, policy="desk_operator_still"):
+    # B1+B2: a USABLE reflex needs an allowlisted policy AND IMU peak AND in-band -- not just verdict.
     store.insert_l6b_probe(device_id=dev, probe_ts_ms=1.0, latency_ms=lat,
-                           classification=cls, accel_delta_peak=600.0, reflex_verdict=verdict)
+                           classification=cls, accel_delta_peak=peak, reflex_verdict=verdict,
+                           policy_ref=policy)
 
 
-def test_gate_counts_valid_reflexes_not_raw_probes(store):
-    # 3 real reflexes + 47 garbage = 50 raw rows, but only 3 valid -> gate NOT reached.
+def test_gate_counts_usable_reflexes_not_raw_or_observed(store):
+    # 3 usable reflexes + 47 garbage of THREE kinds -> only 3 usable, gate NOT reached.
     for _ in range(3):
-        _probe(store, "REFLEX_OBSERVED", "HUMAN")
-    for _ in range(30):
-        _probe(store, None, "NO_RESPONSE", lat=-1.0)
-    for _ in range(17):
-        _probe(store, None, "INCONCLUSIVE", lat=17.0)   # too-fast artifact
+        _probe(store, "REFLEX_OBSERVED", "HUMAN")                                   # usable
+    for _ in range(20):
+        _probe(store, None, "NO_RESPONSE", lat=-1.0)                               # no reflex
+    for _ in range(15):
+        _probe(store, "REFLEX_OBSERVED", "HUMAN", peak=0.0, policy=None)           # null-route peak=0 junk
+    for _ in range(12):
+        _probe(store, "REFLEX_OBSERVED", "HUMAN", policy="CCO_T0_POLICY_v1_OPTION_C")  # device-physics
     p = store.get_l6b_calibration_progress()
     assert p["probe_count"] == 50            # raw total (transparency)
-    assert p["valid_reflex_count"] == 3      # only REFLEX_OBSERVED
-    assert p["gate_reached"] is False        # 50 garbage probes do NOT reach the gate
+    assert p["valid_reflex_count"] == 3      # B1+B2: only allowlisted + IMU + in-band
+    assert p["gate_reached"] is False        # 47 garbage (incl. REFLEX_OBSERVED junk) do NOT count
 
 
-def test_gate_reached_only_on_50_valid(store):
+def test_gate_reached_only_on_50_usable(store):
     for _ in range(50):
         _probe(store, "REFLEX_OBSERVED", "HUMAN")
     p = store.get_l6b_calibration_progress()
