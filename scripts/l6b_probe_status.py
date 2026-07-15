@@ -31,9 +31,10 @@ def _print_progress(progress: dict) -> None:
     valid = progress.get("valid_reflex_count", progress["probe_count"])
     raw = progress["probe_count"]
     target = progress.get("target_n", TARGET_N)
-    # F-POEP-P0-2: the gate is VALID reflexes (REFLEX_OBSERVED), not raw probes. Show both so the
-    # gap between "probes fired" and "clean reflexes captured" is never hidden.
-    print(f"L6B calibration corpus: N={valid} / {target} valid reflexes  ({raw} raw probes fired)")
+    # B1+B2 (poep_reflex_gate): the gate is USABLE reflexes (policy-allowlist AND IMU-corroborated AND
+    # in-band), not raw REFLEX_OBSERVED (which counts null-route peak=0 junk + CCO device-physics).
+    # Show both so the gap between "probes fired" and "usable reflexes" is never hidden.
+    print(f"L6B calibration corpus: N={valid} / {target} usable reflexes  ({raw} raw probes fired)")
     dist = progress.get("reflex_verdict_distribution") or {}
     if dist:
         print("  reflex_verdict distribution:")
