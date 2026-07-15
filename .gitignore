@@ -290,3 +290,7 @@ corpus_growth_*.jsonl
 
 # Recognition bake-off raw per-crop OCR (derived from gitignored crops; other-player gamertags; bulky)
 audits/rbo_*.jsonl
+
+# POEP-LIVE-1 reflex-capture artifacts (operator behavioral reaction-time scalars; public repo, keep local).
+# Only counts + verdicts are banked in the ledger/memory — never the per-challenge scalars.
+audits/poep_live_capture_*.json
