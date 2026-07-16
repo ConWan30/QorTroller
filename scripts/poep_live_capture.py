@@ -65,12 +65,18 @@ def fresh_nonce() -> str:
 
 def nonce_derived_delay_s(nonce: str, *, min_s: float = DEFAULT_MIN_DELAY_S,
                           max_s: float = DEFAULT_MAX_DELAY_S) -> float:
-    """Derive the challenge delay from the nonce -> nonce-committed, but unpredictable while secret.
+    """Derive the challenge delay from the fresh secret nonce -> unpredictable while the nonce is secret.
 
-    The delay is a deterministic function of the (secret, fresh) nonce, so a verifier who is later
-    shown the nonce can confirm the fire time was nonce-derived and not operator-chosen. Because the
-    nonce is generated fresh and unrevealed until the stimulus fires, neither the operator nor a
-    pre-scheduled macro can anticipate the onset -- the property P-LIVE-0 needs.
+    The load-bearing property is UNPREDICTABILITY: the nonce is generated fresh and unrevealed until the
+    stimulus fires, so neither the operator nor a pre-scheduled macro can anticipate the onset (the
+    property P-LIVE-0 needs against replay + pre-schedule).
+
+    NOT provable by the auditor (F-POEP-LIVE-1, grok round-17): the P-LIVE-0 commitment binds
+    (device_id, nonce, feature_digest, t_response) but NOT delay_s / arm-time, so `verify_live_response`
+    does NOT prove the fire matched this nonce-derived schedule -- it only checks the post-hoc latency
+    against the recorded t_challenge. Deriving delay from the nonce also puts schedule + binding entropy
+    on ONE secret (bit double-duty). The hygiene upgrade (deferred to the fix arc) is an INDEPENDENT
+    CSPRNG for the delay + the nonce for binding only, optionally committing H(nonce||delay||t_arm).
     """
     if max_s <= min_s:
         return max(0.0, min_s)
