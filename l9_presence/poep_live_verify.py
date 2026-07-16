@@ -12,7 +12,7 @@ VERIFY auditor (not an ML 'presence model'). By construction it defeats:
     fixed-schedule response lands outside the [challenge_ts, challenge_ts + reaction_band] window.
 
 Honest limits (NOT defeated by P-LIVE-0 alone, so poep_enabled STAYS False):
-  - A REACTIVE bot (detects the live challenge onset, reacts within 80-300 ms) is not defeated by
+  - A REACTIVE bot (detects the live challenge onset, reacts within the reaction band) is not defeated by
     timing/binding alone -- that needs waveform shape + Stage-A. P-LIVE-0 raises the bar to 'must
     react to a live unpredictable stimulus', a much stronger claim than offline scoring, but not yet
     'embodied human'. Candidate tag; no FROZEN promotion; no flip.
@@ -25,7 +25,15 @@ from typing import Optional
 
 _DOMAIN = b"QORTROLLER-POEP-v0-CANDIDATE"
 _SCHED_DOMAIN = b"QORTROLLER-POEP-v0-SCHEDULE"
-REACTION_BAND_MS = (80.0, 300.0)          # human sensorimotor reaction window (RBM-v0 band)
+# Surprise-mode reaction window. LOWER bound (80ms) = security edge: faster than human sensorimotor is
+# pre-press / pre-arm. UPPER bound (450ms) is a DATA-QUALITY filter, NOT a security gate (grok round-24):
+# a macro can hit any in-band latency, so the ceiling never was the anti-bot mechanism (nonce + timing +
+# shape + catch-trials are). Widened 300->450 for SURPRISE-mode: genuine surprise reactions run slower than
+# the primed RBM-v0 band (live captures 216-318ms; one failed at 301ms by 1ms). 450 is physiology-motivated
+# (unexpected-stimulus voluntary reactions plausibly reach ~400-500ms; beyond that = inattention/no-response)
+# and PROVISIONAL — the real ceiling is a pre-registered p95+fixed-margin rule on HELD-OUT multi-operator
+# sessions, not this one-session value. poep_enabled stays False regardless.
+REACTION_BAND_MS = (80.0, 450.0)
 SCHEDULE_TOLERANCE_MS = 300.0             # jitter budget: intended lag ~= 0 (continuous poll fires at t_arm+delay); allows sleep overshoot + poll cost
 
 
@@ -105,7 +113,7 @@ def verify_live_response(ch: LiveChallenge, resp: ChallengeResponse) -> dict:
     Checks, in order (each independently defeats an attack class):
       1. nonce match          -- resp answers THIS challenge's fresh nonce (defeats A-REPLAY)
       2. temporal ordering    -- response strictly AFTER the challenge (defeats pre-recorded)
-      3. reaction-band gate    -- latency within [80,300]ms of the challenge (defeats pre-scheduled A-CONST)
+      3. reaction-band gate    -- latency within REACTION_BAND_MS of the challenge (defeats pre-scheduled A-CONST)
       4. IMU corroboration     -- peak above floor (defeats no-response)
       5. commitment integrity  -- recomputed commitment == claimed (binding is not forged)
     """
