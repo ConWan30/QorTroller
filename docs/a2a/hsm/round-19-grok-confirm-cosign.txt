@@ -1,0 +1,5 @@
+Verifying F1 at the library boundary against the live code and tests.Confirming no alternate path sets `fully_authorized` without the library guard, then running the F1 test.**CLOSED. SHIP.**
+
+1. **F1 CLOSED** — both boundaries: `add_operator_cosignature` raises on bridge `operator_id`/recovered; `verify_dual_signed_attestation` demotes `operator_id_authenticated` (and thus `fully_authorized`) on either match. Suite 9/9 green.
+2. **No false reject** — `assert_operator_key_not_bridge` is exact case-fold equality to `BRIDGE_WALLET` only; lookalike addresses pass.
+3. **No remaining path** — `fully_authorized` / `cryptographic_dual_key_satisfied` only via `verify_dual_signed_attestation`; hand-crafted bridge dual-sign fails library verify; CLI is defense-in-depth, not the sole gate.

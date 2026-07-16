@@ -1,0 +1,95 @@
+Independent charter-(a) verify: I'll read the on-disk modules + attestation preimage path, re-run the suite, and hammer the seven threat/crypto points against forge paths.Probing attestation preimage binding, eth_keys recover/malleability, and forge paths next.## VERDICT: **SHIP-WITH-FIX** (not pure SHIP)
+
+**Crypto core is sound.** No path to `fully_authorized=True` for a **non-bridge** `operator_id` without that key signing the **exact** re-derived digest. One defense-in-depth hole remains on the **bridge-wallet** refuse (T1 incomplete at library boundary).
+
+**Independent re-run:** cosign 8/8 · SEL suite 40/40 · PV-CI 183 PASS.
+
+---
+
+### Findings (severity order)
+
+| # | Sev | Finding |
+|---|-----|---------|
+| F1 | **HIGH (fix)** | **T1 incomplete at module boundary.** `assert_operator_key_not_bridge` is only used by the CLI. `add_operator_cosignature` / `verify_dual_signed_attestation` do **not** refuse `operator_id == BRIDGE_WALLET`. Confirmed: cosigning a record with `operator_id=BRIDGE_WALLET` fails only on signer mismatch (`override the signed…`), never on “BRIDGE wallet”. If the bridge sets `operator_id` to itself and signs with the deployer key it already holds, **both halves are bridge-held** → vacuous `fully_authorized`. Not a forge against a real external operator address; **is** the trust-collapse path T1 was written to kill. |
+| F2 | LOW (semantic) | `operator_sig_ok=True` means “ECDSA recover succeeded over re-derived digest,” **not** “operator authorized.” Wrong-key, EIP-191-wrapped, and post-mutation packages all yield `operator_sig_ok=True` + `operator_id_authenticated=False` + `fully_authorized=False`. Split is correct; **do not gate on `operator_sig_ok` alone.** |
+| F3 | INFO | Malleability: eth_keys produces low-s; flipping to high-s with wrong `v` recovers a **different** address (auth fails); with correct `v` recovers **same** address (benign duplicate sig). **No forge of `operator_id_authenticated`.** |
+| F4 | INFO | Guardian external verify trusts `record["pubkey_hex"]` when `guardian_pubkey_hex=None` (pre-existing attestation residual). Still needs operator half for dual auth. Pin trusted Guardian pubkey at consumption time. |
+
+**No silent forge of a real operator address.** F1 is the only commit-blocker-class gap.
+
+---
+
+### Hammer answers (1–7)
+
+**1. Threat model — CLOSED for external operator_id**  
+`fully_authorized = guardian_ok ∧ operator_sig_ok ∧ operator_id_authenticated`.  
+Bridge can always force `guardian_ok` (AWS creds).  
+`operator_id_authenticated` requires recover(raw_digest, op_sig) == `operator_id` with `_is_address`.  
+Probed:
+- wrong-key sig → `sig_ok=True`, auth=False, full=False  
+- junk 65B → both False  
+- EIP-191 wrap → recoverable wrong addr, full=False  
+- cross-package transplant → guardian ok, auth=False  
+- mutate `operator_id` / `decision` after dual → guardian fails (preimage-bound), full=False  
+
+**Only collapse:** `operator_id` = bridge-controlled address (F1).
+
+**2. Recover soundness — CLOSED**  
+`sign_msg_hash` / `recover_public_key_from_msg_hash` = raw 32B digest (not EIP-191). Malleability does not change recovered address under correct `(r,s,v)`; wrong form fails auth.
+
+**3. Digest re-derivation — CLOSED**  
+Both paths call the **same** `build_graduation_attestation_preimage(...)` then SHA-256. Cosign digest matches attestation `digest_hex`. Tampering stored `digest_hex` is ignored (re-derive wins). Guardian `pub.verify(..., preimage, ECDSA(SHA256()))` ≡ digest-mode over the same bytes.
+
+**4. RAW vs EIP-191 — CLOSED**  
+Method flag only admits verification attempt. Recover always over raw re-derived digest. Flag=`raw` + EIP-191 body → wrong recover → not authorized. Sufficient for v1; optional later: refuse non-65B / enforce low-s explicitly.
+
+**5. Bridge-wallet refuse — OPEN (F1)**  
+Lowercase checksum compare is fine (one secp256k1 → one address). No alternate derivation bypass. **Must refuse inside `add_operator_cosignature` + fail-closed in `verify_*` / `cryptographic_dual_key_satisfied`**, not only CLI — future non-CLI callers will skip the guard.
+
+**6. Scope/rails — HELD**  
+`operator_dual_key_present` untouched (O3 supersede still declarative — correct). Helper is intentional dead-until-wired primitive (PCRA-shaped). CLI env-only key; 0-IOTX; no auto-apply; CANDIDATE. Good.
+
+**7. Honest claim — COMPLETE**  
+Notes correctly scope to address-keyholder auth; key theft / blind-sign residuals named; not cognitive intent; not a capability token.
+
+---
+
+### Minimal this-commit fix (before operator commits)
+
+```python
+# add_operator_cosignature — after _is_address(op_id):
+assert_operator_key_not_bridge(op_id)
+# after recover, before accept:
+assert_operator_key_not_bridge(recovered)
+
+# verify_dual_signed_attestation — after computing operator_id_authenticated:
+if operator_id_authenticated:
+    try:
+        assert_operator_key_not_bridge(record["operator_id"])
+        assert_operator_key_not_bridge(recovered)
+    except ValueError:
+        operator_id_authenticated = False
+```
+
++ test: Guardian attests `operator_id=BRIDGE_WALLET` + matching bridge-key cosign → `add` raises / `fully_authorized=False`.
+
+---
+
+### Charter checklist
+
+| Item | Status |
+|------|--------|
+| operator_id=address + recover-check | ✅ |
+| Independent same-digest co-sign (no bind) | ✅ |
+| RAW SHA-256 (not EIP-191) | ✅ |
+| eth_keys sign_msg_hash/recover | ✅ |
+| operator_dual_key_present untouched | ✅ |
+| cryptographic_dual_key_satisfied helper | ✅ |
+| secp256k1 | ✅ |
+| Refuse bridge wallet | ⚠️ CLI only — **library gap F1** |
+| Co-sign refuses recovered ≠ operator_id | ✅ |
+| T2 cross/half/mutation/non-raw | ✅ tested + re-probed |
+
+---
+
+**Bottom line:** Do **not** commit as pure SHIP. Apply the ~6-line T1 library refuse + one test, then **SHIP**. Without F1, a compromised/lazy bridge can dual-sign as itself and claim `fully_authorized` while holding both keys — exactly the non-repudiation collapse the charter named.
