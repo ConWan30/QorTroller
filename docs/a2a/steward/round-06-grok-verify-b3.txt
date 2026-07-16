@@ -1,0 +1,126 @@
+I'll adversarially verify B3 against the live tree: mechanical delta vs existing Curator draft pipe + FSCA, hard/soft split, FORBIDDEN_COLUMNS fail direction, state machine, adapter honesty, and rails.Next: live code vs claims — Curator draft pipe, FSCA consent rule, FORBIDDEN_COLUMNS, B1/B2 parallels, and the test suite.Checking existing Curator decision logic — `curator_review` may already cover part of what DPIG claims is novel.# B3 DPIG — adversarial verify
+
+**Tests:** 13/13 pass (re-ran). Files untracked; config `dpig_enabled=False` present (B0). No runtime wiring / no act path.
+
+---
+
+## VERDICT: **SHIP-WITH-FIX**
+
+Delta is real and draft-only rails hold, but the novelty claim overreaches, and two state-machine / fail-open edges are wrong for a product-integrity gate. Not BLOCK (no spend/git/chain; stub refuses hollow recs; pure evaluator is new hazard surface). Not clean SHIP.
+
+---
+
+## 1. MECHANICAL DELTA — mostly honest, one overclaim
+
+| Claimed peer | Reality | Delta? |
+|---|---|---|
+| `CuratorDraftGenerator.draft_marketplace_listing_review` | Takes a pre-chosen `verdict`, validates against `_FROZEN_VERDICTS`, persists+KMS-sign path. **No integrity rules.** | **Yes.** Pipe ≠ decision logic. |
+| FSCA `CONSENT_REVOKED_LISTING_ACTIVE` | Fleet poll over `curator_listing_review_log` where verdict=`FLAGGED_CONSENT_AMBIGUOUS`. Runtime coherence signal. | **Yes.** Different layer. |
+| **`curator_review` / `compute_verdict_for_listing`** | **Already decision logic:** consent bit → `FLAGGED_CONSENT_AMBIGUOUS`, tier mismatch, anchor stale, IPFS, `APPROVED` / rejects. Live in Curator agent + operator API. | **Claimed novelty is thin.** Docstring never mentions this. |
+
+**Honest delta (what B3 actually adds):** WMP-product dimensions `curator_review` does **not** check — `FORBIDDEN_COLUMNS` leak, PII-free, aggregate de-anon floor, MPJA/PoSP join, consent **expiry**, **category-match** — plus a suspend/relist *recommendation* vocabulary (disjoint from FROZEN verdicts: **zero string overlap**).
+
+**Not honest as written:** “DPIG is **the** missing decision logic.” It is a **second** decision surface (WMP product-integrity), not the discovery of Curator’s first brain. Consent-revoked is elevation/overlap with both `curator_review` and FSCA, not invention.
+
+**Thinner than claim if sold as full marketplace gate:** no tier, no anchor-freshness, no IPFS, no commitment validity — those stay in `curator_review`.
+
+---
+
+## 2. HARD vs SOFT
+
+| Rule | Class | Call |
+|---|---|---|
+| no consent / expired / category mismatch / forbidden leak / not PII-free / aggregate &lt; floor / join BROKEN | HARD → suspend-class | **Right** for sale-unsound |
+| join PARTIAL / absent | SOFT → HOLD | **Right** (incomplete ≠ contradictory) |
+| **join `UNVERIFIABLE`** | HARD, labeled “contradictory” | **Wrong.** Incomplete/can’t-attest → **SOFT HOLD**, same as PARTIAL. Hard only for structural false-claim (`JOIN_BROKEN` / `BROKEN`). |
+| missing: buyer-category outcome, PoSR recency, duplicate-sale, price/terms, tier/anchor/IPFS | — | **Defer v0.1** (scope, not this-commit blockers) if docstring stays WMP-product-scoped |
+
+Hard set is directionally correct for a sellability gate. Main class bug is **UNVERIFIABLE-as-hard**.
+
+---
+
+## 3. FORBIDDEN_COLUMNS reuse
+
+- Lazy import of `ReplayPreProcessor.FORBIDDEN_COLUMNS` (20 real names) — **good, no fork.**
+- Import fail + non-empty cols → SOFT HOLD (not PRODUCT_OK) — **acceptable sell direction** (won’t clear to OK).
+- **Bitmap lie:** `no_biometric_leak: True` when `forb` empty (probe: EMPTY_FORB_LEAK). Integrity bitmap claims verified-clean while soft says unverifiable.
+- Empty cols + empty forb → PRODUCT_OK with `no_biometric_leak=True` (vacuous pass). OK only if “no columns declared” is intentional; else soft “manifest columns absent — floor UNVERIFIABLE.”
+
+**Fail direction for sale:** HOLD on unverifiable floor is fine for draft v0; hard-suspend on import-fail is overkill. **Fix the bitmap**, not necessarily escalate to HARD.
+
+---
+
+## 4. RECOMMENDATION STATE MACHINE
+
+```
+hard → RECOMMEND_SUSPEND | STAY_SUSPENDED   OK
+soft → RECOMMEND_HOLD                      OK
+clean+active → PRODUCT_OK                  OK
+clean+inactive → RECOMMEND_RELIST          FOOTGUN
+```
+
+**RELIST:** DPIG cannot see operator legal-hold, abuse, fraud, or non-integrity suspend reasons. Clean integrity evidence ⇒ affirmative **RECOMMEND_RELIST** is unsafe advice that will feed the draft pipe in v0.1.
+
+**Minimal safe v0:** clean+inactive → **STAY_SUSPENDED** + soft  
+`"integrity clear; relist is operator decision (non-integrity suspend reasons invisible to DPIG)"`  
+— or require explicit caller flag `integrity_class_suspend=True` before RELIST. Do not default-RELIST.
+
+Hard-over-soft priority works (probed).
+
+---
+
+## 5. ADAPTER
+
+`evaluate_products_from_store` STUB + `dpig_enabled` gate + refuses bare listing_ids → all-no-consent SUSPEND invention: **honest**, matches B2. Not overclaiming a live product.
+
+---
+
+## 6. RAILS
+
+| Rail | Held? |
+|---|---|
+| No suspendListing / chain / git / web3 | **Yes** (only in prose note) |
+| Default OFF `DPIG_ENABLED` | **Yes** |
+| Draft ≠ act | **Yes** |
+| Recs ∉ `_FROZEN_VERDICTS` | **Yes** — naive wire into `draft_marketplace_listing_review(verdict=…)` **fails closed** (good accident) |
+| Empty `listing_id` accepted | Cosmetic; fine for pure eval |
+
+No act footgun in code. **Recommend footgun** is RELIST (above).
+
+---
+
+## EXTRA FAIL-OPENS (probed)
+
+1. **`consented_categories` empty / None + `listing_category` set → PRODUCT_OK, `category_ok=True`.** Missing evidence treated as pass. Should be SOFT “category UNVERIFIABLE” when category present and cats empty.
+2. **`consent_expiry_ts=None` + granted → consent_ok True.** Unexpired-unknown. Acceptable if ledger always has expiry; else soft. Defer ok if noted.
+3. **No adapter / empty-cats / empty-forb / UNVERIFIABLE tests.** Claimed paths covered; edges not.
+
+---
+
+## MINIMAL THIS-COMMIT FIXES
+
+1. **Docstring honesty:** cite `curator_review` as existing decision surface; DPIG = WMP product-integrity **extension** (φ/PII/floor/join/expiry/category), not “the” missing logic; consent overlap with review+FSCA stated.
+2. **RELIST default:** clean+inactive → STAY_SUSPENDED + soft operator-relist note (or gated RELIST). Update `test_clean_inactive_listing_recommends_relist`.
+3. **Category fail-open:** listing_category set & empty cats → soft (not PRODUCT_OK).
+4. **Join UNVERIFIABLE → soft**, not hard; stop calling it “contradictory.”
+5. **`no_biometric_leak`:** False (or N/A) when forb empty and check not actually run.
+
+## DEFER v0.1
+
+- Store adapter (consent ledger, WMP manifest, MPJA join, device_count)
+- Wire DPIG → CuratorDraftGenerator with **explicit mapping table** rec → FROZEN verdict / notify payload
+- Buyer-category, recency, duplicate-sale, tier/anchor/IPFS (or document non-superset forever)
+- Tests for edges above
+
+---
+
+## HAMMER SCORES (short)
+
+1. **Delta:** real vs pipe+FSCA; **overclaim** vs `curator_review`.  
+2. **Hard/soft:** good set; **UNVERIFIABLE misclassed hard.**  
+3. **FORBIDDEN:** reuse good; soft HOLD ok; **bitmap dishonest on unverifiable.**  
+4. **State machine:** **RELIST unsafe.**  
+5. **Adapter:** honest stub.  
+6. **Rails:** act-safe; recommend-RELIST is the risk.
+
+**Do not rubber-stamp.** Fix 1–5 in this commit, then SHIP. Without RELIST + category + UNVERIFIABLE + docstring honesty, I would **BLOCK** novelty framing as misleading even if code is draft-only.
