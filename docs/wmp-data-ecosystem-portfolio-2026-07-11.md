@@ -25,7 +25,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** **NOW** — WMP Phase-2 promote ≈0.3–0.6 IOTX; 3/5 verifier legs already live-capable (vision doc §2). Gate: operator's explicit WMP-4 deploy choice.
 - **Ceiling:** action-only, no observation channel, macro-intent-not-biomechanics, `is_full_pomdp_tuple=false`, demand-is-thesis.
 
-### UC-2 · Skill-stratified corpora (the SKILL axis made into product structure)
+### UC-2 · Skill-stratified corpora (the SKILL axis made into product structure) — **BUILT 2026-07-11** (`d8bf2fe5` — `l9_presence/skill_strata.py` session-demonstration bands + verify-by-rederivation + `wmp_metadata` hook; marker reconciled 2026-07-16)
 - **Produces:** the same action corpora, **stratified by protocol-measured skill bands** — session verdict streaks (GIC-eligible clean sessions), L5 rhythm stability, AIT-corpus membership, authored-kill density per match. "Expert vs intermediate demonstrations" is a real curriculum-learning need.
 - **Proof:** the strata labels derive ONLY from protocol verdicts already computed (`ruling_validation_log`, KAS records, AIT snapshots) — a labeling harness maps verdict history → band; the band ships as a bundle metadata field, the underlying data stays post-φ. No biometric leaves.
 - **Consumer:** curriculum/imitation-learning teams; NPC-difficulty calibration (GAME_DEV buyer category, FROZEN enum INV-BUY-001).
@@ -41,7 +41,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** gated on the **Arc 2 buyer-category prover** (verifier live `VAPIBuyerCategoryVerifier`, prover ABSENT — the known missing half; code-only build).
 - **Ceiling:** baseline-data supplier claim only — never "our data catches X% of bots"; no field-FAR transfer.
 
-### UC-4 · The verified play-résumé (skill-work analytics as a portable credential)
+### UC-4 · The verified play-résumé (skill-work analytics as a portable credential) — **BUILT 2026-07-11** (`8f12d1d5` — `l9_presence/play_resume.py` assembler + verifier; marker reconciled 2026-07-16)
 - **Produces:** a gamer's cryptographic play history digest — verified session counts, clean-streak lengths, match spans (LUMEN-2b), authored-kill totals (KAS), beacon-anchored time windows — the *provable* version of a Tracker.gg profile.
 - **Proof:** an assembler rolls existing artifacts (KAS records, PoSP, match certificates, GIC status) into a REFERENCE-AND-BIND résumé document; PORT-CERT-style off-rig verify; optionally bound to the controller's `did:io:` + the gamer's VHP soulbound (tokenId precedent exists).
 - **Consumer:** esports org scouting, sponsorship qualification (BRAND buyer category), tournament seeding evidence.
@@ -77,7 +77,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** mostly EXISTS dormant — gate: pilot demand (≥2 participating events) + a federation-consent note. No new chain spend to design.
 - **Ceiling:** pattern-sharing only; no cross-event player identification (identity claims stay off the table).
 
-### UC-8 · Controller-fleet capability telemetry (hardware-partner data product)
+### UC-8 · Controller-fleet capability telemetry (hardware-partner data product) — **BUILT 2026-07-16** (`bridge/vapi_bridge/wmp/fleet_telemetry.py` — device-MODEL aggregation over l6b_probe_log CCO rows; min-devices-per-bucket floor suppresses under-floor buckets entirely; no device_id in output, per-unit fingerprinting structurally excluded; 7 tests)
 - **Produces:** aggregated controller-MODEL capability distributions — trigger-force-curve classes, haptic response envelopes, per-tier verification rates — device data, not gamer data.
 - **Proof:** the CapabilityOracle + CCO Phase G measurements already exist (`capability_oracle.py`; `CCO_PHASE_G_VALIDATED_TIERS` — PREMIUM_EDGE N=210, MID_TIER N=130, operator-attested); an aggregation harness rolls per-model stats with device-count floors.
 - **Consumer:** hardware vendors/design houses (the Qorvo outreach precedent is exactly this audience) + the HWFL-1 dev-kit lane's own BOM decisions.
@@ -93,7 +93,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** **NOW (doc + packaging)** — an "IRB companion" document over UC-1's pipeline. Gate: WMP Phase-2 (same as UC-1).
 - **Ceiling:** we supply consent *evidence*, not IRB approval; "cryptographic consent" ≠ legal erasure of every offline copy (DePIN §5.2-5.3 caveat carries verbatim).
 
-### UC-10 · Tournament integrity reports (aggregate organizer analytics)
+### UC-10 · Tournament integrity reports (aggregate organizer analytics) — **BUILT 2026-07-16 (structure; a pilot fills it)** (`l9_presence/integrity_report.py` — REFERENCE-AND-BIND rollup over match certificates + fail-closed re-derivation verifier; ceilings ride verbatim; 8 tests)
 - **Produces:** per-event rollups of the pilot's per-match artifacts — N matches certified, verdict distribution, re-check pass rate, dispute outcomes — the organizer's post-event "integrity report."
 - **Proof:** REFERENCE-AND-BIND rollup over match certificates (`scripts/match_certificate.py` artifacts); each row re-derivable from the cited certs.
 - **Consumer:** the organizer (event marketing + governance) and their sponsors.
@@ -144,7 +144,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** **NOW at N=1 scale** (the rig is the service); gate for scale = population breadth (BCC lever, UC-6).
 - **Ceiling:** `developer_self` scale honesty — one-rig capacity until breadth exists; no QA-outcome guarantees.
 
-### UC-15 · Self-analytics — the gamer consuming their own verified data (demand-side seed) — **BUILT 2026-07-16** (`bridge/vapi_bridge/wmp/self_analytics.py` — pure clean-streak/cadence/authored-progression aggregator + read-only Store adapter over public getters; self-view ceiling rails baked in + guarded; 10 tests; poep/chain untouched)
+### UC-15 · Self-analytics — the gamer consuming their own verified data (demand-side seed) — **BUILT 2026-07-16** (`bridge/vapi_bridge/wmp/self_analytics.py` — pure clean-streak/cadence/authored-progression aggregator + read-only Store adapter over public getters; self-view ceiling rails baked in + guarded; 10 tests; poep/chain untouched. **Endpoint wired same day:** read-only `GET /player/self-analytics` in `operator_api/_app.py`, read-key auth, `asyncio.to_thread` per event-loop discipline; 3 endpoint tests)
 - **Produces:** the producing gamer's own dashboard over their verified history — clean-streak trends, authored-kill progression, session cadence — the *self-consumption* loop that makes the data economy sticky before any external buyer exists.
 - **Proof:** none needed beyond what exists — it's the gamer's own data, zero consent friction; rendered from `ruling_validation_log`, KAS records, grind analytics (the `vapi_grind_analytics` surface + GamerView frontend already exist).
 - **Consumer:** the gamer (retention/engagement driver; the demand-side seed of the flywheel).
@@ -168,14 +168,14 @@ has flattened: further candidates reduce to consumer variants of existing entrie
 
 | Rank | Item | Cost | The one-line case |
 |---|---|---|---|
-| 1 | **UC-4 play-résumé assembler** | code-only | The gamer's skill, provable — the artifact every player understands instantly |
-| 2 | **UC-2 skill-strata harness** | code-only | SKILL becomes the product structure (expert-band demos) from logs that already exist |
-| 3 | **UC-15 self-analytics view** | code-only | Demand-side stickiness with zero consent friction |
-| 4 | **UC-10 integrity-report rollup** | code-only | Completes the pilot story (needs a pilot to fill) |
-| 5 | **UC-8 fleet-telemetry aggregator** | code-only | Hardware-partner audience already warm (Qorvo) |
-| 6 | **UC-1 WMP Phase-2 promote** | ~0.5 IOTX | The base product — the corpus headline; operator deploy choice |
-| 7 | **UC-5 W3bstream analytics fns** | code-only | Verifiable-compute pillar exercised honestly |
-| 8 | **UC-3 buyer prover** | code-only | Closes Arc 2; category-gated selling |
+| 1 | **UC-4 play-résumé assembler** | code-only | **BUILT 2026-07-11** (`8f12d1d5`) |
+| 2 | **UC-2 skill-strata harness** | code-only | **BUILT 2026-07-11** (`d8bf2fe5`) |
+| 3 | **UC-15 self-analytics view** | code-only | **BUILT 2026-07-16** (module + `GET /player/self-analytics`) |
+| 4 | **UC-10 integrity-report rollup** | code-only | **BUILT 2026-07-16 (structure)** — a real pilot fills it |
+| 5 | **UC-8 fleet-telemetry aggregator** | code-only | **BUILT 2026-07-16** (floor-protected model buckets) |
+| 6 | **UC-1 WMP Phase-2 promote** | ~0.5 IOTX | **LIVE 2026-07-11** (first real bundle VERIFIED) |
+| 7 | **UC-5 W3bstream analytics fns** | code-only (wasm) | REMAINING — its own Rust/wasm arc |
+| 8 | **UC-3 buyer prover** | code-only | REMAINING — its own ZK-prover arc (verifier live, prover absent) |
 
 **Portfolio read:** the coherent picture is a three-ring economy — (inner) the gamer consumes their own
 verified output (UC-15/4), (middle) skill-structured corpora + services sell to labs/studios/organizers

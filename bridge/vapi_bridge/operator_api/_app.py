@@ -791,6 +791,24 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             }
 
 
+    # WMP UC-15 — GET /player/self-analytics
+    # ------------------------------------------------------------------
+    # The gamer consuming their OWN verified data (demand-side seed). Read-only aggregation over
+    # already-computed protocol truth (GIC-stamped ruling rows + chain status). SELF-VIEW ONLY:
+    # no cross-player comparison, no rank (population gate stands); advisory, developer_self scale.
+    # No chain call, no consent write, no biometric — pure local aggregates.
+    @app.get("/player/self-analytics")
+    async def player_self_analytics(
+        grind_session_id: str = Query(default="", description="Optional grind session scope"),
+        x_api_key: str = Header(default=""),
+    ):
+        _check_read_key(x_api_key)
+        from ..wmp.self_analytics import self_analytics_from_store
+        import asyncio as _aio
+        # DB aggregation off the event loop (event_loop_invariants discipline)
+        return await _aio.to_thread(
+            self_analytics_from_store, store, grind_session_id=grind_session_id)
+
     # Phase 3 Path B — Gameplay Workflow Layer: GET /player/session-status
     # ------------------------------------------------------------------
     # Single-glance "am I verified?" for the casual player. Read-only COMPOSITION over
