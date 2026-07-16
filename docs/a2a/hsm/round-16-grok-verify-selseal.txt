@@ -1,0 +1,95 @@
+I'll verify the landed module and tests against the round-15 footguns — honest claim first, then preimage canonicalization and digest-mode equivalence.Tests are green. Digging into residual overclaim wording and adversarial preimage edge cases.## VERDICT: **SHIP-WITH-FIX** (one framing line; crypto/rails hold)
+
+**Gates:** 32/32 SEL+attest · PV-CI 183 PASS · no endpoint leak · no FROZEN/spend path
+
+---
+
+### 1. HONEST CLAIM — almost fixed; residual overclaim in opening docstring
+
+| Surface | Status |
+|---------|--------|
+| `_HONEST_NOTE` (signed-record text) | **CORRECT** — Guardian RECORDED package; NOT operator auth; operator_id DECLARATIVE; needs operator key for true NR |
+| `HONEST CLAIM` block (L9–14) | **CORRECT** |
+| `test_note_states_the_honest_claim_*` | Pins the note strings |
+| Record fields (`notary=guardian`, no `operator_authorized`) | Clean |
+| **Module L3–7 opening** | **STILL OVERCLAIMS** |
+
+```3:7:bridge/vapi_bridge/steward_sel_attestation.py
+rejects; SEL never auto-applies. This module makes that OPERATOR DECISION a non-repudiable, EXTERNALLY
+VERIFIABLE record: Guardian's HSM signs a canonical attestation over the decision package ...
+```
+
+That still markets **operator-decision non-repudiation**. The next paragraph walks it back, but L4 is the load-bearing sentence people skim. Per your bar: framing debt is not “code clean = ship.”
+
+**Minimal this-commit fix (docstring only):** replace L4 with something like  
+*“This module makes a Guardian-notarized, externally verifiable **record of a decision package**…”*  
+— never “OPERATOR DECISION a non-repudiable.”
+
+Not a crypto BLOCK; **do not commit with L4 as-is.**
+
+---
+
+### 2. PREIMAGE CANONICALIZATION — airtight for v0
+
+| Check | Result |
+|-------|--------|
+| One builder | `build_graduation_attestation_preimage` only; verify re-derives via it |
+| Length-prefix vars | `_lp` blocks `ab\|c` vs `a\|bc` and null-byte splits |
+| Milli-ints | Float only at attest boundary; record/preimage are ints |
+| Decision enum | ACCEPT/REJECT; case-normalized in builder |
+| 32B head | Non-32 / `0x…` fail closed |
+| All 10 field flips | Break verify |
+| Wrong key / missing fields | Fail closed → `False` |
+| Unsigned meta (`schema`/`note`/`candidate`/`notary`/`digest_hex`/`kms_verified`) | **Correct** — not claims; only signed fields matter |
+
+**Non-holes (document, don’t block):**
+- **Milli rounding** collides by design (`0.9995` and `1.0` → `1000`). Grain is 0.001; not a silent multi-precision forge of distinct claims.
+- **Negative / oversized ints:** `to_bytes` raises `OverflowError` → verify fail-closed; attest would raise. Fine for v0; nicer `ValueError` is v0.1 polish.
+- **Garbage 32B head:** allowed. Sig proves “Guardian signed *this* head”; external check vs live ledger is out of scope (right).
+
+---
+
+### 3. DIGEST MODE — equivalent to KMS DIGEST
+
+Probed locally:
+- Sign: `ECDSA(Prehashed(SHA256()))` over `SHA256(preimage)`  
+- Verify: `ECDSA(SHA256())` over preimage  
+→ **OK** (same digest, one hash)
+
+Wrong-mode (sign digest with non-Prehashed ECDSA) correctly **fails**. Matches AWS KMS `ECDSA_SHA_256` + `MessageType=DIGEST`.
+
+---
+
+### 4. CHAIN-HEAD BINDING — sound
+
+Bound in preimage; real `steward_sel.chain_head` used in test; different ledger → different head. Re-use against another ledger state fails if you rebind the field (tamper test covers head flip). Verifier does not prove head∈ledger — **acceptable**.
+
+---
+
+### 5. SCOPE/RAILS — held
+
+- Rename off “seal” as product name; only **negations** (“NOT a governance seal”) remain — correct  
+- CANDIDATE domain; no FROZEN; no `--confirm-governance`  
+- Injectable sync `sign_digest`; no async-in-sync  
+- No operator endpoint; no auto-apply; 0-IOTX  
+- Log row: `sel-grad-attest:{digest[:16]}` ≤200; reuses `operator_agent_signature_log`
+
+---
+
+### 6. LAYERING — right direction
+
+- `steward_sel` does **not** import attestation  
+- Attestation composes over SEL via dict (`attest_from_graduation`); SEL stays attestation-free  
+- Runtime import of `steward_sel` only in the binding test
+
+---
+
+### Commit gate
+
+| | |
+|--|--|
+| **SHIP** after | Fix L4 opening docstring (and any copy that still says “operator decision is non-repudiable”) |
+| **Optional v0.1** | Explicit non-neg / range checks → `ValueError`; assert `digest_hex` == re-derived (hygiene, not security) |
+| **BLOCK only if** | L4 stays as-is at commit |
+
+**Crypto + footguns (1)(2): PASS. Honest-claim: PASS on note/tests, FAIL on L4 skim-line → SHIP-WITH-FIX.**
