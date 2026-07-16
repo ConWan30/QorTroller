@@ -1,0 +1,55 @@
+Verifying Ceremony B against the round-22 charter: reading the landed artifacts, VMDR contract constraints, and residual re-anchor claims.Checking residual false ceremony steps, `verify_cert` scope, and no-spend surface.Found a real gap: full-cert path uses `sha256(dev_pub)` for `device_id` — fails `verify_cert` (DEVICE_ID_CANON is keccak256). Applying that minimal fix, then re-running tests.## VERDICT: **SHIP-WITH-FIX** (honesty BLOCK cleared; one readiness bug fixed in-tree)
+
+---
+
+### Findings (severity order)
+
+| Sev | Finding | Status |
+|-----|---------|--------|
+| **P0 honesty** | Round-13 false `re-registerDevice` step | **CLOSED** in runbook |
+| **P1** | `full_cert` used `sha256(dev_pub)` for `device_id` → issuer-sig-only passed while production `verify_cert` fails DEVICE_ID_CANON (keccak) | **FIXED this verify** |
+| **P3** | No soft-warn when software CA file absent (`is_new_root=None`) | Residual OK (no false-pass) |
+| **P3** | No GetKeyPolicy Guardian/Sentry ARN soft-warn | Intentional; IAM stays ceremony/operator |
+
+---
+
+### Hammer
+
+**1. RE-ANCHOR HONESTY — PASS**  
+Runbook kills re-`registerDevice`, cites `require(!registered)` L105, revoke-only-`active=false`, no `updateBirthCertHash`. States KMS cert perfect + on-chain hash stuck → `INVALID (birthCertHash mismatch)` = contract limit, not KMS bug. Path A vs B (F-DECON-3.2 / G1.6 not closed on B) honest. Step 5 re-anchor Path-A-only; B has no re-anchor. Residual false flip step not found in migration doc (diff replaces old step 4).
+
+**VMDR .sol re-check:** one-shot register, revoke no free-id, **no** update fn. Confirmed.
+
+**2. READINESS — PASS after fix**  
+Go/no-go: 65B `0x04` + canary + full cert + describe_key (when present) + new-root (when prior).  
+Scope: issuer-sig-only was *enough* for KMS crypto, but “full” overclaimed until device_id was production-shaped. **Now:** `compute_device_id_from_pubkey_hex` + `verify_cert` (issuer + DEVICE_ID_CANON). Still no chain (correct pre-IOTX).
+
+**3. IAM — PASS**  
+`describe_key` soft-skip if boto3/creds fail; hard only when metadata *supplied*. No GetKeyPolicy scan = right for soft-warn ceremony; optional ARN soft-warn is nice-to-have, not this cut.
+
+**4. NO-SPEND / NO-PROVISION — PASS**  
+Module: pure. Script: `describe_key` RO only. No chain/create-key/`--execute`. Runbook only references operator-fired provision.
+
+**5. NEW-ROOT — PASS**  
+Same pubkey → not ready. Prior absent → skip (safe; does not claim new-root). Empty-string edge fail-closed if ever passed.
+
+**6. SCOPE — PASS**  
+Preflight + honest runbook; Sensor-C untouched (`git` clean). G1.6 demotion deferred to post–Path-A proof.
+
+---
+
+### Evidence
+
+- Tests: **21 passed** (`test_mfg_ca_readiness` + `test_kms_identity_backend`)
+- PV-CI: **183 PASS**
+- In-tree fix: `mfg_ca_readiness.py` full path + regression test
+
+---
+
+### Residual (non-blocking)
+
+- Soft-warn `"prior software CA file absent — new-root not proven"` would improve operator UX.
+- Optional GetKeyPolicy soft-warn if Guardian/Sentry ARNs have `kms:Sign`.
+- Operator still must **pick Path A or B** before any live flip; tooling does not force the choice.
+
+**Operator commit: GO** on Ceremony B tooling + runbook honesty (with the device_id/`verify_cert` fix included).
