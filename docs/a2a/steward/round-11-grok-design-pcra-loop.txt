@@ -1,0 +1,121 @@
+I'll ground this in the actual draft/review/executor surfaces before recommending a fork — quick read of the wiring points you named.## Recommendation: **A′ (refined A) — not pure A, not B, not C**
+
+Put PCRA findings in `operator_agent_drafts`, but **do not invent `action_name="pcra-audit"`**.
+
+Reuse Guardian’s existing local path:
+
+| Field | Value |
+|--------|--------|
+| `action_name` | `audit-drafting` |
+| `action_category` | `skill` |
+| `draft_uri` | `draft://audit_entries/pcra:<claim_id>` |
+| payload | finding body + `audit_kind="pcra"` + `task_class="PCRA"` |
+
+Why this wins:
+
+1. **Authenticity for free** — `/operator/operator-agent-draft-review` → `record_operator_decision` is already operator-auth + reason≥10 + decision enum. That is the F3 ingestion guarantee SEL was written to trust.
+2. **Executor isolation without a new ledger** — `audit-drafting` already routes to `_exec_guardian_audit_draft` → `local:audit:<id>`, cost **0.0**. Accept is a local “executed” mark, **not** `no_executor_for_action` refuse churn.
+3. Matches the architecture note: Guardian audit-drafting is **local DB**, not the chain spend path. PCRA is the same class of work.
+
+### Pure A with `"pcra-audit"` — reject
+
+Churn is **not** infinite (terminal `refused_at` drops it from `get_accepted_unexecuted_drafts`), but it is **not cosmetic**:
+
+- One spending-log refusal row per accepted draft
+- Mythos `REFUSAL_BURST` (>5 refusals/hour) can fire on a bulk accept pass
+- `refused_at` on an **operator-accepted** audit finding is the wrong semantic
+- Pollutes a log whose meaning is “executor tried to act”
+
+So: isolation problem is real **if** you invent a new non-routed action_name. **Don’t invent one.**
+
+### B — reject for the first loop
+
+You re-implement the only free authenticity surface you have, for a purity win you already get via `audit-drafting`. Isolation theater.
+
+### C — not cleanly possible
+
+Review endpoint only `UPDATE`s `operator_agent_drafts` by `draft_id` (404 if missing). No way to label a foreign ledger via that endpoint without dual-write or a new capture path. Dual-write is the worst of A+B.
+
+---
+
+## Q2 — executor skip / non-actionable flag?
+
+**Prefer not.** For this increment:
+
+- Reuse `audit-drafting` → no filter needed
+- A general `non_actionable` / `action_category` pre-filter is **scope creep** for “wire PCRA”
+- Only add an executor change if you insist on a new action_name — then the minimal fix is route it like audit-drafting (cost 0 + `local:pcra:`), not a new abstraction
+
+---
+
+## Q3 — minimal cut (your instinct, tightened)
+
+**Agree on shape; change the persistence surface.**
+
+**Inc-1 (one shippable loop unit):**
+1. Wire `STALE_ANCHOR` adapter: `sensor_a_live_drift` / CLAUDE anchors → `live_anchors` + claimed figures
+2. Persist findings via `GuardianDraftGenerator.draft_audit_entry(..., audit_kind="pcra")` with **claim_id-stable** payload (see footguns)
+3. Keep CEILING as-is; leave UNBANKED_BUILD adapter for later
+4. Operator reviews with **existing** draft-review endpoint
+
+**Inc-2:**
+1. SEL ingestion adapter: reviewed PCRA-tagged drafts → labels  
+   `accept→ACCEPTED`, `reject→OVERTURNED`, `src_agent="operator"`, `label_source="operator_decision"`
+2. `score_task_class` + `recommend_graduation` over that stream
+3. Tests with injected Store rows — no rig, no chain
+
+**Hold:** PGSW gating, challenge graph, graduation auto-apply, any executor flag flip.
+
+That is the end-to-end proof: detect → draft → human label → SEL score. Exactly what B1–B4 claimed; B5/B6 stay dormant.
+
+---
+
+## Q4 / Q5
+
+**PGSW from the start?** **No — premature.** PGSW’s Store/PoSP extraction is still a stub; force-CLOSED only parks HIGH disposition and must not become suppression. Wire the evidence loop first; PGSW wraps disposition later.
+
+**SEL footguns from `operator_decision`:**
+
+| Decision | SEL mapping |
+|----------|-------------|
+| `accept` | `ACCEPTED` |
+| `reject` | `OVERTURNED` |
+| `overturn_curator` | **exclude** for PCRA (Curator FP metric, not PCRA residue) |
+| `none` / null | **unreviewed — not in denominator** |
+
+---
+
+## Top 2 footguns to pin in tests
+
+### 1. Re-draft inflation (highest risk)
+
+`draft_audit_entry` does `payload.setdefault("ts_ns", time.time_ns())`. Wall-clock in payload → new `payload_hash` every run → UNIQUE(agent_id, payload_hash) does **not** dedup → N labels per finding → SEL precision/graduation gamed.
+
+**Nail in tests:**
+- Stable payload: no wall-clock; key on `claim_id` (+ measured_vs_claimed)
+- URI: `draft://audit_entries/pcra:<claim_id>` so re-runs collide or SEL aggregates **one label per `claim_id`** (latest `operator_decision_at`)
+- Assert: 5 re-scans of same stale wallet anchor → 1 draft (or 1 SEL entry), not 5
+
+### 2. Executor + review semantics if you pick the wrong `action_name`
+
+If you ship `"pcra-audit"` without a route: accept → refuse → spending-log noise + wrong `refused_at` on accepted audits.
+
+If you ship `"audit-drafting"` correctly: accept → `local:audit:N` executed, cost 0 — clean.
+
+**Nail in tests:**
+- Accept PCRA draft → spending event cost=0, tx `local:audit:*` (or never hits refusal path)
+- SEL only counts rows with `audit_kind/task_class=PCRA` and decision ∈ {accept, reject}
+- Re-review overwrite: second decision replaces first; denom still 1 per claim
+
+---
+
+## Bottom line
+
+| Instinct | Verdict |
+|----------|---------|
+| A vs B authenticity vs isolation | **Both solvable with A′** — reuse `audit-drafting`, don’t invent `pcra-audit`, don’t build a parallel ledger |
+| Inc-1 detector+persist, Inc-2 SEL | **Correct cut** |
+| PGSW from day 1 | **Wrong** — premature |
+| Option C hybrid | **Doesn’t work cleanly** — review endpoint is table-bound |
+
+**Ship A′.** The “necessary next loop” is not a new draft store; it is **claim_id-stable PCRA → existing Guardian draft path → existing review → SEL ingest**. That proves B1–B6 machinery on the safest agent with the least new surface.
