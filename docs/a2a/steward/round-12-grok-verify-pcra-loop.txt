@@ -1,0 +1,54 @@
+Verifying the PCRA evidence loop against live Guardian/SEL wiring — reading the existing draft path, store dedup, executor routing, and SEL scorer.## VERDICT: **SHIP-WITH-FIX** (must-fix before commit)
+
+Independent check against live Guardian draft URI + store + executor. Suite green (46/46) **masks** a production Inc-2 break. Layering change: **agree**.
+
+---
+
+### CRITICAL — Inc-2 URI prefix dead on real drafts
+
+`draft_audit_entry` sanitizes `audit_id` via `_safe_id_segment` (`:` `#` `/` → `_`):
+
+| audit_id | real `draft_uri` |
+|---|---|
+| `pcra:anchor#wallet_iotx` | `draft://audit_entries/pcra_anchor_wallet_iotx` |
+| `pcra:docs/a2a/x.md#poep_enabled` | `draft://audit_entries/pcra_docs_a2a_x.md_poep_enabled` |
+
+Inc-2 filters on `_PCRA_URI_PREFIX = "draft://audit_entries/pcra:"` → **startswith fails** → **0 SEL labels** in prod.
+
+Tests pass because `_FakeGuardianGenerator` builds `draft://audit_entries/{audit_id}` **without** sanitization.
+
+**Minimal fix:**
+```python
+_PCRA_URI_PREFIX = "draft://audit_entries/pcra_"  # post-_safe_id_segment of "pcra:"
+```
+Fake generator must call real `_safe_id_segment` / `GUARDIAN_AUDIT_DRAFT_PREFIX`. Add test that real sanitization path still produces labels.
+
+---
+
+### Hammer answers
+
+| # | Q | Answer |
+|---|---|---|
+| **1** | Two-layer dedup sound? | **Yes after URI fix.** Layer1: `ts_ns=0` + content hash → store `(agent_id, payload_hash)` dedup. Layer2: URI from `pcra:{claim_id}` only (not live value) → N content-rows for evolving STALE_ANCHOR collapse to **1** SEL label. Residual: old accept still labels URI while newer content-row unreviewed (quality, not count-inflation). Sanitizer collisions (`a:b` vs `a_b` → same URI) are low-prob residual. |
+| **2** | F3 authenticity? | **Closes F3 at app ingestion, not crypto.** Only call path to set `operator_decision` is `POST /operator/operator-agent-draft-review` → full `operator_api_key` → `record_operator_decision`. Hardcoding `label_source_agent="operator"` is correct for that path. Still trusted: SQLite writer / tests / seed scripts can forge the column (same as rest of O2). Matches SEL doc: scorer trusts claimed source; authenticity is ingestion. |
+| **3** | Executor isolation? | **Confirmed.** `action_name="audit-drafting"` → `_exec_guardian_audit_draft` → `local:audit:<id>`, **cost 0.0**, no chain. Accept never grants spend. `n_persisted` / `draft_id!=0`: store returns **existing row id** on UNIQUE (docstring “0 on collision” is stale); re-scan still counts as persisted — **cosmetic**, not SEL denom. |
+| **4** | Layering? | **Agree.** `steward_pcra_draft` → `steward_sel` is correct; leave `graduation_report_from_store` stub generic for MPJA/DPIG. |
+| **5** | Rail gap? | Default-OFF OK (`pcra_enabled` / `sel_enabled`). Draft-only / 0-IOTX OK. No PGSW yet = correct. **Pre-existing usability:** store keeps `payload_hash` + byte **length**, not body — operator review is URI/hash-blind unless re-scan. Not introduced by this wire; not a spend hazard. `limit=500` on Guardian drafts can starve old PCRA rows under heavy draft volume (v0.1). |
+| **6** | One adversarial test | **Sanitize→label round-trip:** build URI via real `_safe_id_segment(f"pcra:{claim_id}")`, accept row, assert `pcra_labels_from_draft_rows` yields 1 ACCEPTED. (Optional second: two claim_ids that only differ by `#` vs `_` → same URI → one label.) |
+
+---
+
+### Design change (B4 stub)
+
+**No disagreement.** PCRA-aware ingestion in `steward_pcra_draft` calling generic SEL is the right boundary. Do **not** put draft-schema knowledge in `steward_sel`.
+
+---
+
+### This-commit fix list (minimal)
+
+1. `_PCRA_URI_PREFIX = "draft://audit_entries/pcra_"`
+2. Fake generator uses real URI construction
+3. Test + adversarial sanitize round-trip
+4. (Cosmetic) docstring: real URI shape is `pcra_<sanitized_claim>`, not `pcra:<claim_id>`
+
+**Do not commit until (1)+(3).** After that: **SHIP**. Safe first wire for 0-IOTX draft loop; Inc-2 is currently a no-op without the prefix fix.
