@@ -1,0 +1,161 @@
+I'll inspect the dual-sign attestation surface, SEL graduation path, and the frozen O3-supersede boundary so the gate design is grounded in what's actually shipped.## Ceremony A — Gate Design (FORWARD)
+
+**Verdict: ship `steward_graduation_gate.py` essentially as proposed.** Right primitive, right dormancy, right freeze line. One hardness upgrade and two footgun pins.
+
+---
+
+### 1. Gate shape — YES, with one machine rule
+
+`is_task_class_graduated(records, *, steward, task_class, guardian_pubkey_hex, now_ts=None)` is the correct consumer API. Auto-persist will ask exactly this: **“does a dual-authorized graduation of (S,T) currently hold?”**
+
+**State machine (lock it):**
+
+| Step | Rule |
+|------|------|
+| Filter | `(steward, task_class)` only |
+| Auth | `verify_dual_signed_attestation(..., guardian_pubkey_hex=PINNED)` → `fully_authorized` |
+| Pin | Guardian verify **only** against pinned key (ignore embedded `pubkey_hex`) |
+| Order | among valid: **max `ts_ns` wins** (signed → unforgeable without re-sign) |
+| State | `ACCEPT` → `graduated=True`; `REJECT` → `graduated=False` + `revoked_by` |
+| Empty | no valid record → `graduated=False` (fail-closed) |
+
+Return shape is good. Add:
+
+- `reason`: `"graduated" | "revoked" | "no_valid_record" | "threshold_incoherent" | "pin_missing"`
+- `authorizing_digest_hex` (stable audit id)
+
+**Not a different gate.** Do not invent a capability token, config flip, or O3-adjacent flag. This is *authorization evidence → boolean capability for auto-persist*, still separate from spend/act.
+
+`now_ts` is optional v0 theater unless you have TTL. Prefer omit or ignore until you define expiry.
+
+---
+
+### 2. Guardian pin — mandatory, verify-only-against-pin
+
+**Close r18 F4 hard:**
+
+- `guardian_pubkey_hex: str` **required** (no default, no `None` fallthrough).
+- Empty / missing / non-hex → raise or return fail-closed (`graduated=False`, `reason="pin_missing"`). Prefer **raise on bad API use**, fail-closed on bad records.
+- Pass pin into `verify_dual_signed_attestation` / `verify_graduation_attestation` so verification uses **pinned** key only.
+- Do **not** require `record["pubkey_hex"] == pin` as a separate equality check if verify-against-pin already fails wrong-key records. Equality-only is weaker (format/encoding tricks); **crypto verify against pin is the closure**.
+
+Embedded `pubkey_hex` stays for external audit display only — **never trust root at consumption**.
+
+---
+
+### 3. Dropped REJECT — v0 limit, not ledger-now
+
+**Accept as v0 honest limit**, same class as SEL’s ingestion-authenticity limit:
+
+> Gate is pure over injected `records`. Completeness is the consumer’s job. Dropping a later REJECT is an **availability / ledger-custody** attack, not a crypto forge.
+
+Do **not** add hash-chain on the attestation list in this pass. Reasons:
+
+- Dual-sign already makes each record non-repudiable; chain would protect *set completeness*, which needs a store + append API you don’t have yet.
+- Auto-persist is dormant → completeness threat is theoretical until a real consumer reads a mutable store.
+- When v0.1 store lands: append-only log + optional hash-chain / “tip digest” at the store boundary — not inside the pure gate.
+
+**Document in module note + return `note`:**  
+`v0: assumes complete record list; consumer owns ledger integrity; dropped later REJECT can leave stale ACCEPT graduated.`
+
+That is not theater; it is the same discipline as SEL’s scorer vs ingestion split.
+
+---
+
+### 4. SEL rebind — **threshold self-consistency YES; live re-score NO**
+
+Critical: the attestation preimage has **`decision ∈ {ACCEPT,REJECT}` + score/threshold ints**, not the string `GRADUATE_TASK_CLASS`. Operator dual-signs a *package*, not the SEL enum.
+
+**Do this at the gate:**
+
+```text
+package_coherent =
+  n_labels >= min_samples
+  AND precision_milli >= precision_floor_milli
+```
+
+(only required for `ACCEPT` to graduate; REJECT can be anything — “reject this package” is always meaningful)
+
+**Do not:**
+
+- re-run SEL over live labels (point-in-time graduation must not flap when labels grow)
+- require a free-text / external “this was GRADUATE” field that isn’t in the signed preimage
+- trust “operator wouldn’t ACCEPT a HOLD” — they (or a mistaken CLI) can; **math is free**
+
+Optional later (v0.1, preimage change → new domain tag): bind `sel_verdict` into preimage. **Out of scope this pass** — threshold rebind is the v0 stand-in for “this package claims pass.”
+
+If someone dual-signs ACCEPT with `n_labels=3, min_samples=20` → `graduated=False`, `reason="threshold_incoherent"`. That’s the teeth.
+
+---
+
+### 5. `operator_dual_key_present` — **hands off**
+
+Confirmed:
+
+| Surface | Touch? |
+|---------|--------|
+| `cfg.operator_dual_key_present` | **NO** |
+| O3-supersede preimage / eligibility | **NO** |
+| `operator_dual_key_cryptographically_demonstrated(...)` | **YES**, pure read-only helper |
+| Wire demonstrated → O3 / supersede / advancement | **NO this pass** |
+
+Helper semantics: ∃ fully_authorized dual-signed record with `operator_id == operator_address` (and Guardian pin). Advisory only. Name it so nobody confuses it with the frozen bool (`…_demonstrated` / `_cryptographic`, never `_present`).
+
+---
+
+### 6. Scope — right cut, not premature, not theater
+
+| Ship | Defer |
+|------|--------|
+| Pure gate module + tests | Auto-persist consumer |
+| Pin + dual-verify + latest-ts SM | Attestation store / hash-chain |
+| Threshold self-check on ACCEPT | SEL live re-score |
+| Advisory `demonstrated()` unwired | O3 rewiring |
+
+**Not theater:** transforms “fully_authorized exists” into a **named, testable authorization predicate** the future auto-persist path must call. Without this, dual-sign is evidence with no capability surface — ceremony incomplete.
+
+Premature would be wiring PCRA/MPJA persist to the gate before a real dual-signed ACCEPT corpus + store. Stay dormant.
+
+---
+
+## Top 2 footguns (pin in tests)
+
+**F1 — Wrong-key / embedded-pubkey acceptance**  
+Craft dual-signed record with attacker Guardian key in `pubkey_hex`. Gate called with **pinned real Guardian key** → must `graduated=False`. Also: pin omitted/empty → hard fail (API contract).
+
+**F2 — Stale ACCEPT after later REJECT (ordering)**  
+Inject ACCEPT@t1 + REJECT@t2 (both fully_authorized, pin-valid) → not graduated, `revoked_by` = t2 record.  
+Inject only ACCEPT@t1 → graduated.  
+(Documents the dual of the availability attack: when both present, order works; when REJECT dropped, v0 limit — optional third test that asserts the documented note / does **not** invent detection.)
+
+**Strong runners-up (add if cheap):**
+
+- **F3 threshold incoherent ACCEPT** — ACCEPT with n &lt; min_samples → not graduated  
+- **F4 bridge-wallet operator** — cosign already fails; gate must not resurrect `fully_authorized` if verify path weakens  
+- **F5 cross-steward / cross-task bleed** — ACCEPT for (guardian, pcra) must not graduate (sentry, mpja)
+
+---
+
+## Condensed API lock
+
+```python
+def is_task_class_graduated(
+    records: list,
+    *,
+    steward: str,
+    task_class: str,
+    guardian_pubkey_hex: str,   # MANDATORY, no default
+) -> dict:
+    # filter (S,T) → dual-verify vs PIN only → drop threshold-incoherent ACCEPTs
+    # latest ts_ns → ACCEPT=graduated / REJECT=not / none=not
+
+def operator_dual_key_cryptographically_demonstrated(
+    records: list,
+    operator_address: str,
+    *,
+    guardian_pubkey_hex: str,
+) -> bool:
+    # pure advisory; wire nowhere this pass
+```
+
+**Ship it.** No O3 touch, no consumer, no chain, no store. Next deliberate ceremony after this is v0.1: append-only attestation ledger + first auto-persist call site that **must** check this gate fail-closed.
