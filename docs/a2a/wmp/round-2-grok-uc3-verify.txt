@@ -1,0 +1,89 @@
+Independent UC-3 verification. Reading the prover, tests, circuit, and Hardhat golden fixture against the stated risk.Confirming registry trust anchor and running the golden prover end-to-end.Confirming golden hex byte-match and running the UC-3 tests.## UC-3 VERDICT: **SHIP**
+
+Independently re-ran golden prove + 4/4 tests. Round-1 risk is closed for this scope.
+
+---
+
+### 1. Hardcoded-wrong-vector risk — **CLOSED** (residual is different)
+
+**Closes it.** Evidence stack is real, not fixture-only:
+
+| Check | Result |
+|--------|--------|
+| Poseidon computed in prover (not hardcoded) | yes — `pos([DID,cat,issued,expires,nonce])` / `pos([DID,nonce])` |
+| `fullProve` → circuit-emitted `publicSignals` | yes |
+| `snarkjs.groth16.verify(vkey, publicSignals, proof)` | `true` (live re-run) |
+| Byte-match T-BCV-1 publics | `commit=0x2d22e513…`, `null=0x0fd56a89…`, cat=3, ts=`0x684ee180` |
+
+A wrong Poseidon order would **not** both (a) verify against the committed vkey **and** (b) match the on-chain golden commitment. That dual lock kills the round-1 failure mode.
+
+**Still true (different gap, not “wrong vector”):** proof only means *preimage knowledge + C1/C1b/C2/C3/C4*. It does **not** mean “Curator issued this.” That is issuance/gating, not a bad public vector.
+
+**Coverage depth (non-blocking):** fullProve path is golden-only; rail tests never reach the circuit. Acceptable for UC-3 ship.
+
+---
+
+### 2. Footguns
+
+**(a) Pre-check vs circuit — no hide, C3/C4 still load-bearing**
+
+- Pre-check: enum / claim match / expiry → clean exits 4/5/6.
+- Prover **always recomputes** commitment + nullifier from privates; it does not accept a caller-supplied mismatched commitment.
+- Circuit still enforces C3/C4: you cannot fullProve a forged public commitment without the preimage.
+- Pre-check does **not** replace C3/C4; it only short-circuits obvious fails.
+
+**(b) Nullifier — deterministic is correct; reuse is consumer-side**
+
+- `Poseidon(DID, nonce)` = one nullifier per credential: **correct** for spend-once.
+- Same credential → same nullifier every prove: **by design** (anti-replay set).
+- Prover should **not** invent “already used” — that is on-chain/app nullifier set.
+- Privacy: uses of the **same** credential are linkable via nullifier until spent; DID stays hidden if only the proof is shown.
+
+---
+
+### 3. Self-chosen credential — **product/issuance gap, not prover bug**
+
+Yes: anyone can invent `(DID, cat, nonce, issued, expires)`, compute commitment, and prove category C. Circuit only proves preimage of a **public** commitment.
+
+**Trust must anchor outside the proof:**
+
+1. Curator-published membership of `credentialCommitment` (circuit docs option b), **and**
+2. Nullifier not spent, **and**
+3. `currentTimestamp` set by verifier (not blindly trusted from buyer).
+
+**Honesty vs live registry:** `VAPIBuyerRegistry` stores `buyerDID` + `evidenceHash` (sha256 docs) + category/times — **not** Poseidon `credentialCommitment`. So option-(b) membership is **not** wired end-to-end today. That is an **issuance/composability gate**, not a UC-3 prover defect. Document it; do not pretend the prover alone is marketplace authorization.
+
+---
+
+### 4. Exit rails + public layout — **CORRECT**
+
+| Exit | Condition | Verified |
+|------|-----------|----------|
+| 4 | `categoryId ∉ [1,4]` | test + live |
+| 5 | `currentTimestamp >= expiresAt` | test + live |
+| 6 | `claimedCategory != categoryId` | test + live |
+| 0 | prove + local verify + layout | golden + 4/4 |
+
+Layout: `[valid, claimedCategory, currentTimestamp, credentialCommitment, nullifierHash]` — matches circuit `public […]` + output-first snarkjs order.
+
+**Cosmetic only (do not block):** `pubOk` checks `[1],[3],[4]` but not `[2]===currentTimestamp`. Safe under normal fullProve; optional one-liner if you want belt+suspenders.
+
+---
+
+### Working prover vs harness?
+
+**WORKING prover** (not a fake harness):
+
+- Real Groth16 against **committed** wasm + `_final.zkey`
+- Real local verify against **committed** vkey
+- Publics reproduce the **deployed verifier’s** accepted golden
+
+**Not yet** full product path: no 320-byte wire pack for `zk_buyer_verifier.py`, no registry membership check, no nullifier store. Scope of UC-3 is the missing prove half — that half works.
+
+---
+
+### **VERDICT: SHIP** (commit)
+
+No mandatory fix. Optional post-commit: assert `publicSignals[2] === currentTimestamp`; later UC: bind proof consumer to Curator commitment set + nullifier set.
+
+Round-1 risk **discharged** for UC-3.
