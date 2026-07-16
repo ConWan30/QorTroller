@@ -1,0 +1,109 @@
+I'll ground this in the actual code — reading the three files and tracing the silent fire path, schedule commitment, and FAR harness.Checking schedule lag arithmetic against `collect_imu_samples` and the harness tests.## VERIFY (grounded in code)
+
+### 1. Residual tell — `_fire_probe_silent` does **not** fully close A-PRE-TELL
+
+**Stdout / one-shot arming prints — closed for per-challenge timing**
+- Header + `"Armed. Hold relaxed..."` print **once** before the loop (`poep_live_capture.py` ~289–306). Not a per-fire cue. Confirmed.
+- Per-challenge results print **after** each fire (~363–368). Not a pre-fire tell.
+- Module top docstring still says *“The console still prints a baseline tell before firing”* (L19–20) — **stale / wrong**.
+
+**What remains open**
+- `pre_count = base//2 + secrets.randbelow(base) + 1` → for `base=50`: **[26, 75]** → est pre **[208, 600] ms** at `poll=0.008`.
+- That floor is **not** a fixed offset from a public event by itself.
+- The real residual is the **silence → dense HID poll** transition:
+  - `lead = delay_s - est_pre_s` → `time.sleep(lead)` with **no polls** (L210–212)
+  - then `collect_imu_samples(pre_count, …)` at ~8 ms (L214–216)
+  - then force write (L222–223)
+- A co-resident process watching USB HID / poll cadence sees “polling started” **before** the force. That is still **A-PRE-TELL**, not A-REACTIVE (force command).
+- Randomized length blurs the offset; it does **not** remove the cue. Fixed-offset-after-burst bots still win (see §2).
+- Collect duration is a **side-channel of when fire is near**, not of the CSPRNG delay itself (delay entropy still hidden until burst starts).
+
+**Net:** closes **stdout / ENTER / fixed printed pre-window**. Does **not** close **poll-burst pre-tell**.
+
+---
+
+### 2. Harness honesty — nonce gift OK; silent model **understates** FAR
+
+| Choice | Verdict |
+|--------|---------|
+| Give bot the nonce | **Correct conservative call.** Isolates timing. Doc is honest. |
+| `silent_csprng` = uniform delay over [3,12]s | **Too weak an adversary.** Measured FAR 0.02 ≈ theory (~0.22s band / 9s). |
+| Acceptance bar silent ≤ 0.15 | Only true against that blind guesser. |
+
+**Smarter bot the harness misses — name it: `PollBurstWatcher`**
+
+Sees start of dense pre-poll (`t_burst`), not CSPRNG delay. Fires at `t_burst + O`.
+
+Empirical over `pre_count ∈ [26,75]`:
+- Best fixed `O`: **FAR ≈ 0.56** (at ~684 ms)
+- Median-est + 150 ms react: **FAR ≈ 0.54**
+- Distribution-aware guess of pre length: **FAR ≈ 0.46**
+
+All **≫ 0.15** and **≫ harness 0.02**.
+
+Further smart paths (also unmodeled):
+- **Multi-pulse across the 0.2–0.6 s pre-window** if the bot can choose/post-select one in-band timestamp when writing the record → FAR→1 (host-controlled record).
+- **cfg-known `pre_samples` / `poll_interval`** (CLI defaults public) — narrows prior; bot doesn’t need the nonce for schedule.
+
+**Conclusion:** harness proves “stdout tell removal beats a **blind uniform delay guesser**.” It does **not** prove pre-tell macros collapse to ~chance on the **actual silent capture path**. Committing the 0.02 number as the tell-removal proof is **overclaim**.
+
+---
+
+### 3. Schedule leg — integrity + lag, not independent schedule proof
+
+```45:52:l9_presence/poep_live_verify.py
+def schedule_commitment(...):
+    body = _SCHED_DOMAIN + b"|" + nonce ... + delay_ns + t_arm_ns + t_challenge_ns
+```
+
+```118:122:l9_presence/poep_live_verify.py
+lag_ms = (ch.t_challenge_ns - (ch.t_arm_ns + ch.delay_ns)) / 1e6
+if lag_ms < 0.0 or lag_ms > SCHEDULE_TOLERANCE_MS:  # 300ms
+```
+
+**What it buys**
+- Detects **post-hoc field edits** that break the quartet hash.
+- Enforces **lag ∈ [0, 300] ms** vs committed `t_arm+delay`.
+
+**What it does not buy**
+- Capture process owns **all four inputs** and the hash → can fabricate any consistent schedule after the fact.
+- Binding **`t_challenge` into the hash** makes this a **record MAC**, not commit-reveal of delay-at-arm. True pre-commit would be `H(nonce‖delay‖t_arm)` at arm, then lag check at fire **without** re-hashing `t_challenge` into the commitment.
+
+**300 ms vs 600 ms pre-window — not the bug you feared**
+- Path is `sleep(delay − est_pre)` then collect ≈ `est_pre` → intended lag ≈ **0**, not up to 600 ms.
+- Your “legit fires fail schedule_ok because pre up to 600 ms” arithmetic **does not apply** to this design.
+- 300 ms is a **jitter budget** (sleep overshoot / poll cost). Comment *“up to the (silent) pre-collection window”* is **misleading**.
+- Residual risk: long `time.sleep(lead)` overshoot under load can push lag **> 300** → false `schedule_drift` (operational, not the 600 ms logic bug).
+
+**Claims:** audit line “schedule commitment … fire schedule becomes auditable” is OK if read as **self-consistency**. Overclaims if read as “delay was fixed and unpredictable before fire against a malicious host.”
+
+---
+
+### 4. Other correctness / honesty bugs
+
+1. **Stale module docstring** (L19–20): still claims baseline tell before fire — contradicts `_fire_probe_silent`.
+2. **Header text** L302: *“Results print AFTER the run”* — false; prints after each challenge.
+3. **`--min-delay` / `--max-delay` help** still says “nonce-derived” (L424–427) — delay is independent CSPRNG now.
+4. **`collect_imu_samples` sleeps after every sample including last** — lag model still ~OK; not a silent-fire security break.
+5. **No hardware test** that live silent fires actually land `schedule_ok=True` under real sleep jitter — unit tests only use exact `t_arm + delay`.
+6. Harness **does not** exercise schedule leg (`LiveChallenge` 3-field only) — fine for timing-only FAR; doesn’t validate schedule path under attack.
+
+---
+
+## VERDICT = **SHIP-WITH-FIX**
+
+**Must-fix (smallest honesty-preserving path):**
+
+1. **Demote the proof claim** in `poep_tell_watcher` claim string + capture audit `claim` + module docstrings:  
+   *“FAR collapse vs blind delay-guesser / stdout tell only; residual **PollBurstWatcher** pre-tell (HID silence→dense poll) unmodeled; A-REACTIVE still out.”*  
+   Do **not** ship “pre-tell macros → ~chance” as the full A-PRE-TELL close.
+
+2. **Either** (prefer one):
+   - **(A, honesty)** Add `path="poll_burst"` to the harness measuring residual FAR (~0.5 expected) and stop treating silent 0.02 as the complete proof; **or**
+   - **(B, real close — better)** Continuous poll from `t_arm` through `t_arm+delay` (ring of last `pre_count` samples), fire at target — **remove silence→burst transition**. Then re-run FAR vs PollBurstWatcher.
+
+3. **Doc-only for schedule:** state schedule hash is **integrity + lag**, not anti-malicious-capture schedule proof; fix the “tolerance = pre-window” comment. Optional stronger design later: commit `H(nonce‖delay‖t_arm)` at arm without `t_challenge`.
+
+**Not blocking alone:** 300 ms lag under default lead compensation (not the 600 ms fail-legit bug).
+
+**Do not ship as-is** with the current “silent_csprng FAR=0.02 = tell-removal proof” framing — that understates residual pre-tell and overstates the harness.
