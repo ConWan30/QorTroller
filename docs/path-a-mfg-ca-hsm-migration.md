@@ -42,29 +42,85 @@ public key**, i.e. a **new root**. Consequences:
 
 **`MFG_CA_BACKEND=kms` must not be set until the ceremony below is complete.**
 
+## THE RE-ANCHOR BLOCKER (read before ceremony day — grok round-22)
+
+The round-13 draft of this doc said "re-`registerDevice` for the affected devices." **That is false against
+the deployed contract.** `VAPIManufacturerDeviceRegistry.registerDevice` is **ONE-SHOT**:
+
+```solidity
+require(!registered[deviceId], "VMDR: already registered");   // line 105
+// revokeDevice only sets active=false; registered[deviceId] stays true forever
+// there is NO updateBirthCertHash function
+```
+
+So the one live device `581a836c…` (software-anchored) **cannot be re-anchored to a new root**. A
+`provision_device_mfg.py --execute` against it would **revert and waste gas**. Two consequences:
+
+1. A KMS-issued cert produces a **different** `birthCertHash`; with the old hash still on chain,
+   `verify_device_cert` returns **INVALID (birthCertHash mismatch)** for `581a836c` even though the KMS
+   signature is perfect. **The anchor cannot move** — this is a contract limit, not a KMS bug.
+2. Therefore the flip is only *fully* real for the existing device under **Path A** below.
+
+**Pick a path (operator decision):**
+
+| Path | What it means | Cost |
+|---|---|---|
+| **A — add an update path** | Add `updateBirthCertHash(deviceId, newHash)` `onlyOwner` (+ event) to VMDR, deploy it, then operator-fire the re-anchor. Fully closes F-DECON-3.2 at root for `581a836c`; earns the G1.6 demotion. | Solidity change + a deploy (a separate chain ceremony) |
+| **B — net-new only (honest v0)** | Use the KMS CA for **net-new** devices only; `581a836c` **stays software-anchored** on chain forever (its old cert stays VALID against the old issuer). Flip is partial. **F-DECON-3.2 is NOT closed** for the existing device; **G1.6 is NOT demoted**. | 0 chain change |
+| **C — new VMDR + Lens rewire** | Out of scope. | Too big |
+
 ## Operator ceremony (to actually flip)
 
 1. **Provision** an AWS KMS key `KeySpec=ECC_NIST_P256`, `KeyUsage=SIGN_VERIFY`; create alias
    `VAPI_KMS_MFG_CA_ALIAS`; scope IAM to `kms:Sign`/`kms:Verify`/`kms:GetPublicKey` on **that alias only**.
    Do **not** grant the Guardian/Sentry principals Sign on it (trust domains stay separate).
-2. Keep `MFG_CA_BACKEND=software` while provisioning + testing.
-3. **Re-issue** the `DeviceBirthCertificate` for each active device under the new KMS issuer
-   (`provision_device_mfg.py`), i.e. re-sign the birth cert with the KMS CA.
-4. **Re-anchor** on-chain if the VMDR binds `birthCertHash` (re-`registerDevice` for the affected devices).
-5. **Only then** set `MFG_CA_BACKEND=kms` + `VAPI_KMS_MFG_CA_ALIAS` in `bridge/.env`.
-6. **Retire** the software key: archive offline or destroy per policy — do **not** leave two live signers
-   without a written policy (that is a new fragility, not a fix).
 
-## Only after the real flip
+   ```bash
+   aws kms create-key --key-spec ECC_NIST_P256 --key-usage SIGN_VERIFY \
+     --description "QorTroller Foundation Manufacturer Root CA"
+   aws kms create-alias --alias-name alias/qortroller-mfg-ca --target-key-id <keyId>
+   # IAM policy (attach to the operator/CA principal ONLY — never Guardian/Sentry):
+   # { "Effect":"Allow", "Action":["kms:Sign","kms:Verify","kms:GetPublicKey"],
+   #   "Resource":"arn:aws:kms:us-east-1:<acct>:key/<keyId>" }
+   ```
 
-- Demote **Sensor-C G1.6** `LIVE-FRAGILE → LIVE` and close **F-DECON-3.2** at root (this pass builds the
-  capability; it does **not** demote G1.6 — capability ≠ root fix).
+2. Keep `MFG_CA_BACKEND=software` while provisioning.
+3. **PREFLIGHT (no spend, no chain)** — prove the KMS CA is usable before anything irreversible:
+   ```bash
+   MFG_CA_BACKEND=kms VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca AWS_REGION=us-east-1 \
+     python scripts/mfg_ca_hsm_preflight.py     # exit 0 = READY (P-256 / canary / full-cert / describe_key / new-root)
+   ```
+4. **Re-issue (no chain)** the cert under the KMS issuer — local sign + persist:
+   ```bash
+   MFG_CA_BACKEND=kms VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca \
+     python scripts/provision_device_mfg.py --dry-run ...   # produces the KMS-signed cert JSON, NO chain
+   ```
+5. **Re-anchor** — **only under Path A** (after deploying `updateBirthCertHash`); operator-fired, estimate-first.
+   Under **Path B this step does not exist** — `581a836c` stays software-anchored; only net-new devices use
+   `--execute` (their first registration is allowed by the one-shot rule).
+6. **Only then** set `MFG_CA_BACKEND=kms` + `VAPI_KMS_MFG_CA_ALIAS` in `bridge/.env`.
+
+## Rollback + key retention (load-bearing)
+
+- **Rollback:** set `MFG_CA_BACKEND=software` (or unset) — the flip-back.
+- **Retention:** do **NOT** destroy or offline-wipe the software CA key until, for every device you care
+  about, EITHER the on-chain hash matches a KMS-issued cert AND `verify_device_cert` → **VALID**, OR there is
+  a written policy that that device stays software-anchored forever (Path B). Until then the software key is
+  **cold-retained**, never a second live signer in prod config.
+
+## Only after the real flip (Path A on-chain proof)
+
+- Demote **Sensor-C G1.6** `LIVE-FRAGILE → LIVE` and close **F-DECON-3.2** at root — a **separate,
+  operator-confirmed Sensor-C edit**, earned ONLY after the authoritative root for the live device is the
+  HSM and `verify_device_cert` → VALID under it. Under Path B this is **not** earned (capability ≠ root fix).
 
 ## Verification (built)
 
-`bridge/tests/test_kms_identity_backend.py` pins: single-SHA-256-then-DIGEST contract (with a double-hash
-negative that fails verify), 64-byte sig / 65-byte `0x04‖X‖Y` pubkey wire shapes, end-to-end
-`verify_cert_signature` through both `create_backend("kms")` and `ManufacturerRootCA(backend=…)`, wrong-curve
-fail-closed, and default-stays-`software`. `PV-CI 183`. No live AWS call, no chain write, no key provisioned.
+- `bridge/tests/test_kms_identity_backend.py` — the KMS backend wire contract (single-SHA-256-then-DIGEST,
+  64B/65B shapes, verify through `create_backend("kms")` + `ManufacturerRootCA(backend=…)`, wrong-curve
+  fail-closed, default-stays-`software`).
+- `bridge/tests/test_mfg_ca_readiness.py` — the preflight go/no-go (software + KMS-fake CA ready; wrong
+  KeySpec / disabled / not-a-new-root fail-closed; note flags the VMDR one-shot blocker).
 
-Design consult: `docs/a2a/hsm/round-13-grok-design-hsm.txt`.
+`PV-CI 183`. No live AWS call, no chain write, no key provisioned by this repo. Design consults:
+`docs/a2a/hsm/round-13-grok-design-hsm.txt` (capability) + `round-22-grok-design-mfgflip.txt` (flip tooling).
