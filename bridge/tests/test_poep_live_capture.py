@@ -15,6 +15,7 @@ from scripts.poep_live_capture import (
     DEFAULT_MAX_DELAY_S,
     DEFAULT_MIN_DELAY_S,
     build_live_record,
+    csprng_delay_s,
     fresh_nonce,
     nonce_derived_delay_s,
 )
@@ -48,6 +49,21 @@ def test_fresh_nonce_is_unique_and_hex():
 
 def test_degenerate_window_returns_min():
     assert nonce_derived_delay_s(fresh_nonce(), min_s=5.0, max_s=5.0) == 5.0
+
+
+# --- F-POEP-LIVE-1 (ii): independent CSPRNG delay ---------------------------------------------------
+
+def test_csprng_delay_in_window_and_independent_of_nonce():
+    # the security-critical delay is drawn from an INDEPENDENT CSPRNG, not the nonce (no bit double-duty)
+    for _ in range(200):
+        d = csprng_delay_s(min_s=3.0, max_s=12.0)
+        assert 3.0 <= d <= 12.0
+    delays = {csprng_delay_s(min_s=3.0, max_s=12.0) for _ in range(200)}
+    assert len(delays) > 20                       # genuinely random, not a single value
+
+
+def test_csprng_degenerate_window_returns_min():
+    assert csprng_delay_s(min_s=5.0, max_s=5.0) == 5.0
 
 
 # --- record builder feeds the P-LIVE-0 auditor ------------------------------------------------------
@@ -99,3 +115,30 @@ def test_record_never_flips_poep_or_claims_presence():
     )
     assert r["verify"]["poep_enabled"] is False
     assert r["verify"]["is_presence_verdict"] is False
+
+
+def test_record_without_arm_time_has_no_schedule_leg():
+    # legacy call (no t_arm_ns) -> schedule not bound, schedule_ok None, still passes
+    r = build_live_record(
+        device_id=DEV, nonce="leg", t_challenge_ns=T0,
+        latency_ms=168.0, peak_lsb=1520.0, precursor_gap_ms=9.0,
+        classification="HUMAN", challenge_index=1, delay_s=7.0,
+    )
+    assert r["schedule_commitment"] is None
+    assert r["verify"]["schedule_ok"] is None
+    assert r["verify"]["ok"] is True
+
+
+def test_record_with_arm_time_binds_schedule_and_verifies():
+    # (ii): t_arm_ns given -> schedule commitment bound, and t_challenge == t_arm + delay -> schedule_ok
+    delay_s = 7.0
+    t_arm = T0 - int(delay_s * 1e9)
+    r = build_live_record(
+        device_id=DEV, nonce="sch", t_challenge_ns=T0,
+        latency_ms=168.0, peak_lsb=1520.0, precursor_gap_ms=9.0,
+        classification="HUMAN", challenge_index=1, delay_s=delay_s, t_arm_ns=t_arm,
+    )
+    assert r["schedule_commitment"] is not None and len(r["schedule_commitment"]) == 64
+    assert r["t_arm_ns"] == t_arm
+    assert r["verify"]["schedule_ok"] is True
+    assert r["verify"]["ok"] is True

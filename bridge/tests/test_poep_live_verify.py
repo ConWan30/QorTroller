@@ -11,7 +11,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from l9_presence.poep_live_verify import (
-    ChallengeResponse, LiveChallenge, poep_commitment, response_feature_digest, verify_live_response,
+    ChallengeResponse, LiveChallenge, poep_commitment, response_feature_digest, schedule_commitment,
+    verify_live_response,
 )
 
 DEV = "581a836c"
@@ -71,3 +72,49 @@ def test_never_claims_presence_verdict_or_flips_poep():
     r = verify_live_response(ch, _valid_response("n4"))
     assert r["is_presence_verdict"] is False and r["poep_enabled"] is False
     assert "NOT yet anti-reactive-bot" in r["claim"]
+
+
+# --- F-POEP-LIVE-1 (ii): schedule-commitment leg -----------------------------------------------------
+
+DELAY_NS = 7_000_000_000     # 7s committed CSPRNG delay
+T_ARM = T0 - DELAY_NS        # arm 7s before the fire -> t_challenge == t_arm + delay exactly
+
+
+def _sched_challenge(nonce, *, t_challenge=T0, t_arm=T_ARM, delay_ns=DELAY_NS, tamper=None):
+    sc = schedule_commitment(nonce=nonce, delay_ns=delay_ns, t_arm_ns=t_arm, t_challenge_ns=t_challenge)
+    if tamper == "commitment":
+        sc = "deadbeef" * 8
+    return LiveChallenge(DEV, nonce, t_challenge, t_arm_ns=t_arm, delay_ns=delay_ns, schedule_commitment=sc)
+
+
+def test_legacy_challenge_has_schedule_ok_none():
+    # 3-field challenge (no schedule leg) -> schedule_ok None, existing behavior byte-identical
+    ch = LiveChallenge(DEV, nonce="leg", t_challenge_ns=T0)
+    r = verify_live_response(ch, _valid_response("leg"))
+    assert r["ok"] is True and r["schedule_ok"] is None
+
+
+def test_schedule_bound_challenge_verifies():
+    ch = _sched_challenge("sch1")
+    r = verify_live_response(ch, _valid_response("sch1"))
+    assert r["ok"] is True and r["schedule_ok"] is True
+
+
+def test_schedule_commitment_forgery_fails():
+    ch = _sched_challenge("sch2", tamper="commitment")
+    r = verify_live_response(ch, _valid_response("sch2"))
+    assert r["ok"] is False and r["schedule_ok"] is False
+    assert any("schedule_commitment_mismatch" in x for x in r["reasons"])
+
+
+def test_schedule_drift_fails_when_fire_deviates_from_committed_delay():
+    # fire lands 2s after t_arm+delay -> beyond the ~300ms silent pre-collection tolerance
+    t_arm = T0 - DELAY_NS
+    drifted_challenge = LiveChallenge(
+        DEV, "sch3", T0, t_arm_ns=t_arm, delay_ns=DELAY_NS - 2_000_000_000,  # committed delay 2s short
+        schedule_commitment=schedule_commitment(
+            nonce="sch3", delay_ns=DELAY_NS - 2_000_000_000, t_arm_ns=t_arm, t_challenge_ns=T0),
+    )
+    r = verify_live_response(drifted_challenge, _valid_response("sch3"))
+    assert r["ok"] is False and r["schedule_ok"] is False
+    assert any("schedule_drift" in x for x in r["reasons"])

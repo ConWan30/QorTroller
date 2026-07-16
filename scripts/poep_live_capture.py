@@ -16,10 +16,13 @@ defeats replay + pre-scheduled macros BY CONSTRUCTION (grok round-16 verdict; se
 HONEST LIMITS (unchanged — this runner does NOT flip anything):
   - poep_enabled / L6B_ENABLED / L6_CHALLENGES_ENABLED stay FALSE. This produces CANDIDATE live evidence
     + exercises the verify path on real hardware. It does NOT earn the flip.
-  - P-LIVE-0 does NOT defeat a REACTIVE bot (one that detects the live stimulus onset and reacts in-band).
-    The console still prints a baseline tell before firing; a reactive adversary is explicitly out of
-    scope until waveform-shape + Stage-A land. The claim is "must react to a live unpredictable stimulus",
-    a much stronger bar than offline scoring, but not yet "embodied human".
+  - The capture is fully SILENT and polls continuously from arm to fire (F-POEP-LIVE-1 (i), grok
+    round-19) so there is no stdout tell and no poll-burst transition to pre-arm on. It still does NOT
+    defeat a REACTIVE bot that watches the HID OUTPUT force command and reacts in-band (A-REACTIVE) —
+    that is uncloseable for any host-timed proof and is explicitly out of scope until controller-firmware
+    force-timestamp / waveform-shape + Stage-A land. The claim is "must react to a live unpredictable
+    stimulus a pre-scheduled / stdout-tell / poll-burst macro cannot time", a much stronger bar than
+    offline scoring, but not yet "embodied human".
 
 Run this in YOUR OWN terminal (it is interactive — your reflex is the input):
   # stop the bridge first (dual-writer contention), then:
@@ -49,6 +52,7 @@ from l9_presence.poep_live_verify import (  # noqa: E402
     LiveChallenge,
     poep_commitment,
     response_feature_digest,
+    schedule_commitment,
     verify_live_response,
 )
 
@@ -63,10 +67,26 @@ def fresh_nonce() -> str:
     return secrets.token_hex(16)
 
 
+def csprng_delay_s(*, min_s: float = DEFAULT_MIN_DELAY_S, max_s: float = DEFAULT_MAX_DELAY_S) -> float:
+    """F-POEP-LIVE-1 (ii): the challenge delay from an INDEPENDENT CSPRNG (not the nonce).
+
+    Separating the schedule entropy from the binding nonce ends the round-17 bit-double-duty finding:
+    a partial leak of the nonce (logs/crash) no longer leaks the fire schedule. The nonce is used only
+    for the response commitment; the delay is drawn here and bound via `schedule_commitment`.
+    """
+    if max_s <= min_s:
+        return max(0.0, min_s)
+    span_ms = int(round((max_s - min_s) * 1000.0))
+    if span_ms <= 0:
+        return max(0.0, min_s)
+    return min_s + secrets.randbelow(span_ms) / 1000.0
+
+
 def nonce_derived_delay_s(nonce: str, *, min_s: float = DEFAULT_MIN_DELAY_S,
                           max_s: float = DEFAULT_MAX_DELAY_S) -> float:
-    """Derive the challenge delay from the fresh secret nonce -> unpredictable while the nonce is secret.
+    """DEPRECATED for the security-critical delay (use `csprng_delay_s`) — kept as a utility.
 
+    Derives the challenge delay from the fresh secret nonce -> unpredictable while the nonce is secret.
     The load-bearing property is UNPREDICTABILITY: the nonce is generated fresh and unrevealed until the
     stimulus fires, so neither the operator nor a pre-scheduled macro can anticipate the onset (the
     property P-LIVE-0 needs against replay + pre-schedule).
@@ -75,8 +95,9 @@ def nonce_derived_delay_s(nonce: str, *, min_s: float = DEFAULT_MIN_DELAY_S,
     (device_id, nonce, feature_digest, t_response) but NOT delay_s / arm-time, so `verify_live_response`
     does NOT prove the fire matched this nonce-derived schedule -- it only checks the post-hoc latency
     against the recorded t_challenge. Deriving delay from the nonce also puts schedule + binding entropy
-    on ONE secret (bit double-duty). The hygiene upgrade (deferred to the fix arc) is an INDEPENDENT
-    CSPRNG for the delay + the nonce for binding only, optionally committing H(nonce||delay||t_arm).
+    on ONE secret (bit double-duty). The hygiene upgrade is NOW LIVE via `csprng_delay_s` (independent
+    CSPRNG for the delay + the nonce for binding only) + `schedule_commitment`; this function is retained
+    only as a utility and is no longer on the security-critical path.
     """
     if max_s <= min_s:
         return max(0.0, min_s)
@@ -100,11 +121,16 @@ def build_live_record(
     classification: str,
     challenge_index: int,
     delay_s: float,
+    t_arm_ns: int | None = None,
 ) -> dict:
     """Build the P-LIVE-0 record for one challenge and run the fail-closed verify auditor.
 
     A no-response (no clean reflex peak) -> latency_ms None/<=0 -> t_response == t_challenge -> the
     auditor fails it honestly (response_not_after_challenge + reaction-band), never a spurious pass.
+
+    When ``t_arm_ns`` is given (F-POEP-LIVE-1 (ii)), the CSPRNG-drawn ``delay_s`` + arm time are bound
+    into a `schedule_commitment` so the fire schedule becomes auditable (and the auditor cross-checks
+    that the fire landed at-or-after the committed delay). Absent -> legacy 3-field challenge.
     """
     lat = float(latency_ms) if (latency_ms is not None and latency_ms > 0.0) else 0.0
     precursor = float(precursor_gap_ms) if precursor_gap_ms is not None else 0.0
@@ -115,7 +141,18 @@ def build_live_record(
     commitment = poep_commitment(
         device_id=device_id, nonce=nonce, feature_digest=feature_digest, ts_ns=t_response_ns,
     )
-    ch = LiveChallenge(device_id=device_id, nonce=nonce, t_challenge_ns=t_challenge_ns)
+
+    delay_ns = int(round(delay_s * 1e9))
+    sched_commitment = None
+    if t_arm_ns is not None:
+        sched_commitment = schedule_commitment(
+            nonce=nonce, delay_ns=delay_ns, t_arm_ns=t_arm_ns, t_challenge_ns=t_challenge_ns)
+
+    ch = LiveChallenge(
+        device_id=device_id, nonce=nonce, t_challenge_ns=t_challenge_ns,
+        t_arm_ns=t_arm_ns, delay_ns=(delay_ns if t_arm_ns is not None else None),
+        schedule_commitment=sched_commitment,
+    )
     resp = ChallengeResponse(
         t_response_ns=t_response_ns,
         latency_ms=lat,
@@ -129,6 +166,7 @@ def build_live_record(
         "challenge_index": challenge_index,
         "nonce": nonce,
         "delay_s": round(delay_s, 3),
+        "t_arm_ns": t_arm_ns,
         "t_challenge_ns": t_challenge_ns,
         "t_response_ns": t_response_ns,
         "latency_ms": round(lat, 3) if lat > 0.0 else None,
@@ -137,7 +175,8 @@ def build_live_record(
         "classification": classification,
         "feature_digest": feature_digest,
         "commitment": commitment,
-        "verify": verdict,          # {ok, reasons, commitment_ok, observed_latency_ms, poep_enabled:False, ...}
+        "schedule_commitment": sched_commitment,
+        "verify": verdict,          # {ok, reasons, commitment_ok, schedule_ok, observed_latency_ms, ...}
     }
 
 
@@ -145,6 +184,73 @@ def build_live_record(
 
 def _iso_date() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _fire_probe_silent(ds, cfg, *, delay_s, reader):  # pragma: no cover - hardware path
+    """F-POEP-LIVE-1 (i): SILENT, CONTINUOUS-POLL nonce-scheduled fire — the A-PRE-TELL fix.
+
+    grok round-19 caught the naive fix (sleep -> then dense collect -> fire) leaves a POLL-BURST tell:
+    a process watching USB HID poll cadence sees the silence->burst transition ~200-600 ms BEFORE the
+    force and pre-arms on it (measured FAR ~0.56 in the harness, not chance). This version removes that
+    transition entirely: it polls CONTINUOUSLY at a UNIFORM cadence from t_arm through the fire, keeping
+    a ring of the last (randomized) pre_count samples as the pre-window. A poll-cadence watcher therefore
+    sees uniform polling from arm-time only (delay-seconds before the force, with the CSPRNG delay still
+    hidden) -> no pre-fire burst to key on. The only reliable onset left is the physical force itself
+    (A-REACTIVE, explicitly out of P-LIVE-0's claim).
+
+    Returns (probe_ts, pre_reports, post_reports, r2_at_probe, t_arm_ns, t_challenge_ns).
+    """
+    import asyncio
+    from collections import deque
+    from bridge.controller.l6_challenge_profiles import l6b_probe_profile
+    from bridge.controller.l6_trigger_driver import L6TriggerDriver
+    from bridge.vapi_bridge.l6b_desk_session import accel_report_from_snapshot
+
+    accel_scale = float(getattr(reader, "_accel_scale", None) or 8192.0)
+    t_arm_ns = time.time_ns()
+    arm_mono = time.monotonic()
+
+    # randomized, UNPRINTED ring size in ~[N/2, 3N/2): the pre-window is the last `pre_count` samples
+    base = max(1, cfg.pre_samples)
+    pre_count = base // 2 + secrets.randbelow(base) + 1
+    ring: deque = deque(maxlen=pre_count)
+
+    # CONTINUOUS uniform polling from arm to fire — no silence->burst transition for a watcher to see
+    fire_at = arm_mono + max(0.0, delay_s)
+    while time.monotonic() < fire_at:
+        snap = reader.poll()
+        ring.append(accel_report_from_snapshot(snap, accel_scale=accel_scale))
+        if cfg.poll_interval_s > 0:
+            time.sleep(cfg.poll_interval_s)
+    pre_reports = list(ring)
+
+    latest = reader.poll()
+    r2_at_probe = int(getattr(latest, "r2_trigger", 0) or 0)
+
+    profile = l6b_probe_profile(cfg.r2_force, mode=cfg.mode)
+    probe_ts = time.monotonic()
+    t_challenge_ns = time.time_ns()     # exact stimulus onset == the force write
+    L6TriggerDriver._sync_write(ds, profile)
+
+    hold_s = cfg.hold_ms / 1000.0
+    capture_s = cfg.capture_window_ms / 1000.0
+    deadline = time.monotonic() + hold_s + capture_s
+    clear_at = time.monotonic() + hold_s
+    cleared = False
+    driver = L6TriggerDriver()
+    post_reports: list[dict] = []
+    while time.monotonic() < deadline:
+        snap = reader.poll()
+        post_reports.append(accel_report_from_snapshot(snap, accel_scale=accel_scale))
+        if not cleared and time.monotonic() >= clear_at:
+            asyncio.run(driver.clear_triggers(ds))
+            cleared = True
+        if cfg.poll_interval_s > 0:
+            time.sleep(cfg.poll_interval_s)
+    if not cleared:
+        asyncio.run(driver.clear_triggers(ds))
+
+    return probe_ts, pre_reports, post_reports, r2_at_probe, t_arm_ns, t_challenge_ns
 
 
 def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - hardware path
@@ -161,7 +267,6 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
     from controller.dualshock_emulator import DualSenseReader, HAS_DUALSENSE
     from scripts.l6b_desk_reaction_session import (
         _bridge_running,
-        _fire_probe_sync,
         _resolve_registered_edge_device_id,
     )
 
@@ -197,35 +302,28 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
     print("=" * 66)
     print(f"  Device ID:  {device_id}")
     print(f"  Policy ref: {policy_ref}   CCO profile: {args.cco_profile_id}")
-    print(f"  Challenges: {args.count}   delay window: {args.min_delay}-{args.max_delay}s (nonce-derived)")
+    print(f"  Challenges: {args.count}   delay window: {args.min_delay}-{args.max_delay}s (independent CSPRNG)")
     print(f"  Actuator:   mode={cfg.mode} force={cfg.r2_force} hold_ms={cfg.hold_ms}")
     print(f"  DB:         {(args.db or Config().db_path) if store else '(dry-run -- not persisting)'}")
     print("-" * 66)
     print("  Hold the controller in a NORMAL, RELAXED grip. Do NOT press R2.")
-    print("  A resistance challenge will fire at a RANDOM moment you cannot")
-    print("  anticipate. React naturally when you feel it. Do NOT press ENTER.")
+    print(f"  {args.count} resistance challenges will fire SILENTLY at random moments over the")
+    print("  next ~minute — NO on-screen cue before each fire (F-POEP-LIVE-1 tell-fix).")
+    print("  React naturally each time you feel resistance. Results print AFTER the run.")
     print("  poep_enabled STAYS FALSE -- this is candidate live evidence.")
     print("=" * 66)
-    print()
+    print("  Armed. Hold relaxed...")
 
     ds = reader.ds
     records: list[dict] = []
     n_ok = 0
     try:
         for idx in range(1, args.count + 1):
-            nonce = fresh_nonce()
-            delay_s = nonce_derived_delay_s(nonce, min_s=args.min_delay, max_s=args.max_delay)
-            print(f"--- Challenge {idx}/{args.count} --- (arming; hold relaxed)")
-            # unpredictable pre-delay: the operator does not know when the stimulus fires
-            time.sleep(delay_s)
-
-            mono0 = time.monotonic()
-            wall0 = time.time_ns()
-            probe_ts, pre_reports, post_reports, r2_at_probe = _fire_probe_sync(
-                ds, force=cfg.r2_force, mode=cfg.mode, hold_ms=cfg.hold_ms, reader=reader, cfg=cfg,
-            )
-            # exact wall-clock stimulus onset (probe_ts is monotonic at the fire instant)
-            t_challenge_ns = wall0 + int(round((probe_ts - mono0) * 1e9))
+            nonce = fresh_nonce()                                     # binding only
+            delay_s = csprng_delay_s(min_s=args.min_delay, max_s=args.max_delay)  # (ii) independent CSPRNG
+            # SILENT fire: no pre-fire print, randomized unprinted pre-window (F-POEP-LIVE-1 (i))
+            (probe_ts, pre_reports, post_reports, r2_at_probe,
+             t_arm_ns, t_challenge_ns) = _fire_probe_silent(ds, cfg, delay_s=delay_s, reader=reader)
 
             result, diagnostic_json = analyze_desk_probe(pre_reports, post_reports, probe_ts, cfg)
             diag = {}
@@ -244,6 +342,7 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
                 classification=result.classification,
                 challenge_index=idx,
                 delay_s=delay_s,
+                t_arm_ns=t_arm_ns,               # (ii) binds the schedule commitment
             )
             record["reflex_verdict"] = map_l6b_classification_to_reflex_verdict(result.classification)
             record["r2_at_probe"] = r2_at_probe
@@ -267,16 +366,11 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
                 except Exception as exc:  # noqa: BLE001
                     print(f"  (persist skipped: {exc})")
 
-            v = record["verify"]
-            status = "PASS" if v["ok"] else "FAIL"
-            if v["ok"]:
+            # SILENT during the run — no per-fire output (a post-fire cadence marks challenge
+            # boundaries; keeping it silent removes that inter-challenge structure entirely). Results
+            # print AFTER the run.
+            if record["verify"]["ok"]:
                 n_ok += 1
-            print(f"  latency={record['latency_ms']}ms peak={record['peak_lsb']} LSB "
-                  f"class={result.classification} -> LIVE-VERIFY {status}")
-            if not v["ok"]:
-                print(f"    reasons: {', '.join(v['reasons'])}")
-            print(f"    nonce={nonce[:12]}...  commitment={record['commitment'][:16]}...")
-            print()
     except KeyboardInterrupt:
         print("\n  (interrupted)")
     finally:
@@ -294,7 +388,7 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
 
     # write the audit artifact (P-LIVE-0 candidate evidence; NOT a flip)
     audit = {
-        "schema": "qortroller-poep-live-capture-v0",
+        "schema": "qortroller-poep-live-capture-v1",
         "candidate": True,
         "poep_enabled": False,
         "device_id": device_id,
@@ -302,11 +396,17 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
         "player": args.player,
         "captured_utc": datetime.now(timezone.utc).isoformat(),
         "reaction_band_ms": [80.0, 300.0],
+        "silent_fire": True,               # F-POEP-LIVE-1 (i): silent continuous-poll fire (no stdout / poll-burst tell)
+        "schedule_bound": True,            # F-POEP-LIVE-1 (ii): independent CSPRNG delay + schedule commitment
         "n_challenges": len(records),
         "n_live_verify_pass": n_ok,
         "claim": "candidate live nonce-challenge evidence on the registered Edge; each PASS = a reflex "
-                 "causally bound to a live unpredictable stimulus (defeats replay + pre-scheduled macro "
-                 "by construction). NOT yet anti-reactive-bot; poep_enabled stays False.",
+                 "causally bound to a live unpredictable stimulus. Closes replay + pre-scheduled + "
+                 "stdout-tell + poll-burst pre-tell macros (silent CONTINUOUS-poll fire + independent-CSPRNG "
+                 "delay + schedule commitment; see l9_presence/poep_tell_watcher.py FAR harness). NOT anti-"
+                 "reactive-host: a bot watching the HID force command reacts at the true onset (A-REACTIVE) "
+                 "and is OUT of claim; that needs firmware force-timestamp / waveform+Stage-A. poep_enabled "
+                 "stays False.",
         "records": records,
     }
     out_dir = REPO_ROOT / "audits"
@@ -315,6 +415,15 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
     out_path.write_text(json.dumps(audit, indent=2), encoding="utf-8")
 
     print("=" * 66)
+    print("  RESULTS (printed after the run — the session itself was silent):")
+    for r in records:
+        v = r["verify"]
+        line = (f"  #{r['challenge_index']:>2}  latency={r['latency_ms']}ms  peak={r['peak_lsb']} LSB  "
+                f"class={r['classification']}  -> LIVE-VERIFY {'PASS' if v['ok'] else 'FAIL'}")
+        print(line)
+        if not v["ok"]:
+            print(f"        reasons: {', '.join(v['reasons'])}")
+    print("-" * 66)
     print(f"  LIVE-VERIFY PASS: {n_ok}/{len(records)}   (poep_enabled=False -- candidate only)")
     print(f"  Audit: {out_path}")
     print("=" * 66)
@@ -328,9 +437,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--player", "-p", default="P1", help="Player label")
     parser.add_argument("--count", "-n", type=int, default=8, help="Number of live challenges")
     parser.add_argument("--min-delay", type=float, default=DEFAULT_MIN_DELAY_S,
-                        dest="min_delay", help="Min nonce-derived challenge delay (s)")
+                        dest="min_delay", help="Min challenge delay (s) — independent CSPRNG")
     parser.add_argument("--max-delay", type=float, default=DEFAULT_MAX_DELAY_S,
-                        dest="max_delay", help="Max nonce-derived challenge delay (s)")
+                        dest="max_delay", help="Max challenge delay (s) — independent CSPRNG")
     # edge-reflex capture defaults MIRROR the corpus-capture path byte-for-byte
     parser.add_argument("--force", type=int, default=128, help="R2 force 1-255")
     parser.add_argument("--mode", choices=("rigid", "pulse"), default="rigid", help="Adaptive trigger mode")

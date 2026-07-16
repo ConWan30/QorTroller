@@ -83,6 +83,38 @@ re-run the 5-class adversarial gate (`adversarial_nulls_rbm_v0.py`) against the 
 accept region. Do **not** train a model until the (i)+(ii) harness is green — else it's a recalibrated
 band check. `poep_enabled` stays False throughout.
 
+## BUILT — (i)+(ii)+harness, with the grok round-19 correction (`docs/a2a/poep/round-19-grok-build-verify.txt`)
+Built (i) + (ii) + the TellWatcher harness. grok's **pre-commit** build-verify (the new discipline) caught
+a real residual before commit: the first "silent" fire (sleep → **then** a dense pre-collection burst →
+fire) still leaks a **poll-burst** pre-tell — a process watching USB poll cadence sees the silence→burst
+transition ~200–600 ms before the force and pre-arms (measured **FAR ≈ 0.56**, not chance). Verdict
+SHIP-WITH-FIX. The real fix (grok option B) shipped: `_fire_probe_silent` now polls **continuously at a
+uniform cadence from arm to fire** (ring = last randomized `pre_count`), so there is no burst transition to
+key on. The harness (`l9_presence/poep_tell_watcher.py`) models the `PollBurstWatcher` honestly across three
+paths and proves the **continuous-poll fire** — not merely deleting the stdout print — is what collapses it:
+
+| capture path | strongest host macro | FAR |
+|---|---|---|
+| `stdout_tell` (old print + fixed window) | stdout_watcher | **1.00** |
+| `sleep_then_burst` (naive "silent") | poll_burst_watcher | **0.56** ← the flaw grok caught |
+| `continuous_poll` (the fix) | poll_burst_watcher | **0.02** ← collapses to chance |
+
+Bot is GENEROUS (given the nonce → commitment always valid; timing is the sole discriminator). Also shipped:
+(ii) independent-CSPRNG `csprng_delay_s` (nonce is binding-only; ends bit-double-duty) + `schedule_commitment`
+`H(nonce‖delay‖t_arm‖t_challenge)` with a lag check — **honest scope: an integrity MAC + lag gate, NOT a
+commit-reveal against a malicious capture host** (which owns all four inputs); a true arm-time
+`H(nonce‖delay‖t_arm)` published to an external timestamp authority is the deferred stronger design.
+**Still deferred:** (iii) catch trials; the surprise-mode corpus; A-REACTIVE (firmware force-timestamp /
+waveform + Stage-A). `poep_enabled` stays False. PV-CI 183; 29 poep tests green; no chain/FROZEN/PoAC edit.
+
+grok **round-20** re-verified the fix pre-commit (`docs/a2a/poep/round-20-grok-fix-reverify.txt`) →
+**VERDICT: SHIP.** Confirmed: continuous-poll closes the burst pre-tell (the residual cadence wiggle sits
+*at* the fire = A-REACTIVE-class, out of claim); the 0.02 fallback FAR is the honest information-theoretic
+floor (~220 ms band / ~9 s delay span); `O_opt` is near-optimal among fixed-offset burst bots (a stronger
+naive bot only raises the 0.56, the fix still passes); no ship-blocker bugs; load-bearing claims
+non-overclaiming. Three stale doc strings it flagged (jitter-budget comment, "nonce-derived", "deferred
+hygiene") were corrected pre-commit.
+
 ## Claim ceiling (unchanged)
 Candidate live evidence. Each PASS = a reflex causally bound to a live unpredictable stimulus — defeats
 **replay + pre-scheduled macro by construction**, NOT yet a reactive bot (waveform-shape + Stage-A
