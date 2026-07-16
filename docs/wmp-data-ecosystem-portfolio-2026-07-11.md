@@ -33,7 +33,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** **NOW (code-only)** — a `wmp/skill_strata.py` labeling harness over existing logs + a strata field in bundle metadata (additive, non-FROZEN). Gate: a grading-methodology note + the ceiling below.
 - **Ceiling:** bands are **protocol-internal labels, not certified rank** — no ELO/matchmaking claims, no cross-player identity comparisons (population gate stands), `developer_self` grade.
 
-### UC-3 · Anti-bot ground-truth baselines (coopetition — selling certified-human to other detectors)
+### UC-3 · Anti-bot ground-truth baselines (coopetition — selling certified-human to other detectors) — **PROVER BUILT 2026-07-16** (`contracts/circuits/prove_buyer_category.js` — snarkjs fullProve over the committed circuit → local vkey verify; public signals BYTE-MATCH the deployed verifier's golden T-BCV-1; fail-closed rails; 4 tests. Closes the "missing half". Ceiling: proves credential-preimage knowledge, NOT Curator issuance — marketplace authorization needs the Curator-published commitment-membership wiring, an issuance/composability gate. A2A grok round-2 SHIP.)
 - **Produces:** certified-human input corpora as **training baselines for third-party bot detectors** — "what real human macro-input looks like," provenance-attested.
 - **Proof:** identical WMP stack; the *value inversion* is the consumer class — anti-fraud ML teams need uncontaminated human baselines more than anyone, and post-φ is exactly right for them (they need macro patterns + provenance, NOT our micro moat — which never exports, so we can sell to competitor-detectors without arming bot-makers).
 - **Consumer:** studio anti-cheat teams, bot-detection vendors, platform trust-and-safety ML.
@@ -49,7 +49,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** **NOW (code-only)** — `l9_presence/play_resume.py` assembler + verifier, same pattern as `match_certificate.py`. Gate: none hard; ioID join waits on D-IOID-CER-5 wire-up.
 - **Ceiling:** counts and verdicts only — **no rank, no identity certification, no "best player" claims**; explicitly `advisory=true`, `population_certified=false` (PORT-CERT precedent fields).
 
-### UC-5 · Provenance-preserving analytics (W3bstream as the verifiable compute rail)
+### UC-5 · Provenance-preserving analytics (W3bstream as the verifiable compute rail) — **REFERENCE BUILT 2026-07-16 (wasm port CI-gated)** (`bridge/vapi_bridge/wmp/analytics_ref.py` — canonical Python reference: consent-gated aggregates (count/sum/mean-milli/p50/hist) + provenance row-commitment (consent bound in preimage) + sorted-leaf-merkle set root + output triple; 10 tests. Rust `wasm32` port DEFERRED — target uninstallable in-sandbox; spec + parity vectors in `docs/wmp-uc5-wasm-analytics-design.md`; CI builds the wasm. A2A grok round-3 SHIP.)
 - **Produces:** derived statistics over bundles — APM distributions, session cadence, engagement-window histograms — where **the analytic itself carries provenance** (computed inside the W3bstream wasm sandbox over commitment-bound inputs, so the buyer verifies the *statistic*, not just the raw data).
 - **Proof:** extend the existing applet (`w3bstream/applet/src/lib.rs` — `EvmLogPayload` already carries `events_root`) with pure-wasm aggregate functions over bundle references; output = (statistic, input-commitment-set, applet-version) triple.
 - **Consumer:** analysts/brands who want metrics without buying raw corpora — a cheaper, smaller product tier.
@@ -174,8 +174,10 @@ has flattened: further candidates reduce to consumer variants of existing entrie
 | 4 | **UC-10 integrity-report rollup** | code-only | **BUILT 2026-07-16 (structure)** — a real pilot fills it |
 | 5 | **UC-8 fleet-telemetry aggregator** | code-only | **BUILT 2026-07-16** (floor-protected model buckets) |
 | 6 | **UC-1 WMP Phase-2 promote** | ~0.5 IOTX | **LIVE 2026-07-11** (first real bundle VERIFIED) |
-| 7 | **UC-5 W3bstream analytics fns** | code-only (wasm) | REMAINING — its own Rust/wasm arc |
-| 8 | **UC-3 buyer prover** | code-only | REMAINING — its own ZK-prover arc (verifier live, prover absent) |
+| 7 | **UC-5 W3bstream analytics fns** | code-only (wasm) | **REFERENCE BUILT 2026-07-16** (Python; wasm port CI-gated) |
+| 8 | **UC-3 buyer prover** | code-only | **BUILT 2026-07-16** (snarkjs prover; byte-matches deployed golden) |
+
+**The buildable-NOW shortlist is COMPLETE (8/8): UC-1 LIVE; UC-2/3/4/8/10/15 BUILT; UC-5 reference BUILT + wasm CI-gated.**
 
 **Portfolio read:** the coherent picture is a three-ring economy — (inner) the gamer consumes their own
 verified output (UC-15/4), (middle) skill-structured corpora + services sell to labs/studios/organizers
