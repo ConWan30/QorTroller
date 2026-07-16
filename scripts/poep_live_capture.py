@@ -54,6 +54,8 @@ from l9_presence.poep_live_verify import (  # noqa: E402
     response_feature_digest,
     schedule_commitment,
     verify_live_response,
+    waveform_commitment,
+    waveform_digest,
 )
 
 # --- unpredictable-timing scheduler (pure, testable) ------------------------------------------------
@@ -65,6 +67,28 @@ DEFAULT_MAX_DELAY_S = 12.0
 def fresh_nonce() -> str:
     """A fresh, cryptographically-random per-challenge nonce (never revealed until the challenge)."""
     return secrets.token_hex(16)
+
+
+# --- FLIP-A rung 2: raw reflex waveform (pure, testable) --------------------------------------------
+
+def _accel_mag(report: dict) -> float:
+    """Euclidean accel magnitude (LSB) from an IMU report dict {ax, ay, az, ...}."""
+    ax = float(report.get("ax", 0.0) or 0.0)
+    ay = float(report.get("ay", 0.0) or 0.0)
+    az = float(report.get("az", 0.0) or 0.0)
+    return (ax * ax + ay * ay + az * az) ** 0.5
+
+
+def reflex_curve(pre_reports: list[dict], post_reports: list[dict]) -> list[float]:
+    """The DC-removed post-fire reflex curve: ||accel|| per post sample minus the pre-window baseline
+    mean. This is the raw waveform P-WAVE-0's shape gate consumes — it lets a rig session answer the
+    load-bearing empirical question (does a real reflex settle-to-plateau or return-to-baseline?).
+    Onset-aligned near 0 at the fire; rises to the reflex peak; then settles or relaxes."""
+    if not post_reports:
+        return []
+    pre_mags = [_accel_mag(r) for r in pre_reports]
+    baseline = (sum(pre_mags) / len(pre_mags)) if pre_mags else 0.0
+    return [round(_accel_mag(r) - baseline, 1) for r in post_reports]
 
 
 def csprng_delay_s(*, min_s: float = DEFAULT_MIN_DELAY_S, max_s: float = DEFAULT_MAX_DELAY_S) -> float:
@@ -122,6 +146,7 @@ def build_live_record(
     challenge_index: int,
     delay_s: float,
     t_arm_ns: int | None = None,
+    waveform: list[float] | None = None,
 ) -> dict:
     """Build the P-LIVE-0 record for one challenge and run the fail-closed verify auditor.
 
@@ -147,6 +172,14 @@ def build_live_record(
     if t_arm_ns is not None:
         sched_commitment = schedule_commitment(
             nonce=nonce, delay_ns=delay_ns, t_arm_ns=t_arm_ns, t_challenge_ns=t_challenge_ns)
+
+    # FLIP-A rung 2: bind the raw reflex waveform to this challenge (integrity only)
+    wave_digest = None
+    wave_commitment = None
+    if waveform:
+        wave_digest = waveform_digest(waveform)
+        wave_commitment = waveform_commitment(
+            nonce=nonce, wave_digest=wave_digest, t_challenge_ns=t_challenge_ns)
 
     ch = LiveChallenge(
         device_id=device_id, nonce=nonce, t_challenge_ns=t_challenge_ns,
@@ -176,6 +209,9 @@ def build_live_record(
         "feature_digest": feature_digest,
         "commitment": commitment,
         "schedule_commitment": sched_commitment,
+        "waveform": waveform,                 # raw DC-removed reflex curve (rung 2; gitignored artifact)
+        "waveform_digest": wave_digest,
+        "waveform_commitment": wave_commitment,
         "verify": verdict,          # {ok, reasons, commitment_ok, schedule_ok, observed_latency_ms, ...}
     }
 
@@ -343,6 +379,7 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
                 challenge_index=idx,
                 delay_s=delay_s,
                 t_arm_ns=t_arm_ns,               # (ii) binds the schedule commitment
+                waveform=reflex_curve(pre_reports, post_reports),  # rung 2: raw reflex curve
             )
             record["reflex_verdict"] = map_l6b_classification_to_reflex_verdict(result.classification)
             record["r2_at_probe"] = r2_at_probe
@@ -398,6 +435,7 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
         "reaction_band_ms": [80.0, 300.0],
         "silent_fire": True,               # F-POEP-LIVE-1 (i): silent continuous-poll fire (no stdout / poll-burst tell)
         "schedule_bound": True,            # F-POEP-LIVE-1 (ii): independent CSPRNG delay + schedule commitment
+        "waveform_captured": True,         # FLIP-A rung 2: raw reflex curve stored per record (run poep_waveform_analyze.py)
         "n_challenges": len(records),
         "n_live_verify_pass": n_ok,
         "claim": "candidate live nonce-challenge evidence on the registered Edge; each PASS = a reflex "

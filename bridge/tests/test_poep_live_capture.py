@@ -18,7 +18,9 @@ from scripts.poep_live_capture import (
     csprng_delay_s,
     fresh_nonce,
     nonce_derived_delay_s,
+    reflex_curve,
 )
+from l9_presence.poep_live_verify import waveform_commitment, waveform_digest
 
 DEV = "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"
 T0 = 1_000_000_000_000  # challenge fire (ns)
@@ -142,3 +144,50 @@ def test_record_with_arm_time_binds_schedule_and_verifies():
     assert r["t_arm_ns"] == t_arm
     assert r["verify"]["schedule_ok"] is True
     assert r["verify"]["ok"] is True
+
+
+# --- FLIP-A rung 2: reflex waveform capture --------------------------------------------------------
+
+def _rep(ax, ay, az):
+    return {"ax": ax, "ay": ay, "az": az, "t_mono": 0.0}
+
+
+def test_reflex_curve_dc_removes_baseline():
+    # pre baseline magnitude ~1000; post rises above it -> DC-removed curve starts ~0 and rises
+    pre = [_rep(1000.0, 0.0, 0.0) for _ in range(5)]
+    post = [_rep(1000.0, 0.0, 0.0), _rep(1500.0, 0.0, 0.0), _rep(3000.0, 0.0, 0.0),
+            _rep(1200.0, 0.0, 0.0)]
+    curve = reflex_curve(pre, post)
+    assert curve[0] == 0.0                 # onset-aligned at the baseline
+    assert curve[2] == 2000.0              # peak above baseline
+    assert len(curve) == len(post)
+
+
+def test_reflex_curve_empty_post_is_empty():
+    assert reflex_curve([_rep(1.0, 1.0, 1.0)], []) == []
+
+
+def test_record_with_waveform_binds_waveform_commitment():
+    wf = [0.0, 500.0, 2000.0, 1200.0, 1000.0, 990.0]
+    r = build_live_record(
+        device_id=DEV, nonce="wav", t_challenge_ns=T0,
+        latency_ms=168.0, peak_lsb=2000.0, precursor_gap_ms=9.0,
+        classification="HUMAN", challenge_index=1, delay_s=7.0, waveform=wf,
+    )
+    assert r["waveform"] == wf
+    assert r["waveform_digest"] == waveform_digest(wf)
+    assert r["waveform_commitment"] == waveform_commitment(
+        nonce="wav", wave_digest=waveform_digest(wf), t_challenge_ns=T0)
+    # a swapped waveform breaks the digest -> integrity detectable downstream
+    assert waveform_digest(wf) != waveform_digest(wf[:-1] + [0.0])
+
+
+def test_record_without_waveform_has_no_waveform_fields():
+    r = build_live_record(
+        device_id=DEV, nonce="now", t_challenge_ns=T0,
+        latency_ms=168.0, peak_lsb=2000.0, precursor_gap_ms=9.0,
+        classification="HUMAN", challenge_index=1, delay_s=7.0,
+    )
+    assert r["waveform"] is None
+    assert r["waveform_digest"] is None
+    assert r["waveform_commitment"] is None
