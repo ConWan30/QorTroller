@@ -62,9 +62,35 @@ class ManufacturerRootCA:
     """
 
     def __init__(self, key_path: str = DEFAULT_ROOT_CA_KEY_PATH,
-                 manufacturer_id: str = QORTROLLER_FOUNDATION_MFG_ID):
-        from .hardware_identity import SoftwareIdentityBackend
-        self._backend = SoftwareIdentityBackend(key_path)
+                 manufacturer_id: str = QORTROLLER_FOUNDATION_MFG_ID,
+                 backend=None):
+        # Backend selection (grok round-13). DEFAULT is byte-identical to before: a plaintext-file
+        # SoftwareIdentityBackend. An injected `backend` (tests / a pre-built KMS backend) wins. Otherwise
+        # the MFG_CA_BACKEND env selects: "software" (default) or "kms" (P-256 AWS KMS HSM, non-exportable
+        # key). NOTE: flipping to "kms" mints a NEW issuer pubkey = a NEW root — it is a CA MIGRATION
+        # (re-issue + re-anchor device certs), NOT a transparent swap. See
+        # docs/path-a-mfg-ca-hsm-migration.md. Nothing here flips it; the flip is an operator ceremony.
+        if backend is not None:
+            self._backend = backend
+        else:
+            import os
+            which = os.getenv("MFG_CA_BACKEND", "software").strip().lower()
+            if which == "kms":
+                from .hardware_identity import create_backend
+                alias = os.getenv("VAPI_KMS_MFG_CA_ALIAS", "")
+                if not alias:
+                    raise ValueError(
+                        "MFG_CA_BACKEND=kms requires VAPI_KMS_MFG_CA_ALIAS (the P-256 CA key alias)")
+                self._backend = create_backend(
+                    "kms", alias=alias, region=os.getenv("AWS_REGION", "us-east-1"))
+            elif which in ("software", ""):
+                from .hardware_identity import SoftwareIdentityBackend
+                self._backend = SoftwareIdentityBackend(key_path)
+            else:
+                # fail LOUD on a typo'd flip (e.g. MFG_CA_BACKEND=kme) rather than silently signing with
+                # the software key the operator thought they were replacing (grok round-14 nit)
+                raise ValueError(
+                    f"unknown MFG_CA_BACKEND={which!r} (expected 'software' or 'kms')")
         self._manufacturer_id = manufacturer_id
         self._ready = False
 
@@ -85,11 +111,11 @@ class ManufacturerRootCA:
         return self.issuer_pubkey_uncompressed().hex()
 
     def sign_cert_body(self, body: bytes) -> bytes:
-        """ECDSA-P256 over SHA-256(body). Returns 64-byte raw r||s (matches
-        the hardware_identity.SoftwareIdentityBackend wire contract)."""
+        """ECDSA-P256 over SHA-256(body). Returns 64-byte raw r||s. Every SigningBackend hashes the body
+        internally and returns raw r||s (SoftwareIdentityBackend via ec.ECDSA(SHA256); KMSIdentityBackend
+        via SHA-256-once + KMS DIGEST mode + DER->raw), so we pass the body bytes directly regardless of
+        which backend is configured."""
         self._ensure_setup()
-        # SoftwareIdentityBackend.sign(body) already does ec.ECDSA(SHA256())
-        # internally and converts DER -> raw r||s. We pass body bytes directly.
         return self._backend.sign(body)
 
     def backend_type(self) -> str:

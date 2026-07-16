@@ -1,0 +1,79 @@
+Verifying the MFG-CA-on-HSM build against the round-13 charter: reading the real code, tests, and migration doc—not the paste.# VERIFY — MFG-CA-on-HSM (charter a)
+
+**VERDICT: SHIP**
+
+Both load-bearing footguns are closed. Scope holds. Regression green. No commit-blocking gap.
+
+---
+
+## Footguns (the hammer)
+
+| # | Claim | Status | Evidence |
+|---|--------|--------|----------|
+| **1** | Single SHA-256 then KMS `DIGEST` | **CLOSED** | `sign()` does `hashlib.sha256(body).digest()` once → port; fake uses `ECDSA(Prehashed(SHA256()))` = AWS DIGEST semantics; `test_body_is_hashed_exactly_once` asserts exact 32B digest ≠ body ≠ double-hash; `test_a_double_hashed_signature_would_fail_verify` + real `verify_cert_signature` prove the contract is load-bearing |
+| **2** | Wire round-trip DER→raw 64B + SPKI→65B `0x04‖X‖Y` | **CLOSED** | Converters pure; verify against real `verify_cert_signature` (same path software uses); wrong-curve (secp256k1) fails closed at `setup()`; mirrors `SoftwareIdentityBackend.sign` `r.to_bytes(32)+s.to_bytes(32)` |
+
+**Fake fidelity:** Real KMS `MessageType=DIGEST` + `ECDSA_SHA_256` = prehash, no second hash. Local `Prehashed(SHA256())` is the correct stand-in. The fake cannot hide a double-hash bug — the digest-byte assert would fail first, and end-to-end verify would fail second.
+
+**Leading-zero r/s test this commit?** **No.** `int.to_bytes(32,"big")` zero-pads; verify uses `int.from_bytes` (same as software). Spot-check: 3/200 random KMS-path sigs had leading-zero r/s bytes; all verified. Not a ship gate.
+
+---
+
+## Hammer answers (3–6)
+
+**3. Default byte-identical — CLOSED.**  
+`MFG_CA_BACKEND` default `"software"` → `SoftwareIdentityBackend(key_path)`. Existing suite still green: `test_device_birth_cert` + `test_hardware_identity` + `test_signing_backends` + KMS tests = **58+12+38 pass**. Env-at-`__init__` is the right ceremony seam.
+
+Minor test hygiene (non-blocking): `test_mfg_ca_default_is_software` does not `monkeypatch.delenv("MFG_CA_BACKEND")` — a leaked operator env could flake it. Production unaffected.
+
+Soft code niggle (non-blocking): unknown values (`MFG_CA_BACKEND=kme`) silently fall through to software. Fail-safe for accidental flip, not fail-loud for misconfig. Optional v0.1: `if which not in ("software","kms","")` raise.
+
+**4. IAM separation — CLOSED at code.**  
+- Agent map (`kms_client._AGENT_ALIAS_ENV_VARS`) = sentry / guardian / curator only — **no** `VAPI_KMS_MFG_CA_ALIAS`.  
+- `make_kms_ca_port` is only reached via `create_backend("kms")` with explicit alias (or injected ports).  
+- No agent/Guardian path imports `make_kms_ca_port` or `KMSIdentityBackend`.  
+- Live IAM “Guardian has no Sign on CA key” remains **operator ceremony** (doc §1) — correct, not code-enforceable here.
+
+**5. Scope — correct.**  
+- G1.6 still `LIVE-FRAGILE` (sensor_c untouched).  
+- No dual-root.  
+- Default OFF; doc forbids flip until re-issue + re-anchor.  
+- No SEL/WMP.
+
+**6. `make_kms_ca_port` — OK for `#pragma: no cover`.**  
+32B DIGEST guard, `MessageType="DIGEST"`, `ECDSA_SHA_256`, alias-as-`KeyId` (AWS accepts alias/id/ARN), region default `us-east-1`. No agent-alias map reuse. Real AWS remains unexercised until ceremony — expected.
+
+---
+
+## Empirics
+
+| Check | Result |
+|-------|--------|
+| `test_kms_identity_backend.py` | **12/12** |
+| hardware_identity + device_birth_cert + signing_backends | **pass** (no regression) |
+| PV-CI | **PASS — 183** |
+| Sensor C G1.6 | still LIVE-FRAGILE |
+| Agent alias map contains MFG CA | **no** |
+
+---
+
+## Non-blocking nits (not this-commit fixes)
+
+1. `create_backend` docstring still omits `"kms"` in Supported types.  
+2. Default test should `delenv("MFG_CA_BACKEND")`.  
+3. Optional: fail-closed on unknown `MFG_CA_BACKEND` values.  
+4. Leading-zero r/s unit test is optional polish only.
+
+---
+
+## SHIP criteria vs charter
+
+| Charter item | Status |
+|--------------|--------|
+| KMSIdentityBackend P-256, DER/SPKI→raw, single SHA-256 then DIGEST | ✓ |
+| Config-selected MFG CA, default software | ✓ |
+| Migration doc, no dual-root / live flip / SEL-WMP / G1.6 demotion | ✓ |
+| Tests pin hash-once + wire round-trip | ✓ |
+| Operator owns key provision + re-anchor | ✓ (doc) |
+
+**SHIP.** Commit the four surfaces (`hardware_identity.py`, `manufacturer_root_ca.py`, `test_kms_identity_backend.py`, `docs/path-a-mfg-ca-hsm-migration.md`) alone — leave unrelated dirty tree out.
