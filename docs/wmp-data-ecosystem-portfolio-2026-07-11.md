@@ -144,7 +144,7 @@ buildable-NOW vs gated (named gate) → claim ceiling.
 - **Buildable:** **NOW at N=1 scale** (the rig is the service); gate for scale = population breadth (BCC lever, UC-6).
 - **Ceiling:** `developer_self` scale honesty — one-rig capacity until breadth exists; no QA-outcome guarantees.
 
-### UC-15 · Self-analytics — the gamer consuming their own verified data (demand-side seed)
+### UC-15 · Self-analytics — the gamer consuming their own verified data (demand-side seed) — **BUILT 2026-07-16** (`bridge/vapi_bridge/wmp/self_analytics.py` — pure clean-streak/cadence/authored-progression aggregator + read-only Store adapter over public getters; self-view ceiling rails baked in + guarded; 10 tests; poep/chain untouched)
 - **Produces:** the producing gamer's own dashboard over their verified history — clean-streak trends, authored-kill progression, session cadence — the *self-consumption* loop that makes the data economy sticky before any external buyer exists.
 - **Proof:** none needed beyond what exists — it's the gamer's own data, zero consent friction; rendered from `ruling_validation_log`, KAS records, grind analytics (the `vapi_grind_analytics` surface + GamerView frontend already exist).
 - **Consumer:** the gamer (retention/engagement driver; the demand-side seed of the flywheel).
