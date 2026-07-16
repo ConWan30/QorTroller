@@ -1,0 +1,90 @@
+I'll ground this in the actual FLIP-A rung-2 code — waveform capture, analyzer, and settle threshold wiring — then give a numbered adversarial verdict.## FLIP-A Rung-2 Pre-Commit Verify (grounded)
+
+**Scope read:** `poep_waveform_shape.py` (TAIL_SLOPE_MIN), `poep_live_verify.py` (wave digest/commit), `poep_live_capture.py` (`reflex_curve` + post loop), `poep_waveform_analyze.py` (SETTLE reuse), tests. `poep_enabled` stays False. Audits gitignored.
+
+---
+
+### 1. SETTLE threshold = circular / wrong
+
+**Yes. Gate threshold ≠ science threshold.**
+
+- Gate: `TAIL_SLOPE_MIN = -0.030` in `poep_waveform_shape.py` splits **synth human** (tail ~flat, banked mean ≈ 0.0003) from **synth triangle** (still descending). Docstring already calls settle-to-plateau an **EMPIRICAL ASSUMPTION** for rung 2.
+- Analyzer: `SETTLE_TAIL_SLOPE = TAIL_SLOPE_MIN` → `mean_tail >= -0.030` → `real_reflexes_settle_to_plateau` + SETTLES/RETURNS verdict.
+
+That boolean does **not** answer “do real reflexes settle?” It answers “does mean `tail_slope` clear the constant that was chosen so synth human clears the gate?” A slow return-to-baseline with mean = −0.02 would still get **SETTLES-TO-PLATEAU**. Circular.
+
+**Smallest fix (remove circularity):**
+1. Drop `SETTLE_TAIL_SLOPE = TAIL_SLOPE_MIN` as the science decider.
+2. Always emit distribution: `mean / median / min / max / std` (and ideally p10/p90) of `tail_slope`.
+3. Optional non-gate physical readouts: e.g. `mean(last_quarter) / amp` (still elevated vs back near 0), or fraction with `|tail_slope| < ε` in **normalized units** with ε chosen for “flat within noise,” not copied from the gate.
+4. Keep `real_data_shape_gate_pass_rate` / per-reflex `passes_human_shape_gate` as a **separate FRR-proxy that intentionally uses gate constants**.
+
+Operator sees the answer; the gate is not reified as nature.
+
+---
+
+### 2. Window / latency / tail validity
+
+**Brief understates post length; alignment issue is real.**
+
+Code path:
+
+```271:273:scripts/poep_live_capture.py
+hold_s = cfg.hold_ms / 1000.0
+capture_s = cfg.capture_window_ms / 1000.0
+deadline = time.monotonic() + hold_s + capture_s
+```
+
+Defaults: hold 200 + capture 400 → **~600 ms post**, not ~400. At 8 ms → **~75 samples**, not ~50. Tail = last 25% ≈ **19 samples / ~152 ms**.
+
+| latency | ~peak sample (n≈75) | after-peak | peak in “tail”? |
+|--------|---------------------|------------|-----------------|
+| 80–200 ms | 16–31 | plenty | no |
+| 280–300 ms | 41–43 | ~32 | no (with n=75) |
+| same, **n=50 only** | 41–43 | ~7–9 | **yes — broken** |
+
+- P-WAVE-0 is **onset-aligned** N=40 (~320 ms pure reflex). Live curves are **challenge-aligned**; first 19–35 samples are pre-onset quiet. Features are not onset-sliced.
+- For mid-band latency (~150–200 ms) and default 600 ms post, last-quarter can be post-peak enough for a **flat vs descending** read.
+- For slow end-of-band latency (~280–300 ms) or if someone sets capture short / hold 0, “tail” is still rise/early relaxation → **analyzer cannot answer settle-vs-baseline**.
+- Stimulus is **hold then clear** (~200 ms), not an impulse; “plateau” can be residual grip / force lifecycle, not pure free response.
+
+**So:** default window is *probably* enough for typical 150–200 ms reflexes; it is **not** guaranteed for the full reaction band, and features were designed for onset-aligned synth. Window is a second-order trust problem after #1, not a free pass.
+
+**Smallest capture-side harden (optional, not the #1 fix):** onset-align (trim to peak − k) before shape features, and/or lengthen post to ≥800–1000 ms so slow reflexes have a true settled tail.
+
+---
+
+### 3. Privacy + commitment theater
+
+**Privacy:** yes, beyond gitignore. ~50–75 DC-removed ||accel|| samples is a **motor time series** (richer than latency/peak). Gitignore + not writing waveforms to `bridge.db` is correct hygiene; still: local disk, backups, accidental paste of audit JSON, operator sharing. Aggregates (mean tail, pass rate) are the bankable surface; curves stay operator-biometric. Docstring already says that.
+
+**Commitment:** integrity-only, same class as schedule leg. Host owns nonce, curve, `t_challenge` → can fabricate a consistent `(digest, commitment)` post-hoc. Meaningful for **swap/edit detection** on a package you already trust the capture path of; **not** anti-malicious-host authenticity. Code states this; claiming more would be theater. Acceptable as labeled integrity MAC, not presence evidence.
+
+---
+
+### 4. Correctness bugs
+
+| Item | Status |
+|------|--------|
+| `reflex_curve` empty post | `[]` — OK |
+| Empty pre | baseline `0.0` → **not** DC-removed (absolute mag). Rare if pre ring always filled; edge-case honesty gap |
+| Round 0.1 | once in curve, again in digest — stable, OK |
+| Integrity recompute | digest then commitment; swap test covers — OK |
+| Empty `waveform` / no digest fields | `if waveform:` skips bind; analyzer skips empty — OK |
+| **Peak in last quarter** | **real science bug:** pure late rise / pure ramp can get **positive** `tail_slope` and clear `≥ -0.030` → false “SETTLES” while still ascending. Tail mean for overshoot also includes the peak when peak is in the last 25% |
+| Mean-only settle | one weird curve can flip the boolean; no median/IQR |
+| Gate FRR on challenge-aligned curves | not the same distribution as onset-aligned P-WAVE-0 synth — pass rate is a rough proxy only |
+
+No crash-level bug that blocks the capture plumbing; the **verdict logic** is the load-bearing defect.
+
+---
+
+## VERDICT: **SHIP-WITH-FIX**
+
+Must-fix before treating the analyzer as trustworthy science:
+
+1. **Decouple science from `TAIL_SLOPE_MIN`.** Report `tail_slope` distribution; do not decide SETTLES/RETURNS with the gate constant. Optionally add a physical settle fraction; keep gate pass rate as a separate labeled FRR-proxy.
+
+Willing to say: **the current boolean is not yet trustworthy.** Capture + digest + integrity path are fine as de-risk plumbing; the headline verdict is still synth-assumption re-injection.
+
+Would **BLOCK** only if this PR claimed “real data confirms P-WAVE-0 settle assumption” or flipped `poep_enabled`. As “store curves + run features,” ship after #1 so the next rig session does not bank a circular PASS/FAIL.

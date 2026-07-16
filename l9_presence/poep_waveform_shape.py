@@ -99,6 +99,7 @@ def waveform_shape_features(w: list[float]) -> dict:
         "hf_ratio": hf_ratio,
         "rise_decay_asym": rise_samples / decay_samples,
         "tail_slope": tail_slope,
+        "peak_frac": pidx / max(1, n - 1),          # where the peak sits (rung-2: >0.75 => still rising, no tail)
     }
 
 

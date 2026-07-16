@@ -59,6 +59,25 @@ def schedule_commitment(*, nonce: str, delay_ns: int, t_arm_ns: int, t_challenge
     return hashlib.sha256(body).hexdigest()
 
 
+_WAVE_DOMAIN = b"QORTROLLER-POEP-v0-WAVEFORM"
+
+
+def waveform_digest(samples: list[float]) -> str:
+    """Stable digest of the raw post-fire reflex curve (rung 2). Rounds to 0.1 LSB for byte-stability."""
+    body = "|".join(f"{round(float(x), 1)}" for x in samples).encode()
+    return hashlib.sha256(body).hexdigest()
+
+
+def waveform_commitment(*, nonce: str, wave_digest: str, t_challenge_ns: int) -> str:
+    """FLIP-A rung 2: bind the captured reflex WAVEFORM to THIS challenge's nonce, separate domain from
+    the response + schedule commitments. So a third party auditing a candidate live package can confirm
+    the stored waveform is the one that answered this challenge (not swapped in). Integrity binding only;
+    like the schedule leg it is NOT proof against a malicious capture host (FLIP-B / firmware-attested)."""
+    body = _WAVE_DOMAIN + b"|" + nonce.encode() + b"|" + wave_digest.encode() + b"|" + \
+        str(int(t_challenge_ns)).encode()
+    return hashlib.sha256(body).hexdigest()
+
+
 @dataclass(frozen=True)
 class LiveChallenge:
     device_id: str
