@@ -1,0 +1,87 @@
+I'll adversarially verify B4 SEL-v0 against the three hard boundaries and the six hammers — reading the landed module/tests first, then red-teaming the anti-self-scoring and graduation-gate surfaces.Probing collusion, casing spoof, multi-source graduation, and whether anything wires SEL into real auto-persist:## B4 SEL-v0 — Adversarial Verify
+
+**Tests:** 14/14 pass · `sel_enabled` default False · no live wire to auto-persist/act  
+**Scope claim:** pure scorer + stub adapter over **injected** labels — honest in prose
+
+---
+
+### FINDINGS (severity-first)
+
+| ID | Sev | Finding | Empirically confirmed |
+|----|-----|---------|----------------------|
+| **F1** | **HIGH** | **Peer collusion graduates.** `is_external_label` only checks `src_agent != steward`. Sentry labeling Guardian PCRA ACCEPTED×20 (and reverse) → both `GRADUATE_TASK_CLASS`. | yes |
+| **F2** | **HIGH** | **Case spoof bypasses anti-self.** `steward=guardian` + `label_source_agent=Guardian` → external=True → flood graduates. No `.casefold()` / allowlist. | yes |
+| **F3** | **HIGH (ingestion-bound)** | **Source identity is free-form.** Claiming `label_source_agent="operator"` is accepted with zero authenticity. Pure scorer cannot verify truth — **only trusted ingestion can**. Acceptable for v0 **iff** stewards never write label rows; **not** documented as a load-bearing invariant in code/tests. | by design |
+| **F4** | **MED–HIGH** | **Graduation bar too weak for “remove human pre-review”.** Defaults: n≥20, precision≥0.90 (`prec < 0.90` only fails → **18/20 = 0.90 graduates**). Single source `operator_decision` alone graduates. 20× peer `adversarial_holdout` ACCEPTED graduates. 20× `CHALLENGE_SURVIVED` alone graduates. `CHALLENGE_FELL` diluted when `require_challenge_survival=False` (19 ACCEPTED + 1 FELL → 0.95 GRADUATE). No multi-source diversity gate. | yes |
+| **F5** | **MED (framing)** | **Auto-persist ≠ spend, but ≠ free.** `grants_if_accepted` is prose-only; no apply path. Still: graduated auto-persist of **DPIG SUSPEND rec** / **MPJA anchor preimage** into an executor-visible store moves closer to two-key acts if v0.1 treats “graduated persisted draft” as pre-approved. **v0 has no wiring** — good; framing should say *persist draft artifact only; act path still two-key + estimate-first, never auto-armed by SEL*. | wiring absent |
+| **F6** | **LOW** | **Chain delimiter ambiguity.** Pipe-separated free strings: `steward="a\|b", task="c"` collides with `steward="a", task="b\|c"` (same head). Label/source use single bytes (good). Closed STEWARDS set makes practical risk low; not length-prefix hardened. | yes |
+| **F7** | **LOW** | `n_rejected_self_labels` also counts **unknown** labels from true external agents (not only self). Naming overclaims. | yes |
+| **F8** | **OK** | Adapter STUB + default-OFF + refuses fabricate; graduation never auto-applied; CANDIDATE tag / not FROZEN / never spend in strings — **honest vs B1/B2/B3**. Module does **not** claim live evolution. | yes |
+
+---
+
+### HAMMER answers
+
+**1. Anti-self-scoring**  
+- **Defends:** same-id self-label flood (`src_agent == steward`) — tested, works.  
+- **Does NOT defend:** (a) **mutual back-scratching** among stewards, (b) **case spoof**, (c) **forged `label_source_agent`** until ingestion binds writer identity to source class.  
+- **v0 honest read:** scorer is a filter over claimed fields, **not** an anti-collusion / anti-forgery system. Ingestion authenticity is the real rail (v0.1).
+
+**2. Graduation gate**  
+Defaults are **too soft** as a mechanical green light for removing pre-review: small-n Wilson floor for 18/20@0.90 is ~0.70; no holdout diversity; challenge OFF by default is OK for B5 sequencing **only if** GRADUATE is treated as advisory draft. As written, tests celebrate `GRADUATE_TASK_CLASS` on operator-accept spam alone — over-weights the bar for the charter question.
+
+**3. Task-class vs spend**  
+- Code path: **no spend, no chain, no git, no auto-apply.** Spend boundary holds for v0.  
+- Residual: auto-persist of high-severity drafts (DPIG/MPJA) is an **authority** escalation even without IOTX — keep act gates independent forever; never let SEL flip executor flags.
+
+**4. Chain**  
+Sound as a **candidate** integrity chain (genesis, order+tamper sensitive, domain-tagged). CANDIDATE claim is honest (real SHA-256 ≠ FROZEN family). Fix delimiter ambiguity later (length-prefix / structured encode); not a ship-blocker alone.
+
+**5. Adapter**  
+Honest stub; matches B1–B3 posture. Missing: tests for `sel_enabled` False/True adapter shapes (minor).
+
+**6. Scope honesty**  
+Docstring + stub note are correct: pure scorer + stub, not running evolution. No overclaim of live SEL. Config comment aligned.
+
+---
+
+### What is solid
+
+- External-only precision math; self-flood → `HOLD_INSUFFICIENT_SAMPLES`  
+- Challenge-survival gate shape when flag ON (survive≥1 **and** fell==0)  
+- Spend/never-auto-apply prose rails  
+- Default-OFF capability packaging  
+- No store writes, no graduation apply path  
+
+---
+
+### VERDICT: **SHIP-WITH-FIX**
+
+Not BLOCK: pure draft scorer, stubbed, default-OFF, no auto-apply/spend.  
+Not SHIP as-is: **F1+F2** make “THE anti-gaming rail” overstated for a primitive that later **removes human review**.
+
+#### Minimal this-commit (required before operator commit)
+
+1. **Casefold** steward + `label_source_agent` before `!=` (and strip).  
+2. **Bind source → allowed agents** in `is_external_label`:
+   - `operator_decision` → only `{"operator"}` (casefolded)
+   - `adversarial_holdout` → `src_agent` **not** in STEWARDS (holdout oracle / operator, not peer)
+   - `challenge_graph` → any agent **≠** scored steward (peer challenge OK)
+3. **Pin tests:** collusion ACCEPTED flood via peer steward **fails**; case spoof fails; operator_decision from `sentry` rejected; holdout from peer steward rejected; challenge from peer still external.
+
+#### Strongly recommended this-commit or hard v0.1 pin (do not wire auto-persist until done)
+
+4. **Multi-source floor for GRADUATE:** require `operator_decision` ∈ `sources_seen` **and** (for production bar) ≥1 `adversarial_holdout` when available; challenge remains B5 flag.  
+5. Raise bar or document: e.g. `min_samples≥50` **or** keep 20 but treat GRADUATE as **advisory only** with explicit operator re-ack (already true for apply — keep it).  
+6. Length-prefix `chain_head` body fields (or forbid `|` in free strings).  
+7. Adapter tests + rename rejected counter if you touch that path.
+
+#### Explicit out-of-scope (must not be claimed closed by B4)
+
+- Label authenticity / Store writer binding (F3)  
+- Full anti-collusion under compromised peer stewards writing challenge edges  
+- Live auto-persist wiring  
+
+---
+
+**Bottom line for operator:** Ship the pure scorer **after** agent-binding + casefold fixes (and tests). Without those, do not let this module’s `GRADUATE_TASK_CLASS` become the story for removing pre-review — F1/F2 show the rail is incomplete.
