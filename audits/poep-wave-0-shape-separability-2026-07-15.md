@@ -60,3 +60,28 @@ post-fire IMU window, hashed into the candidate commitment, consent-bound, gitig
 settle-to-plateau assumption on real reflexes**, not because separability is proven. Rung 2 is rig-gated;
 rung 4 (the HIL rig) is the real adversarial test. `poep_enabled` / `L6B_ENABLED` / `L6_CHALLENGES_ENABLED`
 stay **False**. 6 P-WAVE-0 tests green; PV-CI 183; no chain/FROZEN/PoAC edit.
+
+## Rung-2 FIRST CLEAN LIVE RESULT (2026-07-16, registered Edge) — caveat 2 answered directionally
+First real reflex-waveform capture on the registered Edge (`--sharp`: single 120ms jolt, 900ms window →
+clean stimulus-free tail). Aggregates only; per-reflex curves are operator biometric (gitignored). N=8
+challenges, all felt + reacted (class HUMAN, peaks 1.4k–4.4k LSB); 6/8 live-verify PASS.
+
+**The settle-vs-baseline answer (P-WAVE-0 caveat 2):** of 7 determinate reflexes —
+**settled=4 · slight_drift=3 · returning=0**; median tail_slope **−0.004** (≈ flat). **Zero return-to-baseline.**
+So on real data the reflexes settle / mildly drift — they do NOT relax to baseline. This **directionally
+supports** the `tail_slope` settle assumption the P-WAVE-0 triangle-separation hinged on. Honest bounds:
+N=7, one operator, one session; 3/7 are *slight_drift* (not crisp settle); and the **shape-gate pass rate is
+0.0** — real reflexes settle-ish but do NOT match the synthetic damped-oscillator model, so the gate
+thresholds need real-reflex recalibration (separate from the settle question).
+
+**Three banked rig findings (FLIP-A ladder inputs):**
+1. Settle assumption holds directionally (returning=0) — the shape path stays alive.
+2. **The [80,300] ms reaction band is mis-calibrated for surprise-mode** — genuine surprise reactions ran
+   216–318 ms (one failed by **1 ms** at 301 ms). Recalibrate the band on the surprise distribution
+   (grok round-18/21 rung 5) before it's used as a hard gate.
+3. Shape gate needs real-reflex recalibration (0.0 real-data pass rate).
+
+**Rig-hardware note:** the Edge adaptive-trigger actuator jammed mid-session (RIGID went unfelt); recovered
+under vigorous PULSE and then fired reliably on brief `--sharp` jolts. Reliable-feel default is PULSE +
+sustained re-issue (`.\scripts\poep_live.ps1`); clean-shape is `--sharp` (`-Sharp`) with the 900 ms window.
+`poep_enabled` stays False.
