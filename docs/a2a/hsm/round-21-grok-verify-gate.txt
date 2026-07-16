@@ -1,0 +1,46 @@
+Verifying Ceremony A against the round-20 charter: reading the module, cosign pin path, and tests, then running them.Confirming pin-path closure and one edge case with a quick adversarial script:## Ceremony A VERIFY — findings first
+
+**11/11 tests green. Adversarial probes pass. Dormant (no main/operator_api consumer).**
+
+---
+
+### CLOSED
+
+| Hammer | Result |
+|--------|--------|
+| **1. PIN / r18 F4** | **CLOSED at this gate.** Path: `is_task_class_graduated` → `_require_pin` → `verify_dual_signed_attestation(r, guardian_pubkey_hex=PIN)` → `verify_graduation_attestation(r, PIN)` → `load_der_public_key(PIN)` (pin truthy ⇒ **never** `record["pubkey_hex"]`). Wrong-key test + probe: attacker-signed excluded under real pin; graduates only under attacker pin; display-tamper of embedded pubkey still verifies under pin. |
+| **2. State machine** | **Correct.** max-`ts_ns` wins; ACCEPT-coherent / REJECT / INCOHERENT / empty map as specified. **Latest incoherent overrides earlier coherent ACCEPT** → `threshold_incoherent` (fail-closed on latest dual-signed package) — right call for v0. |
+| **3. Threshold rebind** | **Correct.** `n_labels>=min_samples AND precision_milli>=precision_floor_milli` on ACCEPT only; fields are preimage-bound (tamper breaks `fully_authorized`). Exact floor / exact N → coherent (`>=`). |
+| **4. Dropped-REJECT** | **Documented honestly** (module docstring + `_NOTE`): availability/ledger-custody, not forge. No overclaim. v0.1 store/hash-chain is the right fix site. |
+| **5. FROZEN boundary** | **Clean.** Imports only `steward_sel_cosign`. No `config`, no `operator_dual_key_present`, no O3-supersede. `demonstrated()` named, pin-gated, **wired nowhere**. |
+| **6. Fail-closed hygiene** | Bad/missing fields → `except` skip; non-ACCEPT/REJECT fully_authorized → not entered into `valid`; empty → `no_valid_record`. Never spurious graduate. |
+
+**F2 / F3 / F5:** ordered revoke + re-ACCEPT, both incoherent paths, steward+task filter (logic + same-steward cross-task probe) — OK.
+
+---
+
+### RESIDUALS (not BLOCK)
+
+1. **Cosign/attestation still allow pin-less verify** (`pubkey_hex or record["pubkey_hex"]`; `guardian_pubkey_hex=None` → embedded trust). **F4 residual is at the lower API**, not this gate. Ceremony A consumption forces pin. Optional later: fail-closed when pin omitted at cosign.
+2. **Equal `ts_ns`:** stable sort → last-in-list wins; reorder of equal-ts ledger flips verdict. Consumer must total-order (or unique ts). Doc nit only.
+3. **F5 test** only dual-mismatch (steward∧task); code filters both axes — coverage thin, not a code gap.
+4. **Dropped-REJECT / no hash-chain** — intentional v0 limit; keep loud in any auto-persist design.
+
+---
+
+### Hammer answers (short)
+
+1. **r18 F4 at gate: fully closed.** No path in this module trusts embedded `pubkey_hex`. Residual only if someone calls cosign/attest without pin.
+2. **Latest-incoherent over earlier ACCEPT: yes, fail-closed.** Equal-ts: last-in-list (stable) — ledger discipline, not nondeterminism in pure math.
+3. **Threshold: yes; `>=` matches SEL floor semantics.**
+4. **Dropped-REJECT note: sufficient, neither over- nor under-claim.**
+5. **No O3 / dual_key_present leak.**
+6. **Cut is right; dormancy correct.** Missed footgun: equal-ts only (residual).
+
+---
+
+## VERDICT: **SHIP**
+
+No this-commit fix required. Residuals are v0 docs / lower-layer pin-optional / equal-ts consumer discipline — not graduation-gate bugs.
+
+Operator may commit Ceremony A as-is.
