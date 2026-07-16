@@ -1,0 +1,121 @@
+Adversarial verify B6 (PGSW) against the six hammers — starting with the module, tests, and B1–B5 severity/presence conventions.# B6 PGSW — adversarial verify (charter a)
+
+**14/14 pass · arc suite 89/89 · PV-CI assumed 183 held · 0 IOTX**
+
+---
+
+## VERDICT: **SHIP-WITH-FIX** (doc honesty only — no logic change required)
+
+Logic is sound and fail-closed on the load-bearing rails. Before seal, land a short honesty block in the module docstring (items under **this-commit**). No functional BLOCK.
+
+---
+
+## Findings (severity-first)
+
+### F1 — **DESIGN / HIGH (answer to #5)** — inversion is real as **timeliness**, not as **suppression**
+**Q:** Can force-CLOSED disable HIGH oversight when it matters?
+
+| Layer | What happens if adversary denies presence |
+|--------|-------------------------------------------|
+| Detection / draft emission | Still runs — stewards still produce findings |
+| Disposition | HIGH/MED → `BACKLOG`; LOW stays `ACTIVE` |
+| Acting / spend | Still impossible (read-only, default-OFF, 0 IOTX) |
+
+**Interpretation (load-bearing):**  
+PGSW does **not** gate *detection*. It gates **ACTIVE disposition of HIGH-severity agentic reach** on operator liveness. That is human-in-the-loop for *when* HIGH drafts are “live,” not a kill-switch on scanning.
+
+**Force-CLOSED attacker gains:** delay of HIGH ACTIVE surface (no present operator to review/act anyway).  
+**Force-CLOSED attacker does *not* gain (if consumers honor semantics):** silent delete of CEILING_OVERCLAIM / other HIGH drafts.
+
+**Footgun that *would* make inversion lethal:** a downstream that treats `BACKLOG` as drop → presence-DoS becomes full HIGH censorship. That is **outside this module**; this commit must pin the consumer contract: **BACKLOG is durable, queryable, and surfaces on reopen — never silent-drop.**
+
+**Is the design right?**  
+Yes for draft-only stewards: HIGH without a present operator is lower-value noise; parking is coherent. Complementary path already exists: **LOW stays ACTIVE** when closed (e.g. PCRA `UNBANKED_BUILD`). Anything that must fire *regardless of presence* must not be modeled only as HIGH+ACTIVE.
+
+**Not a logic bug. Document as load-bearing honesty rail before arc close.**
+
+---
+
+### F2 — **PASS** — KAS hygiene (#1) is **allowlist**, not substring open-path
+Open path:
+
+```text
+live_session_active  OR  (verdict == "SYNCHRONIZED" AND fresh)
+```
+
+`"AUTHORED" in verdict` only shapes the **closed** reason. Probed closed:  
+`AUTHORED_SESSION`, `AUTHORED`, `WITNESSED*`, `DEFERRED_AUTHORED_SESSION`, `AUTHORED_PRESENT`, `PARTIAL_SURFACES`, `UNVERIFIABLE`, `FAKE_SYNCHRONIZED`, `SYNCHRONIZED_OR_AUTHORED`, empty, None.
+
+No authorship shape opens the window. Exact `SYNCHRONIZED` allowlist matches PoSP enum (`SYNCHRONIZED` | `PARTIAL_SURFACES` | `UNVERIFIABLE`). Hygiene is correctly defensive against **miswiring KAS into `posp_verdict`**.
+
+Minor: `posp_verdict` is not `.strip()` → `" SYNCHRONIZED "` stays closed (fail-closed; fine).
+
+---
+
+### F3 — **LOW / DOC** — freshness / replay (#2)
+- `posp_ts ≤ now ≤ posp_ts+τ` — future-dated rejected; exact τ edge inclusive.
+- **v0 limit:** trusts injected `posp_ts_ns`; cannot distinguish fresh mint vs re-presented record with a recent ts. Replay resistance lives upstream (PoSP/PoSR/Store), not here.
+- `τ=3600s` is policy, acceptable for default-OFF draft disposition; not a chain grant.
+- `live_session_active=True` alone opens with **no attestation** — pure injector trust (honest for pure function; v0.1 adapter must not take that bool from untrusted callers).
+
+Document ts-trust + “no replay binding at PGSW layer” as v0 limit. **Not this-commit code.**
+
+---
+
+### F4 — **LOW / SCOPE** — severity gate (#3)
+- Closed: only `LOW` ACTIVE; `MED`/`HIGH` BACKLOG. Unknown → remapped to `HIGH` → BACKLOG when closed. Correct fail-closed.
+- **PCRA** uses `HIGH`/`MED`/`LOW` — clean map.
+- **MPJA** emits join verdicts (`JOIN_*`), not severity.
+- **DPIG** emits recommendations (`RECOMMEND_*`), not severity.
+
+Doc claim “wraps PCRA / MPJA / DPIG” is **API-level intent**, not automatic severity normalization for all three. Overclaim risk if someone assumes MPJA/DPIG auto-gate without a severity map. **v0.1 / consumer mapping** — not a pure-logic fail.
+
+---
+
+### F5 — **PASS** — read-only (#4)
+`gate_draft` returns disposition only; never deletes. Note text matches behavior.  
+Real risk is **consumer misuse of BACKLOG** (see F1), not PGSW itself.
+
+---
+
+### F6 — **PASS** — rails / adapter (#6)
+- `cfg.pgsw_enabled` default `False` in config.
+- Enabled adapter returns honest STUB; **refuses to fabricate presence** (fabricated OPEN = unearned HIGH authority). Matches B1–B5 pattern.
+
+---
+
+### F7 — **NIT**
+- `max_active_severity({"window_open": "yes"})` → HIGH (truthy non-bool). Safe if window always from `presence_window`.
+- No test for live_session precedence over `AUTHORED` (behavior correct: open via `live_session`).
+
+---
+
+## Hammer scorecard
+
+| # | Topic | Result |
+|---|--------|--------|
+| 1 | KAS hygiene | **PASS** — exact SYNCHRONIZED allowlist; authorship cannot open |
+| 2 | Freshness / replay | **PASS + v0 limit** — future rejected; ts-trust / no PoSR at this layer |
+| 3 | Gate semantics | **PASS for PCRA** — fail-closed unknown→HIGH; MPJA/DPIG need severity map later |
+| 4 | Read-only | **HELD** — disposition only; BACKLOG≠drop is consumer contract |
+| 5 | Inversion | **Design OK** — delay of HIGH ACTIVE under presence-DoS, not detection kill; document |
+| 6 | Adapter rails | **HONEST** — default-OFF, no fabricate |
+
+---
+
+## This-commit (minimal) vs v0.1
+
+**This-commit (doc only — recommend before seal):**
+1. **Inversion honesty:** force-CLOSED delays HIGH ACTIVE; does not suppress drafts; BACKLOG must be durable/queryable/never silent-drop.
+2. **Signal trust:** pure function trusts injected PoSP ts + `live_session_active`; no replay binding; v0.1 Store path must not invent OPEN.
+3. **Severity surface:** `gate_draft` is HIGH/MED/LOW only; MPJA/DPIG need explicit severity mapping if wrapped.
+
+**Optional one-liner tests (nice, not required):** live+AUTHORED → open via `live_session`; whitespace SYNCHRONIZED stays closed.
+
+**v0.1:** Store extraction of latest PoSP + live session; BACKLOG persistence/API; severity maps for MPJA/DPIG; optional PoSR/recency bind on PoSP age.
+
+---
+
+## Bottom line
+
+Pure window + disposition logic is correct, KAS-safe, fail-closed, default-OFF, stub-honest. **#5 is the real question and the answer is: presence-gating HIGH *authority disposition* is right for this arc; presence-gating *detection* would be the suppress-by-absence hole — this module does not do that.** Pin that in the docstring and **SHIP**.
