@@ -1,0 +1,74 @@
+Adversarial verify of B5 against the six hammers. Reading the module, tests, and B4 SEL composition for collusion/self-score vectors.## B5 adversarial verify (charter a) — findings first
+
+**Tests:** 14/14 pass. Module matches pasted draft.
+
+---
+
+### HIGH
+
+**F1 — `resolve_challenge` does not re-check the graph.**  
+Edge / self-challenge rails live only on `issue_challenge`. Resolve only checks `resolver=="operator"`, `status=="OPEN"`, outcome ∈ {SURVIVED,FELL}.
+
+Probed:
+- Forged OPEN with **unauthorized** edge (`sentry→guardian.PCRA`) → **RESOLVED** + SEL-valid `challenge_graph` label (`is_external_label=True`).
+- Happy-path `issue_*` cannot mint that edge; **resolve is the mint** and skips the edge set.
+
+Claimed rail “only authorized edges” is false at the label-production site. Same trust class as B4 F3 if you treat all challenge dicts as pure injects — but B5’s job is to *define* legal edges; re-validate on resolve is defense-in-depth and ~5 LOC.
+
+---
+
+### MEDIUM
+
+**F2 — `resolver="operator"` is a free string (B4-F3 class).**  
+Casefold/strip only. Spoofable at the call site. Authenticity = ingestion/caller trust, not crypto. Honest, but **not stated on B5 resolve** (B4 documents it; B5 should mirror one line).
+
+**F3 — OPEN is not consumed.**  
+Resolve is pure; original stays `OPEN` → same challenge can be resolved N times → N labels if ingestion is naïve. v0.1: challenge_id + status transition / single-mint.
+
+---
+
+### LOW / NOTES (not blocks)
+
+**F4 — 3-cycle collusion.**  
+No reverse edges → **pairwise A↔B backscratch impossible**. Trilateral A→B→C→A all SURVIVED **does** give every steward one `CHALLENGE_SURVIVED` **if the operator rubber-stamps**. Real anti-collusion control is **operator-only resolve**, not topology. B4 still blocks pure-challenge graduation (`HOLD_NO_OPERATOR_LABELS`). Topology reduces mutual farming; it does not replace the operator.
+
+**F5 — Indirect self-benefit.**  
+Issue alone: no score. Resolve label always `steward=target`, `label_source_agent=challenger`. Mutate target→challenger → SEL rejects (`is_external_label=False`). No “challenger was right” positive. **Direct self-score: impossible under SEL composition.** Indirect: only via operator granting others’ survival (or F1 forge) — not via issue.
+
+**F6 — Absence ≠ approval.**  
+No path from zero challenges → positive label. REFUSED / non-OPEN unresolvable. Adapter STUB does not fabricate. **Held.**
+
+**F7 — Edge semantics.**  
+G→S.MPJA / S→C.DPIG / C→G.PCRA is skill-separation (audit join / provenance of sale / residue-vs-noise), not random. Competence is design judgment, not measured. Acceptable for v0 lock.
+
+**F8 — Rails.**  
+Draft-only issue, no score mutation in B5, adapter stub, `sel_enabled` gate, no act/git/chain. **Held** except F1 gap on resolve.
+
+---
+
+### Hammer map
+
+| # | Result |
+|---|--------|
+| 1 Can’t raise own score | **PASS** direct; SEL rejects self-source even on mutated dict |
+| 2 Collusion | **3-cycle blocks pairwise**; trilateral needs operator; operator is real control |
+| 3 Operator-only | **String check only** — F2 / same as B4 F3 |
+| 4 Absence ≠ approval | **PASS** |
+| 5 Edge semantics | **Plausible design**, not proven — F7 |
+| 6 Rails | **Mostly held**; F1 hole at resolve mint |
+
+---
+
+### VERDICT: **SHIP-WITH-FIX**
+
+Not BLOCK: pure draft logic, no act path, self-score rail composes with B4, absence rail holds, tests green.
+
+**This-commit (minimal):**
+
+1. In `resolve_challenge`, after OPEN check: refuse if not `may_challenge(challenger, target, task_class)` or casefolded self-challenge; `sel_label=None`.
+2. One-line honest note: resolver identity is caller/ingestion trust (mirror B4 F3).
+3. Optional test: unauthorized OPEN dict → resolve REFUSED (pins F1).
+
+**v0.1 (not this commit):** status OPEN→RESOLVED consume / challenge_id single-mint (F3); real ingestion never steward-writes labels.
+
+Operator: apply F1 fix then commit, or accept F1 as “ingestion purity only” and SHIP as-is with F1 logged as known limit. I recommend the 5-line fix.
