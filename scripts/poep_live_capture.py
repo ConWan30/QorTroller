@@ -502,8 +502,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sharp", action="store_true",
                         help="Clean-shape mode: a single brief jolt (120ms, NO re-issue) -> clean reflex "
                              "waveform for rung-2 shape analysis. Needs a reliable actuator (post-reset).")
-    parser.add_argument("--capture-ms", type=float, default=400.0, dest="capture_ms",
-                        help="Post-probe IMU capture window (ms)")
+    parser.add_argument("--capture-ms", type=float, default=900.0, dest="capture_ms",
+                        help="Post-probe IMU capture window (ms) — long enough for a slow surprise reaction "
+                             "(peak up to ~400ms) to still leave a settled tail (grok round-23)")
     parser.add_argument("--pre-samples", type=int, default=50, dest="pre_samples",
                         help="Pre-probe baseline samples")
     parser.add_argument("--poll-interval", type=float, default=0.008, dest="poll_interval",
