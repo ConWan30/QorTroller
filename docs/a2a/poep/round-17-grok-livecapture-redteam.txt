@@ -1,0 +1,79 @@
+I'll red-team the claimed finding against the actual live-run implementation and auditor, not the narrative.## Adversarial read — POEP-LIVE-1
+
+Grounded in `scripts/poep_live_capture.py`, shared `_fire_probe_sync` (`scripts/l6b_desk_reaction_session.py`), and `l9_presence/poep_live_verify.py`. Same primitive on both arms: print → 50×~8 ms baseline (~400 ms) → `probe_ts` at force write.
+
+---
+
+### 1. Confound on the ~75 ms “priming” claim
+
+**Partially real direction, over-attributed mechanism.**
+
+| Factor | Effect |
+|--------|--------|
+| Shared post-cue arm | ENTER corpus and live both get the same print + ~400 ms baseline before fire. Live is *not* pure surprise for the last ~400 ms; corpus is not pure “ENTER then instantaneous fire” either. |
+| What actually differs | Long **unknown** foreperiod (3–12 s) vs **operator-initiated** arm (ENTER). That *is* a classic foreperiod / readiness effect — but it’s mixed with session, fatigue, attention, grip, and N=8 vs corpus N≈52. |
+| Measurement match | Same `_fire_probe_sync` + same latency definition → not a clock-definition artifact. Good. |
+| Ceiling claim | Aggregate check: **one** trial is within ~15 ms of 300 (286); the next is ~19 ms off (281). “2 of 8 within ~15 ms” is soft. |
+| Print as micro-prime | Live path still offers a discrete “collecting baseline” I/O event ~400 ms before stimulus. That can **shorten** live latency vs true silent surprise — so the true surprise–corpus gap may be **≥** 75 ms, not smaller. Confound works both ways. |
+
+**Sound piece:** live latencies sit higher in the band (mean 253 vs µ≈178); band/RBM from primed data is a real risk for false FAIL near 300.
+
+**Over-claimed piece:** “exactly priming,” “~75 ms is the priming effect,” and “any future model **must** recalibrate on surprise” as if mechanism and necessity were proven. Honest version: *provisional: surprise/foreperiod shifts mean upward; N=8, confounded tell; recalibration is the safe default, not a closed finding.*
+
+---
+
+### 2. Console print + fixed ~400 ms baseline = reactive side-channel
+
+**Yes — current artifact is weaker than “unpredictable live onset” marketing.**
+
+- Print fires **before** baseline collection; baseline is **fixed** length (~400 ms); force write is after that.
+- A process watching the console (or any parent that sees stdout) gets **~400 ms free arm** then fires a canned in-band IMU pulse → lands in [80,300] with high probability.
+- P-LIVE-0 already carves out reactive bots, but this is worse: the “live unpredictable” claim is **false for the final 400 ms** if the adversary can see host I/O. Pre-scheduled macros remain defeated by the long secret delay; **onset-coupled** macros are not, once the tell exists.
+
+**Minimal fix (ordered):**
+1. **Delete** pre-fire `print("Baseline IMU...")` (and any other pre-fire UI).
+2. Prefer **continuous silent IMU ring**; fire from ring without a discrete “start baseline now” phase (or randomize pre-sample count *after* arming, never printed).
+3. Optional: log arming only **after** `probe_ts` (post-hoc).
+
+Catch trials alone do **not** remove the tell on go trials; silence does.
+
+---
+
+### 3. Nonce-derived delay vs independent CSPRNG
+
+**Pre-fire unpredictability:** equivalent if nonce is `secrets`-fresh and stays secret until after fire. `delay = f(nonce[:8])` does not leak while secret.
+
+**Leak / hygiene paths (real, not theoretical theater):**
+- **Bit double-duty:** schedule entropy and binding material share the same secret. Any early partial leak of nonce bits (logs, crash dumps, debug) leaks schedule.
+- **No schedule binding in the commitment:** commitment is `device_id ‖ nonce ‖ feature_digest ‖ t_response` — **not** `delay_s` / arm wall-clock. Offline auditor never proves “fire matched nonce-derived delay”; it only proves post-hoc latency vs recorded `t_challenge`. The docstring claim that a verifier can confirm fire time was nonce-derived is **stronger than the crypto**.
+- **Mod bias:** `int(nonce[:8],16) % span_ms` is fine for 3–12 s UX, not a crypto issue at this scale.
+
+**Stronger design:**  
+`delay ← CSPRNG independent`; `nonce ← CSPRNG for binding only`; optionally commit `H(nonce ‖ delay ‖ t_arm)` or include `t_challenge` in the challenge package. Separation means schedule proofs don’t nibble binding entropy, and you can audit schedule without overloading the response nonce.
+
+**Not weaker for P-LIVE-0’s stated goal (anti-replay / anti-preschedule)** while nonce stays secret. Weaker as **protocol hygiene** and for any future “prove schedule was committed.”
+
+---
+
+### 4. Catch trials vs next cheap anti-reactive move
+
+**Catch trials:** sound as a **false-alarm channel** (go/no-go). A bot that always jerks on the print (or on any host tell) fails no-go; humans mostly produce no peak. Raises bar vs *always-react* and *tell-triggered* bots. Does **not** beat a bot that senses **actual** R2 force / HID actuator report. Human false alarms need a rate budget (anxiety twitch ≠ auto-fail forever).
+
+**Cheaper than waveform-shape?** Yes — boolean sham + same peak/latency pipeline; no storage/shape model.
+
+**Single highest-leverage next move:**  
+**Kill the pre-fire I/O tell and silent continuous baseline** so the only reliable onset is physical force. That upgrades *every* go trial. Then add **catch trials** (second, still cheap) against residual always-fire policies. Waveform capture is higher cost and still secondary without clean onset coupling (round-16 P-LIVE-0 hierarchy still holds).
+
+---
+
+### Corrections to banked narrative (compact)
+
+- 8/8 PASS + r2=0 + commitment path on Edge: **honest candidate evidence** (replay/preschedule bar).
+- “Surprise harder than primed corpus” as **hypothesis with direction**: ok.
+- “~75 ms = priming” + “must recalibrate” as settled: **too hard**.
+- Near-ceiling pressure: real risk; exact “2 within 15 ms” is soft.
+- Reactive scope: claim ceiling in the audit is fine; **implementation** undercuts “unpredictable onset” until the tell is gone.
+
+---
+
+**Verdict: OVER-CLAIMED** — direction of slower live reflexes is credible; packaging it as clean priming magnitude + mandatory recalibration from N=8 with a shared 400 ms tell is stronger than the evidence supports.

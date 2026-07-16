@@ -1,0 +1,121 @@
+I'll ground this in the live capture path, offline auditor, and adversarial-nulls harness so the roadmap is specific to what's actually shipping.## FORWARD CONSULT — F-POEP-LIVE-1 → next bankable tier
+
+Grounded in: `_fire_probe_sync` prints `"Baseline IMU (N)..."` then fixed `pre_samples` then `L6TriggerDriver._sync_write`; commitment is `(device_id, nonce, feature_digest, t_response)` only; delay = `f(nonce)`.
+
+---
+
+### 1. BUILD ORDER + minimal set
+
+**Re-rank: (i) then (ii); (iii) next, not same PR.**
+
+| # | Work | Why |
+|---|------|-----|
+| **(i) FIRST** | Kill pre-fire I/O tell: no print; continuous silent IMU ring; **randomize** pre-sample count *or* continuous ring with no “window start” boundary; `t_challenge` = force-write instant only | Closes the free ~400ms arm. Highest adversary value. |
+| **(ii) SAME MILESTONE (small)** | Independent CSPRNG `delay_s`; nonce binding-only; commit `H(nonce‖delay_s‖t_arm_ns‖t_challenge_ns)` (or store delay+t_arm in preimage) | Schedule becomes auditable; ends bit double-duty. Cheap once (i) lands. |
+| **(iii) NEXT** | Catch trials (go/no-go) | Catches always-fire / jitter-spam bots that silence alone does not. |
+
+**Smallest set that is a *defensible candidate* proof (not flip):**  
+**(i) + (ii) + one tell-watcher harness test that fails old path / passes new.**  
+Catch trials = strong next bank, not required to claim “pre-tell closed.”
+
+Skip waveform/Stage-A / `poep_enabled` for this tier.
+
+---
+
+### 2. THE TEST THAT MAKES IT A PROOF
+
+**Adversary: `TellWatcherBot` (unit/integration, no real human needed for the *tell* claim)**
+
+```
+interface:
+  on_pre_fire_signal() → arm
+  on_true_force_or_timeout() → inject canned in-band IMU pulse @ lat ~ U(80,300), peak ≥ 1000
+signals watched (old path):
+  A) stdout regex "Baseline IMU"
+  B) fixed-length pre-buffer start (if instrumented)
+  C) optional: HID OUT adaptive-trigger report (force write)
+```
+
+**Two fixtures, same bot, same N trials (e.g. N=200):**
+
+| Path | Expected FAR (bot accepted by `verify_live_response`) |
+|------|------------------------------------------------------|
+| **OLD** (`_fire_probe_sync` + Baseline print + fixed pre) | **≥ 0.90** (bot arms on tell, fires at t_tell + pre_window + human-like lat) |
+| **NEW** (silent continuous ring + CSPRNG delay, no pre-window boundary) | **≤ chance**: ≈ band_width / mean_isi ≈ 220ms / E[delay] — with 2–8s delays, **FAR ≲ 0.05–0.11** without HID-out watching |
+
+**Acceptance bar (tell-removal proof):**
+- `FAR_old ≥ 0.90` AND `FAR_silent ≤ 0.15` (or ≤ random-onset baseline ±2σ)
+- Same bot code, only capture path swaps
+- Commit this as `test_f_poep_live_1_tell_watcher.py` — not “we deleted a print”
+
+---
+
+### Crux: is HID OUTPUT a residual tell silence does not close?
+
+**Split the attack classes — do not conflate them.**
+
+| Attack | Signal | Free arm? | Closed by silence? |
+|--------|--------|-----------|--------------------|
+| **A-PRE-TELL** (F-POEP-LIVE-1) | stdout / fixed pre-window | **Yes ~400ms** before force | **YES** — that is this tier |
+| **A-REACTIVE** (onset-coupled) | HID OUT force report / USB write | **No** — signal ≈ t_challenge (±1 USB frame) | **NO** — and should not claim to |
+
+**Answer:** Watching the HID **OUTPUT** report (R2 force command) is a residual for *reactive* bots, not for the free-arm tell. Host issues the force → any co-resident process can see the write at **true challenge time**. That is **onset-coupling to the real stimulus**, equivalent (minus ~1ms) to feeling the actuator. Silence-on-stdout does **not** close A-REACTIVE; it was never the claim of P-LIVE-0.
+
+**Is on-host onset-coupling fundamentally uncloseable?**  
+**Yes, for pure host-timed proofs:** if the host both commands force and scores IMU, a host-side watcher always gets t_challenge. Closing A-REACTIVE as a *protocol* property requires something the host cannot pre-see or forge:
+
+1. **Controller-firmware force timestamp / SE attestation** (best long-term), or  
+2. **Actuator↔IMU physics that macros can’t fake** (waveform + Stage-A — already the flip gate), or  
+3. **External witness** of the force event (camera/optical — Surface 4 class; out of scope here).
+
+**For THIS tier:** firmware-side force timing is **deferrable**. The bankable win is defeating A-PRE-TELL with a demonstrated FAR collapse. Honest claim language: *“unpredictable to pre-arm macros; still not anti-reactive-host.”*
+
+---
+
+### 3. CATCH TRIALS acceptance bar
+
+| Parameter | Bar |
+|-----------|-----|
+| **Go : no-go ratio** | **4:1** (20% catch) — enough signal, low human fatigue |
+| **Human false-alarm (FA) budget** | **≤ 5%** of no-go trials marked “bot” (twitchy grip / tremor must not fail) |
+| **Always-fire bot catch rate** | **≥ 90%** of no-go trials correctly FAIL the bot |
+| **Tell-triggered bot** | On silent path: catch trials catch residual always-fire; go trials still require in-band post-challenge |
+
+**How a no-go FAILs a bot without unfairly failing a human:**
+- No-go = **no force** (or force=0 / no write), still full random arm delay  
+- **FAIL bot:** IMU peak ≥ floor **or** fabricated “response” commitment without a real challenge event  
+- **PASS human:** no above-threshold IMU event in the post-window (relaxed grip)  
+- Twitchy human: require **joint** condition: peak ≥ floor **AND** response claims a go-challenge nonce that was never issued / no-go flag set — do **not** fail on low-level tremor alone; raise no-go threshold or require R2 onset coupling that only exists on go trials  
+
+Optional soft rule: 2-of-3 consecutive no-go spikes → session fail (reduces single-twitch FA).
+
+---
+
+### 4. SURPRISE-MODE CORPUS + P4 GATE
+
+Live mean **253ms** vs primed **μ 177.6** (~+75ms) = **distribution shift**. Primed RBM band/model is wrong for surprise.
+
+| Item | Honest bar (candidate, not flip) |
+|------|----------------------------------|
+| **N surprise captures** | **≥ 50 usable** on certified Edge, **≥ 2 operators** preferred; minimum **N=30** to even call “calibrated surprise band” (not identity model) |
+| **What to re-estimate** | latency μ/σ, peak floor if needed, reaction band upper (300ms may clip slow surprise tails — measure P95 before freezing) |
+| **5-class adversarial gate** | **YES, re-run** against surprise-recalibrated accept region (or protocol path, not offline 2-feature). Old primed nulls are weak if band widens |
+| **“Defensible candidate” bar** | (a) human surprise pass ≥ 85% in-band; (b) A-CONST/REPLAY/RAND/JITTER/HYBRID still **not** presence by offline scalars alone (gate still fails pure offline); (c) **protocol path** FAR: pre-tell bot ≤ chance, always-fire bot caught by catch trials ≥ 90%; (d) still `poep_enabled=False` |
+
+Do **not** train a presence model on surprise until (i)+(ii) harness is green — otherwise you recalibrate a band check.
+
+---
+
+### 5. “SUCCESSFUL PROOF” at this tier (one line)
+
+**PASS:** *On the certified Edge, a tell-watcher (stdout/pre-window) macro’s live-verify FAR drops from ≥0.90 on the old path to ≤ random-onset chance on silent+CSPRNG path, with schedule bound in `H(nonce‖delay‖t_arm‖t_challenge)`, while poep_enabled stays False and A-REACTIVE remains explicitly out of claim.*
+
+---
+
+### FIRST INCREMENT + firmware timing
+
+**Do first:**  
+**(i) silent continuous IMU + remove Baseline tell + randomized/no fixed pre-boundary + TellWatcher harness (old vs new FAR).**  
+Ship **(ii) CSPRNG delay + schedule commitment** in the same PR if cheap; otherwise immediately after.
+
+**Firmware-side force timing:** **defer.** Required only when you claim anti-reactive / anti-host-onset; not required to bank F-POEP-LIVE-1 closure.
