@@ -48,6 +48,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from l9_presence.poep_live_verify import (  # noqa: E402
+    REACTION_BAND_MS,
     ChallengeResponse,
     LiveChallenge,
     poep_commitment,
@@ -446,7 +447,7 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
         "policy_ref": policy_ref,
         "player": args.player,
         "captured_utc": datetime.now(timezone.utc).isoformat(),
-        "reaction_band_ms": [80.0, 300.0],
+        "reaction_band_ms": list(REACTION_BAND_MS),
         "silent_fire": True,               # F-POEP-LIVE-1 (i): silent continuous-poll fire (no stdout / poll-burst tell)
         "schedule_bound": True,            # F-POEP-LIVE-1 (ii): independent CSPRNG delay + schedule commitment
         "waveform_captured": True,         # FLIP-A rung 2: raw reflex curve stored per record (run poep_waveform_analyze.py)

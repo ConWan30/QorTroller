@@ -41,11 +41,21 @@ def test_A_REPLAY_defeated_by_fresh_nonce():
 
 
 def test_A_CONST_pre_scheduled_macro_defeated_by_unpredictable_timing():
-    # a fixed-schedule macro fires 500ms after ITS expected time, but the real challenge fired later;
-    # the response lands outside the [80,300]ms reaction window of the actual challenge.
+    # a fixed-schedule macro fires long after the real challenge; the response lands outside the reaction
+    # window (1.5s >> the 450ms surprise-mode ceiling) of the actual challenge.
     ch = LiveChallenge(DEV, nonce="n1", t_challenge_ns=T0)
     early = _valid_response("n1", dt_ms=1500.0)   # 1.5s after challenge -> out of band (too slow / pre-scheduled)
     r = verify_live_response(ch, early)
+    assert r["ok"] is False and any("reaction_band" in x for x in r["reasons"])
+
+
+def test_surprise_mode_slow_reaction_passes_after_band_widen():
+    # a genuine surprise reaction at 380ms (slower than the old 300ms primed ceiling) now PASSES the
+    # widened [80,450] surprise-mode band. Rig-observed reactions ran 216-318ms; 380 leaves margin.
+    ch = LiveChallenge(DEV, nonce="s1", t_challenge_ns=T0)
+    assert verify_live_response(ch, _valid_response("s1", latency_ms=380.0, dt_ms=380.0))["ok"] is True
+    # but a clearly-inattentive 600ms response is still rejected (data-quality ceiling holds at 450)
+    r = verify_live_response(ch, _valid_response("s1", latency_ms=600.0, dt_ms=600.0))
     assert r["ok"] is False and any("reaction_band" in x for x in r["reasons"])
 
 
