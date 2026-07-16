@@ -471,6 +471,108 @@ class ATECC608IdentityBackend(SigningBackend):
 
 
 # ---------------------------------------------------------------------------
+# AWS KMS HSM backend (P-256, non-exportable key) — Path A partner-HSM path
+# ---------------------------------------------------------------------------
+#
+# Closes the SoftwareIdentityBackend "INSECURE/DEV ONLY" gap for the Manufacturer
+# Root CA (F-DECON-3.2 / OA-4 / Sensor-C G1.6) by moving the CA private key into an
+# AWS KMS HSM where it is NON-EXPORTABLE — the bridge can request a signature, never
+# read the key. Reuses the same HSM mechanism the Sentry/Guardian operator agents use,
+# but on a SEPARATE ECC_NIST_P256 key (the CA is P-256; the agent keys are secp256k1
+# — a curve/protocol difference, not a shared key). See grok round-13 design consult.
+#
+# Wire-contract discipline (the load-bearing footgun, grok round-13): the ABC signs over
+# RAW BODY and hashes internally (SoftwareIdentityBackend does sign(body, ECDSA(SHA256))).
+# AWS KMS signs a PRE-HASHED 32-byte DIGEST (MessageType=DIGEST). So KMSIdentityBackend
+# MUST SHA-256 the body ONCE, sign that digest, and convert DER->raw r||s. Never pass the
+# body as a digest; never double-hash.
+
+def _der_sig_to_raw_rs(der_sig: bytes) -> bytes:
+    """DER ECDSA signature -> 64-byte raw r||s (the ABC wire contract). Low-s is NOT
+    normalized: `cryptography` verifies high-s and low-s alike, and the cert path never
+    byte-compares the signature."""
+    from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+    r, s = decode_dss_signature(der_sig)
+    return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+
+
+def _spki_to_uncompressed_p256(spki_der: bytes) -> bytes:
+    """DER SubjectPublicKeyInfo (KMS GetPublicKey shape) -> 65-byte uncompressed SEC1
+    point (0x04||X||Y). Fails CLOSED if the key is not P-256 (a secp256k1 agent key
+    fed here is a wiring error, not a valid CA key)."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_der_public_key
+    pub = load_der_public_key(spki_der)
+    if not isinstance(getattr(pub, "curve", None), ec.SECP256R1):
+        raise ValueError(
+            f"KMSIdentityBackend requires a P-256 (SECP256R1) key; got "
+            f"{getattr(getattr(pub, 'curve', None), 'name', 'unknown')!r} — wrong curve, failing closed")
+    return pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+
+
+class KMSIdentityBackend(SigningBackend):
+    """P-256 identity backed by an AWS KMS HSM key (non-exportable).
+
+    Uses an INJECTABLE SYNC PORT rather than importing the async kms_client — `sign_cert`
+    and the ceremony scripts are synchronous, and async-in-sync (asyncio.run inside a
+    signer) is a production footgun (grok round-13). The port is two callables:
+        sign_digest_der(digest32) -> DER sig    (KMS Sign, MessageType=DIGEST)
+        get_pubkey_spki()         -> DER SPKI   (KMS GetPublicKey)
+    The real boto3 port is built by `make_kms_ca_port`; tests inject a fake."""
+
+    def __init__(self, *, sign_digest_der, get_pubkey_spki, key_role: str = "mfg-ca"):
+        self._sign_digest_der = sign_digest_der
+        self._get_pubkey_spki = get_pubkey_spki
+        self._key_role = key_role
+        self._pub_bytes: Optional[bytes] = None
+
+    def setup(self) -> None:
+        """Fetch + cache the public key; fails closed on a non-P-256 key."""
+        self._pub_bytes = _spki_to_uncompressed_p256(self._get_pubkey_spki())
+
+    def sign(self, body: bytes) -> bytes:
+        """SHA-256 the body ONCE, sign the digest via KMS DIGEST mode, return 64-byte raw r||s."""
+        import hashlib
+        digest = hashlib.sha256(body).digest()          # single hash — NOT double, NOT body-as-digest
+        der = self._sign_digest_der(digest)
+        return _der_sig_to_raw_rs(der)
+
+    @property
+    def public_key_bytes(self) -> bytes:
+        if self._pub_bytes is None:
+            raise RuntimeError("setup() must be called before public_key_bytes")
+        return self._pub_bytes
+
+    @property
+    def backend_type(self) -> str:
+        return "kms"
+
+    @property
+    def is_hardware_backed(self) -> bool:
+        return True
+
+
+def make_kms_ca_port(alias: str, region: str = "us-east-1"):  # pragma: no cover - real AWS boto3 port
+    """Build the real SYNC boto3 KMS port for the MFG CA key. Kept OUT of the operator-agent
+    alias map so IAM stays separable: agents get Sign on the secp256k1 aliases; the MFG CA gets
+    Sign on its own P-256 alias, and Guardian is NOT granted Sign on it (grok round-13)."""
+    import boto3
+    client = boto3.client("kms", region_name=region)
+
+    def sign_digest_der(digest: bytes) -> bytes:
+        if len(digest) != 32:
+            raise ValueError("KMS DIGEST mode requires a 32-byte prehash")
+        resp = client.sign(KeyId=alias, Message=digest, MessageType="DIGEST",
+                            SigningAlgorithm="ECDSA_SHA_256")
+        return resp["Signature"]
+
+    def get_pubkey_spki() -> bytes:
+        return client.get_public_key(KeyId=alias)["PublicKey"]
+
+    return {"sign_digest_der": sign_digest_der, "get_pubkey_spki": get_pubkey_spki}
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
@@ -483,6 +585,8 @@ def create_backend(backend_type: str, **kwargs) -> SigningBackend:
         "yubikey"               — YubiKeyIdentityBackend(piv_slot=..., management_key=...)
         "atecc608" / "atecc608a" / "atecc608b"
                                 — ATECC608IdentityBackend(i2c_bus=..., i2c_address=...)
+        "kms"                   — KMSIdentityBackend (P-256 AWS KMS HSM). Inject sign_digest_der +
+                                  get_pubkey_spki, or pass alias=... for the real boto3 port.
 
     Does NOT call setup() — caller's responsibility.
 
@@ -508,7 +612,24 @@ def create_backend(backend_type: str, **kwargs) -> SigningBackend:
             i2c_address=kwargs.get("i2c_address", 0x60),
         )
 
+    if t == "kms":
+        # Ports may be injected directly (tests / pre-built), else built from a P-256 CA alias.
+        sign_digest_der = kwargs.get("sign_digest_der")
+        get_pubkey_spki = kwargs.get("get_pubkey_spki")
+        if sign_digest_der is None or get_pubkey_spki is None:
+            alias = kwargs.get("alias")
+            if not alias:
+                raise ValueError(
+                    "create_backend('kms') requires either (sign_digest_der + get_pubkey_spki) "
+                    "or alias=... for the P-256 MFG CA key")
+            port = make_kms_ca_port(alias, region=kwargs.get("region", "us-east-1"))
+            sign_digest_der, get_pubkey_spki = port["sign_digest_der"], port["get_pubkey_spki"]
+        return KMSIdentityBackend(
+            sign_digest_der=sign_digest_der, get_pubkey_spki=get_pubkey_spki,
+            key_role=kwargs.get("key_role", "mfg-ca"),
+        )
+
     raise ValueError(
         f"Unknown backend type: {backend_type!r}. "
-        "Valid values: 'software', 'yubikey', 'atecc608'."
+        "Valid values: 'software', 'yubikey', 'atecc608', 'kms'."
     )
