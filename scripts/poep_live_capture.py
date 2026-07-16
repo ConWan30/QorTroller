@@ -222,7 +222,7 @@ def _iso_date() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def _fire_probe_silent(ds, cfg, *, delay_s, reader):  # pragma: no cover - hardware path
+def _fire_probe_silent(ds, cfg, *, delay_s, reader, reissue=True):  # pragma: no cover - hardware path
     """F-POEP-LIVE-1 (i): SILENT, CONTINUOUS-POLL nonce-scheduled fire — the A-PRE-TELL fix.
 
     grok round-19 caught the naive fix (sleep -> then dense collect -> fire) leaves a POLL-BURST tell:
@@ -275,12 +275,21 @@ def _fire_probe_silent(ds, cfg, *, delay_s, reader):  # pragma: no cover - hardw
     cleared = False
     driver = L6TriggerDriver()
     post_reports: list[dict] = []
+    last_reissue = probe_ts
     while time.monotonic() < deadline:
+        now = time.monotonic()
+        if not cleared:
+            # RE-ISSUE the stimulus through the hold so it's a sustained, perceptible buzz that
+            # pydualsense's report-sender thread cannot overwrite (single-shot writes went unfelt).
+            # --sharp disables this: a single brief jolt -> clean reflex waveform (needs a reliable actuator).
+            if reissue and now - last_reissue >= 0.06:
+                L6TriggerDriver._sync_write(ds, profile)
+                last_reissue = now
+            if now >= clear_at:
+                asyncio.run(driver.clear_triggers(ds))
+                cleared = True
         snap = reader.poll()
         post_reports.append(accel_report_from_snapshot(snap, accel_scale=accel_scale))
-        if not cleared and time.monotonic() >= clear_at:
-            asyncio.run(driver.clear_triggers(ds))
-            cleared = True
         if cfg.poll_interval_s > 0:
             time.sleep(cfg.poll_interval_s)
     if not cleared:
@@ -318,10 +327,14 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
     if not reader.connect():
         return 1
 
+    # --sharp: a brief single jolt (no re-issue) so the reaction tail is stimulus-free -> CLEAN reflex
+    # waveform for the rung-2 shape analysis. Needs a reliable actuator (post hardware-reset); the long
+    # re-issued buzz is the fallback for a jamming trigger, but it corrupts the waveform shape.
+    hold_ms_eff = 120 if args.sharp else args.hold_ms
     cfg = DeskProbeConfig(
         r2_force=max(1, min(255, args.force)),
         mode=args.mode,
-        hold_ms=max(50, min(2000, args.hold_ms)),
+        hold_ms=max(50, min(2000, hold_ms_eff)),
         pre_samples=args.pre_samples,
         poll_interval_s=args.poll_interval,
         capture_window_ms=args.capture_ms,
@@ -342,13 +355,13 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
     print(f"  Actuator:   mode={cfg.mode} force={cfg.r2_force} hold_ms={cfg.hold_ms}")
     print(f"  DB:         {(args.db or Config().db_path) if store else '(dry-run -- not persisting)'}")
     print("-" * 66)
-    print("  Hold the controller in a NORMAL, RELAXED grip. Do NOT press R2.")
-    print(f"  {args.count} resistance challenges will fire SILENTLY at random moments over the")
-    print("  next ~minute — NO on-screen cue before each fire (F-POEP-LIVE-1 tell-fix).")
-    print("  React naturally each time you feel resistance. Results print AFTER the run.")
+    print("  Hold the controller relaxed with a finger RESTING on R2 (don't press it).")
+    print(f"  {args.count} {cfg.mode.upper()} challenges (force {cfg.r2_force}/255, {cfg.hold_ms}ms) fire SILENTLY")
+    print("  at random moments over the next ~minute -- NO on-screen cue before each fire.")
+    print("  React (a small grip jerk) the instant you feel R2 BUZZ. Results print AFTER.")
     print("  poep_enabled STAYS FALSE -- this is candidate live evidence.")
     print("=" * 66)
-    print("  Armed. Hold relaxed...")
+    print("  Armed. Hold relaxed, finger on R2...")
 
     ds = reader.ds
     records: list[dict] = []
@@ -359,7 +372,8 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
             delay_s = csprng_delay_s(min_s=args.min_delay, max_s=args.max_delay)  # (ii) independent CSPRNG
             # SILENT fire: no pre-fire print, randomized unprinted pre-window (F-POEP-LIVE-1 (i))
             (probe_ts, pre_reports, post_reports, r2_at_probe,
-             t_arm_ns, t_challenge_ns) = _fire_probe_silent(ds, cfg, delay_s=delay_s, reader=reader)
+             t_arm_ns, t_challenge_ns) = _fire_probe_silent(
+                ds, cfg, delay_s=delay_s, reader=reader, reissue=not args.sharp)
 
             result, diagnostic_json = analyze_desk_probe(pre_reports, post_reports, probe_ts, cfg)
             diag = {}
@@ -478,10 +492,16 @@ def build_parser() -> argparse.ArgumentParser:
                         dest="min_delay", help="Min challenge delay (s) — independent CSPRNG")
     parser.add_argument("--max-delay", type=float, default=DEFAULT_MAX_DELAY_S,
                         dest="max_delay", help="Max challenge delay (s) — independent CSPRNG")
-    # edge-reflex capture defaults MIRROR the corpus-capture path byte-for-byte
-    parser.add_argument("--force", type=int, default=128, help="R2 force 1-255")
-    parser.add_argument("--mode", choices=("rigid", "pulse"), default="rigid", help="Adaptive trigger mode")
-    parser.add_argument("--hold-ms", type=int, default=200, dest="hold_ms", help="Hold resistance (ms)")
+    # STRONG, clearly-perceptible stimulus so the operator feels it and reacts (supra-perceptual, not the
+    # sub-perceptual L6B reflex probe). Crank --force toward 255 if you still can't feel it.
+    parser.add_argument("--force", type=int, default=255, help="R2 force 1-255 (255=max — confirmed felt on the rig)")
+    parser.add_argument("--mode", choices=("rigid", "pulse"), default="pulse",
+                        help="Adaptive trigger mode: pulse=buzzing push (confirmed felt); rigid=hard stiffen")
+    parser.add_argument("--hold-ms", type=int, default=1500, dest="hold_ms",
+                        help="Stimulus duration (ms) — re-issued ~16Hz so it's a sustained, vigorous buzz")
+    parser.add_argument("--sharp", action="store_true",
+                        help="Clean-shape mode: a single brief jolt (120ms, NO re-issue) -> clean reflex "
+                             "waveform for rung-2 shape analysis. Needs a reliable actuator (post-reset).")
     parser.add_argument("--capture-ms", type=float, default=400.0, dest="capture_ms",
                         help="Post-probe IMU capture window (ms)")
     parser.add_argument("--pre-samples", type=int, default=50, dest="pre_samples",
