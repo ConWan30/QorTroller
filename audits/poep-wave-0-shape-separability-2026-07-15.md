@@ -66,20 +66,33 @@ First real reflex-waveform capture on the registered Edge (`--sharp`: single 120
 clean stimulus-free tail). Aggregates only; per-reflex curves are operator biometric (gitignored). N=8
 challenges, all felt + reacted (class HUMAN, peaks 1.4k–4.4k LSB); 6/8 live-verify PASS.
 
-**The settle-vs-baseline answer (P-WAVE-0 caveat 2):** of 7 determinate reflexes —
+**The settle-vs-baseline answer (P-WAVE-0 caveat 2) — DEMOTED per grok round-24
+(`docs/a2a/poep/round-24-grok-rig-findings.txt`):** of 7 determinate reflexes —
 **settled=4 · slight_drift=3 · returning=0**; median tail_slope **−0.004** (≈ flat). **Zero return-to-baseline.**
-So on real data the reflexes settle / mildly drift — they do NOT relax to baseline. This **directionally
-supports** the `tail_slope` settle assumption the P-WAVE-0 triangle-separation hinged on. Honest bounds:
-N=7, one operator, one session; 3/7 are *slight_drift* (not crisp settle); and the **shape-gate pass rate is
-0.0** — real reflexes settle-ish but do NOT match the synthetic damped-oscillator model, so the gate
-thresholds need real-reflex recalibration (separate from the settle question).
+Honest read: settle-to-plateau is **NOT FALSIFIED** on N=7 one-session (returning=0 is interesting) — but it is
+**NOT ESTABLISHED**. The shape path stays **alive under condition, not proven**. This is a *directional
+one-session hint*, not a population or protocol claim. Bankable beyond a hint needs ≥3 independent sessions
+on this Edge + ≥2–3 operators + ≥30 determinate tails; protocol-grade needs ≥50 usable / ≥5 operators. Do
+NOT write "the settle assumption holds."
 
-**Three banked rig findings (FLIP-A ladder inputs):**
-1. Settle assumption holds directionally (returning=0) — the shape path stays alive.
-2. **The [80,300] ms reaction band is mis-calibrated for surprise-mode** — genuine surprise reactions ran
-   216–318 ms (one failed by **1 ms** at 301 ms). Recalibrate the band on the surprise distribution
-   (grok round-18/21 rung 5) before it's used as a hard gate.
-3. Shape gate needs real-reflex recalibration (0.0 real-data pass rate).
+**Three banked rig MEASUREMENT findings (FLIP-A ladder inputs — none freeze a threshold):**
+1. Settle-to-plateau **not falsified, not established** (returning=0, N=7) — shape path alive under condition.
+2. **The [80,300] ms band's UPPER bound is a DATA-QUALITY filter, NOT a security gate** (grok round-24). A
+   macro can sample any in-band latency (A-RAND/A-JITTER FAR≈1 on the band alone), so the ceiling never was
+   the anti-bot mechanism — security is nonce schedule + silent pre-fire + shape + catch-trials + (later)
+   force-binding. Genuine surprise reactions ran 216–318 ms (one failed by **1 ms** at 301 ms), so the 300 ms
+   ceiling is currently **wrong for surprise-mode**. Recalibrate the ceiling by a PRE-REGISTERED rule
+   (`min(cap, ceil(p95 + fixed_margin))`, margin fixed first, p95 from HELD-OUT sessions only) — not post-hoc
+   widening. Until N suffices, treat the upper band as soft QA / REPORT, not a hard reject. (Lower bound =
+   too-fast = pre-press stays a real security edge.)
+3. **Shape gate is a MEASUREMENT channel, not a gate, at N≈8** (0.0 real-data pass — the synthetic
+   damped-oscillator model does not transfer to real reflexes). Keep extracting the 6 features + tail class on
+   every challenge; do NOT hard-reject on shape or fit PASS/FAIL cuts until a multi-session/multi-operator real
+   distribution is banked.
+
+**Honest next move (grok round-24): REST-until-more-rig-data.** Everything that freezes bands or shape
+thresholds is rig-gated (more sessions on this Edge + ≥2–3 operators; ≥50 usable surprise rows before a
+presence floor is credible). Do not over-build tooling on N=8.
 
 **Rig-hardware note:** the Edge adaptive-trigger actuator jammed mid-session (RIGID went unfelt); recovered
 under vigorous PULSE and then fired reliably on brief `--sharp` jolts. Reliable-feel default is PULSE +

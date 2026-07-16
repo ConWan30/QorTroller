@@ -1,0 +1,63 @@
+I'll ground the consult in the actual FLIP-A / PoEP reflex gate definitions and tonight's numbers before giving the numbered verdict.**FLIP-A consult — tonight’s Edge clean-tail data (N=8 / 7 determinate). `poep_enabled` stays False.**
+
+---
+
+**1. Settle wording**
+
+**Over-reading if banked as “assumption holds.”** Honest: **directional one-session hint** only.
+
+- N=7, 1 operator, 1 session, 4/7 crisp settle + 3/7 slight_drift. Zero `returning` is interesting; it is **not** a population claim.
+- Bankable beyond “hint” needs roughly: **≥3 independent sessions** on the same Edge, **≥2–3 operators**, **≥30 determinate tails** before “returning rare under `--sharp`” is a working assumption; **≥50 usable / ≥5 operators** before it is protocol-grade (same order as surprise-band corpus, not a new identity model).
+- **Demote now:**  
+  > “Settle-to-plateau is **not falsified** on N=7 one-session (`returning=0`); **not established**. Shape path stays **alive under condition**, not proven.”
+
+Do **not** write “settle assumption holds.”
+
+---
+
+**2. The [80, 300] ms band**
+
+**Upper bound is mis-calibrated for surprise-mode.** Tonight’s 232–318 ms (mean ~270) is consistent with the earlier live-surprise shift (primed ~178 → surprise higher). Rejecting 301 ms as “too slow” is a **data-quality / mode mismatch**, not a security win.
+
+**How to move the upper bound without circular “widen until I pass”:**
+
+1. Freeze a **surprise-mode** capture protocol (nonce-scheduled, silent pre-fire, same `--sharp` window) as the **only** distribution that sets the presence band.
+2. Collect **held-out** sessions (new nights / operators) → report distribution only.
+3. Set ceiling by **pre-registered rule**, not post-hoc fit: e.g.  
+   `ceil = min(ceil_cap, ceil(p95 + margin))` with **margin fixed first** (5–15 ms or 1–2 sample ticks at poll rate), and **p5/p95 from held-out only**.  
+   Document floor separately (too-fast = pre-press / pre-arm; literature + primed corpus still useful for lower edge).
+4. Until N is enough, keep band as **`REPORT_BAND` / soft QA**, not a hard reject that fails genuine surprise by 1 ms.
+
+**Security relevance of the upper bound:**  
+**Mostly data-quality, weakly security.** A macro can sample any latency in-band (round-14: A-RAND / A-JITTER FAR ≈ 1 on band alone). Upper bound mainly rejects **inattention / no-response / late voluntary wiggle**, not bots. Security for FLIP-A is **nonce schedule + silence of pre-tell + catch trials + shape/physics (and later force-binding)** — not “≤300 ms.”  
+**Do not treat 300 as a security ceiling; treat it as a provisional quality gate that is currently wrong for surprise.**
+
+---
+
+**3. Shape gate 0.0 real pass**
+
+Synthetic underdamped model **failed transfer**. At current N:
+
+| Option | Verdict |
+|--------|---------|
+| **(a) Recalibrate thresholds on real features** | **Too early** to freeze thresholds. Logging real feature distributions is fine; **do not** fit PASS/FAIL cuts on N=7–8. |
+| **(b) Drop gate; keep tail class + nonce only** | Honest interim for **claim language**, not for FLIP-A readiness. Dropping shape without a replacement **re-opens naive macros** that P-WAVE-0 only half-killed under the settle condition. |
+| **(c) Something else (recommended)** | **Demote shape to diagnostic / report-only.** Keep extracting the 6 features + `tail_slope` class on every live challenge. **No hard reject on shape** until real-human distribution is banked. Revisit gate only after multi-session / multi-operator tails exist. Optionally add **settling-adversary harness** as regression (already know FAR up to 0.64). |
+
+**Honest at N≈8:** shape is a **measurement channel**, not a **gate**.
+
+---
+
+**4. Minimal next increment**
+
+**Highest value is not a new analyzer product.** It is:
+
+1. **Bank tonight as a measurement audit** (you already have the aggregate story): settle not-falsified; band wrong for surprise; shape model wrong for real; capture path works on Edge post-actuator fix.  
+2. **If any build is allowed before more bodies:** a **report-only** latency/tail feature dump (percentiles, settle class counts, band pressure, shape feature moments) — **no threshold decisions, no `poep`/`L6B` flips**. That is Claude-buildable-now and low risk.  
+3. **Everything that freezes bands or shape thresholds is rig-gated:** more sessions on this Edge **and** ≥2–3 operators before recalibration claims; ≥50 usable surprise-mode Edge rows before a presence floor is credible.
+
+**Plain stop line:** do **not** over-build tooling on N=8. One thin reporter is optional; **rest-until-more-rig-data** is the correct default for FLIP-A progress.
+
+---
+
+**Bank line:** Tonight is **real progress** (first clean Edge tails; settle not falsified; band + shape mismatches are bankable *measurement* findings). Honest next move: **REST-until-more-rig-data** (optional micro-BUILD: report-only surprise latency + tail feature analyzer — no gates).
