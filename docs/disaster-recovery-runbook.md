@@ -42,10 +42,19 @@ to confirm is in place *before* any incident.
 
 Security findings related to recovery posture (key custody, IAM scope,
 single-copy material) are tracked privately and in the operator's own
-hardening backlog — not enumerated here. The single highest-leverage standing
-action remains backing up the Manufacturer Root CA material off-machine and
-migrating it to an HSM-backed root (the long-term fix that also retires the
-single-copy concern).
+hardening backlog — not enumerated here.
+
+**Update 2026-07-17 — the standing top action changed.** The former
+highest-leverage action (back up the Manufacturer Root CA off-machine +
+migrate to an HSM-backed root) is **done**: the F-DECON-3.2 single-copy
+concern is closed at root — the CA is now a non-exportable HSM key, the live
+device re-anchored and verifies VALID under it, and the software key is
+cold-retained as a forensic archive (never a live signer; kept only for
+emergency rollback). The remaining standing hardening item is the AWS IAM
+least-privilege scope-down on the bridge's KMS access (tracked as OA-3 in the
+sensors' OPERATOR-ACTION box + privately). See
+`docs/path-a-mfg-ca-hsm-migration.md` (retention graduated) and the
+operator-attested `audits/operator_actions.json`.
 
 ---
 
