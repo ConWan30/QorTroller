@@ -97,6 +97,25 @@ Root fix landed end-to-end: mint/verify split (`b558bdec`) made the re-anchor su
 - **Sensor-C G1.6 LIVE-FRAGILE → LIVE** is earned only AFTER step 5 (581a836c VALID under the HSM root) —
   a separate operator-confirmed Sensor-C edit. Not touched here.
 
-**This pass:** contract + tests + deploy + re-anchor + verify integration + this audit note. PV-CI 183
-unchanged; 0 IOTX; no chain write; no key provisioned by the repo. grok round-24 (design) + round-25
-(verify). Operator fires the deploy + the ~0.2 IOTX re-anchor.
+## Part 4 — offline-seal provenance gap + the replay tool (A2A round-30 T4)
+
+The `INV-MFG-003` `--generate` seal fired while the bridge was **down**, so the gate printed
+"Governance event not stored — run bridge and POST manually": the bridge DB's tamper-evident
+allowlist-governance provenance chain is missing this seal event. This is a **secondary audit gap, not a
+PV-CI gap** — the allowlist write IS the seal (the `816b4d81` commit message says so), and the gate reads
+the 184 digest-pinned entries fail-closed regardless of the bridge.
+
+`scripts/replay_governance_event.py` closes the gap honestly and reusably (for every future offline
+`--generate`): it records a **NEW** provenance-chain entry that DOCUMENTS the offline seal — it does NOT
+and cannot backdate the original (the provenance hash embeds a fresh `ts_ns`). It reuses the gate's own
+canonicalization + provenance formula (no reinvention), defaults to dry-run, and only POSTs under
+`--execute`. Dry-run for this seal is proven: prev-hash `2ade1082…` (allowlist at `74c864c8`, 183 entries)
+→ new-hash `a47d6dbb…` (current, 184) — a real transition. **Firing the late POST is OPTIONAL and
+operator-fired** (needs the bridge up + read key); the reusable tool is the deliverable.
+
+  `python scripts/replay_governance_event.py --prev-git-ref 74c864c8 --category invariant_change --reason "late record of INV-MFG-003 seal (816b4d81), PV-CI 183 to 184" [--execute]`
+
+**This pass:** contract + tests + deploy + re-anchor + verify integration + this audit note + the offline-seal
+replay tool. PV-CI 184; 0 IOTX; no chain write; no key provisioned by the repo. grok round-24 (design) +
+round-25 (verify) + round-30 T4. Operator fires the deploy + the ~0.2 IOTX re-anchor (done, Part 3) + the
+optional late governance POST.
