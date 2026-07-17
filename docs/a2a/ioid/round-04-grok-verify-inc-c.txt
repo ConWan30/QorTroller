@@ -1,0 +1,160 @@
+I'll adversarially verify the ioID Inc-C prereq-tx ceremony against the build note, pure guards, operator CLI, tests, and precedents — focusing on accidental-broadcast, fee/value, Transfer-log parsing, mapping safety, mint preflight, and sequencing honesty.Checking precedents for register fee handling, Transfer-log parsing, and broadcast gates.# A2A ioID-CEREMONY r03 — VERIFY Inc-C (prereq-tx ceremony)
+
+**Inspected:** `controller_ceremony.py`, `operator_session_register_controller.py`, `test_controller_ceremony.py` (29/29 PASS w/ `PYTHONPATH=bridge`), precedents `provision_device_mfg.py` + `operator_session_register_agents.py` step_3/4 + `agent_registration` ABIs, scope doc. Live HexBytes probe: `.hex()` is **bare** (no `0x`) on this env.
+
+---
+
+## Findings first
+
+### F1 — **BLOCKING**: mint can exit “success” with `CONTROLLER_TOKEN_ID=None`
+
+`scripts/operator_session_register_controller.py:270-277`
+
+After a status=1 mint, balance delta is checked, but log-parse failure is **not** fatal:
+
+```270:277:scripts/operator_session_register_controller.py
+    token_id = _minted_token_id_from_logs(w3, rcpt, nft, gamer)
+    bal_after = nft_c.functions.balanceOf(gamer).call()
+    ...
+    if bal_after != bal_before + 1:
+        ... sys.exit(1)
+    print(f"  CONTROLLER_TOKEN_ID={token_id}")
+```
+
+`register-project` has an enumeration fallback (`tokenOfOwnerByIndex`); **mint does not**. Operator can spend gas, see balance+1, and copy `CONTROLLER_TOKEN_ID=None` into Inc-D. Same class as Inc-B: green unit tests, silent production-path hole.
+
+**Minimal fix:** if `token_id is None` after mint → fall back to enumerable (add `tokenOfOwnerByIndex` / `totalSupply` to least-privilege ABI) **or** `sys.exit(1)` with explorer link. Never print `None` as the exit artifact.
+
+---
+
+### F2 — **BLOCKING**: Transfer-log parser can `IndexError` after a paid tx
+
+`scripts/operator_session_register_controller.py:151-170`
+
+```python
+to_addr = "0x" + str(topics[2])...   # assumes len(topics) >= 3
+return int(str(topics[3])...)         # assumes len(topics) >= 4
+```
+
+No `len(topics) >= 4` guard. An ERC-20-shaped Transfer (3 topics) on a receipt log matching address+topic0, or any truncated topic list, crashes **after** broadcast — spend done, no clean readback.
+
+Also does **not** require `from == 0x0` (mint/project mint). Agent step_3 uses `process_receipt` event decode instead of raw topics.
+
+**Minimal fix:**
+
+```python
+if len(topics) < 4:
+    continue
+# mint/register only:
+from_addr = str(topics[1]).replace("0x", "")[-40:]
+if int(from_addr, 16) != 0:
+    continue
+```
+
+Prefer extracting to `controller_ceremony.minted_token_id_from_logs(...)` + synthetic-log unit tests (Inc-B lesson: pure path tested, load-bearing path not).
+
+---
+
+### F3 — **ADVISORY**: `.hex()` / `0x` handling is mostly right, still under-tested
+
+`_minted_token_id_from_logs` does the right *shape* of Inc-B hardening for topic0 (`startswith("0x")` else prefix) and for address/id (`replace("0x","")`). Live `HexBytes.hex()` is bare → parse works on this stack.
+
+Gaps:
+
+| Risk | Effect |
+|------|--------|
+| Parser lives only in CLI | 0 tests pin it |
+| `lg.address.lower()` if address ever HexBytes | compare bytes≠str → never match → mint hits F1 |
+| `print(f"0x{tx_hash.hex()}")` | fine today; agent uses defensive re-prefix |
+
+**Minimal fix:** pure helper + tests for bare/`0x`/HexBytes-like fixtures; `str(lg.address).lower()`; shared tx-hash hex normalizer.
+
+---
+
+### F4 — **ADVISORY**: setDeviceContract preflight is one-direction only
+
+`cmd_set_device_contract` (`:205-216`):
+
+- `existing == project_token_id` → honest no-op  
+- `existing != 0` → refuse remap  
+- `existing == 0` → proceed  
+
+Correct and safe for **deviceContract → project**. Missing: reverse “this project already mapped to another NFT” (ABI only exposes `deviceContractProject`). Agent step_4 also lacks reverse preflight; `estimate_gas` is the net. Acceptable with residual.
+
+**Soft fix:** document that remap-by-project is estimate_gas-only; optional on-chain view if ioIDStore exposes `projectDeviceContract`.
+
+---
+
+### F5 — **ADVISORY**: mint auth preflight is good; incomplete as “exit proof”
+
+`assert_mint_authorized(is_minter, minter_allowance>=1)` + post `balanceOf` delta==1 is the right Inc-A linkage.
+
+Holes: no post-check that `minterAllowance` decremented; no `ownerOf(token_id)==gamer` when token_id known. Secondary to F1.
+
+---
+
+### F6 — **ADVISORY**: sequencing docs over-claim “mapping before mint”
+
+CLI header (`:23-24`) says mapping before mint. r01 / scope: hard constraints are **mapping before register**, not before mint. Code correctly does **not** require mapping for mint. Doc is the bug, not the code.
+
+**Fix:** align comment to r01: NFT deploy before map/mint; project before map; mint before Inc-D register; map before Inc-D register.
+
+---
+
+### F7 — **RESIDUAL**: spend posture is solid (no accidental broadcast)
+
+Triple-gate matches provision:
+
+1. `is_bridge_caller`  
+2. `hard_cap_ok`  
+3. `--execute` **and** `IOID_CONTROLLER_CEREMONY_CONFIRM=1`  
+
+Default path returns `None` after estimate. `estimate_gas` is pre-send revert guard. `receipt.status != 1` → exit 1. No import-side broadcast. **No accidental-broadcast path found.**
+
+---
+
+### F8 — **RESIDUAL**: `ProjectRegistry.register` + `value=0` is correct
+
+ABI is `payable`; agents’ live step_3 uses `_submit_transaction(..., value: int = 0)` and registered “VAPI Operator Agents” that way. Scope costs for project are **gas-only** (~0.2–0.4). Device fee is `ioIDStore.price()` on **applyIoIDs / Inc-D register**, not ProjectRegistry.
+
+`value=0` is right. Cap 0.75 for gas is enough; no project registration fee to fold into value. If fee were ever required, `estimate_gas({"value": 0})` reverts before broadcast.
+
+---
+
+### F9 — **RESIDUAL**: other gaps (non-blocking for this commit)
+
+| Item | Note |
+|------|------|
+| No session-state JSON | Operator pastes `PROJECT_TOKEN_ID` — intentional one-step design |
+| `apply-ioids` no post-readback | Optional; status=1 is weak but OK |
+| Re-run `register-project` mints another project | Operator discipline; warn if desired |
+| No `rawTransaction` fallback | Matches provision; agent is more defensive |
+| Tests don’t import `_minted_token_id_from_logs` | Drives F1/F2 residual risk |
+
+---
+
+## V1–V6
+
+**V1 — spend posture:**  
+No accidental broadcast. Per-step cap + confirm-env + `--execute` is sufficient and precedent-aligned. **`value=0` for `ProjectRegistry.register` is correct** (agent-proven; fee is ioIDStore device price, not project mint). Cap need not include a project fee. Keep apply-ioids value = `price * amount` under the 1.0 cap.
+
+**V2 — readback correctness:**  
+Topic0 0x/bare handling is directionally sound and matches the Inc-B lesson for **topic0**. Address/tokenId `replace("0x","")[-40:]` / `int(...,16)` works on bare HexBytes. **Not** fully robust: missing `len>=4`, missing `from==0`, mint has no fallback, parser untested → **F1+F2**.
+
+**V3 — mapping preflight:**  
+Already-mapped no-op + mapped-elsewhere refuse are correct and safe for the device→project map. Reverse project→NFT not preflighted (estimate_gas residual). Good enough for Inc-C.
+
+**V4 — mint auth:**  
+`isMinter` + `minterAllowance>=1` preflight is correct. `balanceOf` delta==1 is correct integrity check. Incomplete without non-null tokenId / optional `ownerOf` (**F1**).
+
+**V5 — sequencing fail-honest:**  
+Inc-A unfired → `assert_nft_deployed` with deploy pointer: good. `project_token_id<=0` rejected before RPC: good. Half-run gaps: mint readback None; log-parse IndexError after spend; optional apply has no residual balance print. Mapping-before-mint is **not** enforced (and should not be).
+
+**V6 — commit grain:**  
+One no-spend commit for Inc-C is right. Do **not** fold Inc-A live deploy or Inc-D register. Fix F1+F2 in this commit (or a tiny follow-up before any spend) — they are code honesty, not spend ops.
+
+---
+
+## VERDICT: **FIX**
+
+Ship after F1+F2 (mint fail-closed / fallback on missing tokenId; `len(topics)>=4` + prefer `from=0`; ideally pure helper + 2–3 synthetic log tests). Spend gates and value=0 are not the problem.
