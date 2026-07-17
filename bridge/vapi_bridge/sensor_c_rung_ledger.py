@@ -402,6 +402,7 @@ class RungLedger:
     cycle_date: str          # YYYY-MM-DD
     generated_at: str        # ISO-8601 UTC
     results: list[GateResult]
+    repo_root: Path | None = None  # set by assemble_ledger; located the OA data file
 
     def state_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -434,13 +435,11 @@ class RungLedger:
             "Machine-readable companion: `audits/rung-gate-ledger-latest.json`.\n"
         )
 
-        # Standing OPERATOR-ACTION box (R4 / nag-once-per-cycle).
-        lines.append("\n## Standing OPERATOR-ACTION box (loop never auto-touches)\n")
-        lines.append("- [ ] **OA-1** Back up MFG Root CA canonical file (path per `docs/disaster-recovery-runbook.private.md`). F-DECON-3.2 interim mitigation. Highest-leverage 5-min action.")
-        lines.append("- [ ] **OA-2** Create `docs/disaster-recovery-runbook.private.md` with full AWS KMS ARNs.")
-        lines.append("- [ ] **OA-3** IAM scope-down on bridge/.env AWS keys → `KMS:Sign` + `KMS:GetPublicKey` on the two specific key ARNs.")
-        lines.append("- [ ] **OA-4** Long-term: HSM-backed ManufacturerRootCA + device re-issuance.")
-        lines.append("")
+        # Standing OPERATOR-ACTION box — rendered from the single operator-attested
+        # source (audits/operator_actions.json) shared with Sensor B. The loop
+        # renders; it never attests. (HWFL-1 2026-07-17 — killed the dual hardcode.)
+        from .operator_actions import render_operator_actions
+        lines.append(render_operator_actions(self.repo_root))
 
         counts = self.state_counts()
         lines.append("\n## State summary\n")
@@ -513,6 +512,7 @@ def assemble_ledger(repo_root: Path, *, cycle: int, cycle_date: str | None = Non
         cycle_date=date,
         generated_at=now_utc,
         results=results,
+        repo_root=repo_root,
     )
 
 

@@ -33,6 +33,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from enum import Enum
+from pathlib import Path
 
 
 class FetchKind(str, Enum):
@@ -207,6 +208,7 @@ class WatchReport:
     cycle_date: str
     generated_at: str
     lines: list[WatchLine]
+    repo_root: Path | None = None  # set by assemble_watch_report; locates the OA data file
 
     def state_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -238,12 +240,12 @@ class WatchReport:
             "verification by the operator."
         )
 
-        # Standing OPERATOR-ACTION box (consistent with Sensor C).
-        lines.append("\n## Standing OPERATOR-ACTION box (loop never auto-touches)\n")
-        lines.append("- [ ] **OA-1** Back up MFG Root CA canonical file (path per `docs/disaster-recovery-runbook.private.md`). F-DECON-3.2 interim mitigation. Highest-leverage 5-min action.")
-        lines.append("- [ ] **OA-2** Create `docs/disaster-recovery-runbook.private.md` with full AWS KMS ARNs.")
-        lines.append("- [ ] **OA-3** IAM scope-down on bridge/.env AWS keys → `KMS:Sign` + `KMS:GetPublicKey` on the two specific key ARNs.")
-        lines.append("- [ ] **OA-4** Long-term: HSM-backed ManufacturerRootCA + device re-issuance.")
+        # Standing OPERATOR-ACTION box — rendered from the SAME operator-attested
+        # source (audits/operator_actions.json) as Sensor C, via the shared
+        # renderer. Identical block in both cycle artifacts, single source of
+        # truth (HWFL-1 2026-07-17 — killed the dual hardcode).
+        from .operator_actions import render_operator_actions
+        lines.append(render_operator_actions(self.repo_root))
 
         lines.append("\n## State summary\n")
         lines.append("| State | Count |")
@@ -452,10 +454,13 @@ def assemble_watch_report(
     cycle: int,
     cycle_date: str | None = None,
     fetched: dict[str, FetchResult] | None = None,
+    repo_root: Path | None = None,
 ) -> WatchReport:
     """Pure-function: takes fetched payloads keyed by topic_id, produces
     a `WatchReport`. Never raises (fetch errors materialize as
-    FETCH-ERROR state in the report)."""
+    FETCH-ERROR state in the report). `repo_root` (optional) locates the
+    shared OPERATOR-ACTION data file for the markdown render; when None the
+    renderer self-locates from its module path."""
     now_utc = datetime.now(timezone.utc)
     iso_now = now_utc.isoformat(timespec="seconds")
     date = cycle_date or iso_now[:10]
@@ -471,6 +476,7 @@ def assemble_watch_report(
         cycle_date=date,
         generated_at=iso_now,
         lines=lines,
+        repo_root=repo_root,
     )
 
 
