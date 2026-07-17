@@ -54,6 +54,34 @@ software-signed `birthCertHash`. VMDR cannot be updated in place (grok round-22/
 5. `python scripts/verify_device_cert.py --cert-path ~/.vapi/device_birth_cert_reissue.json` → expect **VALID**.
 6. Flip `MFG_CA_BACKEND=kms` in `bridge/.env`; archive the old software cert as forensic-only.
 
+## Part 3 — CEREMONY FIRED 2026-07-16/17 (operator-fired broadcasts; agent ran read-only/no-spend steps)
+
+**The live device `581a836c` now verifies VALID under the AWS KMS HSM root. F-DECON-3.2 closed at ROOT
+for the live device.** Measured live, wallet 28.441474 → **27.754206 IOTX = 0.687268 IOTX total**:
+
+1. ✅ **Re-issue under KMS (0 IOTX):** `--reissue 581a836c…` under `MFG_CA_BACKEND=kms` — gate PASS
+   (registered + active + on-chain pubkeyHash `235a2c04…` == local key); cert signed by HSM issuer
+   `04d2636c…` (`issuer_backend: kms`); `birthCertHash 0x3fa0e79586d0593c7fe08669ce006a9f66c6de1b47570d75dfe16eecfdc79da7`;
+   persisted `~/.vapi/device_birth_cert_reissue.json`.
+2. ✅ **Override deployed (operator-fired):** `VAPIDeviceBirthCertUpdateRegistry`
+   **`0x31030C8F4d805bC73e2c49D935eD0FB6a12987a5`** — wired VMDR `0x2e5B5FB1…`, owner = bridge wallet;
+   estimate_gas 604254, **0.604254 IOTX** measured. (Estimate-first gate caught the original 0.5 hard-cap
+   as too low for a contract deploy — bumped to 1.0 per repo deploy-cap convention, annotated in-script.)
+3. ✅ **Re-anchor (operator-fired):** `setUpdatedBirthCertHash(581a836c…, 3fa0e795…)` — tx
+   **`0x9f2821574dc50db7f22048af7247a756f329f0ce358bfb8a2f46c39c424a979c`** block **45715805** status 1,
+   gas 83014 = **0.083014 IOTX**; `currentBirthCertHash` readback = the new hash.
+4. ✅ **Verify (read-only):** KMS cert → **VERDICT: VALID exit 0** (sig by HSM root + CHAIN pubkeyHash
+   binding + override hash match + active). **Old software cert → INVALID (birthCertHash mismatch)** —
+   the override supersedes it; the plaintext-key cert can no longer be presented. Wiring note: the
+   verifier loads the REPO-ROOT `.env` — `BIRTH_CERT_UPDATE_REGISTRY_ADDRESS` set in BOTH root `.env`
+   (scripts) and `bridge/.env` (bridge process).
+5. ✅ **Backend flipped:** `MFG_CA_BACKEND=kms` + `VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca` in
+   `bridge/.env`; `CHAIN_SUBMISSION_PAUSED=true` untouched. Software CA key **cold-retained** per the
+   retention rule (forensic-only; never a second live signer).
+
+Root fix landed end-to-end: mint/verify split (`b558bdec`) made the re-anchor sufficient; node_id
+`01a574e7…` preserved. Remaining: INV-MFG-003 seal + Sensor-C G1.6 demote (below).
+
 ### Pending governance seal (OPERATOR-FIRED — not done autonomously)
 - **INV-MFG-003** (pin the override contract's `onlyOwner` + `isActive` guard + `BirthCertHashUpdated` +
   `currentBirthCertHash` override-wins) bumps PV-CI 183→184. Adding an invariant + regenerating the
