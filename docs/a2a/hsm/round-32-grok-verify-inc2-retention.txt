@@ -1,0 +1,58 @@
+Verifying Inc-2 docs: inspecting the shipped changes and scanning for sanitization, consistency, honesty, and leftover nags.Reading the edited sections and cross-checking OA seed, ceremony record, and remaining nags.## A2A round-32 — VERIFY Inc-2 (T2 retention graduation)
+
+**Tree:** `feat/l9-consistency-adversarial-harness` · Inc-2 is **uncommitted** working-tree diff on  
+`docs/path-a-mfg-ca-hsm-migration.md` + `docs/disaster-recovery-runbook.md` only (docs-only ✓).
+
+---
+
+### Findings
+
+**V1 Sanitization — PASS**  
+Inc-2 delta introduces **no** `qortroller_foundation_mfg_ca*`, **no** real AWS ARN, **no** new home-dir CA path.  
+- L84 `arn:aws:kms:us-east-1:<acct>:key/<keyId>` is **pre-existing**, placeholders only → **acceptable** operational template (not OA render; not a live account ID). No further redaction required for T2.  
+- `~/.vapi/device_birth_cert_reissue.json` in ceremony steps is **pre-existing**, not newly introduced.
+
+**V2 Consistency — FAIL (in-file, load-bearing)**  
+Graduated retention body **agrees** with Inc-1 OA seed and ceremony:
+
+| Source | State |
+|--------|--------|
+| `operator_actions.json` | OA-1 `moot`, OA-4 `done`, cold-retain forensic-only |
+| Ceremony Part 3 | software CA cold-retained; never second live signer; VALID under HSM |
+| DR §Security findings | CA+HSM action **done**; OA-3 remaining |
+
+**Contradiction in the same migration runbook T2 edited:**
+
+| Location | Still says | Footer/§Retention says |
+|----------|------------|-------------------------|
+| L3 status banner | `CAPABILITY BUILT, DEFAULT OFF` | **migration FIRED**; `MFG_CA_BACKEND=kms` live |
+| L6–11 Why | plaintext single-copy CA; F-DECON-3.2 / OA-1·OA-4 open; **G1.6 = LIVE-FRAGILE** | G1.6 demoted; F-DECON-3.2 closed; OA-4 done |
+
+Ceremony Part 3 still has mid-doc “Remaining: INV-MFG-003 + G1.6 demote” prose (historical snapshot), but governance seal + later commits supersede it — out of T2 scope. The migration-doc header is **in T2 scope** because a reader hits “LIVE-FRAGILE / DEFAULT OFF” then “FIRED / demoted” in one operational doc.
+
+**V3 Honesty — PASS**  
+- “Cold-retain forensic; never second live signer; destroy only under written write-off; rollback still needs it” is the right nuance: destroy-gate **condition met** ≠ delete authorized.  
+- DR demotes CA-backup correctly and keeps **OA-3 open** (does not claim IAM scope-down done).
+
+**V4 Other nags — PASS for T2 scope; residual notes**  
+| Surface | Result |
+|---------|--------|
+| README / ARCHITECTURE | Clean |
+| DR + migration §Retention/§After flip | Graduated as designed |
+| Cycle 2–9 audit artifacts | Historical; leave frozen |
+| `qortroller-project-assessment-2026-06-13.md`, firmware assessment OA-4 checkbox, BOM F-DECON analogy | Dated snapshots — not standing ops nags |
+| **Open-source interoperability report v2** | Still claims software-backed LIVE-FRAGILE + OA-4 open — **partner narrative; still out of scope for T2** (r30 D3). One-liner later if partner diligence; not a T2 block |
+
+---
+
+### Verdict: **FIX**
+
+Retention + DR standing-action graduation is **correct and honest**. Ship is blocked only by **stale present-tense framing at the top of `path-a-mfg-ca-hsm-migration.md`** (L3 + Why), which reasserts “DEFAULT OFF / LIVE-FRAGILE / F-DECON open” against the FIRED footer and Inc-1 OA state.
+
+**Minimum fix (same Inc-2 commit, ~3–6 lines):**  
+1. Status banner → e.g. **FIRED 2026-07-16/17 (HSM live; code default remains `software` for rollback; operator ceremony, not auto-flip)**.  
+2. Why → past-tense / “was” for the pre-flip SPOF + G1.6 LIVE-FRAGILE; pointer to §After the real flip / ceremony Part 3.  
+
+No change required for: ARN template, OA-3 openness, destroy-gate nuance, interop report, historical audits.
+
+**After that patch → SHIP.**

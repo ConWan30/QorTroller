@@ -1,14 +1,19 @@
 # Path A — Manufacturer Root CA → AWS KMS HSM migration
 
-**Status: CAPABILITY BUILT, DEFAULT OFF. The live flip is an operator ceremony — nothing in code flips it.**
+**Status: FIRED 2026-07-16/17 (operator ceremony). The HSM CA is live (`MFG_CA_BACKEND=kms`); the live
+device re-anchored and verifies VALID under it; F-DECON-3.2 is closed at root. The code DEFAULT remains
+`software` for rollback — nothing in code auto-flips; the flip was, and any future one is, an operator
+ceremony.** This doc is retained as the migration runbook + the historical record of the flip.
 
-## Why
+## Why (this was the pre-flip posture — now resolved)
 
-The QorTroller Foundation Manufacturer Root CA signs Path A `DeviceBirthCertificate`s. Today its private
-key is a **single-copy, plaintext P-256 key file** (`SoftwareIdentityBackend`, which warns
-`INSECURE/DEV ONLY` on every use). That single copy on one machine is the protocol's longest-standing
+The QorTroller Foundation Manufacturer Root CA signs Path A `DeviceBirthCertificate`s. Before the flip its
+private key **was** a **single-copy, plaintext P-256 key file** (`SoftwareIdentityBackend`, which warns
+`INSECURE/DEV ONLY` on every use). That single copy on one machine **was** the protocol's longest-standing
 CRITICAL finding — **F-DECON-3.2** (single-point-of-failure CA), **OA-1**/**OA-4** (backup / HSM-root
-actions), and **Sensor-C G1.6 = LIVE-FRAGILE**.
+actions), and **Sensor-C G1.6 = LIVE-FRAGILE**. **All of that is now discharged** (see §After the real flip
++ the retention graduation below): the CA is a non-exportable HSM key, G1.6 is **LIVE**, OA-4 is **done**,
+and OA-1 is **moot**. The remaining standing item is OA-3 (AWS IAM least-privilege scope-down).
 
 Moving the CA key into an **AWS KMS HSM** makes it **non-exportable**: the bridge can request a signature,
 it can never read the key. This reuses the exact HSM mechanism the Sentry/Guardian operator agents already
@@ -109,17 +114,24 @@ So the one live device `581a836c…` (software-anchored) **cannot be re-anchored
 
 ## Rollback + key retention (load-bearing)
 
-- **Rollback:** set `MFG_CA_BACKEND=software` (or unset) — the flip-back.
-- **Retention:** do **NOT** destroy or offline-wipe the software CA key until, for every device you care
-  about, EITHER the on-chain hash matches a KMS-issued cert AND `verify_device_cert` → **VALID**, OR there is
-  a written policy that that device stays software-anchored forever (Path B). Until then the software key is
-  **cold-retained**, never a second live signer in prod config.
+- **Rollback:** set `MFG_CA_BACKEND=software` (or unset) — the flip-back. This is why the software key is
+  retained (cold), not destroyed: emergency rollback + emergency re-sign still need it.
+- **Retention — GRADUATED 2026-07-17 (condition met).** The original destroy-gate was: do NOT destroy the
+  software CA key until, for every device you care about, EITHER the on-chain hash matches a KMS-issued cert
+  AND `verify_device_cert` → **VALID**, OR there is a written write-off policy. That condition is now **MET
+  for the only live device** — `581a836c` re-anchored under the HSM root and reads **VALID** (2026-07-16/17,
+  Path A fired). So the software key graduates from *"MUST retain, condition unmet"* to **"cold-retain as a
+  forensic archive; never a second live signer; destroy only under an explicit written write-off policy."**
+  `MFG_CA_BACKEND=kms` is live; the software-signed cert is INVALID-superseded on-chain (the override wins).
+  Do not delete the key just because the condition is met — rollback still depends on it.
 
-## Only after the real flip (Path A on-chain proof)
+## After the real flip (Path A on-chain proof) — ✅ DONE 2026-07-16/17
 
-- Demote **Sensor-C G1.6** `LIVE-FRAGILE → LIVE` and close **F-DECON-3.2** at root — a **separate,
-  operator-confirmed Sensor-C edit**, earned ONLY after the authoritative root for the live device is the
-  HSM and `verify_device_cert` → VALID under it. Under Path B this is **not** earned (capability ≠ root fix).
+- **Sensor-C G1.6 demoted `LIVE-FRAGILE → LIVE` and F-DECON-3.2 closed at root** (commit `bb11a0bb`). The
+  authoritative root for the live device is now the HSM and `verify_device_cert` → **VALID** under it; the
+  demote is evidence-driven (two-part: INV-MFG-003 sealed + override registry deployed), so reverting either
+  artifact re-demotes honestly. This was the Path-A-only outcome — Path B never earned it (capability ≠ root
+  fix). See `audits/mfg-ca-hsm-readiness-and-path-a-2026-07-16.md` Part 3.
 
 ## Verification (built)
 
@@ -129,5 +141,8 @@ So the one live device `581a836c…` (software-anchored) **cannot be re-anchored
 - `bridge/tests/test_mfg_ca_readiness.py` — the preflight go/no-go (software + KMS-fake CA ready; wrong
   KeySpec / disabled / not-a-new-root fail-closed; note flags the VMDR one-shot blocker).
 
-`PV-CI 183`. No live AWS call, no chain write, no key provisioned by this repo. Design consults:
-`docs/a2a/hsm/round-13-grok-design-hsm.txt` (capability) + `round-22-grok-design-mfgflip.txt` (flip tooling).
+**Status 2026-07-17: the migration is FIRED.** HSM CA live (issuer `04d2636c…`), override registry deployed
+(`0x31030C8F…`), `581a836c` re-anchored (tx `0x9f282157…`) + VALID, `INV-MFG-003` governance-sealed
+(**PV-CI 184**), G1.6 demoted. 0.687 IOTX measured. Design consults `docs/a2a/hsm/round-13-grok-design-hsm.txt`
+(capability) + `round-22-grok-design-mfgflip.txt` (flip tooling); F-PATHA-1 mint/verify split `round-26/27`;
+ceremony record `audits/mfg-ca-hsm-readiness-and-path-a-2026-07-16.md`.
