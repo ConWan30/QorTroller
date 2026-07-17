@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Tuple
 
 from eth_account import Account
@@ -55,19 +57,96 @@ EIP712_DOMAIN_TYPEHASH = keccak(
     b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
 )
 
-# Placeholder addresses (resolved at runtime from env / chain config in integrate phase)
-DEFAULT_IOID_REGISTRY = "0x0000000000000000000000000000000000000000"  # replace in live
+# Placeholder addresses (resolved at runtime via resolve_ioid_registry_address).
+DEFAULT_IOID_REGISTRY = "0x0000000000000000000000000000000000000000"  # sentinel: unresolved
 DEFAULT_IOID = "0x0000000000000000000000000000000000000000"
+_ZERO_ADDR = "0x0000000000000000000000000000000000000000"
+
+# The Phase 55 VAPIioIDRegistry (bridge-only DID book — register(bytes32,address,string),
+# NO nonces / NO EIP-712 permit). It is NOT the ioID permit registry the controller flow
+# needs; wiring the permit path at it makes nonces() revert. Refuse it by address equality
+# (F-T3-1 / A2A round-33).
+_VAPI_DID_REGISTRY_ADDR = "0xF7885B588718b891B2234477D031607da4a7ACfe"
+
+
+def resolve_ioid_registry_address(*, deployed_addresses_path: Path | None = None) -> str:
+    """Resolve the ioID PERMIT registry (the one with nonces() + 8-param EIP-712 register).
+
+    Fail-loud, never the zero address, never the Phase 55 VAPIioIDRegistry DID book.
+    Resolution order (A2A round-33 Q3 + F3 hardening):
+      1. env IOID_PERMIT_REGISTRY_ADDRESS (DEDICATED — permit registry only)
+      2. env IOID_REGISTRY_ADDRESS (SHARED — historically also holds the Phase 55 DID book
+         for chain.py's DID wiring; the DID book is SKIPPED here, not fatal)
+      3. contracts/deployed-addresses.json key "ioIDRegistry" (NOT "VAPIioIDRegistry")
+      4. agent_registration.IOID_REGISTRY_ADDR (fleet-proven system registry; last resort)
+
+    A candidate equal to the DID book (or zero) is SKIPPED, not fatal — the shared env
+    legitimately points at the DID book for Phase 55 DID work (grok F3). Passing the DID book
+    EXPLICITLY as ioid_registry_address IS fatal (a deliberate mis-wire) — that check lives in
+    register_controller_ioid.
+
+    Both agents and controllers register against this SAME system registry; the device-type
+    difference is the ioIDStore deviceContract (VAPIOperatorAgentNFT vs VAPIGamerControllerNFT),
+    NOT the registry — so reusing the agent-path constant here is correct, not an identity merge.
+    """
+    candidates: list[tuple[str, str]] = []
+
+    permit_env = os.environ.get("IOID_PERMIT_REGISTRY_ADDRESS", "").strip()
+    if permit_env:
+        candidates.append(("env IOID_PERMIT_REGISTRY_ADDRESS", permit_env))
+
+    shared_env = os.environ.get("IOID_REGISTRY_ADDRESS", "").strip()
+    if shared_env:
+        candidates.append(("env IOID_REGISTRY_ADDRESS", shared_env))
+
+    path = deployed_addresses_path or (
+        Path(__file__).resolve().parents[2] / "contracts" / "deployed-addresses.json"
+    )
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            addr = data.get("ioIDRegistry")
+            if addr:
+                candidates.append(("deployed-addresses.json ioIDRegistry", str(addr)))
+    except Exception:  # noqa: BLE001 — a bad addresses file just means this source is skipped
+        pass
+
+    try:
+        from vapi_bridge.agent_registration import IOID_REGISTRY_ADDR as _agent_ioid
+        candidates.append(("agent_registration.IOID_REGISTRY_ADDR", str(_agent_ioid)))
+    except Exception:  # noqa: BLE001 — optional fallback
+        pass
+
+    for source, addr in candidates:
+        a = str(addr).strip()
+        if not a or a.lower() == _ZERO_ADDR.lower():
+            continue  # skip zero
+        if a.lower() == _VAPI_DID_REGISTRY_ADDR.lower():
+            log.debug("resolve_ioid_registry: skipping DID book %s from %s (not a permit registry)",
+                      a, source)
+            continue  # skip the DID book — ambient, not a permit target
+        return a  # first non-zero, non-DID-book candidate wins
+
+    raise ValueError(
+        "no ioID PERMIT registry resolved. Sources tried (env IOID_PERMIT_REGISTRY_ADDRESS / "
+        "env IOID_REGISTRY_ADDRESS / deployed-addresses 'ioIDRegistry' / agent constant) were "
+        "all absent, zero, or the Phase 55 VAPIioIDRegistry DID book (which has no permit "
+        "interface; F-T3-1). Set IOID_PERMIT_REGISTRY_ADDRESS or the deployed-addresses "
+        "'ioIDRegistry' key to the ioID permit registry."
+    )
 
 
 @dataclass(slots=True)
 class ControllerRegistrationResult:
     device_id: str
-    ioid_token_id: int
-    tba_address: str
+    ioid_token_id: Optional[int]      # None in dry-run — NEVER a fabricated placeholder
+    tba_address: Optional[str]        # None in dry-run — needs a real mint + ioID.wallet()
     did_cid: str
     tx_hash: Optional[str]
     dry_run: bool
+    ioid_registry_address: Optional[str] = None  # the resolved PERMIT registry
+    device_nonce: Optional[int] = None           # live nonce read (proves the registry interface)
+    pending_prereqs: Optional[list[str]] = None  # what blocks a real registration (honest)
 
 
 def _require_device_binding(
@@ -220,24 +299,30 @@ def sign_permit(gamer_private_key: str, digest: bytes) -> Tuple[int, bytes, byte
 
 def assemble_register_calldata(
     *,
-    project_id: int,
-    did_hash: str,  # bytes32
+    device_contract: str,   # VAPIGamerControllerNFT (controller prereq — placeholder in dry-run)
+    token_id: int,          # minted controller-NFT tokenId (prereq — placeholder in dry-run)
+    device: str,            # device EOA (checksummed)
+    did_hash: bytes,        # bytes32 DID content hash
     uri: str,
     v: int,
     r: bytes,
     s: bytes,
 ) -> bytes:
-    """Build the 8-param calldata for ioIDRegistry.register (wrapper form)."""
-    # The exact 8-param order is taken from the agent flow precedent.
-    # (projectId, deviceContract, didHash, uri, v, r, s, user) — user is supplied by bridge as msg.sender in wrapper.
-    # Here we return the inner call data; the actual tx uses the wrapper selector or direct if bridge is authorized.
+    """Build canonical `ioIDRegistry.register(deviceContract, tokenId, device, hash, uri, v, r, s)`
+    calldata — the exact 8-param order/types of the LIVE IoTeX ioIDRegistry ABI
+    (`agent_registration.IOID_REGISTRY_ABI`), corrected from the old skeleton shape
+    `(projectId, deviceContract, didHash, uri, v, r, s, user)` which never matched the
+    real registry (A2A round-33 F6).
+
+    `device_contract` + `token_id` are CONTROLLER PREREQUISITES (VAPIGamerControllerNFT
+    deployed + a minted tokenId); until those exist they are placeholders, so this is
+    dry-run-shape only — never a broadcastable registration.
+    """
     from eth_abi import encode  # type: ignore
 
-    # Simplified: the bridge will use the same 8-arg encoding the agent path used.
-    # For test we just produce a plausible payload.
     return encode(
-        ["uint256", "address", "bytes32", "string", "uint8", "bytes32", "bytes32", "address"],
-        [project_id, "0x0000000000000000000000000000000000000000", did_hash, uri, v, r, s, "0x0000000000000000000000000000000000000000"],
+        ["address", "uint256", "address", "bytes32", "string", "uint8", "bytes32", "bytes32"],
+        [device_contract, token_id, device, did_hash, uri, v, r, s],
     )
 
 
@@ -258,16 +343,33 @@ def register_controller_ioid(
 ) -> ControllerRegistrationResult:
     """End-to-end (or dry-run) registration for a gamer controller.
 
+    ioid_registry_address: the ioID PERMIT registry. Default (the zero sentinel) triggers
+    resolve_ioid_registry_address() — env → deployed-addresses 'ioIDRegistry' → agent constant,
+    fail-loud, refusing the zero address AND the Phase 55 VAPIioIDRegistry DID book (F-T3-1).
+
+    HONEST SCOPE: dry-run assembles the permit + canonical calldata against the LIVE registry
+    (proving the interface) but returns ioid_token_id=None / tba_address=None — a controller
+    registration is BLOCKED until the prerequisites exist (VAPIGamerControllerNFT deployed +
+    ioIDStore.setDeviceContract for a "QorTroller Controllers" project + a minted tokenId +
+    a real gamer permit signature). A non-dry-run call raises rather than fabricate a tx.
+
     Steps:
-      1. Validate the device_id/key binding (chain-first when the caller
-         supplies the VMDR pubkeyHash; canon best-effort otherwise).
-      2. Build + pin DID doc.
-      3. Compute did content hash.
-      4. Mint device NFT slot (via minter on VAPIGamerControllerNFT) — omitted in v1 surface; assume pre-minted or handled by caller for now.
-      5. Read nonce, build permit, (gamer signs if key supplied).
-      6. Assemble + (optionally) send the register tx.
-      7. Readback TBA via ioID.wallet(tokenId).
+      1. Resolve + validate the ioID permit registry (never zero, never the DID book).
+      2. Validate the device_id/key binding (chain-first when the caller supplies the
+         VMDR pubkeyHash; canon best-effort otherwise).
+      3. Build + pin DID doc; compute did content hash.
+      4. Read the live device nonce (proves the resolved registry's permit interface).
+      5. Build permit; (gamer signs if key supplied).
+      6. Assemble canonical register calldata (placeholder deviceContract/tokenId in dry-run).
     """
+    if not ioid_registry_address or ioid_registry_address == DEFAULT_IOID_REGISTRY:
+        ioid_registry_address = resolve_ioid_registry_address()
+    elif ioid_registry_address.lower() == _VAPI_DID_REGISTRY_ADDR.lower():
+        raise ValueError(
+            f"ioid_registry_address is VAPIioIDRegistry {ioid_registry_address} (the Phase 55 "
+            f"DID book — no permit/nonces; F-T3-1). Pass the ioID PERMIT registry."
+        )
+
     _require_device_binding(
         device_id_hex, p256_pubkey_hex,
         on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
@@ -296,8 +398,14 @@ def register_controller_ioid(
         # Dry run: leave sig zero; caller will replace with real gamer sig
         v, r, s = 27, b"\x00" * 32, b"\x00" * 32
 
+    # Canonical register calldata. deviceContract/tokenId/device are controller
+    # prerequisites (VAPIGamerControllerNFT + a minted tokenId) — placeholders here, so
+    # this is dry-run-shape only, never a broadcastable registration.
+    _device_addr = Web3.to_checksum_address("0x" + device_id_hex.lower().removeprefix("0x")[-40:])
     calldata = assemble_register_calldata(
-        project_id=project_id,
+        device_contract=_ZERO_ADDR,   # VAPIGamerControllerNFT — PREREQ, not deployed
+        token_id=0,                   # minted controller tokenId — PREREQ, not minted
+        device=_device_addr,
         did_hash=bytes.fromhex(did_hash[2:]),
         uri=f"ipfs://{cid}",
         v=v,
@@ -305,27 +413,36 @@ def register_controller_ioid(
         s=s,
     )
 
-    tx_hash = None
-    ioid_token_id = 0
-    tba = "0x0000000000000000000000000000000000000000"
+    # The controller registration prerequisites (D-CONTROLLER-IOID-1 Option A + Phase 1B).
+    prereqs = [
+        "ProjectRegistry: a 'QorTroller Controllers' project registered",
+        "VAPIGamerControllerNFT deployed (the controller deviceContract)",
+        "ioIDStore.setDeviceContract(projectId, VAPIGamerControllerNFT)",
+        "a minted controller-NFT tokenId for this device",
+        "a real gamer EIP-712 permit signature (gamer-sovereign, Option A)",
+    ]
 
-    if not dry_run and gamer_private_key:
-        # In real run the bridge would send from an authorized minter or the gamer would call after bridge assembles.
-        # For skeleton we simulate a successful path and fake the readbacks.
-        # Real implementation wires the actual sendRawTransaction path + event parsing.
-        tx_hash = "0x" + "cc" * 32
-        ioid_token_id = 1
-        tba = Web3.to_checksum_address("0x" + "11" * 20)
-    else:
-        # dry-run readback simulation
-        ioid_token_id = 42  # placeholder
-        tba = Web3.to_checksum_address("0x" + "dead" * 5 + "beef" * 5)
+    if not dry_run:
+        # HONEST: the real broadcast path is NOT wired and the prerequisites above are unmet.
+        # Refuse to fabricate a tx / tokenId / TBA (the old skeleton returned fake success).
+        raise NotImplementedError(
+            "controller ioID registration broadcast is not wired — dry-run only. "
+            "Blocked on: " + "; ".join(prereqs) + ". "
+            "The registry + permit interface are proven live (see the dry-run result); "
+            "registration is a separate operator-GO ceremony once the prereqs exist."
+        )
 
+    # Dry-run: honest result — no fabricated tokenId / TBA. The registry resolved, the
+    # nonce read live, the permit + canonical calldata assembled; a real registration is
+    # blocked on `pending_prereqs`.
     return ControllerRegistrationResult(
         device_id=device_id_hex,
-        ioid_token_id=ioid_token_id,
-        tba_address=tba,
+        ioid_token_id=None,
+        tba_address=None,
         did_cid=cid,
-        tx_hash=tx_hash,
-        dry_run=dry_run,
+        tx_hash=None,
+        dry_run=True,
+        ioid_registry_address=ioid_registry_address,
+        device_nonce=nonce,
+        pending_prereqs=prereqs,
     )

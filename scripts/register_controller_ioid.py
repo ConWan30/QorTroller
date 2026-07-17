@@ -31,7 +31,10 @@ sys.path.insert(0, str(REPO_ROOT / "bridge"))
 from dotenv import load_dotenv
 load_dotenv(REPO_ROOT / ".env")
 
-from vapi_bridge.controller_ioid_registration import register_controller_ioid
+from vapi_bridge.controller_ioid_registration import (
+    register_controller_ioid,
+    resolve_ioid_registry_address,
+)
 from web3 import Web3
 
 
@@ -111,6 +114,27 @@ def main() -> None:
     key = args.gamer_key or os.environ.get("GAMER_PRIVATE_KEY")
     dry = args.dry_run or not args.confirm
 
+    # Resolve the ioID PERMIT registry (fail-loud; never zero, never the Phase 55
+    # VAPIioIDRegistry DID book — F-T3-1 / A2A round-33).
+    try:
+        registry = resolve_ioid_registry_address()
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)
+    print(f"ioID permit registry: {registry}")
+
+    # Prove the resolved registry is a LIVE permit registry (has nonces()) — read-only.
+    try:
+        nonce_abi = [{"name": "nonces", "type": "function", "stateMutability": "view",
+                      "inputs": [{"name": "owner", "type": "address"}],
+                      "outputs": [{"type": "uint256"}]}]
+        reg = w3.eth.contract(address=w3.to_checksum_address(registry), abi=nonce_abi)
+        live_nonce = reg.functions.nonces(w3.to_checksum_address(args.gamer)).call()
+        print(f"live nonces(gamer):   {live_nonce}  (registry answers the permit interface)")
+    except Exception as exc:  # noqa: BLE001 — surface but don't fabricate
+        print(f"WARNING: live nonces() read failed ({exc}) — is the RPC up / address a permit "
+              f"registry? Proceeding with dry-run assembly.", file=sys.stderr)
+
     # Mint/verify split (round-27 F2): a registered device is bound by its VMDR
     # pubkeyHash; the evidence is RPC-fetched here, never taken from the CLI.
     on_chain_pubkey_hash = _fetch_vmdr_pubkey_hash(w3, args.device_id)
@@ -120,33 +144,41 @@ def main() -> None:
         print("binding: CANON best-effort (device not registered on VMDR, or "
               "MANUFACTURER_DEVICE_REGISTRY_ADDRESS unset)")
 
-    res = register_controller_ioid(
-        web3=w3,
-        device_id_hex=args.device_id,
-        p256_pubkey_hex=args.pubkey_hex,
-        gamer_address=args.gamer,
-        gamer_private_key=key,
-        birth_cert_cid=args.birth_cert_cid,
-        mfg_registry_tx=args.mfg_tx,
-        pinata_client=pinata,
-        project_id=args.project_id,
-        dry_run=dry,
-        on_chain_pubkey_hash_hex=on_chain_pubkey_hash,
-    )
+    try:
+        res = register_controller_ioid(
+            web3=w3,
+            device_id_hex=args.device_id,
+            p256_pubkey_hex=args.pubkey_hex,
+            gamer_address=args.gamer,
+            gamer_private_key=key,
+            birth_cert_cid=args.birth_cert_cid,
+            mfg_registry_tx=args.mfg_tx,
+            pinata_client=pinata,
+            ioid_registry_address=registry,
+            project_id=args.project_id,
+            dry_run=dry,
+            on_chain_pubkey_hash_hex=on_chain_pubkey_hash,
+        )
+    except NotImplementedError as exc:
+        # Honest: a real registration is blocked on prerequisites. No fabricated tx.
+        print(f"\nREGISTRATION BLOCKED (not wired): {exc}", file=sys.stderr)
+        sys.exit(3)
 
     print(json.dumps({
         "device_id": res.device_id,
-        "ioid_token_id": res.ioid_token_id,
-        "tba": res.tba_address,
+        "ioid_registry_address": res.ioid_registry_address,
+        "device_nonce": res.device_nonce,
+        "ioid_token_id": res.ioid_token_id,   # None in dry-run (needs a real mint)
+        "tba": res.tba_address,               # None in dry-run (needs ioID.wallet(tokenId))
         "did_cid": res.did_cid,
         "tx": res.tx_hash,
         "dry_run": res.dry_run,
+        "pending_prereqs": res.pending_prereqs,
     }, indent=2))
 
-    if res.dry_run:
-        print("\nDRY RUN — re-run with --confirm (and gamer key) to broadcast.")
-    else:
-        print("\nSubmitted. Verify on explorer and read TBA owner == gamer.")
+    print("\nDRY RUN — registry + permit interface proven live; a real registration is "
+          "BLOCKED on pending_prereqs (VAPIGamerControllerNFT + project + setDeviceContract "
+          "+ minted tokenId + gamer permit). Not a registration.")
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ certified controller already uses**, applied to the observer:
 
 | prerequisite | on-chain / in-repo | role |
 |---|---|---|
-| **ioID device identity** | `VAPIioIDRegistry` `0xF7885B588718b891B2234477D031607da4a7ACfe` (deployed) | the node's DID / token — its independent identity |
+| **ioID device identity** | ioID **permit** registry `ioIDRegistry` `0x0A7e595C7889dF3652A19aF52C18377bF17e027D` (has `nonces()` + 8-param EIP-712 `register`; the `agent_registration.py` flow lives here). NOTE (F-T3-1 / round-33): `VAPIioIDRegistry` `0xF7885B58…` is the Phase 55 **DID book** (`register(bytes32,address,string)`, no permit) — NOT this mint target. | the node's DID / token — its independent identity |
 | **device birth cert** | `VAPIManufacturerDeviceRegistry` `0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0` (deployed) | the node's provenance (silicon-rooted, Path A) |
 | **registration pattern** | `bridge/vapi_bridge/agent_registration.py` (`ioid_did` / `ioid_token`, e.g. the Curator DID) | the proven mint flow to reuse |
 | **event validation** | `w3bstream/applet/` (`frame_grabbing=false` pinned) | the node's perception events validated mechanically, never captured |
@@ -45,7 +45,7 @@ Everything needed to register a witness node **already exists** (readiness check
 registration is a future, **operator + device + spend gated** ceremony (not fired here):
 
 1. Provision the node's device identity + birth cert (Path A `provision_device_mfg.py` pattern → VMDR).
-2. Mint the ioID (DID + token + TBA) via `VAPIioIDRegistry`, reusing the `agent_registration.py` flow.
+2. Mint the ioID (DID + token + TBA) via the ioID **permit** registry `ioIDRegistry` `0x0A7e595C…` (the `agent_registration.py` flow's registry — NOT the `VAPIioIDRegistry` DID book, whose `nonces()` reverts; F-T3-1).
 3. Bind the node's perception-event schema to W3bstream validation (mechanical-only).
 4. Re-run the RP-7 rail with the node's independent identity → confirm it flips.
 
