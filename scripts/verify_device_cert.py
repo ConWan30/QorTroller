@@ -143,7 +143,36 @@ def main():
         sys.exit(3)
 
     print(f"  on-chain         : registered={registered_flag} active={active}")
-    print(f"  on-chain hash    : 0x{on_chain_birth_cert_hash.hex()}")
+    print(f"  VMDR hash        : 0x{on_chain_birth_cert_hash.hex()}")
+
+    # Path A: when a birth-cert override registry is wired, the EFFECTIVE hash is
+    # currentBirthCertHash (OVERRIDE-then-VMDR).
+    #   - env UNSET  → legacy VMDR-only (fail-open for unmigrated tooling). CORRECT.
+    #   - env SET + read OK → use effective hash.
+    #   - env SET + read FAIL → ERROR exit 3 (fail-CLOSED). Do NOT fall back to the
+    #     raw VMDR hash: after HSM re-anchor, that would silently re-accept a
+    #     software-signed cert that the override is meant to supersede.
+    override_addr = os.getenv("BIRTH_CERT_UPDATE_REGISTRY_ADDRESS", "").strip()
+    if override_addr:
+        try:
+            OVR_ABI = [{"name": "currentBirthCertHash", "type": "function", "stateMutability": "view",
+                        "inputs": [{"name": "deviceId", "type": "bytes32"}],
+                        "outputs": [{"type": "bytes32"}]}]
+            ovr = w3.eth.contract(address=w3.to_checksum_address(override_addr), abi=OVR_ABI)
+            effective = bytes(ovr.functions.currentBirthCertHash(device_id_bytes).call())
+            if effective != on_chain_birth_cert_hash:
+                print(f"  override hash    : 0x{effective.hex()}  (OVERRIDE-then-VMDR)")
+            on_chain_birth_cert_hash = effective
+        except Exception as exc:  # noqa: BLE001 — fail-CLOSED when override is configured
+            print(
+                f"ERROR: BIRTH_CERT_UPDATE_REGISTRY_ADDRESS is set but override read failed "
+                f"({exc}). Refusing to fall back to VMDR raw hash (would accept stale "
+                f"software cert after HSM re-anchor). Fix RPC/address or unset the env.",
+                file=sys.stderr,
+            )
+            sys.exit(3)
+
+    print(f"  effective hash   : 0x{on_chain_birth_cert_hash.hex()}")
 
     if on_chain_birth_cert_hash != expected_hash:
         print(f"\nVERDICT: INVALID  (birthCertHash mismatch — cert content "

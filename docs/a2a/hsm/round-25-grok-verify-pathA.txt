@@ -1,0 +1,54 @@
+I'll verify Path A against the live tree: contract, Hardhat tests, deploy/re-anchor scripts, and `verify_device_cert` integration — findings first.Hardhat 10/10 green. One real footgun in verify (#3): env-set + override-read failure falls back to stale VMDR hash. Fixing that to fail-closed (exit 3).## VERDICT: **SHIP-WITH-FIX** (fix applied: verify fail-closed)
+
+Hardhat: **10/10 pass** (real VMDR deploy+register).
+
+---
+
+### FINDINGS
+
+| # | Sev | Status |
+|---|-----|--------|
+| **F1** | **HIGH** | **FIXED** — `verify_device_cert.py`: env SET + override read fail was WARNING→VMDR raw hash. Post re-anchor that re-accepts software cert. Now **exit 3 ERROR** (fail-CLOSED). Env **unset** still legacy fail-open. |
+| F2 | LOW | Re-anchor script has **no 2× balance guard** (deploy does). Hard-cap 0.5 + CONFIRM still blocks blind spend. Optional parity. |
+| F3 | INFO | No Python unit test for override path. Ceremony covers it. Non-blocking. |
+
+No contract bugs found.
+
+---
+
+### HAMMER
+
+**1. CONTRACT — CLOSED**  
+Guards: `isActive` / nonzero / noop. `clearOverride` deletes both slots. `vmdr` immutable.  
+**Index 5 = `birthCertHash`** confirmed vs VMDR struct + `chain.py` comment.  
+Unregistered → `currentBirthCertHash=0`: moot — verify exits `NOT_REGISTERED` before hash.  
+No reentrancy surface (view-only external calls). No overflow concern on `uint64` ts.
+
+**2. TRUST/PRECEDENCE — CLOSED**  
+Override wins; `onlyOwner` = same principal as VMDR.  
+T-DBC-9: stale override after revoke is inert — verify check 3 is `isActive` **independent** of hash (lines 171–173). No VALID path for revoked.
+
+**3. VERIFY — FIXED (rule)**  
+| Condition | Policy |
+|-----------|--------|
+| env **unset** | fail-open VMDR-only — **correct** |
+| env **set**, read OK | effective = `currentBirthCertHash` |
+| env **set**, read **fail** | **fail-CLOSED exit 3** — **not** VMDR fallback |
+
+**4. DEPLOY/RE-ANCHOR — CLOSED (minor gap F2)**  
+Neither spends without `*_CONFIRM=1`. Deploy: wallet + hard-cap + 2× bal. Re-anchor: wallet + hard-cap + pre-send `estimateGas` + CONFIRM. No silent broadcast path.
+
+**5. INV-MFG-003 — AGREE, defer**  
+Adding to gate+allowlist is a real PV-CI 183→184 / `--confirm-governance` seal. Keep operator-fired. Pending in audit note is right.
+
+**6. SCOPE — CLOSED**  
+Contract + tests + deploy + re-anchor + verify-read + audit note = right cut. Operator: deploy → env/addresses → re-anchor (~0.2 IOTX) → verify VALID → INV seal + G1.6 demotion.  
+Eligibility (`isFullyEligible_PathA`) does **not** read birthCertHash — trust split holds.
+
+---
+
+### This-commit fix (already on tree)
+- `scripts/verify_device_cert.py` — fail-CLOSED when override configured but unreadable  
+- `audits/mfg-ca-hsm-readiness-and-path-a-2026-07-16.md` — documents the rule  
+
+**Operator may commit + fire deploy/re-anchor.** No further agent code required before spend.
