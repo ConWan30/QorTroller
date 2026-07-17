@@ -50,14 +50,16 @@ def test_assert_nft_deployed_raises_with_inc_a_pointer_when_absent():
     assert "deploy-vapi-gamer-controller-nft.js" in msg  # points at Inc-A
 
 
-def test_real_deployed_addresses_nft_still_unfired():
-    """Documents current state: Inc-A has not been broadcast, so the ceremony
-    fails honest rather than fabricating an address."""
+def test_real_deployed_addresses_nft_now_live():
+    """Inc-A fired 2026-07-17: the controller NFT is deployed + recorded, so the guards
+    RESOLVE it (this was fail-honest while Inc-A was unfired). read_text(encoding='utf-8')
+    is REQUIRED - the file holds UTF-8 and the OS default (cp1252 on Windows) raises on it
+    (the live F-INC-C-2 finding, mirrored by _load_deployed's fix)."""
     deployed = json.loads(
-        (Path(__file__).resolve().parents[2] / "contracts" / "deployed-addresses.json").read_text())
-    assert resolve_controller_nft_address(deployed) is None
-    with pytest.raises(CeremonyPrereqError):
-        assert_nft_deployed(deployed)
+        (Path(__file__).resolve().parents[2] / "contracts" / "deployed-addresses.json").read_text(encoding="utf-8"))
+    addr = resolve_controller_nft_address(deployed)
+    assert addr == "0x93b77eB6D8F9e12A801aC06b81bb6E37b7dcdE55"
+    assert assert_nft_deployed(deployed) == addr
 
 
 # ── T-CC-3: project token id guard ────────────────────────────────────────────

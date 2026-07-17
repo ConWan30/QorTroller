@@ -16,7 +16,8 @@
  * Empirical IoTeX baselines (agent NFT, commit fef267e9 — Hardhat under-estimates upgradeable ~3-4x):
  *   deploy ~2.17 IOTX / initialize ~0.13 / configureMinter ~0.07  (total ~2.37; budget ~3.0).
  *   Explicit gasLimit overrides: initialize 500000, configureMinter 200000.
- *   Check receipt.status === 1n after EVERY tx (a mined-but-reverted tx still returns a receipt).
+ *   Check Number(receipt.status) === 1 after EVERY tx (ethers v6 returns status as a NUMBER, not
+ *   bigint; a mined-but-reverted tx still returns a receipt).
  *
  * Post-deploy (operator ceremony, Inc-C): ProjectRegistry.register("QorTroller Controllers", 0) ->
  *   ioIDStore.setDeviceContract(projectTokenId, thisAddress) -> NFT.mint(gamer).
@@ -90,21 +91,21 @@ async function main() {
   const addr = await contract.getAddress();
   const dtx = contract.deploymentTransaction();
   const drcpt = await dtx.wait();
-  if (drcpt.status !== 1n) {
+  if (Number(drcpt.status) !== 1) {   // ethers v6 returns status as a NUMBER, not bigint (1n false-positives)
     throw new Error(`Deploy reverted: status=${drcpt.status} tx=${dtx.hash} — https://testnet.iotexscan.io/tx/${dtx.hash}`);
   }
   console.log("DEPLOYED        :", addr, " block:", drcpt.blockNumber, " gasUsed:", drcpt.gasUsed.toString());
 
   const itx = await contract.initialize(NAME, SYMBOL, { gasLimit: 500000 });
   const ircpt = await itx.wait();
-  if (ircpt.status !== 1n) {
+  if (Number(ircpt.status) !== 1) {
     throw new Error(`initialize reverted: status=${ircpt.status} tx=${itx.hash} (0x65 = IoTeX OOG, raise gasLimit) — https://testnet.iotexscan.io/tx/${itx.hash}`);
   }
   console.log("initialize      : status", ircpt.status, " gasUsed", ircpt.gasUsed.toString());
 
   const ctx = await contract.configureMinter(deployer.address, MINTER_ALLOWANCE, { gasLimit: 200000 });
   const crcpt = await ctx.wait();
-  if (crcpt.status !== 1n) {
+  if (Number(crcpt.status) !== 1) {
     throw new Error(`configureMinter reverted: status=${crcpt.status} tx=${ctx.hash} (owner 0x0 => initialize failed) — https://testnet.iotexscan.io/tx/${ctx.hash}`);
   }
   console.log("configureMinter : status", crcpt.status, " minter=deployer allowance=" + MINTER_ALLOWANCE);
