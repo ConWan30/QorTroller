@@ -97,7 +97,7 @@ async function main() {
   // to subsequent operations. See header NatSpec for failure-mode context.
   if (deployTx) {
     const deployReceipt = await deployTx.wait();
-    if (deployReceipt.status !== 1n) {
+    if (Number(deployReceipt.status) !== 1) {   // ethers v6 status is a NUMBER (1n false-positives)
       throw new Error(
         `Deploy reverted: status=${deployReceipt.status} (expected 1n). ` +
         `tx=${deployTx.hash} block=${deployReceipt.blockNumber} ` +
@@ -128,7 +128,7 @@ async function main() {
   console.log("initialize tx submitted:", initTx.hash);
   // Finding 2: explicit receipt status check.
   const initReceipt = await initTx.wait();
-  if (initReceipt.status !== 1n) {
+  if (Number(initReceipt.status) !== 1) {
     throw new Error(
       `initialize reverted: status=${initReceipt.status} (expected 1n). ` +
       `tx=${initTx.hash} block=${initReceipt.blockNumber} ` +
@@ -155,7 +155,7 @@ async function main() {
   console.log("configureMinter tx submitted:", configTx.hash);
   // Finding 2: explicit receipt status check.
   const configReceipt = await configTx.wait();
-  if (configReceipt.status !== 1n) {
+  if (Number(configReceipt.status) !== 1) {
     throw new Error(
       `configureMinter reverted: status=${configReceipt.status} (expected 1n). ` +
       `tx=${configTx.hash} block=${configReceipt.blockNumber} ` +

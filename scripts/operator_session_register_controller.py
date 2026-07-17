@@ -98,7 +98,10 @@ def _connect():
 
 
 def _load_deployed() -> dict:
-    return json.loads(DEPLOYED_ADDRESSES.read_text())
+    # encoding="utf-8" is REQUIRED: deployed-addresses.json holds UTF-8 (smart quotes/em-dashes
+    # in wiring notes) and the default read_text() uses the OS locale (cp1252 on Windows) -> a
+    # UnicodeDecodeError on byte 0x9d. read_text() must never rely on the platform default here.
+    return json.loads(DEPLOYED_ADDRESSES.read_text(encoding="utf-8"))
 
 
 def _submit(w3, account, fn, *, value_wei: int, cap: float, execute: bool,
