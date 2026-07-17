@@ -1,0 +1,138 @@
+I'll re-inspect the tree and the two registry surfaces with evidence first, then re-rule F-T3-1 against the live interface mismatch.Confirming one more interface detail: agent ABI vs controller calldata assembly order (secondary drift).# A2A r33 re-rule — F-T3-1
+
+**Verdict: CONCEDE F-T3-1. r30 doc-based steer to `0xF7885B58` is SUPERSEDED.**  
+Empirical interface + live agent path outrank the review-bars / `deployed-addresses` label collision.
+
+---
+
+## Findings (tree + interface)
+
+### F1. Two different contracts, same namespace confusion
+
+| Address | Name in tree | Role | Interface |
+|---------|--------------|------|-----------|
+| `0xF7885B588718b891B2234477D031607da4a7ACfe` | `VAPIioIDRegistry` | Phase 55 **VAPI-custom DID book** | `register(bytes32,address,string)` / `getDID` / `isRegistered` / `onlyBridge` — **no `nonces`** |
+| `0x0A7e595C7889dF3652A19aF52C18377bF17e027D` | IoTeX **`ioIDRegistry`** | System **permit + mint** registry | `nonces(address)` / EIP-712 `Permit` / 8-param `register` (selector `0x39a4a241`) / mints via `ioID` + TBA |
+
+Source for F788: `contracts/contracts/VAPIioIDRegistry.sol` (Phase 55, bridge-only registrar, `did:io:` string store).  
+Source for 0A7e: `ioIDRegistry_canonical.sol` + `agent_registration.IOID_REGISTRY_ADDR` + successful agent fleet registration.  
+Your eth_calls match this exactly: F788 `nonces` reverts; 0A7e returns `0`.
+
+### F2. Controller code targets the **permit** registry, not the DID book
+
+`controller_ioid_registration.py`:
+- `get_device_nonce` → `reg.functions.nonces(device_owner)`
+- `EIP712_DOMAIN_NAME = "ioIDRegistry"`
+- `IOID_REGISTER_SELECTOR = "0x39a4a241"`
+- comments explicitly cite agent path / 8-param wrapper
+
+Adapting that module to F788’s interface would **delete** the permit/TBA/ioID-mint ceremony the design bars require (gamer EIP-712, TBA via `ioID.wallet`). That is a redesign, not a wire fix. **Rejected.**
+
+### F3. Bridge already uses **both**, for different jobs
+
+- `chain.py` `IOID_REGISTRY_ABI` = **VAPI DID** surface (`register(deviceId, deviceAddress, did)`) — session/DID bookkeeping via `ensure_ioid_registered` when `IOID_REGISTRY_ADDRESS` points at F788-class.
+- `agent_registration.py` `IOID_REGISTRY_ABI` = **IoTeX permit** surface — live agent DID mint + TBA.
+
+Same env name `IOID_REGISTRY_ADDRESS` historically served Phase 55 DID wiring; agent path hardcoded the system registry. That naming collision is part of why r30 went wrong.
+
+### F4. Review-bars + witness doc **conflated** the two
+
+`docs/ioid-ceremony-review-bars-2026-07-11.md` line 6 + CODE-TRUTH index:
+> On-chain: `VAPIioIDRegistry` … `0xF7885B58`  
+> Deployed ioID registry → `deployed-addresses.json` → `VAPIioIDRegistry`
+
+…while the same doc correctly describes the **agent permit ceremony** (8-param register, gamer Permit, TBA). That is internal contradiction.  
+`deployed-addresses.json` `_wiring_notes.VAPIioIDRegistry` is accurate **for what it is** (“DID device identity registry”) — wrong only when used as the **controller permit target**.  
+`docs/witness-node-ioid-readiness-2026-07-11.md` has the same error (mint via F788 + “reuse agent_registration flow” — those are incompatible).
+
+### F5. Device-type split is **deviceContract / project**, not a second registry
+
+Canonical `ioIDRegistry.register` consumes `(deviceContract, tokenId, …)` and looks up `ioIDStore.deviceContractProject(deviceContract)`.  
+Agents: `VAPIOperatorAgentNFT` `0xa0CDD2B3…` + project “VAPI Operator Agents”.  
+Controllers: `VAPIGamerControllerNFT` + a controllers ProjectRegistry project + `ioIDStore.setDeviceContract` — **same** `ioIDRegistry` `0x0A7e595C`.  
+`VAPIGamerControllerNFT` is **not** in `deployed-addresses.json` yet (prerequisite still open — correct).
+
+### F6. Secondary drift (not F-T3-1, but Inc-3 must not paper over it)
+
+`assemble_register_calldata` encodes  
+`(projectId, deviceContract, didHash, uri, v, r, s, user)`  
+while agent ABI + `ioIDRegistry_canonical.sol` use  
+`(deviceContract, tokenId, device, hash, uri, v, r, s)` (wrapper; user = `msg.sender`).  
+
+Dry-run calldata assembly in Inc-3 should follow the **agent/canonical** order, not the skeleton comment order.
+
+### F7. r30 footgun #4 was wrong on the registry axis
+
+“Do not silently reuse agent constant `0x0A7e595C` for controllers” assumed two registries. Reality: **one system registry, two deviceContracts**. The real footgun is:
+
+1. Resolving controller target to `VAPIioIDRegistry` (DID book), or  
+2. Reusing **agent** `deviceContract` / project / NFT for a controller mint.
+
+Reusing `IOID_REGISTRY_ADDR = 0x0A7e595C` is **correct**, not a silent agent/controller identity merge.
+
+---
+
+## Decision table (Q1–Q5)
+
+| Q | Decision | Ruling |
+|---|----------|--------|
+| **Q1** | **Concede F-T3-1** | `0xF7885B58` is **not** the controller permit registry. Do **not** adapt `controller_ioid_registration.py` to the DID registry. Wire permit path to **`0x0A7e595C`**. |
+| **Q2** | **Shared registry is correct** | r30 footgun #4 **RETRACTED** on registry reuse. Shared `ioIDRegistry`; differ by **project + deviceContract (+ tokenId)**. Keep agent vs controller **NFT/project** separation loud. |
+| **Q3** | **Resolution order (fail-loud)** | See below. Never fall back to `VAPIioIDRegistry`. |
+| **Q4** | **Correct in THIS increment** | Minimal drift fix in review-bars + addresses note (+ witness doc if touched). Do not leave the wrong target as the “documented” answer. |
+| **Q5** | **Inc-3 scope confirmed** | Dry-run + live `nonces` + VMDR binding + DID pin stub + digest/calldata; `tx=None`; drop fake `tokenId=42` / fake TBA; registration stays BLOCKED on prereqs. |
+
+### Q3 — resolution (cleanest + most honest)
+
+```text
+1) env IOID_REGISTRY_ADDRESS   (if set and non-zero)
+2) contracts/deployed-addresses.json key "ioIDRegistry"   ← NEW, not VAPIioIDRegistry
+3) agent_registration.IOID_REGISTRY_ADDR                  ← last resort, loud comment
+FAIL if zero-address
+FAIL (explicit message) if resolved == VAPIioIDRegistry (0xF788…ACfe)
+```
+
+**Prefer (b) + import fallback (a):**
+
+- **(b)** Add `"ioIDRegistry": "0x0A7e595C…"` with note: *IoTeX system permit registry (not VAPI-deployed); distinct from Phase 55 `VAPIioIDRegistry` DID book.* Optionally annotate siblings already hardcoded in agents (`ProjectRegistry`, `ioIDStore`, `ioID`) as external infra — not required for Inc-3 if you only need the registry.
+- **(a)** as code fallback is fine and already fleet-proven.
+- **(c)** env-only: reject as sole path for Inc-3 (forces every dry-run smoke to re-plumb a known public system address).
+
+Optional hardening: if env `IOID_REGISTRY_ADDRESS` is still pointed at F788 for Phase 55 bridge DID work, **do not** reuse that env blindly for the controller CLI without an interface probe (`nonces` view succeeds). Prefer a dedicated env e.g. `IOID_PERMIT_REGISTRY_ADDRESS` **or** probe-and-refuse when ABI is DID-only. Smallest Inc-3: resolve as above + refuse F788 by address equality.
+
+### Q4 — drift correction scope (this increment, minimal)
+
+| File | Action |
+|------|--------|
+| `docs/ioid-ceremony-review-bars-2026-07-11.md` | CORRIGENDUM: permit target = `ioIDRegistry` `0x0A7e595C`; F788 = Phase 55 DID book only; fix CODE-TRUTH index |
+| `contracts/deployed-addresses.json` | Add `ioIDRegistry` key + note; leave `VAPIioIDRegistry` as-is with clearer wiring note (“DID book, not permit”) |
+| `docs/witness-node-ioid-readiness-…` | Same one-line fix if you touch it; else next doc pass |
+
+No need to rewrite ceremony bars’ gamer-sign / TBA / dry_run defaults — those remain correct.
+
+### Q5 — Inc-3 honest deliverable (unchanged, sharpened)
+
+| Item | Call |
+|------|------|
+| Resolve registry (fail-loud, never zero, never F788) | **YES** |
+| Live `eth_call nonces(gamer)` on resolved addr | **YES** (proves permit interface) |
+| VMDR binding for `581a836c` | **YES** |
+| DID pin stub + digest + calldata | **YES** (calldata = agent/canonical 8-param shape) |
+| `tx=None` / no spend | **YES** |
+| Fake `ioid_token_id=42` / fake TBA | **DROP** — omit / `None` / 0 with honest `dry_run=True` |
+| Live register | **BLOCKED** until ProjectRegistry project + `VAPIGamerControllerNFT` + `ioIDStore.setDeviceContract` + gamer permit + GO |
+
+---
+
+## Supersession note (for the loop record)
+
+| Prior | Status |
+|-------|--------|
+| r30: “wire documented `VAPIioIDRegistry` `0xF7885B58` — review-bars do not supersede it” | **SUPERSEDED by r33** — review-bars named the **wrong** contract for the permit ceremony; empirical `nonces` + agent live path + controller ABI + `ioIDRegistry_canonical.sol` win |
+| r30 footgun #4: “do not reuse `0x0A7e595C` for controllers” | **RETRACTED** for the **registry** address; still holds for **deviceContract / project / NFT** reuse |
+
+---
+
+## Inc-3 go shape (one line)
+
+**Wire CLI to IoTeX `ioIDRegistry` `0x0A7e595C` (env → new addresses key → agent constant), refuse F788, live-nonce dry-run only, no fake tokenId, registration still blocked on controller project/NFT/store prereqs.**
