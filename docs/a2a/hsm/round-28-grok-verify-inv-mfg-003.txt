@@ -1,0 +1,85 @@
+I'll adversarially verify INV-MFG-003 against the live contract source: the gate entry, the five pin lines, and any over/under-match or trust-surface gaps.Confirming the gate's per-line match semantics and simulating each alternate against the full contract.## INV-MFG-003 adversarial verify (183→184 seal)
+
+**Verdict: SHIP** (optional description nit only)
+
+---
+
+### V1 — Match hygiene: clean (5 = 5, 1:1)
+
+Simulated per-line `re.search(..., IGNORECASE)` on the live `.sol`:
+
+| Alt | Pins | Hits | Line |
+|-----|------|------|------|
+| 1 | `setUpdated… onlyOwner` | 1 | L53 |
+| 2 | `isActive` require | 1 | L54 |
+| 3 | non-zero `newHash` | 1 | L55 |
+| 4 | `event BirthCertHashUpdated…` | 1 | L43 |
+| 5 | `function currentBirthCertHash…` | 1 | L79 |
+
+**Not matched (good):**
+- L56 call `currentBirthCertHash(deviceId)` — needs `function …`
+- L60 `emit BirthCertHashUpdated` — needs `event …`
+- NatSpec / comments mentioning those names
+- `BirthCertHashCleared`, `clearOverride`, `hasOverride`, IVMDR `isActive`
+- IGNORECASE has no extra hits (no case-variant collisions)
+
+Each alternate = exactly one line. No over/under-match.
+
+---
+
+### V2 — Right trust pins: yes for write-path + wire name
+
+Pinned surface is the load-bearing one for HSM re-anchor:
+
+1. **onlyOwner on set** — anyone-can-reanchor if loosened  
+2. **isActive gate** — re-anchor revoked devices  
+3. **non-zero hash** — zero = no-override sentinel; collides with “clear” semantics  
+4. **event declaration** — auditability (weaker than 1–3, still fine)  
+5. **`currentBirthCertHash` signature** — verifier wire name  
+
+**Not pinned (acceptable at this seal, with nuance):**
+
+| Candidate | Why skip is OK |
+|-----------|----------------|
+| `clearOverride onlyOwner` | Loss of onlyOwner is DoS/rollback of HSM state, not silent false-VALID (cleared → VMDR software hash → KMS verify fails closed). Secondary vs set path. |
+| constructor zero-vmdr | Deploy-time; immutable after live. |
+| `hasOverride` | Convenience view, not integrity. |
+| **Body of `currentBirthCertHash` (override-then-VMDR)** | **Residual risk:** digest only hashes matched lines. Signature can stay identical while body becomes “always VMDR” / “always override”. Pin intent (per gate comment) is **wire rename**, not algorithm. Trust-breaking body rewrite would **not** trip this invariant. |
+
+That body gap is real but **out of scope for “signature + write guards” pins** and matches how INV-LENS-V2-001 freezes names, not bodies. Optional later: pin a body line like `if (o != bytes32(0))` if you want semantics frozen.
+
+---
+
+### V3 — `min_matches=5` + alternation footgun
+
+**In abstract:** yes — one alt double-hitting + another missing can still total 5.
+
+**Here:** each alt hits exactly one line; no double-hit exists today.
+
+**After `--generate` seal:** digest = SHA-256 of the joined matched lines. Wrong line set → **DIGEST DRIFT** even if count stays 5. Digest is the real pin; `min_matches` is a coarse pre-check. **Acceptable.**
+
+---
+
+### V4 — Description accuracy
+
+Mostly accurate. One soft overclaim:
+
+- Description says: *“currentBirthCertHash **override-then-VMDR** view”*  
+- Pattern actually freezes: **function signature only** (matches the gate comment’s “public view signature / renaming is a wire-break”)
+
+Not a ship-blocker. If you touch prose before seal, align description to signature/wire-break wording (or add a body pin and keep the claim).
+
+Address truncate `0x31030C8F…` is fine; device `581a836c` is context, not a pin.
+
+---
+
+### Summary
+
+| Check | Result |
+|-------|--------|
+| V1 exact 1:1 matches | PASS |
+| V2 trust surface | PASS (body optional residual) |
+| V3 min_matches footgun | PASS post-digest seal |
+| V4 description | Minor overclaim on override-then-VMDR |
+
+**SHIP** — fire `--confirm-governance` when ready. No FIX required for match correctness or the five write/wire pins.
