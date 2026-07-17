@@ -1,0 +1,130 @@
+I'll ground this against the live VMDR / verify path, then give a terse companion-vs-v2 call and the exact surface I'd ship.## Call: **companion override. Ship it.**
+
+VMDR v2 is the wrong tool for N=1. You only need to move **one field** (`birthCertHash`). Everything else on-chain for `581a836c` is still right (pubkeyHash, path, tier, active). LensV2 never reads the birth hash — only VMDR active/path/tier — so a full redeploy+rewire is pure migration tax for zero eligibility gain.
+
+**Audit split is real but fine.** Two Ownable contracts is operational surface, not a new trust principal, **if**:
+- same Foundation owner
+- override is hash-only
+- write path requires `VMDR.isActive`
+- `currentBirthCertHash` is the **single** effective-hash view (no “pick your favorite contract” for verifiers)
+
+Name it honestly in the audit trail: *birth-cert integrity = OVERRIDE-then-VMDR; identity/eligibility = VMDR.* Same pattern family as Lens v1→v2 coexistence / SeparationRatio supersession — additive, not migration.
+
+---
+
+## Trust model — **confirm, no new trust surface**
+
+| Check | What it proves | Trust root |
+|-------|----------------|------------|
+| 1 | Cert is self-consistent (sig ↔ claimed issuer) | Math only |
+| 2 | Owner vouches for **this** hash | **Owner key** |
+| 3 | Still enrolled | VMDR |
+
+Override **is** the trust root for the *updated* hash. Attacker with owner key can point at a malicious cert — **identical** to `registerDevice` already. Same wallet, same blast radius. No new principal, no weaker gate, no gamer-side authority leak.
+
+Do **not** pretend on-chain “issuer == KMS pubkey.” The contract sees a `bytes32`. That check is off-chain ceremony, not Solidity.
+
+---
+
+## Exact surface (minimal, reversible)
+
+```solidity
+// Ownable only — ReentrancyGuard optional (no external value transfer; skip unless you want symmetry)
+contract VAPIDeviceBirthCertUpdateRegistry is Ownable {
+    IVMDR public immutable vmdr;  // constructor: non-zero, frozen
+
+    mapping(bytes32 => bytes32) public updatedBirthCertHash;
+    mapping(bytes32 => uint64)  public updatedAt;
+
+    event BirthCertHashUpdated(
+        bytes32 indexed deviceId,
+        bytes32 newHash,
+        bytes32 previousEffectiveHash  // override if set, else VMDR
+    );
+    event BirthCertHashCleared(bytes32 indexed deviceId, bytes32 previousHash);
+
+    function setUpdatedBirthCertHash(bytes32 deviceId, bytes32 newHash) external onlyOwner {
+        require(vmdr.isActive(deviceId), "DBC-UPD: not active on VMDR");
+        require(newHash != bytes32(0),   "DBC-UPD: zero hash");
+        bytes32 prev = currentBirthCertHash(deviceId);
+        require(newHash != prev,         "DBC-UPD: noop");  // anti-footgun, keep
+        updatedBirthCertHash[deviceId] = newHash;
+        updatedAt[deviceId] = uint64(block.timestamp);
+        emit BirthCertHashUpdated(deviceId, newHash, prev);
+    }
+
+    function clearOverride(bytes32 deviceId) external onlyOwner {
+        bytes32 prev = updatedBirthCertHash[deviceId];
+        require(prev != bytes32(0), "DBC-UPD: no override");
+        delete updatedBirthCertHash[deviceId];
+        delete updatedAt[deviceId];
+        emit BirthCertHashCleared(deviceId, prev);
+    }
+
+    function hasOverride(bytes32 deviceId) external view returns (bool) {
+        return updatedBirthCertHash[deviceId] != bytes32(0);
+    }
+
+    // THE verifier API — pin this name
+    function currentBirthCertHash(bytes32 deviceId) public view returns (bytes32) {
+        bytes32 o = updatedBirthCertHash[deviceId];
+        if (o != bytes32(0)) return o;
+        return vmdr.getDevice(deviceId).birthCertHash; // or devices()[5]
+    }
+}
+```
+
+**Guards (yes / no):**
+- **Yes:** `onlyOwner`, `isActive` (registered ∧ active), `newHash != 0`, optional `!= prev`
+- **No:** on-chain issuer/KMS match (impossible honestly on hash-only)
+- **Yes:** `clearOverride` — prefer clear over “set back to software hash” (leave no override residue claiming HSM era)
+
+**Do not store** the old software hash as override when rolling back — `clear()` is the honest rollback.
+
+Deploy: estimate-first, triple-gate (deployer == bridge wallet, hard-cap ~1 IOTX, confirm env). Immutable `vmdr` = `0x2e5B5FB1…`.
+
+---
+
+## Q answers (short)
+
+1. **Companion.** Split hash authority is OK under same owner + narrow surface. v2 only if you need to change more than hash or kill one-shot forever for scale.
+
+2. **Confirmed.** Override = same onlyOwner trust as `registerDevice`. No new trust surface; only a second write path.
+
+3. **Active-on-VMDR is enough on-chain.** Owner asserts hash. KMS issuer match lives in `provision_device_mfg` preflight + `verify_device_cert` post-check.
+
+4. **Yes.** Precedence: override if non-zero else VMDR. Footgun (override set to KMS hash, disk cert still software-signed) → check 1 may pass (self-consistent), check 2 **must fail**. Gate: preflight READY + re-issue under KMS → set → `verify_device_cert` VALID on **that** cert file. Optional bridge soft-check: `cert.issuer_pubkey_hex == known KMS CA` before firing `setUpdated`.
+
+5. **Ship `INV-MFG-003`.** Not overkill — this is the hash-update authority for Path A. Pin: `onlyOwner` on set, `isActive` guard string/pattern, `BirthCertHashUpdated` event, `currentBirthCertHash` override-wins. Content-hash the sol region. Candidate contract still gets an INV if it’s LIVE trust.
+
+6. **Reversible via `clearOverride`.** Required. Deploy script triple-gated. Re-anchor ~0.2 IOTX is the `setUpdated` tx, operator-fired.
+
+---
+
+## Top 2 footguns → pin in tests
+
+**Hardhat (contract):**
+1. **Active-gate + precedence** — unregistered / revoked → `set` reverts; active → set updates `currentBirthCertHash` to newHash and ignores VMDR raw; `clearOverride` → falls back to VMDR `birthCertHash`; non-owner reverts; zero/noop reverts.
+2. **Revoke after override** — override may still sit in mapping, but `isActive=false` → `verify` check 3 fails (eligibility dead). Optionally also make `set` re-check active only on write (already does); **do not** auto-clear on revoke (VMDR can’t call you). Document: revoked device’s stale override is inert for VALID.
+
+**Bridge / `verify_device_cert`:**
+1. **Override-then-VMDR read path** — when `BIRTH_CERT_UPDATE_REGISTRY_ADDRESS` set: check 2 uses `currentBirthCertHash`, never raw `devices[5]` alone. Env empty → legacy VMDR-only (fail-open to old behavior for unmigrated tooling).
+2. **Wrong-issuer / stale-cert matrix** — (a) KMS cert + matching override → VALID; (b) software cert + KMS override → INVALID (hash mismatch); (c) KMS cert + no override (VMDR still software hash) → INVALID until set fires. That third case is the pre-deploy state of `581a836c` — test it so the re-anchor ceremony order is mechanical.
+
+---
+
+## Re-anchor ceremony (operator order)
+
+1. Preflight READY (KMS CA proven)  
+2. `provision_device_mfg --dry-run` under KMS → new cert JSON (issuer `04d2636c…`)  
+3. `expected_hash = SHA-256(canonical)`  
+4. Deploy override (if not live)  
+5. Operator: `setUpdatedBirthCertHash(581a836c, expected_hash)`  
+6. `verify_device_cert` → **VALID**  
+7. Archive old software cert as forensic-only; disk path = KMS cert only  
+
+**G1.6:** HSM CA proven already closes the *root* half of F-DECON-3.2; this re-anchor closes the *device* half (no live device still bound to software hash). Demote G1.6 when both are true in Sensor C’s story — don’t demote on CA alone while `581a836c` still only verifies against software hash.
+
+---
+
+**Ship surface:** companion + `clearOverride` + `currentBirthCertHash` + INV-MFG-003 + two test packs above. Skip VMDR v2.
