@@ -1,14 +1,16 @@
 # Sensor C — Rung-Gate Readiness Ledger (Cycle 18, 2026-07-16)
 
-HWFL-1 Sensor C v0.1 — machine-checkable snapshot of every gate across Rungs 1-4 of the QorTroller manufacturing staircase. Honest weighting: nothing LIVE that isn't verifiable now. Generated `2026-07-17T02:05:04+00:00` by `scripts/run_sensor_c.py`. Machine-readable companion: `audits/rung-gate-ledger-latest.json`.
+HWFL-1 Sensor C v0.1 — machine-checkable snapshot of every gate across Rungs 1-4 of the QorTroller manufacturing staircase. Honest weighting: nothing LIVE that isn't verifiable now. Generated `2026-07-17T03:10:36+00:00` by `scripts/run_sensor_c.py`. Machine-readable companion: `audits/rung-gate-ledger-latest.json`.
 
 
-## Standing OPERATOR-ACTION box (loop never auto-touches)
+## Standing OPERATOR-ACTION box (loop renders; operator attests)
 
-- [ ] **OA-1** Back up MFG Root CA canonical file (path per `docs/disaster-recovery-runbook.private.md`). F-DECON-3.2 interim mitigation. Highest-leverage 5-min action.
-- [ ] **OA-2** Create `docs/disaster-recovery-runbook.private.md` with full AWS KMS ARNs.
-- [ ] **OA-3** IAM scope-down on bridge/.env AWS keys → `KMS:Sign` + `KMS:GetPublicKey` on the two specific key ARNs.
-- [ ] **OA-4** Long-term: HSM-backed ManufacturerRootCA + device re-issuance.
+_Statuses are OPERATOR attestations. The HWFL-1 sensors (Sensor C ledger + Sensor B watch) render this box via bridge/vapi_bridge/operator_actions.py; they never write or infer a status. To change an attestation, edit this file. Sanitization (F-CYCLE8-1/9-1): keep CA filenames, raw AWS ARNs, and home-directory key paths OUT of this file._
+
+- [x] **OA-1** (moot) Back up / protect the MFG Root CA canonical file (path per docs/disaster-recovery-runbook.private.md). — _attested 2026-07-17: Retired on both axes: the interim-backup secrecy rationale was already lost to public git history (F-CYCLE9-1), AND the F-DECON-3.2 root fix landed, so the software CA is now cold-retained forensic-only, not a live signer._ (hint: see `Sensor-C G1.6 (LIVE post root-fix)`)
+- [x] **OA-2** (done) Maintain docs/disaster-recovery-runbook.private.md with the full AWS KMS ARNs (gitignored companion). — _attested 2026-07-17: Private companion exists locally; the loop existence-checks only and never reads its contents._ (hint: path `docs/disaster-recovery-runbook.private.md`)
+- [ ] **OA-3** (open) Scope the bridge/.env AWS IAM keys down to KMS:Sign + KMS:GetPublicKey on the specific key ARNs. — _attested 2026-07-17: There are now THREE keys (Sentry secp256k1 + Guardian secp256k1 + MFG Root CA P-256 alias). The 2026-07-16 ceremony proved the bridge IAM user can Sign with the CA key and that CreateKey is denied; full least-privilege policy is verifiable only in the operator's AWS console. CA isolation is enforced at the kms_client alias map (agents hold no MFG alias), not at the IAM principal — so the scope-down remains a real, open hardening step._
+- [x] **OA-4** (done) Long-term: HSM-backed ManufacturerRootCA + live-device re-issuance (the F-DECON-3.2 root fix). — _attested 2026-07-17: Fired 2026-07-16/17: AWS KMS P-256 HSM CA live, override registry deployed (0x31030C8F...), device 581a836c re-anchored and VALID under the HSM root, INV-MFG-003 governance-sealed (PV-CI 184), Sensor-C G1.6 demoted to LIVE._ (hint: see `audits/mfg-ca-hsm-readiness-and-path-a-2026-07-16.md`)
 
 
 ## State summary

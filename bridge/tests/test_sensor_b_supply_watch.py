@@ -101,10 +101,12 @@ def test_t_sensor_b_7_fetch_error_state():
 
 
 def test_t_sensor_b_8_markdown_renders_operator_action_box_and_honesty_rail():
-    """OA-1..OA-4 + honesty rail render into every report AND
-    (HWFL-1 Cycle 9 / F-CYCLE9-1 sanitization) the rendered markdown MUST
-    NOT contain operator-private filename tokens. Positive content
-    assertions verify the sanitized OA-1 text shape + Sensor B honesty rail."""
+    """OA-1..OA-4 + honesty rail render into every report AND (HWFL-1 Cycle 9 /
+    F-CYCLE9-1) the markdown stays sanitized. Since HWFL-1 2026-07-17 the box is
+    rendered from the shared operator-attested source (identical to Sensor C);
+    this test asserts STRUCTURE + sanitization + the shared-render substring,
+    NOT specific attestation prose (which the operator is free to change)."""
+    from bridge.vapi_bridge.operator_actions import render_operator_actions
     report = assemble_watch_report(cycle=9)
     md = report.to_markdown()
     # Required structural markers (filename intentionally absent).
@@ -117,10 +119,9 @@ def test_t_sensor_b_8_markdown_renders_operator_action_box_and_honesty_rail():
             f"Sensor B watch markdown leaked operator-private token {tok!r} into "
             f"public artifact — violates F-CYCLE9-1 sanitization rail."
         )
-    # Positive content for sanitized OA-1 (must match Sensor C exactly per cross-artifact consistency).
-    assert "MFG Root CA canonical file" in md
-    assert "docs/disaster-recovery-runbook.private.md" in md
-    assert "F-DECON-3.2" in md
+    # Single-source proof: the watch report's box IS the shared renderer output
+    # (self-located, same as the report's default repo_root=None).
+    assert render_operator_actions().strip() in md
 
 
 def test_t_sensor_b_9_markdown_escapes_external_pipe_and_html_in_summary():

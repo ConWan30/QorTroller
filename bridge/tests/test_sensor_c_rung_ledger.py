@@ -112,10 +112,12 @@ def test_t_sensor_c_8_json_serializes_and_validates_schema():
 
 
 def test_t_sensor_c_9_markdown_operator_action_box_present_and_sanitized():
-    """OA-1..OA-4 nag-once-per-cycle rail renders into every ledger doc
-    AND (HWFL-1 Cycle 9 / F-CYCLE9-1 sanitization) the rendered markdown
-    MUST NOT contain operator-private filename tokens. Positive content
-    assertions verify the sanitized OA-1 text shape."""
+    """OA-1..OA-4 box renders into every ledger doc AND (HWFL-1 Cycle 9 /
+    F-CYCLE9-1) the markdown stays sanitized. Since HWFL-1 2026-07-17 the box is
+    rendered from the shared operator-attested source (single source of truth);
+    this test asserts STRUCTURE + sanitization + the shared-render substring,
+    NOT specific attestation prose (which the operator is free to change)."""
+    from bridge.vapi_bridge.operator_actions import render_operator_actions
     ledger = assemble_ledger(REPO_ROOT, cycle=9)
     md = ledger.to_markdown()
     # Box presence — required markers (filename intentionally absent).
@@ -128,10 +130,8 @@ def test_t_sensor_c_9_markdown_operator_action_box_present_and_sanitized():
             f"Sensor C ledger markdown leaked operator-private token {tok!r} into "
             f"public artifact — violates F-CYCLE9-1 sanitization rail."
         )
-    # Positive content for sanitized OA-1.
-    assert "MFG Root CA canonical file" in md
-    assert "docs/disaster-recovery-runbook.private.md" in md
-    assert "F-DECON-3.2" in md
+    # Single-source proof: the ledger's box IS the shared renderer output.
+    assert render_operator_actions(REPO_ROOT).strip() in md
 
 
 def test_t_sensor_c_12_g1_6_live_post_root_fix_plus_evidence_sanitization():
