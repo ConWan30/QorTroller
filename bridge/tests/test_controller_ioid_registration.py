@@ -236,3 +236,113 @@ def test_assemble_register_calldata_canonical_order():
     assert decoded[1] == 7                     # tokenId (absent in skeleton)
     assert decoded[2].lower() == dev.lower()   # device
     assert decoded[3] == h                      # hash
+
+
+# ── ioID Inc-B — Option-A correctness (A2A round-01 F2) ───────────────────────
+
+def test_inc_b_content_hash_is_canonical_did_doc_keccak():
+    """compute_did_content_hash hashes the canonical-JSON DID DOCUMENT (agent-consistent),
+    NOT the CID string (the old bug)."""
+    import json as _json
+    from web3 import Web3 as _W3
+    from vapi_bridge.controller_ioid_registration import (
+        build_controller_did_document, compute_did_content_hash,
+    )
+    doc = build_controller_did_document(
+        device_id_hex=GOLDEN_DEVICE_ID, ecdsa_p256_pubkey_hex=GOLDEN_PUBKEY,
+        gamer_address="0x" + "aa" * 20)
+    expected = _W3.keccak(text=_json.dumps(doc, sort_keys=True, separators=(",", ":"))).hex()
+    assert compute_did_content_hash(doc) == expected
+    # and it is NOT the old CID-string hash
+    assert compute_did_content_hash(doc) != _W3.keccak(text="bafysomecid").hex()
+
+
+def test_inc_b_register_calldata_device_is_gamer_not_device_id():
+    """F2: the register `device` slot decodes to the GAMER EOA, never the truncated device_id."""
+    from unittest.mock import MagicMock
+    from eth_abi import decode
+    from web3 import Web3 as _W3
+    w3 = _make_mock_web3(nonce_return=0)
+    pin = MagicMock(); pin.pin_json.return_value = "bafy"
+    gamer = "0x" + "bb" * 20
+    # capture the calldata by patching assemble_register_calldata? simpler: re-derive from result path.
+    # The dry-run result doesn't expose calldata, so assert via the assembler directly with device=gamer.
+    from vapi_bridge.controller_ioid_registration import assemble_register_calldata
+    data = assemble_register_calldata(
+        device_contract="0x" + "cd" * 20, token_id=1,
+        device=_W3.to_checksum_address(gamer), did_hash=b"\x11" * 32,
+        uri="ipfs://x", v=27, r=b"\x22" * 32, s=b"\x33" * 32)
+    decoded = decode(["address", "uint256", "address", "bytes32", "string", "uint8", "bytes32", "bytes32"], data)
+    assert decoded[2].lower() == gamer.lower()  # device slot == gamer
+    # and NOT the truncated device_id
+    trunc = "0x" + GOLDEN_DEVICE_ID[-40:]
+    assert decoded[2].lower() != trunc.lower()
+
+
+def test_inc_b_permit_recovers_to_gamer_so_device_must_be_gamer():
+    """ecrecover proof: the gamer-signed permit recovers to the gamer, so under Option A the
+    on-chain `device` (ecrecover target) MUST be the gamer EOA."""
+    from eth_keys import keys as ekeys
+    from vapi_bridge.controller_ioid_registration import build_permit_digest, sign_permit
+    gamer = Account.create()
+    digest = build_permit_digest("0x" + "22" * 20, gamer.address, 0)
+    v, r, s = sign_permit(gamer.key.hex(), digest)
+    sig = ekeys.Signature(vrs=(v - 27, int.from_bytes(r, "big"), int.from_bytes(s, "big")))
+    recovered = sig.recover_public_key_from_msg_hash(digest).to_checksum_address()
+    assert recovered.lower() == gamer.address.lower()
+
+
+def test_inc_b_assert_option_a_register_ready_guards():
+    """The real-register guard refuses device!=gamer, zero deviceContract, and zero tokenId."""
+    from vapi_bridge.controller_ioid_registration import assert_option_a_register_ready
+    gamer = "0x" + "ab" * 20
+    nft = "0x" + "cd" * 20
+    # happy path
+    assert_option_a_register_ready(device_contract=nft, token_id=1, device=gamer, gamer_address=gamer)
+    # device != gamer
+    with pytest.raises(ValueError, match="must equal the gamer EOA"):
+        assert_option_a_register_ready(device_contract=nft, token_id=1,
+                                       device="0x" + "ee" * 20, gamer_address=gamer)
+    # zero NFT
+    with pytest.raises(ValueError, match="VAPIGamerControllerNFT"):
+        assert_option_a_register_ready(device_contract="0x" + "00" * 20, token_id=1,
+                                       device=gamer, gamer_address=gamer)
+    # zero tokenId
+    with pytest.raises(ValueError, match="minted controller-NFT tokenId"):
+        assert_option_a_register_ready(device_contract=nft, token_id=0,
+                                       device=gamer, gamer_address=gamer)
+
+
+def test_inc_b_f1_assembled_hash_is_full_32_bytes_and_device_is_gamer(monkeypatch):
+    """grok r02 F1/F4: capture the ACTUAL assembled args from register_controller_ioid (not just the
+    pure fn). The did_hash must be the FULL 32-byte canonical-DID-doc keccak (not 31 bytes from a
+    stray [2:]) and the device slot must be the gamer."""
+    import json as _json
+    from web3 import Web3 as _W3
+    import vapi_bridge.controller_ioid_registration as cir
+
+    captured = {}
+    real_assemble = cir.assemble_register_calldata
+
+    def _spy(**kwargs):
+        captured.update(kwargs)
+        return real_assemble(**kwargs)
+
+    monkeypatch.setattr(cir, "assemble_register_calldata", _spy)
+
+    w3 = _make_mock_web3(nonce_return=0)
+    pin = MagicMock(); pin.pin_json.return_value = "bafyxyz"
+    gamer = "0x" + "bb" * 20
+    cir.register_controller_ioid(
+        web3=w3, device_id_hex=GOLDEN_DEVICE_ID, p256_pubkey_hex=GOLDEN_PUBKEY,
+        gamer_address=gamer, gamer_private_key=None, birth_cert_cid=None,
+        mfg_registry_tx=None, pinata_client=pin, ioid_registry_address=PERMIT_REGISTRY, dry_run=True)
+
+    # F1: the assembled hash is FULL 32 bytes and equals the canonical DID-doc keccak.
+    assert len(captured["did_hash"]) == 32
+    doc = cir.build_controller_did_document(
+        device_id_hex=GOLDEN_DEVICE_ID, ecdsa_p256_pubkey_hex=GOLDEN_PUBKEY, gamer_address=gamer)
+    expected = _W3.keccak(text=_json.dumps(doc, sort_keys=True, separators=(",", ":")))
+    assert captured["did_hash"] == bytes(expected)
+    # F4: device slot is the gamer (checksummed), not the truncated device_id.
+    assert captured["device"].lower() == gamer.lower()
