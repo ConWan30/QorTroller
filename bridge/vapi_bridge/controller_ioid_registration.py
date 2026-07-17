@@ -226,10 +226,48 @@ def pin_did_document(did_doc: dict, pinata_client) -> str:
     return cid
 
 
-def compute_did_content_hash(cid: str) -> str:
-    """keccak256 of the pinned content identifier (or the canonical bytes)."""
-    # Agents used the CID string bytes; keep identical for cross-consistency.
-    return Web3.keccak(text=cid).hex()
+def compute_did_content_hash(did_doc: dict) -> str:
+    """keccak256 of the canonical-JSON DID DOCUMENT — the bytes32 `hash` arg of
+    ioIDRegistry.register (ioID Inc-B, A2A round-01 F2).
+
+    Matches agent_registration.compute_did_content_hash byte-for-byte: the agents hash the DID
+    DOCUMENT (sort_keys=True, separators=(",",":")), NOT the CID string. The prior controller
+    version hashed the CID — inconsistent with the agent path + the on-chain record semantics.
+    """
+    canonical = json.dumps(did_doc, sort_keys=True, separators=(",", ":"))
+    return Web3.keccak(text=canonical).hex()
+
+
+def assert_option_a_register_ready(
+    *,
+    device_contract: str,
+    token_id: int,
+    device: str,
+    gamer_address: str,
+) -> None:
+    """Guard a REAL Option-A register (ioID Inc-B / round-01 F2). Raises unless:
+      - device == gamer_address: under D-CONTROLLER-IOID-1 Option A the GAMER signs the permit,
+        so the register's `device` (ecrecover target) MUST be the gamer EOA — not the controller's
+        truncated device_id (the physical Edge binds via the DID doc + birth cert / VMDR, not this slot).
+      - device_contract is a real, non-zero address (VAPIGamerControllerNFT — the deployed deviceContract).
+      - token_id > 0: a minted controller-NFT tokenId (the register consumes it).
+    Dry-run assembly may use placeholders; the real send (Inc-D) MUST pass this first.
+    """
+    if str(device).lower() != str(gamer_address).lower():
+        raise ValueError(
+            f"Option-A register: device ({device}) must equal the gamer EOA ({gamer_address}) — "
+            f"the gamer signs the permit; ecrecover(device) would fail otherwise."
+        )
+    dc = str(device_contract).strip()
+    if not dc or dc.lower() == _ZERO_ADDR.lower() or len(dc) != 42:
+        raise ValueError(
+            f"Option-A register: device_contract ({device_contract!r}) must be the deployed "
+            f"VAPIGamerControllerNFT address, not zero (deploy it via Inc-A first)."
+        )
+    if int(token_id) <= 0:
+        raise ValueError(
+            f"Option-A register: token_id ({token_id}) must be a minted controller-NFT tokenId (> 0)."
+        )
 
 
 def get_device_nonce(web3: Web3, ioid_registry_addr: str, device_owner: str) -> int:
@@ -384,9 +422,9 @@ def register_controller_ioid(
         on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
     )
     cid = pin_did_document(did_doc, pinata_client)
-    did_hash = compute_did_content_hash(cid)
+    did_hash = compute_did_content_hash(did_doc)  # hash the DID DOCUMENT (agent-consistent, Inc-B F2)
 
-    # For controller the "device owner" in permit is the gamer
+    # Option A (D-CONTROLLER-IOID-1): the GAMER signs the permit; the permit binds (user, nonce(gamer)).
     nonce = get_device_nonce(web3, ioid_registry_address, gamer_address)
 
     digest = build_permit_digest(ioid_registry_address, gamer_address, nonce)
@@ -398,15 +436,17 @@ def register_controller_ioid(
         # Dry run: leave sig zero; caller will replace with real gamer sig
         v, r, s = 27, b"\x00" * 32, b"\x00" * 32
 
-    # Canonical register calldata. deviceContract/tokenId/device are controller
-    # prerequisites (VAPIGamerControllerNFT + a minted tokenId) — placeholders here, so
-    # this is dry-run-shape only, never a broadcastable registration.
-    _device_addr = Web3.to_checksum_address("0x" + device_id_hex.lower().removeprefix("0x")[-40:])
+    # Canonical register calldata. Inc-B F2: `device` is the GAMER EOA (the permit signer /
+    # ecrecover target), NOT the controller's truncated device_id — the physical Edge binds via the
+    # DID doc + birth cert / VMDR, not this slot. deviceContract/tokenId are controller prerequisites
+    # (VAPIGamerControllerNFT + a minted tokenId) — placeholders here, so dry-run-shape only.
     calldata = assemble_register_calldata(
         device_contract=_ZERO_ADDR,   # VAPIGamerControllerNFT — PREREQ, not deployed
         token_id=0,                   # minted controller tokenId — PREREQ, not minted
-        device=_device_addr,
-        did_hash=bytes.fromhex(did_hash[2:]),
+        device=Web3.to_checksum_address(gamer_address),
+        # grok r02 F1: Web3.keccak(...).hex() has NO 0x prefix here, so [2:] would drop the first
+        # BYTE -> a 31-byte hash. removeprefix handles both prefixed + bare, always 32 bytes.
+        did_hash=bytes.fromhex(did_hash.removeprefix("0x")),
         uri=f"ipfs://{cid}",
         v=v,
         r=r,

@@ -1,0 +1,152 @@
+I'll verify Inc-A and Inc-B against the plan and the live agent/registry patterns — findings first, then PASS|FIX.Reading the deploy script, agent-NFT mirror, registration helper, and tests in parallel.Comparing agent NFT deploy, agent content-hash, and the live registry `register` semantics.Confirming a likely `did_hash[2:]` corruption path and re-running the controller tests.# A2A ioID-CEREMONY r02 — VERIFY Inc-A + Inc-B
+
+**Verdict: FIX** (one blocking call-site bug in Inc-B; Inc-A is solid)
+
+Inspected: `deploy-vapi-gamer-controller-nft.js`, agent NFT deploy mirror, `VAPIGamerControllerNFT.sol`, `controller_ioid_registration.py`, `agent_registration.py` (hash + permit), `ioIDRegistry_canonical.sol` (live register), tests. **16/16** controller tests pass. `deployed-addresses.json` has **no** `VAPIGamerControllerNFT` write (estimate-only path held).
+
+---
+
+## Findings first
+
+### F1 — BLOCKING (Inc-B): content-hash assembly truncates one byte
+
+`compute_did_content_hash` is correct and **byte-equal** to `AgentRegistrar.compute_did_content_hash` (canonical JSON → keccak).
+
+The only call site corrupts it:
+
+```447:447:bridge/vapi_bridge/controller_ioid_registration.py
+        did_hash=bytes.fromhex(did_hash[2:]),
+```
+
+`Web3.keccak(...).hex()` returns **64 hex chars with no `0x`**. `[2:]` drops the first byte → 31-byte “hash”. Proven:
+
+| | |
+|--|--|
+| true | `cfc99a07…` (32 B) |
+| after `[2:]` | `c99a0737…` (31 B) |
+
+Tests pass because they only unit-test the pure function, not the dry-run assembly path. Inc-D would ship a wrong on-chain `hash` if this stays.
+
+**Fix (minimal):**
+
+```python
+_raw = did_hash.removeprefix("0x") if isinstance(did_hash, str) else did_hash.hex()
+did_hash=bytes.fromhex(_raw.removeprefix("0x") if False else (did_hash[2:] if did_hash.startswith("0x") else did_hash)),
+```
+
+Cleaner: make `compute_did_content_hash` return `bytes` like agents, or:
+
+```python
+did_hash=bytes.fromhex(did_hash.removeprefix("0x")),
+```
+
+Add an integration test: dry-run (or a thin helper) asserts assembled `hash` == full 32-byte doc keccak.
+
+---
+
+### F2 — ADVISORY (Inc-A): hard-cap is deploy-only; margin is thin on *estimate*, fine on *empirical*
+
+| Signal | Value |
+|--------|--------|
+| Estimate-only buffered deploy | **2.818 IOTX** (cap 3.0) |
+| Agent empirical total (deploy+init+minter) | **~2.37 IOTX** |
+| Init + configureMinter (empirical) | **~0.20 IOTX** not in hard-cap |
+
+Hard-cap gates **deploy estimate only**. After `VAPI_GCN_DEPLOY_CONFIRM=1`, init + configureMinter always run. Empirically total ~2.37 ≪ 3.0 → **do not block**. Soft: raise **HARD_CAP_IOTX to 3.5** (or budget deploy+0.25 for post-deploy txs) so a gas-price spike + 2.8 deploy + 0.2 follow-ons does not surprise. Not required for PASS of the no-spend path.
+
+---
+
+### F3 — ADVISORY (Inc-A): no re-deploy guard
+
+Re-running with `CONFIRM=1` can deploy a second NFT and overwrite the address key. Operator discipline is enough for ceremony; optional `if addresses.VAPIGamerControllerNFT: abort` is nice later.
+
+---
+
+### F4 — ADVISORY (Inc-B tests): device=gamer not proven via `register_controller_ioid`
+
+`test_inc_b_register_calldata_device_is_gamer` only hits `assemble_register_calldata` with a hand-fed gamer. Code path *does* pass `device=gamer` (L446). Prefer capturing assembly from `register_controller_ioid` after F1 fix.
+
+---
+
+### F5 — RESIDUAL (not Inc-B bug): third-party relayer permit `user` field
+
+On-chain (`ioIDRegistry_canonical.sol` L103–110):
+
+```text
+digest = Permit(user, nonces[device])
+require(ecrecover(digest, v,r,s) == device)
+```
+
+Agents: `user = msg.sender = bridge`, `device = KMS-addr`, KMS signs.
+
+Option A: gamer signs → **`device` must be gamer** (Inc-B correct).
+
+For **dev-self** (`gamer == bridge == msg.sender`): `build_permit_digest(..., gamer, nonces[gamer])` matches `Permit(user, nonce(device))`. **OK.**
+
+For a **third-party gamer + bridge relayer**: digest must be `Permit(bridge, nonces[gamer])`, still `device=gamer`. Current builder always puts gamer in the struct’s first slot — wrong for that future path. Scope first-run is developer-self → **document for Inc-D**, not a current FIX.
+
+---
+
+## Hammer answers
+
+### V1 — Inc-A deploy safety → **PASS**
+
+| Check | Result |
+|-------|--------|
+| Default no-spend | `VAPI_GCN_DEPLOY_CONFIRM !== "1"` → early return; no deploy/write |
+| Deployer gate | `== bridge 0x0Cf36d…` |
+| Estimate-first | `estimateGas` × 1.25, hard-cap, 2× balance |
+| `status === 1n` | deploy + initialize + configureMinter |
+| gasLimits | 500k / 200k (agent OOG lesson) |
+| Write + smoke | only after owner/minter/total/allowance OK |
+| Upgradeable pattern | **intentional non-proxy**: deploy impl + `initialize` once (same as `VAPIOperatorAgentNFT`; OZ upgradeable disables constructors). Not UUPS/transparent. Correct. |
+
+Hard-cap 3.0 vs buffered 2.818: **acceptable** given empirical ~2.37; optional bump to **3.5** for total-ceremony comfort (F2). No accidental-spend path found.
+
+### V2 — content hash vs LIVE registry → **PASS function / FIX call site**
+
+- LIVE `register(..., bytes32 hash, ...)` stores the hash opaquely (`_setRecord(device, hash, uri)`); agents pass **keccak(canonical DID JSON)**, not CID.
+- Controller pure function matches agents byte-for-byte.
+- DID shape (`did:io:{device_id_hex}` + P-256 VM + gamer `controller`) is register-compatible; physical Edge binds via DID + birth cert/VMDR, not the `device` slot. F1 call-site corruption is the only defect.
+
+### V3 — device=gamer → **PASS for Option A (dev-self + real gamer-as-signer)**
+
+| Role | Agents | Controllers Option A |
+|------|--------|----------------------|
+| `device` (ecrecover) | KMS agent EOA | **gamer EOA** |
+| signer | KMS (device key) | **gamer** |
+| `user` (8-param = msg.sender) | bridge | gamer (dev-self) or gamer if they submit |
+
+Truncated `device_id[-40:]` was wrong. **device=gamer is right** whenever the gamer signs. Third-party + bridge-relayer only changes the **Permit `user` field** (F5), not `device`.
+
+### V4 — `assert_option_a_register_ready` → **PASS available; correctly not wired**
+
+Conditions: `device==gamer`, non-zero 42-char `device_contract`, `token_id>0` — right real-send guards. Still unused; non-dry path raises `NotImplementedError`. Inc-D must call assert **before** send (and after real NFT/tokenId exist).
+
+### V5 — r01 F2 residual map
+
+| # | Item | State |
+|---|------|--------|
+| 1 | `device=gamer` | **Inc-B done** |
+| 2 | real `deviceContract` + `tokenId` | **Inc-A deploy** → **Inc-C** mint/map → **Inc-D** args |
+| 3 | DID-JSON content hash | **Inc-B pure fn done; F1 call-site FIX** |
+| 4 | Real Pinata | **Inc-D** (CLI stub remains) |
+| 5 | `send` + `value=price` | **Inc-D** |
+| 6 | `tokenOfOwnerByIndex` + `wallet` readback | **Inc-D** |
+| — | assert before send | **Inc-D** |
+| — | third-party Permit `user` | **Inc-D** if not dev-self |
+
+### V6 — Commit grain
+
+**One commit for A+B is fine** (both no-spend; scope doc already allows it). Prefer that commit **includes the F1 one-liner** so Inc-B is actually complete. Split only if you want deploy script reviewable alone.
+
+---
+
+## Summary
+
+| Increment | Status |
+|-----------|--------|
+| **Inc-A** | **PASS** — estimate-first, triple-gate, smoke-then-write, agent-parity gas discipline; optional hard-cap 3.5 |
+| **Inc-B** | **FIX** — hash algorithm + device=gamer + assert + tests are right; **`bytes.fromhex(did_hash[2:])` corrupts the only assembled hash** |
+
+**Operator action before commit:** Claude (or you) applies F1 + a one-line integration assertion; re-run 16 tests; then commit A+B together. **No spend.** Re-verify is a quick delta check on the call site, not a full r02 re-open.
