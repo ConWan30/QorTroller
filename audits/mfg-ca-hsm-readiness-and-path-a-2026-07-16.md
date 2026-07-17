@@ -82,11 +82,18 @@ for the live device.** Measured live, wallet 28.441474 → **27.754206 IOTX = 0.
 Root fix landed end-to-end: mint/verify split (`b558bdec`) made the re-anchor sufficient; node_id
 `01a574e7…` preserved. Remaining: INV-MFG-003 seal + Sensor-C G1.6 demote (below).
 
-### Pending governance seal (OPERATOR-FIRED — not done autonomously)
-- **INV-MFG-003** (pin the override contract's `onlyOwner` + `isActive` guard + `BirthCertHashUpdated` +
-  `currentBirthCertHash` override-wins) bumps PV-CI 183→184. Adding an invariant + regenerating the
-  allowlist is a `--confirm-governance` seal, which stays operator-fired per the governance-seal boundary.
-  Fire it when you seal the contract as LIVE trust.
+### Governance seal — ✅ FIRED 2026-07-17 (operator, `--confirm-governance`)
+- **INV-MFG-003 SEALED: PV-CI baseline 183→184.** Operator fired
+  `scripts/fire_inv_mfg_003_seal.ps1` (wrapper exists because long inline `--reason` strings
+  newline-split in PowerShell) + typed the governance phrase. Allowlist regenerated: **+1
+  INV-MFG-003 digest `e7d7a8d1447f4969…`, 183 pre-existing digests byte-identical**; gate PASS 184.
+  Six pins on the LIVE contract: `setUpdatedBirthCertHash` onlyOwner / `isActive`-on-VMDR gate /
+  non-zero newHash / `BirthCertHashUpdated` event / `currentBirthCertHash` signature / the
+  override-wins branch (`if (o != bytes32(0))` — grok round-28's residual: signature-only would let
+  the body silently become always-VMDR). grok round-28 verify = SHIP
+  (`docs/a2a/hsm/round-28-grok-verify-inv-mfg-003.txt`). The bridge-unreachable warning at seal time
+  is the documented fail-open (governance event POST skipped — bridge not running; allowlist write
+  is the seal).
 - **Sensor-C G1.6 LIVE-FRAGILE → LIVE** is earned only AFTER step 5 (581a836c VALID under the HSM root) —
   a separate operator-confirmed Sensor-C edit. Not touched here.
 
