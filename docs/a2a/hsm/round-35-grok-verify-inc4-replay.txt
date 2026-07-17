@@ -1,0 +1,42 @@
+I'll verify Inc-4 against the V1–V5 hammer: inspect the tool, tests, gate formula reuse, endpoint auth, and the audit bank.## A2A r35 — VERIFY Inc-4 (T4 `replay_governance_event.py`)
+
+**Empirical recheck:** 3/3 tests green · PV-CI **184 PASS** · dry-run `74c864c8` → prev `2ade1082…` / new `a47d6dbb…` · tip zeros (bridge down, labeled) · EXIT 0 · no POST.
+
+---
+
+### Findings (first)
+
+| ID | Sev | Hammer | Finding |
+|----|-----|--------|---------|
+| F1 | **MED** | V4 | Tip-fetch reuses gate `_fetch_latest_provenance_hash()` **without** `x-api-key`. History GET is `check_read_key`-gated. On a key-configured bridge with a **non-empty** provenance chain, tip fails open → `0*64`, while `--execute` **with** key can POST a zeros-prev link → `chain_intact=False` / second “genesis.” Pre-existing gate shape; tool improves **POST** auth only. **Empty-chain INV-MFG-003 path is fine.** |
+| F2 | LOW | V2 | `_hash_allowlist_content` **reimplements** gate canonicalization (`sort_keys` + compact) instead of a shared content helper. Byte-identical **today**; T-RGE-1 pins it. New-hash path correctly calls `compute_allowlist_hash()`. Drift only if gate changes formula without updating the twin. |
+| F3 | LOW | V4 | `prev==new` is stderr WARNING only; `--execute` still allowed. Honest, not fail-hard. |
+| F4 | NIT | V3 | T-RGE-3 checks cats + length bounds but does **not** invoke `main()` on a short reason (no SystemExit path). Contract match is real; test is lean. |
+| — | OK | V1 | Honesty airtight: module docstring, banner, comment on fresh `ts_ns`, reason help “LATE RECORD.” No claim of backdate/reproduction. Residual is **social** misuse (operator claims seal-time); crypto/DB record is POST-time (`ts_ns` in hash + store `created_at`). |
+| — | OK | V3 | Payload keys match endpoint (`previous_hash` / `new_hash` / `reason_category` / `reason_text` / prov fields). Cats + reason 10–200 match. URL = `_bridge_operator_url("/agent/allowlist-governance-event")` → `/operator/agent/...`. **Sending `x-api-key` is a good divergence** from gate `_post_governance_event` (which omits it and 403s when key is set). |
+| — | OK | V4 | Import of gate: data + defs only (~188 `Invariant` tuples); no network; `if __name__` guarded. Wrong key / bridge down → `SystemExit`, no fabrication. |
+| — | OK | V5 | Cut is right for lean **b+c**: tool + 3 pure tests + Part 4 bank. Late INV-MFG-003 POST correctly **operator-optional** (needs bridge). Not under/over-built. |
+
+**Part 4 audit bank:** correctly frames secondary audit gap (not PV-CI), allowlist write = seal, late POST optional/operator-fired. Aligns with tool honesty.
+
+---
+
+### V1–V5 (tight)
+
+| # | Result |
+|---|--------|
+| **V1** | **PASS** — “new late record, fresh `ts_ns`” is consistent in docstring + stdout; cannot honestly claim seal-time from the chain alone. |
+| **V2** | **PASS** (with F2 residual) — prov formula imported; allowlist path shared for “current”; git-blob twin pinned by T-RGE-1. |
+| **V3** | **PASS** — endpoint contract match; x-api-key on POST is **strictly better** than gate’s unauthenticated POST. |
+| **V4** | **PASS-with-F1** — fail-loud on POST errors; tip-auth asymmetry is the only real execute footgun on non-empty auth’d chain. |
+| **V5** | **PASS** — right scope; do not block ship on firing the live late POST. |
+
+---
+
+### Verdict: **SHIP**
+
+Inc-4 meets the round-30 lean (b+c) bar. Honesty and dry-run path are solid; formula reuse is correct where it matters; tests/PV-CI green; audit bank honest.
+
+**Pre-`--execute` operator note (F1):** if the bridge has `OPERATOR_API_KEY` set **and** the provenance chain already has links, tip-fetch must see the key (or confirm dry-run tip is not all-zeros before POST). For the INV-MFG-003 empty/first-link case, dry-run as shipped is sufficient; live late POST stays correctly out of agent scope.
+
+No FIX required to close T4 / open-threads Inc-4. Optional follow-on (not blocking): pass `x-api-key` on the history GET (local fetch wrapper, or extend gate helper).
