@@ -1,0 +1,170 @@
+I'll adversarially verify the round-26 NOVEL' build against the live tree: inspect the binding split, scripts, callers, docs, and tests, then give findings and a SHIP / SHIP-WITH-FIX / BLOCK verdict.Reading the implementation surfaces and related callers next.T-BIND-11 failed on import pathing — checking whether that's environment-only or a real regression, and probing a few more edge cases.# A2A Round-27 — Adversarial Verify: NOVEL′ mint/verify split
+
+**Branch:** `feat/l9-consistency-adversarial-harness`  
+**Scope inspected:** `device_birth_cert.py`, `verify_device_cert.py`, `provision_device_mfg.py`, `controller_ioid_registration.py`, `chain.py`, tests, DEVICE_ID_CANON + F-PATHA-1 + migration docs  
+**Independent checks:** 12/12 T-BIND (with `PYTHONPATH=bridge`), 22 adjacent, PV-CI **183 PASS**, live value recompute for 581a836c
+
+---
+
+## Findings (severity order)
+
+### F1 — MEDIUM — Library trust boundary: caller-supplied `on_chain_pubkey_hash_hex` is circular-forgeable
+
+`verify_registered_device_binding` trusts whatever hex the **caller** passes. Empirically:
+
+```text
+verify_registered_device_binding(arbitrary_id, attacker_key,
+    on_chain_pubkey_hash_hex=compute_pubkey_hash_hex(attacker_key))
+→ True
+```
+
+That is not “chain wins”; it is “hash-of-local-key wins.” The natural footgun is worse than pre-split skip-verify because it **looks** like the secure path:
+
+```python
+verify_cert(cert, on_chain_pubkey_hash_hex=compute_pubkey_hash_hex(cert.ecdsa_p256_pubkey_hex))
+```
+
+grandfathers **any** `device_id` for a correctly signed cert without RPC.
+
+**Mitigations already present (correct):**
+- `scripts/verify_device_cert.py` fetches `devices(id).pubkeyHash` from VMDR after `registered==True`
+- `--reissue` same: RPC-only, no offline fallback
+- Malformed hash / empty string fail-closed (length ≠ 64)
+- Offline/`None` never skips (T-BIND-4, live offline fail)
+
+**Gap:** docstring describes “caller read … from VMDR” but does **not** hard-warn: *never pass `sha256(local_pubkey)`; evidence must be RPC-fetched for that `device_id`*. Compare pre-split: careless caller could omit the check; post-split, careless caller can pass a self-hash and believe they verified. Same root of trust class (caller honesty), **subtler UX hazard**.
+
+**Not a Path A exploit** if only the shipping scripts call the library. Still a real API footgun.
+
+---
+
+### F2 — MEDIUM — Bonus footgun half-closed: ioID **CLI** still canon-only for 581a836c
+
+Library + `chain.register_controller_ioid` thread `on_chain_pubkey_hash_hex` correctly (default `None` = pre-split).
+
+`scripts/register_controller_ioid.py` **never** fetches VMDR or passes the kwarg. Live Edge via CLI still hits offline canon → `ValueError` on 581a836c + 02997c. Help text still says “Canon … must match pubkey.”
+
+So: API unblocked, operator CLI path still blocked. Round-26 bonus is incomplete at the surface people actually run.
+
+---
+
+### F3 — LOW — Residual doc drift
+
+| Site | Issue |
+|------|--------|
+| `DEVICE_ID_CANON_v1.md` §2 “Live demo … Matches 65-byte-with-prefix preimage only” | True for fixture key `042adcdb`, **not** for registered cert key `02997c`. Golden-vector drift block + §8 are correct; §2 table still reads like pre-refinement. |
+| `docs/ioid-ceremony-review-bars-2026-07-11.md` | Still bars on `verify_device_id_matches_pubkey` (stale name/role). |
+| Round-26 “no recoverable formula” | Correctly refined in F-PATHA-1 + §8 as **two-key bind** (identity preimage id + composite cert key). Good. |
+
+---
+
+### F4 — INFO — T-BIND-11 import env
+
+Without `PYTHONPATH=bridge`, T-BIND-11 fails (`from vapi_bridge...` inside controller_ioid). With `PYTHONPATH=bridge`: **12/12**. CI/local bridge harness typically sets this; not a product defect. Worth a one-line note in the test module if bare `pytest path` is used.
+
+---
+
+## Hammer results
+
+### H1 Precedence holes
+
+| Case | Result |
+|------|--------|
+| Offline/None silent pass of wrong pair | **No** — fails + “best-effort” suffix |
+| Chain match grandfathers non-canon | **Yes** (intended) |
+| Chain mismatch fails canon-consistent pair | **Yes** (T-BIND-2/9) |
+| Attacker-supplied hash | **Yes via library** if caller forges (F1); **scripts fetch from VMDR** |
+| Empty/`deadbeef` hash | Fail-closed |
+
+Precedence table implemented as specified. Hole is trust-boundary documentation / circular self-hash, not offline OR-skip.
+
+### H2 `verify_device_cert` restructure
+
+| Contract | Status |
+|----------|--------|
+| Exit 0/1/2/3 | Unchanged |
+| Unregistered | Canon best-effort → exit **2** only if sig+canon OK; binding fail → **1** (correct, not “NOT_REGISTERED for garbage cert”) |
+| Registered + chain bind | pubkeyHash before check 1 |
+| RPC fail | exit **3** |
+| Override set + read fail | exit **3** fail-closed (after binding; does not fall back to raw VMDR birth hash) |
+| Revoked | `isActive=False` → exit **1** after bind |
+
+No exit-code/verdict contract break found. Reorder is intentional and sound.
+
+### H3 `--reissue` gate
+
+| Attack | Status |
+|--------|--------|
+| Gate before `sign_cert` | **Yes** |
+| `isActive=False` refuse | **Yes** |
+| Unregistered refuse | **Yes** (live smoke claimed; code path clear) |
+| `--reissue` + `--execute` | Mutual exclusive, exit 2 |
+| `--reissue` + `--device-id` | Mutual exclusive |
+| Broadcast `registerDevice` | Early `return` after reissue; never reaches REGISTER ABI |
+| Distinct cert-out default | `device_birth_cert_reissue.json` |
+| RPC/env missing | Abort exit 2, no offline reissue |
+
+No bypass found in tree (RPC spoof OOS).
+
+### H4 Mint gate
+
+`resolve_device_id_hex` unchanged fail-closed. Live 581a836c + 02997c still raises on mint path. `assert_mint_device_id_canon` thin wrapper over `verify_device_id_matches_pubkey`. Mint path in provision is the `else` of `--reissue` only. **Not weakened.**
+
+### H5 Other consumers of `verify_device_id_matches_pubkey`
+
+| Surface | Verdict |
+|---------|---------|
+| `secure_element.py` | Mint-only `compute_device_id_from_pubkey_hex` — correct |
+| `daemon_health_monitor.py` | Doc/firmware probe, not runtime verify of registered devices |
+| `poep_session_enroll.py` | Comments only; Arc-2 gated |
+| `qortroller.py` `resolve_device_id_hex` | Different helper (birth/node), not DBC mint gate |
+| `mfg_ca_readiness.py` | Mint-shape readiness certs — correct |
+| `chain.py` / controller_ioid | Split threaded, default `None` byte-compatible |
+| `scripts/register_controller_ioid.py` | **Missed CLI wire** (F2) |
+
+No missed **security-critical** re-assert that should have been split except the CLI UX path.
+
+### H6 Docs / two-key restatement
+
+Root cause correctly restated: `581a836c = keccak(042adcdb…)` (identity key fixture); cert binds `02997c…`; on-chain `pubkeyHash=235a2c04…`. “No formula of **cert** pubkey yields 581a836c” holds. Migration + readiness docs use `--reissue`, not dry-run mint-force. Residual: §2 table + ioID review bars (F3).
+
+### H7 Tests
+
+T-BIND-10 pins **right** public triple (recomputed: `sha256(02997c…)==235a2c04…`, canon id `20b37e1c… ≠ 581a836c`, offline fail, chain pass). Matrix not vacuous: both chain directions, offline, mint raise, malformed, end-to-end sign+verify, live pin, ioID, compress/uncompress hash agreement. Gap: no test that **forbids** self-derived hash (can’t fully; doc + caller discipline).
+
+---
+
+## Independent recompute (public)
+
+| Check | Value |
+|-------|--------|
+| `sha256(compressed 02997c…)` | `235a2c04…` = LIVE_ONCHAIN_PUBKEY_HASH |
+| `keccak(uncompressed 02997c…)` | `20b37e1c…` ≠ `581a836c` |
+| Chain bind | PASS |
+| Offline | FAIL + best-effort |
+| Mint `resolve_device_id_hex(581a836c, 02997c)` | ValueError |
+
+---
+
+## Verdict
+
+# **SHIP-WITH-FIX**
+
+**Why not BLOCK:** Core NOVEL′ path is correct and complete for Path A:
+
+- mint fail-closed unchanged  
+- chain-first verify with both-direction authority  
+- offline honest INVALID for pre-canon live device  
+- `--reissue` gated, non-broadcasting, pre-sign  
+- scripts fetch VMDR evidence; override fail-closed held  
+- tests pin the real grandfather; PV-CI 183 green  
+
+**Why not plain SHIP:** Two non-blocking-but-real residual closures before treating the **full** round-26 surface as done:
+
+1. **Fix (recommended, small):** Strengthen `verify_registered_device_binding` / `verify_cert` docstrings — explicit trust boundary: *`on_chain_pubkey_hash_hex` MUST be the RPC-fetched `devices[deviceId].pubkeyHash` for that id; never `compute_pubkey_hash_hex` of the cert/local key (circular, grandfathers any id).* Optional one-liner in `DEVICE_ID_CANON_v1.md` §8.
+2. **Fix (recommended, bonus completeness):** Wire `scripts/register_controller_ioid.py` to read VMDR `pubkeyHash` (or accept `--on-chain-pubkey-hash`) so 581a836c is not still blocked on the CLI path.
+3. **Nits (can land same commit or follow-up):** §2 live-demo row + `ioid-ceremony-review-bars` name update.
+
+**Staging recommendation:** Accept staging of the **Path A verify + reissue** stack after F1 docstring (and ideally F2 CLI) land in the same commit series; do **not** block on PV-CI/governance (none required). Do **not** spend on override re-anchor until operator is ready — verify layer is already unblocked online.
+
+**Residual risk accepted if you ship without F2:** ioID ceremony for the live Edge still needs a manual `on_chain_pubkey_hash_hex=` call site; cert verify/reissue Path A does not.

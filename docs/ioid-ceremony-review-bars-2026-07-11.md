@@ -15,7 +15,7 @@
 | **Signer** | Gamer wallet signs EIP-712 `Permit(owner, nonce)` — D-CONTROLLER-IOID-1 Option A |
 | **Bridge role** | Read-only orchestrator: pin DID, assemble 8-param `register`, never holds gamer key as policy |
 | **DID form** | `did:io:{device_id}` · `EcdsaSecp256r1VerificationKey2019` (P-256) · `controller: [gamer_address]` |
-| **Device id** | `DEVICE_ID_CANON_v1` enforced via `verify_device_id_matches_pubkey` before DID build |
+| **Device id** | Binding enforced via `_require_device_binding` before DID build (mint/verify split 2026-07-16: a VMDR-registered device binds by its on-chain `pubkeyHash`, RPC-fetched — unblocks `581a836c`; unregistered = `DEVICE_ID_CANON_v1` canon; see `DEVICE_ID_CANON_v1.md` §8) |
 | **Optional fields already in API** | `birth_cert_cid` → `alsoKnownAs: ipfs://…` · `mfg_registry_tx` → `proof.type=MfgRegistryBinding` |
 | **TBA** | Via `ioID.wallet(tokenId)` after register (agent path precedent) |
 | **Silicon permit** | P-256 controller key ≠ secp256k1 permit — gamer wallet signs; Option C silicon-signed permit **blocked** (D-IOID-P256 / IIP-64 class) |

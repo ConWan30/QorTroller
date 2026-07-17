@@ -90,10 +90,17 @@ So the one live device `581a836c…` (software-anchored) **cannot be re-anchored
    MFG_CA_BACKEND=kms VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca AWS_REGION=us-east-1 \
      python scripts/mfg_ca_hsm_preflight.py     # exit 0 = READY (P-256 / canary / full-cert / describe_key / new-root)
    ```
-4. **Re-issue (no chain)** the cert under the KMS issuer — local sign + persist:
+4. **Re-issue (read-only chain gate, no spend)** the cert for the EXISTING registered id under the KMS
+   issuer — `--reissue`, NOT `--dry-run` (a plain dry-run canon-derives `20b37e1c` from the composite key,
+   not the registered `581a836c` — F-PATHA-1; the mint/verify split makes the on-chain pubkeyHash the
+   authoritative binding, see `wiki/methodology/DEVICE_ID_CANON_v1.md` §8):
    ```bash
    MFG_CA_BACKEND=kms VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca \
-     python scripts/provision_device_mfg.py --dry-run ...   # produces the KMS-signed cert JSON, NO chain
+     python scripts/provision_device_mfg.py \
+       --reissue 581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8 \
+       --controller-model CFI-ZCP1 --signing-path B --proof-tier FULL
+   # fail-closed gate: registered + active + on-chain pubkeyHash == local key; NEVER broadcasts.
+   # cert lands at ~/.vapi/device_birth_cert_reissue.json (registered software cert untouched).
    ```
 5. **Re-anchor** — **only under Path A** (after deploying `updateBirthCertHash`); operator-fired, estimate-first.
    Under **Path B this step does not exist** — `581a836c` stays software-anchored; only net-new devices use

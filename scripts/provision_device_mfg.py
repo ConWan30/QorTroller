@@ -13,6 +13,19 @@ Manufacturing ceremony script. Three modes:
                     MFG_REGISTER_CONFIRM=1 env var as a second gate (matches the
                     scripts/provision_composite_device_key.py discipline).
 
+Re-issue mode (mint/verify split, A2A round-26 / F-PATHA-1):
+  --reissue <device_id_hex>
+                    Re-sign an ALREADY-REGISTERED device_id under the current CA
+                    (e.g. after the MFG-CA HSM flip) WITHOUT canon-deriving a new
+                    id. Gated fail-closed on a read-only chain check: the device
+                    must be registered + active on VMDR and
+                    sha256(compressed local pubkey) == devices[id].pubkeyHash —
+                    same device_id, same key, new issuer/sig/birthCertHash.
+                    Never broadcasts registerDevice (VMDR is one-shot; it would
+                    revert). The printed birthCertHash feeds the Path A override
+                    (contracts/scripts/set-updated-birth-cert-hash.js).
+                    Requires RPC even with --dry-run (the gate is the point).
+
 Device-source flag (D-3D):
   --device-source host    (Arc 1 default) — pulls the device's EC pubkey from
                           ~/.vapi/device_composite_mldsa44.json (the composite
@@ -50,7 +63,7 @@ load_dotenv(ROOT / "contracts" / ".env")
 
 from vapi_bridge.device_birth_cert import (
     CERT_VERSION, DeviceBirthCertificate, sign_cert, compute_cert_hash, cert_to_json,
-    resolve_device_id_hex,
+    resolve_device_id_hex, verify_registered_device_binding,
 )
 from vapi_bridge.manufacturer_root_ca import (
     DEFAULT_ROOT_CA_KEY_PATH, ManufacturerRootCA, QORTROLLER_FOUNDATION_MFG_ID,
@@ -61,6 +74,10 @@ from vapi_bridge.manufacturer_root_ca import (
 HARD_CAP_IOTX = 0.5     # registerDevice is a small call (~0.05-0.1 expected)
 GAS_BUFFER = 1.25       # IoTeX recoverable-gas convention
 DEFAULT_CERT_PATH = str(Path.home() / ".vapi" / "device_birth_cert.json")
+# Re-issue writes to a DISTINCT default so the historical (registered) cert is
+# never clobbered by a re-sign ceremony; the operator points the override
+# re-anchor + verify at this file explicitly.
+DEFAULT_REISSUE_CERT_PATH = str(Path.home() / ".vapi" / "device_birth_cert_reissue.json")
 DEFAULT_COMPOSITE_KEY_PATH = str(Path.home() / ".vapi" / "device_composite_mldsa44.json")
 
 # Proof tier → controller model registry. Keep in sync with the Arc 1 brief.
@@ -144,6 +161,13 @@ def main():
                          "Omitted: derived as keccak256(65B uncompressed SEC1 "
                          "pubkey) per DEVICE_ID_CANON_v1. If set, must match "
                          "the derived value or the ceremony aborts.")
+    ap.add_argument("--reissue", default=None, metavar="DEVICE_ID_HEX",
+                    help="Re-sign an ALREADY-REGISTERED device_id under the "
+                         "current CA (no canon derivation). Fail-closed chain "
+                         "gate: registered + active on VMDR AND local pubkey's "
+                         "sha256 == on-chain pubkeyHash. Never broadcasts "
+                         "registerDevice. Mutually exclusive with --device-id "
+                         "and --execute.")
     ap.add_argument("--controller-model", required=True, choices=list(KNOWN_MODELS) + ["BASIC"],
                     help="Controller model (e.g. CFI-ZCP1). BASIC = generic / third-party.")
     ap.add_argument("--device-source", choices=["host", "atecc"], default="host",
@@ -162,8 +186,11 @@ def main():
                     help="Path to the ManufacturerRootCA key file (auto-generated on first run).")
     ap.add_argument("--manufacturer-id", default=QORTROLLER_FOUNDATION_MFG_ID,
                     help="Issuer identifier embedded in the cert.")
-    ap.add_argument("--cert-out", default=DEFAULT_CERT_PATH,
-                    help="Where to persist the signed cert JSON.")
+    ap.add_argument("--cert-out", default=None,
+                    help="Where to persist the signed cert JSON. Defaults to "
+                         f"{DEFAULT_CERT_PATH} (mint) or "
+                         f"{DEFAULT_REISSUE_CERT_PATH} (--reissue; never "
+                         "clobbers the registered cert by default).")
     ap.add_argument("--dry-run", action="store_true",
                     help="Pure-local cert creation + sign + persist. NO chain calls.")
     ap.add_argument("--execute", action="store_true",
@@ -174,7 +201,18 @@ def main():
     if args.execute and args.dry_run:
         print("ERROR: --execute and --dry-run are mutually exclusive", file=sys.stderr)
         sys.exit(2)
+    if args.reissue and args.device_id:
+        print("ERROR: --reissue and --device-id are mutually exclusive "
+              "(re-issue targets the registered id verbatim)", file=sys.stderr)
+        sys.exit(2)
+    if args.reissue and args.execute:
+        print("ERROR: --reissue never broadcasts (VMDR registerDevice is one-shot "
+              "and would revert; the re-anchor path is the Path A override — "
+              "contracts/scripts/set-updated-birth-cert-hash.js)", file=sys.stderr)
+        sys.exit(2)
 
+    cert_out = args.cert_out or (DEFAULT_REISSUE_CERT_PATH if args.reissue
+                                 else DEFAULT_CERT_PATH)
     proof_tier = args.proof_tier or KNOWN_MODELS.get(args.controller_model, "BASIC")
 
     # 1. Pull device pubkey (compressed 33B)
@@ -186,15 +224,79 @@ def main():
     print(f"  device_pubkey    : {device_pubkey.hex()}")
     print(f"  pubkeyHash       : 0x{pubkey_hash.hex()}")
 
-    try:
-        device_id_hex = resolve_device_id_hex(args.device_id, device_pubkey.hex())
-    except ValueError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        sys.exit(2)
-    device_id_bytes = _to_bytes32(device_id_hex)
+    if args.reissue:
+        # ── Re-issue gate (fail-closed, read-only): the target device_id must be
+        # registered + active on VMDR and its on-chain pubkeyHash must match the
+        # LOCAL key. Chain evidence is mandatory — no RPC, no re-issue.
+        try:
+            device_id_bytes = _to_bytes32(args.reissue)
+        except ValueError as exc:
+            print(f"ERROR: --reissue {exc}", file=sys.stderr)
+            sys.exit(2)
+        device_id_hex = device_id_bytes.hex()
+        rpc_url = os.getenv("IOTEX_RPC_URL", "https://babel-api.testnet.iotex.io")
+        registry_addr = os.getenv("MANUFACTURER_DEVICE_REGISTRY_ADDRESS", "")
+        if not registry_addr:
+            print("ERROR: --reissue requires MANUFACTURER_DEVICE_REGISTRY_ADDRESS "
+                  "(the chain gate is the point — no offline re-issue)", file=sys.stderr)
+            sys.exit(2)
+        REISSUE_READ_ABI = [
+            {"name": "registered", "type": "function", "stateMutability": "view",
+             "inputs": [{"name": "deviceId", "type": "bytes32"}],
+             "outputs": [{"type": "bool"}]},
+            {"name": "isActive", "type": "function", "stateMutability": "view",
+             "inputs": [{"name": "deviceId", "type": "bytes32"}],
+             "outputs": [{"type": "bool"}]},
+            {"name": "devices", "type": "function", "stateMutability": "view",
+             "inputs": [{"name": "", "type": "bytes32"}],
+             "outputs": [
+                 {"type": "bytes32"}, {"type": "bytes32"}, {"type": "uint8"},
+                 {"type": "uint8"}, {"type": "uint64"}, {"type": "bytes32"},
+                 {"type": "address"}, {"type": "bool"},
+             ]},
+        ]
+        try:
+            from web3 import Web3 as _W3
+            _w3 = _W3(_W3.HTTPProvider(rpc_url))
+            _vmdr = _w3.eth.contract(
+                address=_w3.to_checksum_address(registry_addr), abi=REISSUE_READ_ABI)
+            if not _vmdr.functions.registered(device_id_bytes).call():
+                print(f"ERROR: --reissue target 0x{device_id_hex} is NOT registered "
+                      f"on VMDR — re-issue is for existing registrations only "
+                      f"(mint new devices without --reissue)", file=sys.stderr)
+                sys.exit(2)
+            if not _vmdr.functions.isActive(device_id_bytes).call():
+                print(f"ERROR: --reissue target 0x{device_id_hex} is revoked on VMDR "
+                      f"(isActive=False) — refusing to re-sign a revoked device",
+                      file=sys.stderr)
+                sys.exit(2)
+            _record = _vmdr.functions.devices(device_id_bytes).call()
+            on_chain_pubkey_hash = bytes(_record[0]).hex()
+        except SystemExit:
+            raise
+        except Exception as exc:  # noqa: BLE001 — fail-CLOSED, never mint-shape fallback
+            print(f"ERROR: --reissue chain gate read failed ({exc}) — refusing to "
+                  f"re-issue without on-chain evidence", file=sys.stderr)
+            sys.exit(2)
+        ok_bind, why_bind = verify_registered_device_binding(
+            device_id_hex, device_pubkey.hex(),
+            on_chain_pubkey_hash_hex=on_chain_pubkey_hash,
+        )
+        if not ok_bind:
+            print(f"ERROR: --reissue binding gate failed: {why_bind}", file=sys.stderr)
+            sys.exit(2)
+        print(f"  reissue gate     : PASS (registered + active + on-chain pubkeyHash "
+              f"0x{on_chain_pubkey_hash[:16]}… matches local key)")
+    else:
+        try:
+            device_id_hex = resolve_device_id_hex(args.device_id, device_pubkey.hex())
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(2)
+        device_id_bytes = _to_bytes32(device_id_hex)
     print(f"[CEREMONY] Path A Arc 1 — DeviceBirthCertificate provisioning")
     print(f"  device_id        : 0x{device_id_bytes.hex()} "
-          f"({'derived' if args.device_id is None else 'CLI verified'})")
+          f"({'REISSUE chain-gated' if args.reissue else ('derived' if args.device_id is None else 'CLI verified')})")
     print(f"  controller_model : {args.controller_model}")
     print(f"  signing_path     : {args.signing_path}")
     print(f"  proof_tier       : {proof_tier}")
@@ -230,10 +332,23 @@ def main():
     print(f"  birthCertHash    : 0x{cert_hash.hex()}")
 
     # 5. Persist cert to disk
-    cert_path = Path(args.cert_out)
+    cert_path = Path(cert_out)
     cert_path.parent.mkdir(parents=True, exist_ok=True)
     cert_path.write_text(cert_to_json(cert))
     print(f"  cert persisted   : {cert_path}")
+
+    if args.reissue:
+        print("\n[REISSUE] Cert re-signed for the EXISTING VMDR device_id. "
+              "registerDevice NOT called (one-shot; would revert).")
+        print("  Next (operator-fired): re-anchor the new birthCertHash via the "
+              "Path A override —")
+        print(f"    DBC_REGISTRY=<override-addr> DEVICE_ID=0x{device_id_bytes.hex()} "
+              f"NEW_HASH=0x{cert_hash.hex()}")
+        print("      npx hardhat run scripts/set-updated-birth-cert-hash.js "
+              "--network iotex_testnet")
+        print(f"  Then: python scripts/verify_device_cert.py --cert-path {cert_path} "
+              f"-> expect VALID")
+        return
 
     if args.dry_run:
         print("\n[DRY-RUN] No chain calls. Cert created and persisted. Done.")

@@ -12,8 +12,12 @@ Gamer-signed permit flow. Bridge is read-only orchestrator:
 - assembles ioIDRegistry.register (8-param form, internal TBA via ioID.wallet)
 - returns ioID tokenId + TBA address
 
-Binding to physical controller:
-- device_id MUST be the canon keccak256(65B SEC1 pubkey) per DEVICE_ID_CANON_v1
+Binding to physical controller (mint/verify split, A2A round-26 / F-PATHA-1):
+- NEW device_ids are minted as canon keccak256(65B SEC1 pubkey) per DEVICE_ID_CANON_v1
+- an ALREADY-REGISTERED device is bound by its VMDR pubkeyHash — callers with
+  chain access pass on_chain_pubkey_hash_hex (devices[deviceId].pubkeyHash) and
+  the binding check becomes authoritative chain evidence (grandfathers the
+  pre-canon 581a836c registration); without it the canon best-effort applies
 - birth cert (on-chain via MFG registry) proves the P256 pubkey ownership at manufacture
 
 Reuse of agent pattern (M1/M2/M4/M6/N2β/N4) without duplicating operator code.
@@ -34,10 +38,7 @@ from eth_hash.auto import keccak
 from eth_keys import keys
 from web3 import Web3
 
-from vapi_bridge.device_birth_cert import (
-    compute_device_id_from_pubkey_hex,
-    verify_device_id_matches_pubkey,
-)
+from vapi_bridge.device_birth_cert import verify_registered_device_binding
 
 log = logging.getLogger(__name__)
 
@@ -69,10 +70,25 @@ class ControllerRegistrationResult:
     dry_run: bool
 
 
-def _require_canon_device_id(device_id_hex: str, pubkey_hex: str) -> None:
-    ok, reason = verify_device_id_matches_pubkey(device_id_hex, pubkey_hex)
+def _require_device_binding(
+    device_id_hex: str,
+    pubkey_hex: str,
+    *,
+    on_chain_pubkey_hash_hex: Optional[str] = None,
+) -> None:
+    """Chain-first device binding (mint/verify split, A2A round-26).
+
+    With on_chain_pubkey_hash_hex (VMDR devices[deviceId].pubkeyHash) the check
+    is the AUTHORITATIVE chain binding — a registered pre-canon device (581a836c)
+    passes iff its key matches what the manufacturer attested. Without it, the
+    offline canon best-effort applies (byte-identical to the pre-split behavior).
+    """
+    ok, reason = verify_registered_device_binding(
+        device_id_hex, pubkey_hex,
+        on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
+    )
     if not ok:
-        raise ValueError(f"device_id does not match canon: {reason}")
+        raise ValueError(f"device_id/key binding failed: {reason}")
 
 
 def build_controller_did_document(
@@ -82,15 +98,20 @@ def build_controller_did_document(
     birth_cert_cid: Optional[str] = None,
     mfg_registry_tx: Optional[str] = None,
     gamer_address: str,
+    on_chain_pubkey_hash_hex: Optional[str] = None,
 ) -> dict:
     """Minimal DID document for a gamer controller.
 
     The document asserts:
-      - controller's canon device_id
+      - controller's device_id (canon-minted, or chain-bound for a registered
+        device when on_chain_pubkey_hash_hex is supplied)
       - the P256 public key from its birth cert
       - optional links to on-chain MFG birth cert + gamer owner
     """
-    _require_canon_device_id(device_id_hex, ecdsa_p256_pubkey_hex)
+    _require_device_binding(
+        device_id_hex, ecdsa_p256_pubkey_hex,
+        on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
+    )
 
     doc: dict = {
         "@context": ["https://www.w3.org/ns/did/v1"],
@@ -233,11 +254,13 @@ def register_controller_ioid(
     ioid_registry_address: str = DEFAULT_IOID_REGISTRY,
     project_id: int = 0,  # must be pre-registered "QorTroller Controllers" project
     dry_run: bool = True,
+    on_chain_pubkey_hash_hex: Optional[str] = None,
 ) -> ControllerRegistrationResult:
     """End-to-end (or dry-run) registration for a gamer controller.
 
     Steps:
-      1. Validate device_id matches canon for the pubkey.
+      1. Validate the device_id/key binding (chain-first when the caller
+         supplies the VMDR pubkeyHash; canon best-effort otherwise).
       2. Build + pin DID doc.
       3. Compute did content hash.
       4. Mint device NFT slot (via minter on VAPIGamerControllerNFT) — omitted in v1 surface; assume pre-minted or handled by caller for now.
@@ -245,7 +268,10 @@ def register_controller_ioid(
       6. Assemble + (optionally) send the register tx.
       7. Readback TBA via ioID.wallet(tokenId).
     """
-    _require_canon_device_id(device_id_hex, p256_pubkey_hex)
+    _require_device_binding(
+        device_id_hex, p256_pubkey_hex,
+        on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
+    )
 
     did_doc = build_controller_did_document(
         device_id_hex=device_id_hex,
@@ -253,6 +279,7 @@ def register_controller_ioid(
         birth_cert_cid=birth_cert_cid,
         mfg_registry_tx=mfg_registry_tx,
         gamer_address=gamer_address,
+        on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
     )
     cid = pin_did_document(did_doc, pinata_client)
     did_hash = compute_did_content_hash(cid)
