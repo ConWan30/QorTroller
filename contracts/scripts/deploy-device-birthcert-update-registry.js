@@ -17,7 +17,10 @@ const { ethers } = require("hardhat");
 
 const BRIDGE_WALLET = "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692";
 const VMDR_ADDRESS  = process.env.VMDR_ADDRESS || "0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0";
-const HARD_CAP_IOTX = 0.50;
+// Measured 2026-07-16: estimate_gas 604254 -> 0.755 IOTX buffered at testnet gas price.
+// 1.0 matches the repo's contract-deploy cap convention (Arc 1 VMDR/Lens, Arc 5/6 deploys);
+// the 0.5 cap in set-updated-birth-cert-hash.js stays (small call, not a deploy).
+const HARD_CAP_IOTX = 1.0;
 
 async function main() {
   const [deployer] = await ethers.getSigners();
