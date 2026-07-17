@@ -41,12 +41,17 @@ software-signed `birthCertHash`. VMDR cannot be updated in place (grok round-22/
   registry is wired (would silently re-accept a software cert after HSM re-anchor).
 
 ### Operator ceremony (fires the AWS-already-done + the chain steps)
+> **Amended 2026-07-16 (F-PATHA-1 resolution):** step 2 MUST use `--reissue` — a plain `--dry-run`
+> canon-derives `20b37e1c` (the composite key's keccak), NOT the registered `581a836c`. The mint/verify
+> split (`DEVICE_ID_CANON_v1.md` §8) made the chain binding authoritative, so this override re-anchor is
+> now SUFFICIENT for 581a836c. (Pre-split it was necessary-but-not-sufficient — F-PATHA-1.)
 1. ✅ Provision KMS key + preflight READY (done — Part 1).
-2. Re-issue the cert under KMS: `MFG_CA_BACKEND=kms VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca AWS_PROFILE=vapi-bridge python scripts/provision_device_mfg.py --dry-run --controller-model CFI-ZCP1 --signing-path B --proof-tier FULL` → note the printed `birthCertHash`.
+2. Re-issue the cert for the EXISTING id under KMS (fail-closed chain-gated on the on-chain pubkeyHash):
+   `MFG_CA_BACKEND=kms VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca AWS_PROFILE=vapi-bridge python scripts/provision_device_mfg.py --reissue 581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8 --controller-model CFI-ZCP1 --signing-path B --proof-tier FULL` → note the printed `birthCertHash` (cert lands at `~/.vapi/device_birth_cert_reissue.json` — the registered software cert is never clobbered).
 3. Deploy the override (estimate first, then `VAPI_DBC_DEPLOY_CONFIRM=1`). Record the address; set
    `BIRTH_CERT_UPDATE_REGISTRY_ADDRESS` in `bridge/.env` + add the `deployed-addresses.json` entry.
 4. Re-anchor (estimate first, then `VAPI_DBC_SET_CONFIRM=1` with `DEVICE_ID`=581a836c, `NEW_HASH`=the step-2 hash).
-5. `python scripts/verify_device_cert.py <kms-cert.json>` → expect **VALID**.
+5. `python scripts/verify_device_cert.py --cert-path ~/.vapi/device_birth_cert_reissue.json` → expect **VALID**.
 6. Flip `MFG_CA_BACKEND=kms` in `bridge/.env`; archive the old software cert as forensic-only.
 
 ### Pending governance seal (OPERATOR-FIRED — not done autonomously)

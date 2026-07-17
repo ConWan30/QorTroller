@@ -171,6 +171,103 @@ def verify_device_id_matches_pubkey(
     return True, ""
 
 
+def assert_mint_device_id_canon(
+    device_id_hex: str,
+    ecdsa_p256_pubkey_hex: str,
+) -> None:
+    """MINT-ONLY gate: raise ValueError unless device_id == canon(pubkey).
+
+    Canon is for MINTING new device_ids (registration ceremonies); it stops
+    vanity/opaque ids at the door. It is NOT the verify gate for devices
+    already registered on VMDR — that is verify_registered_device_binding
+    (the on-chain pubkeyHash is the manufacturer's attestation; re-deriving
+    device_id locally after registration is what created F-PATHA-1 drift).
+    Named so mint and verify cannot be confused (A2A round-26 footgun #2).
+    """
+    ok, reason = verify_device_id_matches_pubkey(device_id_hex, ecdsa_p256_pubkey_hex)
+    if not ok:
+        raise ValueError(f"mint canon violation: {reason}")
+
+
+def compute_pubkey_hash_hex(ecdsa_p256_pubkey_hex: str) -> str:
+    """SHA-256(33-byte compressed SEC1 pubkey) — the VMDR on-chain binding hash.
+
+    VMDR stores this as devices[deviceId].pubkeyHash at registration; it is
+    canon-stable (survives any device_id derivation change). Accepts compressed
+    or uncompressed input; hashes the compressed form, matching what
+    provision_device_mfg.py anchored on-chain.
+    """
+    pubkey = bytes.fromhex(ecdsa_p256_pubkey_hex)
+    if len(pubkey) == 65:
+        pubkey = compress_sec1_p256_pubkey(pubkey)
+    elif len(pubkey) != 33 or pubkey[0] not in (0x02, 0x03):
+        raise ValueError(
+            f"expected 33-byte compressed or 65-byte uncompressed SEC1 pubkey, "
+            f"got len={len(pubkey)}"
+        )
+    return hashlib.sha256(pubkey).hexdigest()
+
+
+def verify_registered_device_binding(
+    device_id_hex: str,
+    ecdsa_p256_pubkey_hex: str,
+    *,
+    on_chain_pubkey_hash_hex: Optional[str] = None,
+) -> tuple[bool, str]:
+    """Verify a device's key binding with chain-first precedence (A2A round-26).
+
+    TRUST BOUNDARY (round-27 F1 — load-bearing): on_chain_pubkey_hash_hex MUST
+    be the RPC-FETCHED devices[deviceId].pubkeyHash from VMDR for THAT
+    device_id. NEVER pass compute_pubkey_hash_hex(cert pubkey) or any
+    locally-derived hash — that is circular ("hash-of-local-key wins") and
+    grandfathers ANY device_id for any key. This function verifies the binding
+    AGAINST supplied chain evidence; it cannot verify the evidence's
+    provenance. When in doubt, pass None (honest canon best-effort) — never
+    fabricate chain evidence to make a check pass.
+
+    Precedence (never a bare OR):
+      - on_chain_pubkey_hash_hex supplied (device is VMDR-registered and the
+        caller read devices[deviceId].pubkeyHash): AUTHORITATIVE — pass iff
+        SHA-256(compressed cert pubkey) == the on-chain pubkeyHash. Chain wins
+        in BOTH directions: a match passes even when local canon disagrees
+        (grandfathers pre-canon registrations like 581a836c); a mismatch fails
+        even when local canon agrees (the cert key is not the registered key).
+      - on_chain_pubkey_hash_hex is None (offline / unregistered): best-effort
+        mint-shape check — device_id == keccak256(uncompressed pubkey) per
+        DEVICE_ID_CANON_v1. For a known-registered pre-canon device this
+        honestly reads INVALID offline; only the chain binding can validate it.
+    """
+    if on_chain_pubkey_hash_hex is None:
+        ok, reason = verify_device_id_matches_pubkey(device_id_hex, ecdsa_p256_pubkey_hex)
+        if not ok:
+            return False, (
+                f"{reason} (offline canon best-effort; a VMDR-registered device "
+                f"is authoritatively verified against its on-chain pubkeyHash)"
+            )
+        return True, ""
+
+    claimed_id = device_id_hex.lower().removeprefix("0x")
+    if len(claimed_id) != 64:
+        return False, f"device_id_hex wrong length: {len(claimed_id)} != 64"
+    chain_hash = str(on_chain_pubkey_hash_hex).lower().removeprefix("0x")
+    if len(chain_hash) != 64:
+        return False, (
+            f"on_chain_pubkey_hash_hex wrong length: {len(chain_hash)} != 64 "
+            f"(refusing binding check on malformed chain evidence)"
+        )
+    try:
+        local_hash = compute_pubkey_hash_hex(ecdsa_p256_pubkey_hex)
+    except (ValueError, TypeError) as exc:
+        return False, f"pubkey decode failed: {exc}"
+    if local_hash != chain_hash:
+        return False, (
+            f"pubkeyHash mismatch: sha256(compressed cert pubkey)=0x{local_hash} "
+            f"but VMDR attests 0x{chain_hash} — the cert key is NOT the "
+            f"registered key for device_id 0x{claimed_id}"
+        )
+    return True, ""
+
+
 def resolve_device_id_hex(
     cli_device_id_hex: Optional[str],
     ecdsa_p256_pubkey_hex: str,
@@ -178,7 +275,9 @@ def resolve_device_id_hex(
     """Derive device_id from pubkey; if CLI value given, fail closed on mismatch.
 
     Used by provision_device_mfg.py so Arc 1 ceremonies cannot anchor a cert
-    whose device_id_hex disagrees with DEVICE_ID_CANON_v1.
+    whose device_id_hex disagrees with DEVICE_ID_CANON_v1. MINT path only —
+    re-issue of an already-registered device_id goes through the --reissue
+    ceremony (chain-gated on the VMDR pubkeyHash), never through this.
     """
     derived = compute_device_id_from_pubkey_hex(ecdsa_p256_pubkey_hex)
     if cli_device_id_hex is None:
@@ -234,15 +333,29 @@ def sign_cert(cert: DeviceBirthCertificate, root_ca) -> DeviceBirthCertificate:
     return cert
 
 
-def verify_cert(cert: DeviceBirthCertificate) -> tuple[bool, str]:
+def verify_cert(
+    cert: DeviceBirthCertificate,
+    *,
+    on_chain_pubkey_hash_hex: Optional[str] = None,
+) -> tuple[bool, str]:
     """Verify the cert's ECDSA-P256 sig against its claimed issuer_pubkey_hex.
     Returns (valid: bool, reason: str). reason is a human-readable explanation
     on failure (empty string on success).
 
-    Pure-local verification. Does NOT consult the chain — that's the job of
-    verify_device_cert.py (which calls this PLUS chain.isActive). Separation:
-    this answers 'is the cert self-consistent?'; the chain check answers 'is
-    the cert active on-chain?'.
+    Pure-local verification by default. Does NOT consult the chain — that's the
+    job of verify_device_cert.py (which calls this PLUS chain.isActive).
+    Separation: this answers 'is the cert self-consistent?'; the chain check
+    answers 'is the cert active on-chain?'.
+
+    Device-id binding (mint/verify split, A2A round-26): with the default
+    on_chain_pubkey_hash_hex=None the binding is the offline canon best-effort
+    (device_id == keccak256(pubkey), byte-identical to the pre-split behavior).
+    A caller that has read devices[deviceId].pubkeyHash from VMDR passes it
+    here and the binding becomes the AUTHORITATIVE chain check instead —
+    see verify_registered_device_binding for the precedence rules AND the
+    trust boundary: the hash MUST be RPC-fetched from VMDR for this cert's
+    device_id, never derived from the cert's own pubkey (circular — would
+    grandfather any id).
     """
     from .manufacturer_root_ca import verify_cert_signature
 
@@ -265,8 +378,9 @@ def verify_cert(cert: DeviceBirthCertificate) -> tuple[bool, str]:
     if not ok:
         return False, "ECDSA-P256 signature verification failed"
 
-    ok_id, reason_id = verify_device_id_matches_pubkey(
+    ok_id, reason_id = verify_registered_device_binding(
         cert.device_id_hex, cert.ecdsa_p256_pubkey_hex,
+        on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
     )
     if not ok_id:
         return False, reason_id

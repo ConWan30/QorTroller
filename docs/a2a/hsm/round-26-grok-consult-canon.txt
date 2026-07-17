@@ -1,0 +1,83 @@
+I'll inspect the verify/device-id surfaces and VMDR binding so the recommendation is grounded, not just rephrased.## Verdict
+
+**Your NOVEL is directionally right — but pure chain-only is wrong, pure OR is wrong, and B is weaker than you think.**
+
+Recommended: **mint/verify split + chain-first hybrid (precedence, not OR)**. B-as-formula is a dead end; A is only a deliberate node re-birth.
+
+---
+
+### Why B is worse than NOVEL
+
+Local cert pubkey `02997c…` → keccak = `20b37e1c`, and **none** of the standard hashes of that key yield `581a836c`. The on-chain bind is `(device_id=581a836c, pubkeyHash=sha256(02997c…))`.
+
+Canon golden fixture uses a **different** uncompressed key `042adcdb…` → `581a836c`. So either registration used an opaque/explicit id, or the golden vector is not the live device key. **There is no recoverable pre-canon formula** of the *registered* pubkey that accepts `581a836c`. B collapses to a hard-coded exception list. Chain binding is the only non-list grandfather.
+
+That also means `DEVICE_ID_CANON_v1.md`’s “live demo = 581a836c under this preimage” is **doc drift** — footgun for the next session.
+
+---
+
+### Answers
+
+**1. Hole in pure NOVEL**  
+Yes: if `verify_cert` / device-id check *requires* chain, offline tools (`controller_ioid_registration`, offline audit, readiness preflight) break or invent fake “VALID.”
+
+Right shape is **not** `canon OR chain` as equal alternatives. It is **precedence**:
+
+| Mode | Rule |
+|------|------|
+| Chain reachable + `registered[device_id]` | **Authoritative:** `sha256(compressed cert pubkey) == devices[device_id].pubkeyHash` (+ `active` if you care about revocation) |
+| Offline / unregistered | **Best-effort mint-shape:** `device_id == keccak256(uncompressed pubkey)` (DEVICE_ID_CANON_v1) |
+| Offline + known pre-canon registered device | Honest: **INVALID-OFFLINE** (or optional frozen offline attestation snapshot — not a free OR) |
+
+`OR` weakens only if offline accepts “either” without chain evidence (e.g. skip on no-RPC). Online, **chain wins; do not also require canon.**
+
+**2. Trust**  
+Agree. Local canon never was the manufacturer attestation; **VMDR `onlyOwner registerDevice` is.** Local re-derivation is a mint hygiene constraint, not a second root of trust. Security model: **mint must be deterministic; verify must match what manufacturer wrote.** Re-deriving after registration *creates* F-PATHA-1-class drift.
+
+Caveat: chain trust = MFG owner key trust. Compromised owner can register evil binds either way. Canon at mint only blocks vanity/opaque ids, not malicious owner+key pairs.
+
+**3. DEVICE_ID_CANON_v1**  
+Yes: **mint-only gate; drop as verify gate for registered devices.**
+
+- **Mint / provision / first `registerDevice`:** fail-closed canon (`resolve_device_id_hex`, `compute_device_id_from_pubkey_hex`).
+- **Verify / audit / Path A readiness:** chain-binding (or offline canon best-effort).
+- Clean slogan: **canon for minting, chain-binding for verifying.**
+
+**4. node_id**  
+**Preservation is hard for the born node** unless you intentionally re-birth. Ledger entry #000 + anchor `0xb985f035…` are keyed through `581a836c`. A orphans protocol continuity for one convenience. Prefer A only if you accept a new node ceremony and treat the first anchor as historical debris. Default: **preserve → NOVEL/hybrid, not A.**
+
+**5. Better than your NOVEL?**  
+Slightly: not “tweak the check,” but **split the API**:
+
+```text
+assert_mint_device_id_canon(device_id, pubkey)     # registration only
+verify_registered_device_binding(device_id, pubkey, chain|None)
+  # chain pubkeyHash first; offline → canon or INVALID-OFFLINE
+```
+
+Path A birthCert override stays **hash re-anchor only** — do **not** encode device_id acceptance in a second contract. VMDR already is the acceptance registry. A v2 “acceptance list” is redundant and invites dual sources of truth.
+
+Also required (missing from pure NOVEL): **re-issue mode** — `provision` must not force `resolve_device_id_hex` → `20b37e1c` when re-signing the *existing* VMDR id. Re-issue = same `device_id` + same pubkey + new issuer/sig/hash, gated by on-chain `pubkeyHash` match.
+
+---
+
+## Recommended path
+
+| Item | Call |
+|------|------|
+| Path | **NOVEL′: mint/verify split + chain-first hybrid** (not A, not formula-B, not bare OR) |
+| Verify shape | **Precedence hybrid:** chain `pubkeyHash` if registered; else offline canon; never “canon OR skip” |
+| DEVICE_ID_CANON_v1 | **Mint-only**; not a verify gate for registered devices |
+| node_id | **Preserve** — A out unless deliberate re-birth |
+| Path A override | Still needed for birthCertHash under HSM; now **sufficient** once check-1 is chain-binding |
+| Canon golden vector | Fix/clarify: live bind is VMDR `(581a836c, pubkeyHash)`, not fixture key `042adcdb…` alone |
+
+---
+
+## Top 2 footguns to pin
+
+1. **Re-issue still mint-forces canon** — `resolve_device_id_hex` / provision will try to register `20b37e1c` or fail. Without an explicit **reissue-existing-device_id** path (require chain `pubkeyHash` match), you “fix verify” and still can’t re-anchor under HSM for `581a836c`.
+
+2. **Hybrid OR done wrong** — offline `canon OR pass` (or “no chain → skip id check”) reopens opaque-id forgery. Correct offline for this device: **INVALID-OFFLINE** until RPC; **VALID** only when chain bind matches. Do not bake a permanent exception list into `verify_device_id_matches_pubkey` — rename/split so mint and verify cannot be confused.
+
+**Bonus footgun:** `controller_ioid_registration` + `chain.register_controller_ioid` still re-assert canon — same split or ioID stays blocked for the live device even after cert verify is fixed.
