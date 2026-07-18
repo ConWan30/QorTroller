@@ -30,6 +30,9 @@ sys.path.insert(0, str(REPO_ROOT / "bridge"))
 
 from dotenv import load_dotenv
 load_dotenv(REPO_ROOT / ".env")
+# bridge/.env is the canonical secrets home (PINATA_JWT / GAMER_PRIVATE_KEY); override=True so an
+# empty/stale key in the root .env can't shadow it (grok r09 residual #3).
+load_dotenv(REPO_ROOT / "bridge" / ".env", override=True)
 
 from vapi_bridge.controller_ioid_registration import (
     register_controller_ioid,
@@ -79,6 +82,42 @@ def _fetch_vmdr_pubkey_hash(w3: Web3, device_id_hex: str) -> str | None:
         sys.exit(3)
 
 
+class _StubPinata:
+    """Deterministic fake CID for dry-runs / offline tests (no network)."""
+    def pin_json(self, doc, name=None):
+        h = Web3.keccak(text=json.dumps(doc, sort_keys=True))
+        return "bafy" + h.hex().removeprefix("0x")[:50]
+
+
+class _RealPinataSync:
+    """Sync adapter over the async PinataClient (PINATA_JWT). Pins the DID doc to REAL IPFS and
+    returns the CID string that register_controller_ioid embeds as uri=ipfs://<cid> and whose
+    keccak is the on-chain content hash. Needed for an honestly-resolvable registration."""
+    def __init__(self):
+        from vapi_bridge.pinata_client import PinataClient
+        self._c = PinataClient()  # reads PINATA_JWT / PINATA_GATEWAY_URL from env (fail-loud if unset)
+
+    def pin_json(self, doc, name=None):
+        import asyncio
+        res = asyncio.run(self._c.pin_json(doc, name=name or "controller-did")) or {}
+        cid = res.get("IpfsHash") or res.get("cid") or res.get("Hash")
+        if not cid:
+            raise RuntimeError(f"Pinata pin returned no CID (keys={list(res.keys())})")
+        return cid
+
+
+def _resolve_controller_nft() -> str | None:
+    """The deployed VAPIGamerControllerNFT (Inc-A) from deployed-addresses.json. encoding='utf-8'
+    is REQUIRED (the file holds UTF-8; the OS default cp1252 raises on Windows -- the Inc-C lesson)."""
+    p = REPO_ROOT / "contracts" / "deployed-addresses.json"
+    try:
+        obj = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    v = obj.get("VAPIGamerControllerNFT")
+    return v if isinstance(v, str) and v.startswith("0x") and len(v) == 42 else None
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--device-id", required=True,
@@ -94,25 +133,43 @@ def main() -> None:
     ap.add_argument("--project-id", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--confirm", action="store_true", help="Actually broadcast (requires env + gamer key)")
+    ap.add_argument("--device-contract", default=None,
+                    help="VAPIGamerControllerNFT (Inc-A). Default: resolved from deployed-addresses.json.")
+    ap.add_argument("--token-id", type=int, default=0,
+                    help="Minted controller-NFT tokenId (Inc-C). REQUIRED for --confirm.")
+    ap.add_argument("--hard-cap", type=float, default=0.75, help="Spend cap (IOTX) for the register send.")
+    ap.add_argument("--real-pinata", action="store_true",
+                    help="Pin the DID doc to REAL IPFS via PinataClient (PINATA_JWT). Forced by --confirm.")
     args = ap.parse_args()
 
-    if args.confirm and not args.gamer_key:
+    key = args.gamer_key or os.environ.get("GAMER_PRIVATE_KEY")
+    dry = args.dry_run or not args.confirm
+
+    if args.confirm and not key:
         print("ERROR: --confirm requires --gamer-key (or GAMER_PRIVATE_KEY env)", file=sys.stderr)
+        sys.exit(2)
+    if args.confirm and args.token_id <= 0:
+        print("ERROR: --confirm requires --token-id (the minted controller tokenId from Inc-C)",
+              file=sys.stderr)
         sys.exit(2)
 
     w3 = Web3(Web3.HTTPProvider(os.environ.get("IOTEX_RPC", "https://babel-api.testnet.iotex.io")))
 
-    # In a full impl pinata_client would be a real client; here we use a tiny stub for skeleton.
-    class _StubPinata:
-        def pin_json(self, doc, name=None):
-            # Deterministic fake CID for dry runs / tests
-            h = Web3.keccak(text=json.dumps(doc, sort_keys=True))
-            return "bafy" + h.hex()[:50]
+    # deviceContract: the deployed VAPIGamerControllerNFT (Inc-A). CLI arg overrides; else resolve.
+    device_contract = args.device_contract or _resolve_controller_nft()
+    if not dry and not device_contract:
+        print("ERROR: VAPIGamerControllerNFT not deployed/resolvable -- run Inc-A + Inc-C first, "
+              "or pass --device-contract.", file=sys.stderr)
+        sys.exit(2)
 
-    pinata = _StubPinata()
-
-    key = args.gamer_key or os.environ.get("GAMER_PRIVATE_KEY")
-    dry = args.dry_run or not args.confirm
+    # Pinata: REAL IPFS pin for --confirm or --real-pinata (honest, resolvable CID whose keccak is
+    # the on-chain content hash); deterministic stub otherwise (offline dry-run / tests).
+    try:
+        pinata = _RealPinataSync() if (args.confirm or args.real_pinata) else _StubPinata()
+    except Exception as exc:  # noqa: BLE001 -- PINATA_JWT unset / client init failed
+        print(f"ERROR: real Pinata requested but client init failed ({exc}) -- set PINATA_JWT, "
+              f"or drop --real-pinata for a stub dry-run.", file=sys.stderr)
+        sys.exit(2)
 
     # Resolve the ioID PERMIT registry (fail-loud; never zero, never the Phase 55
     # VAPIioIDRegistry DID book — F-T3-1 / A2A round-33).
@@ -158,10 +215,13 @@ def main() -> None:
             project_id=args.project_id,
             dry_run=dry,
             on_chain_pubkey_hash_hex=on_chain_pubkey_hash,
+            device_contract=device_contract or "0x" + "00" * 20,  # ignored in dry-run (uses zero)
+            token_id=args.token_id,
+            hard_cap_iotx=args.hard_cap,
         )
-    except NotImplementedError as exc:
-        # Honest: a real registration is blocked on prerequisites. No fabricated tx.
-        print(f"\nREGISTRATION BLOCKED (not wired): {exc}", file=sys.stderr)
+    except (ValueError, RuntimeError) as exc:
+        # Fail-closed: missing prereq / signer mismatch / no ioID mint / zero TBA. No fabrication.
+        print(f"\nREGISTRATION REFUSED: {exc}", file=sys.stderr)
         sys.exit(3)
 
     print(json.dumps({
@@ -176,9 +236,14 @@ def main() -> None:
         "pending_prereqs": res.pending_prereqs,
     }, indent=2))
 
-    print("\nDRY RUN — registry + permit interface proven live; a real registration is "
-          "BLOCKED on pending_prereqs (VAPIGamerControllerNFT + project + setDeviceContract "
-          "+ minted tokenId + gamer permit). Not a registration.")
+    if res.dry_run:
+        print("\nDRY RUN -- registry + permit interface proven live (a REAL Pinata CID if "
+              "--real-pinata/--confirm). A real registration is a separate --confirm run with the "
+              "gamer key + --token-id. Not a registration.")
+    else:
+        print(f"\nREGISTERED -- ioID tokenId={res.ioid_token_id}  TBA={res.tba_address}\n"
+              f"  DID CID={res.did_cid}\n"
+              f"  tx https://testnet.iotexscan.io/tx/{res.tx_hash}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,30 @@
+I'll verify the Inc-D CLI wiring only — reading the runner and tracing the five hammer paths without reopening the core.Next I'll inspect the core register call's dry-run/device_contract handling and PinataClient's async surface for loop risk.Checking dotenv load order and whether PinataClient errors escape the CLI catch.## Inc-D CLI wiring verify (`scripts/register_controller_ioid.py`)
+
+Core left closed. Gate matrix + call path only.
+
+### Hammer results
+
+| # | Risk | Result |
+|---|------|--------|
+| **1** Stub/fake CID on broadcast | **PASS** | `dry = dry_run or not confirm`; pinata = `_RealPinataSync` iff `confirm or real_pinata`. Broadcast requires `confirm` and not dry → pinata always real. Full matrix: `STUB_BCAST=False` on every combination. |
+| **2** `asyncio.run` + running loop | **PASS (residual)** | Intended surface is a process CLI (`python scripts/...`), no loop. Nested-loop would raise `RuntimeError` inside `pin_json` → core aborts **before** send → CLI `(ValueError, RuntimeError)` → exit 3. No silent spend. |
+| **3** `device_contract` dry passthrough | **PASS** | CLI may pass resolved NFT; core dry path hard-overrides to `_ZERO_ADDR` / `token_id=0` for assembly only. Non-dry requires resolvable contract (CLI exit 2) then `assert_option_a_register_ready`. Harmless. |
+| **4** Accidental real spend | **PASS** | Live path needs **all** of: `--confirm`, gamer key (`--gamer-key` / `GAMER_PRIVATE_KEY`), `--token-id > 0`, resolvable `device_contract`, real Pinata init, then core key + Option-A + hard-cap. Default (no flags) is dry. Key alone without `--confirm` stays dry. |
+| **5** Dropped `NotImplementedError` catch | **PASS (residual)** | Core no longer raises it; real path implemented. Intentional catch is `(ValueError, RuntimeError)` → exit 3 REFUSED. Uncaught surface is **PinataClient\*** / most web3 errors (not `ValueError`/`RuntimeError`) → traceback exit 1 **after** no success print — fail-loud, not false REGISTERED. Pre-send pin/estimate failures still prevent spend. |
+
+### Residuals (non-blocking)
+
+1. **`PinataClientError` not mapped to exit 3** — pin/HTTP failures dump stack instead of `REGISTRATION REFUSED`. Safety OK; UX/exit-code hygiene only.
+2. **`--confirm --dry-run`** — dry wins (no chain), but pinata still real because `confirm` forces Real → real IPFS pin without register. Quirk, not a spend hole.
+3. **dotenv order** — root `.env` then `bridge/.env` with default `override=False`. Empty root keys can shadow bridge secrets. Ops note, not a CLI logic bug.
+
+### Spot-checks that match the claim
+
+- `_resolve_controller_nft`: `encoding="utf-8"`, 42-char `0x` check.
+- Real pin: `IpfsHash` / `cid` / `Hash`; empty → `RuntimeError` (caught → exit 3).
+- Pinata init fail → exit 2 before register.
+- Output: dry vs `REGISTERED` only after successful non-dry return.
+
+---
+
+**VERDICT: PASS**
