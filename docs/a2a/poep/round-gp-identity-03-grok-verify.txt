@@ -1,0 +1,67 @@
+I'll independently verify the built increment against the round docs and your r02 FIX list by reading the code, not the report.Next I'll check sealed modules for the load-bearing rail, `make_real_hid_fire`, attach guards, and whether sealed files are untouched.# A2A r03 VERIFY — gp-identity (independent)
+
+**Evidence:** code read + 8/8 new + 47/47 sealed regression + PV-CI 184 PASS + CLI `--dry` smoke. Sealed four modules: **git diff empty** (only `??` new files).
+
+---
+
+## r01 fixed bars
+
+| # | Bar | VERDICT | Evidence |
+|---|-----|---------|----------|
+| 1 | Sealed byte-untouched | **PASS** | `git diff` empty on `poep_gameplay_session/live`, `poep_did_sync`, `controller_presence` |
+| 2 | No real HID fire in tests/CI; never synthesize `real_hardware=True` | **PASS** | Dry uses `FireResult(..., real_hardware=False)`; CLI never assigns True; `--live` requires `POEP_LIVE_FIRE_ENABLED=1`; `make_real_hid_fire` returns `fired=False, real_hardware=False` |
+| 3 | Injected ≠ SYNCHRONIZED | **PASS** | Dry path: `IDENTITY_ONLY`, `candidate=False`, `live_hardware=False`, `dry_plumbing_ok=True` (test + CLI) |
+| 4 | Flags / lane / denylist | **PASS** | `advances_*: False`, `advisory=True`, `identity_lane=identity-provenance`; denylist incl. `controller_identity` / `identity_capture` on lib+CLI+artifact |
+| 5 | Anti-assertion device guard | **PASS** | Runner passes same `device_id` → `start` + `attach`; mismatch `ValueError` inherited from sealed `attach_session_identity` |
+| 6 | Zero spend / no FROZEN-PoAC-Solidity / PV-CI 184 | **PASS** | Orchestration-only; gate: `PASS — 184` |
+
+---
+
+## r02 FIX list (esp. #2 purity + renames)
+
+| FIX | VERDICT | Notes |
+|-----|---------|-------|
+| 1 Names | **PASS** | `poep_session_identity_run` / `run_session_identity_attach` / `poep_session_identity_attach.py` / `audits/poep_session_identity_attach_<sid>.json` |
+| 2 Pipeline purity | **PASS** | Only chain: `start_live_session` → `poll`+`challenge_live` → `summarize_live_session` → `attach_session_identity(presence_summary=summary)`. Mentions of candidate bits are **docstrings only**; no assignment regex hit |
+| 3 Dry fire_fn | **PASS** | Fixed `real_hardware=False`; mechanical test pins `IDENTITY_ONLY` + `candidate is False` |
+| 4 `--live` gate | **PASS** | Env gate; refuse exit 2; no synthesize; stub honest |
+| 5 Seal v0.2 | **PASS** | Under `identity.custody_seal_v02`; domain v0.2-CANDIDATE; verdict identical with/without; never gates candidate |
+| 6 Device guard | **PASS** | Ceremony constants as args; default Edge fixture |
+| 7 CLI success | **PASS** | `IDENTITY_ONLY` exit 0 |
+| 8 Tests | **PASS** | 8 mechanical bars + denylist + purity + no HID on dry |
+| 9 Claim ceiling | **PASS** | `run_claim_ceiling` new; attach `claim_ceiling` + presence `FLIP-A` claim untouched |
+| 10 Rails | **PASS** | Flags false; sealed untouched; PV-CI 184 |
+
+---
+
+## (3) Break attempt — `real_hardware=False` → SYNCHRONIZED?
+
+| Attack | Result |
+|--------|--------|
+| Runner assigns candidate / effective_live / live_hardware | **No path** — only comments; no writes |
+| Post-summarize mutate summary before attach | **No path** — summary passed through; only adds `run_*` + `identity.custody_seal_v02` |
+| Dry fire + mode=live + activity_source=bridge | **Blocked** — sealed `effective_live = (mode==live) AND all(GO.live_hardware)`; `live_hardware=bool(fire.real_hardware)` |
+| Empty / NO_GO-only plan | **candidate stays False** (`bool(go)` fails `all_go_live`) |
+| `--live` + env + stub fire | **`fired=False` / `real_hardware=False`** → no GO issue or non-live GO → not SYNCHRONIZED |
+
+**Only intentional mint path:** inject `FireFn(real_hardware=True)` (live simulator / future L3). Dry CLI does not install that.
+
+**Confirmed:** no path in `poep_session_identity_run.py` turns injected `real_hardware=False` into `SYNCHRONIZED_CONTROLLER`.
+
+---
+
+## (4–5) Seal sidecar + `--live` non-fabrication
+
+| Check | VERDICT |
+|-------|---------|
+| Seal at `identity.custody_seal_v02` | **PASS** |
+| Never gates candidate | **PASS** (test: with/without same verdict) |
+| `make_real_hid_fire` gated + `fired=False` | **PASS** (sealed stub lines 294–319) |
+
+---
+
+## FINAL
+
+**SHIP**
+
+No FIX required. Composition-only runner honors the sealed rail; dry is mechanically `IDENTITY_ONLY`; purity and renames match r02.
