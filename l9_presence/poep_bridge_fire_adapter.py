@@ -110,7 +110,9 @@ def make_bridge_fire_adapter(
     import json
     import urllib.request
 
-    url = bridge_url.rstrip("/") + "/operator/poep/fire"
+    # Measured live 2026-07-18: the operator sub-app mounts at /operator AND in-app routes carry their
+    # own /operator/ prefix (the documented doubled-prefix convention) -> the external path is DOUBLED.
+    url = bridge_url.rstrip("/") + "/operator/operator/poep/fire"
 
     def _post(amplitude: int, nonce: str) -> dict:
         body = json.dumps({"nonce": nonce, "amplitude": int(amplitude)}).encode()

@@ -80,7 +80,8 @@ def _make_bridge_health_fetcher(bridge_url: str, api_key: str, kind: str):
     """
     import urllib.request
 
-    url = bridge_url.rstrip("/") + "/bridge/capture-health"
+    # Measured live 2026-07-18: capture-health lives on the operator sub-app (mounted at /operator).
+    url = bridge_url.rstrip("/") + "/operator/bridge/capture-health"
 
     def _fetch():
         try:
