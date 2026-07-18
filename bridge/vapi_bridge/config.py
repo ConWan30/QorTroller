@@ -879,6 +879,12 @@ class Config:
         )
     )
     """How long R2 effect stays active before BASELINE_OFF clear (default 15ms)."""
+    poep_ring_dump_enabled: bool = field(
+        default_factory=lambda: _env_bool("POEP_RING_DUMP_ENABLED", False)
+    )
+    """(ii) R2-onset study — when True, each nonce-bound POEP ring fire dumps its full pre+post
+    r2/accel/device_ts series to audits/poep_ring_dump/ for the OFFLINE actuator-coupling study.
+    Default False; instrument-only, non-gating; never touches the corpus/verdict/flags."""
 
     # --- Phase 62: Player Enrollment Ceremony ---
     enrollment_min_sessions: int = field(

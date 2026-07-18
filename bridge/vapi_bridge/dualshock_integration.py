@@ -248,6 +248,13 @@ def _build_l6b_report(frame, accel_scale: float, t_mono: float | None = None) ->
         "az": getattr(frame, "accel_z", 0) * accel_scale,
         "t_mono": time.monotonic() if t_mono is None else t_mono,
         "device_ts": int(getattr(frame, "sensor_ts_ticks", 0) or 0),
+        # (ii) R2-onset study (grok r2onset-01 Increment-0): carry the RAW R2 analog channel (0..255)
+        # + L2 + the adaptive-trigger mode so the OFFLINE actuator-coupling study can time the reaction
+        # on the R2 channel with the live device clock. The reflex analyzer IGNORES these keys (reads
+        # only ax/ay/az/t_mono/device_ts) — pure pass-through instrumentation, non-gating, no corpus/verdict.
+        "r2": int(getattr(frame, "r2_trigger", 0) or 0),
+        "l2": int(getattr(frame, "l2_trigger", 0) or 0),
+        "r2_mode": int(getattr(frame, "r2_effect_mode", 0) or 0),
     }
 
 
@@ -3346,6 +3353,18 @@ class DualShockTransport:
             crossing_device_ts, probe_device_ts,
             float(peak_lsb), len(self._l6b_post_buffer), (error or "ok"), _gone,
         )
+        # (ii) R2-onset study Increment-0: optional dump of the FULL pre+post r2/accel/device_ts series
+        # for the offline actuator-coupling study. Gated on poep_ring_dump_enabled; fires BEFORE the
+        # done-check so a client-504'd fire still yields data. Fail-open — instrumentation never breaks
+        # the resolve; never touches latency_ms/verdict/corpus/flags.
+        _cfg = getattr(self, "_cfg", None)
+        if _cfg is not None and getattr(_cfg, "poep_ring_dump_enabled", False):
+            try:
+                self._dump_poep_ring_series(
+                    _p, latency_ms, device_latency_ms, crossing_device_ts, probe_device_ts,
+                )
+            except Exception as _dump_exc:
+                log.debug("POEP-HID-RING: ring dump failed (non-fatal): %s", _dump_exc)
         if _fut.done():
             return   # client cancelled on timeout — logged for diagnostics; nothing to set
         _fut.set_result({
@@ -3358,6 +3377,48 @@ class DualShockTransport:
             "precursor_gap_ms": precursor_gap_ms,
             "error": error,
         })
+
+    def _dump_poep_ring_series(
+        self, pending, latency_ms, device_latency_ms, crossing_device_ts, probe_device_ts,
+    ) -> None:
+        """(ii) R2-onset Increment-0: write a nonce-bound fire's FULL pre+post r2/accel/device_ts series
+        to audits/poep_ring_dump/ for the OFFLINE actuator-coupling study. Instrument-only, fail-open;
+        never gates the corpus/verdict/flags. Studied offline by scripts/poep_ring_coupling_study.py."""
+        import json
+        import os
+        _keys = ("r2", "l2", "r2_mode", "ax", "ay", "az", "t_mono", "device_ts")
+        def _slim(reps):
+            return [
+                {k: r.get(k) for k in _keys}
+                for r in (reps or []) if isinstance(r, dict)
+            ]
+        _nonce = str(pending.get("poep_nonce") or "nofuture")
+        _rec = {
+            "schema": "qortroller-poep-ring-dump-v0",
+            "nonce": _nonce,
+            "t_fire_ns": pending.get("poep_t_fire_ns"),
+            "probe_ts_mono": pending.get("probe_ts"),
+            "probe_r2_force": pending.get("probe_r2_force"),
+            "probe_mode": pending.get("probe_mode"),
+            "probe_hold_ms": pending.get("probe_hold_ms"),
+            "probe_device_ts": probe_device_ts,
+            "resolved_latency_ms": latency_ms,
+            "device_latency_ms": device_latency_ms,
+            "crossing_device_ts": crossing_device_ts,
+            "device_ticks_per_ms": _DEVICE_TS_TICKS_PER_MS,
+            "pre_series": _slim(pending.get("pre_reports")),
+            "post_series": _slim(self._l6b_post_buffer),
+        }
+        _dir = os.path.join("audits", "poep_ring_dump")
+        os.makedirs(_dir, exist_ok=True)
+        _safe = "".join(ch for ch in _nonce if ch.isalnum())[:24] or "fire"
+        _path = os.path.join(_dir, f"{_safe}_{int(time.time())}.json")
+        with open(_path, "w", encoding="utf-8") as _fh:
+            json.dump(_rec, _fh)
+        log.info(
+            "POEP-HID-RING: ring-dump wrote %d pre + %d post frames -> %s",
+            len(_rec["pre_series"]), len(_rec["post_series"]), _path,
+        )
 
     # ------------------------------------------------------------------
     # Sync helpers (executed in thread pool)
