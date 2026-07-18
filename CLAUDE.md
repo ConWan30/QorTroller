@@ -221,6 +221,9 @@ Without L6 (default):
   humanity_probability = 0.28·p_L4 + 0.27·p_L5 + 0.20·p_E4 + 0.15·p_L2B + 0.10·p_L2C
   NOTE: p_L2C resolves to 0.5 neutral prior in dead-zone stick games (NCAA CFB 26).
   Formula runs as effective 4-signal in practice for this game corpus.
+  CFB 27 caveat (2026-07-18, cfb27-r02): the 26 dead-zone assumption does NOT transfer — 27's right
+  stick is ACTIVE in-play (Tackle Stick + carrier moves), so L2C may compute non-None; the weight
+  stays advisory 0.10 (telemetry-shape change, not a reweight; profile `ncaa_cfb_27` registered).
 
 With L6 active:
   p_human = 0.23·p_L4 + 0.22·p_L5 + 0.15·p_E4 + 0.15·p_L6 + 0.15·p_L2B + 0.10·p_L2C

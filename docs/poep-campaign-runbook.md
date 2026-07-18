@@ -15,6 +15,23 @@ growth, and enabling `L6B_ENABLED` is now an UNBLOCKED separate operator decisio
   reverted; the WIP lives in `stash@{0}` for later validation).
 - `OPERATOR_API_KEY` at hand (the fire endpoint requires the full key).
 
+## CFB 27 session addendum (2026-07-18; grok cfb27-r02 — first rig = truth-gathering, no novel claims)
+Set the profile in Shell A alongside the campaign env (process-scoped, like everything else):
+```powershell
+$env:GAME_PROFILE_ID = "ncaa_cfb_27"     # R2-sprint config transfers from 26; D1-D4 annotated in-profile
+```
+**First-minutes EYE-CHECK (fill pass/fail; no shame on early unknowns):**
+1. Capture card UVC live + EYE-CHECK the first crop CONTENT (game frame, not the room).
+2. `GET /bridge/capture-health` -> `latest_gameplay_context == ACTIVE_GAMEPLAY` mid-drive
+   (R2 sprint should keep it green — the load-bearing 26 assumption, TO RE-VERIFY on 27 here).
+3. R2-quiet windows still exist between plays (probe timing viability).
+4. L2C sanity (D1): note whether stick-IMU correlation goes non-None during Tackle Stick /
+   ball-carrier sequences — telemetry observation only, NOT a gate.
+5. AIT discipline: any still-hold capture needs RS neutral (Tackle Stick fidget risk).
+6. **Scoreboard ROI dumps (offline OCR prep):** save a handful of full frames + top-strip
+   (~y 0-0.12) and bottom-strip (~y 0.85-1.0) crops during dead time — ROI fractions get MEASURED
+   from these 27 frames (never guessed from Warzone habits). No live OCR this session.
+
 ## The session (two shells)
 
 **Shell A — the bridge (process-scoped campaign env):**
