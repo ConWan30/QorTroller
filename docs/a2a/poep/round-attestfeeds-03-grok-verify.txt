@@ -1,0 +1,95 @@
+I'll verify Claude's build against your r02 spec: read the open round + brainstorm, then audit the built diffs and tests for fabrication paths.Reading the full test file and key implementation seams for break attempts.Checking sealed PCC gate, threshold edits, and re-running the T-AF suite plus fabrication probes.Confirming sealed PCC module is git-clean and scanning the three-file diff for flag/threshold edits:# ATTEST-FEEDS r03 — INDEPENDENT VERIFY
+
+**Verdict: SHIP**
+
+Re-ran T-AF **9/9**. Sealed l9 stack **git-clean**. No nominal-band / threshold / flag flips in the three-file surface. Fabrication hunt fails closed under production call paths.
+
+---
+
+## A. 1a / 1b / 1c
+
+| Layer | Delivered | Check |
+|-------|-----------|--------|
+| **1a** | N=3 silent (`_PCC_STALL_ITERS`), force via `_hid_counter_force_reopen` inside drain inner loop → existing re-open, cap `_HID_RESTART_CAP=10` | Pass |
+| **1b** | stalled → `update_sample(len(frames))`, `rate_source=main_reader_frames`, `rate_counter_stalled=True`; healthy → delta + `hid_interface3` | Pass |
+| **1c** | no main-reader NOMINAL band; no 950 Hz / `pcc_nominal` edit | Pass |
+
+Pre-N iters still feed delta=0 (2 samples) — allowed by **B1** (no perpetual 0; stall within N+1). Cap is process-lifetime (stricter than “10/hour”) — fine.
+
+---
+
+## B. Live surface + CLI
+
+| Spec | Build | Check |
+|------|-------|--------|
+| deque 20 | `_live_activity_window = deque(maxlen=20)` | Pass |
+| capture-health keys | stalled / source / restarts / fraction / n / source | Pass |
+| omit-when-cold ≥3 | CLI `n >= 3` else `{}` | Pass |
+| no ctx on live path | only `trigger_active_fraction` | Pass |
+| MENU vs UNKNOWN | filled 0 → MENU; cold omit → UNKNOWN (sealed grammar) | Pass |
+| disconnect decays | no-frames path `append(0)` | Pass |
+
+Surface exposes fraction at n≥1; CLI gates n≥3 — correct split (observability vs fail-closed attach).
+
+---
+
+## C. Sealed line HELD
+
+- `pcc_allows_challenge`, `classify_activity`, live/session/did/presence/adapters: **byte-untouched**
+- DEGRADED + EXCLUSIVE_USB → **refuse**; NOMINAL + EXCLUSIVE_USB → **allow** (live oracle)
+- Fallback feed n=120 → not a silent NOMINAL path
+
+---
+
+## D. Fabrication hunt (break attempts)
+
+| Attack | Result |
+|--------|--------|
+| Idle → ACTIVE | 20× `trigger_active=False` → fraction 0 → **MENU** |
+| Empty frames → stall/NOMINAL | stalled False; samples all 0; no force-reopen |
+| Stalled masks disconnect | stall only if `frames` truthy ∧ delta=0 |
+| Stalled → false NOMINAL | len(frames)=120 + `rate_counter_stalled`; sealed PCC refuses DEGRADED |
+| Stale frozen ACTIVE | no-frames appends 0; window decays |
+| CLI invents ACTIVE from ctx | cold + `latest_gameplay_context=ACTIVE` → `{}` |
+| Stale ctx shadows live | live path never forwards `gameplay_context` |
+
+**Residual (non-blocking):** `_pcc_rate_feed` appends the spc trigger bit even if called with `frames=[]`. Production no-frames path **does not** call the helper (it `append(0)` separately). Do not call the helper from empty-frame paths.
+
+---
+
+## E. Tests vs r02 T-AF bars
+
+| r02 bar | Coverage |
+|---------|----------|
+| T-AF-1 stall+len+reopen | their T-AF-1 |
+| T-AF-2 healthy | T-AF-2 |
+| T-AF-3 empty frames | T-AF-4 |
+| T-AF-4/5/6 activity grammar | T-AF-7 (+ CLI cold T-AF-8) |
+| T-AF-7/8 `pcc_allows_challenge` | **not in T-AF suite** (sealed tests + live oracle hold) |
+| T-AF-9 CLI | their T-AF-8 |
+| source pins | their T-AF-9 |
+
+**B1–B6:** product holds. Optional belt (not a product FIX): one assert  
+`pcc_allows_challenge({DEGRADED, EXCLUSIVE_USB}) is False` and  
+`pcc_allows_challenge({NOMINAL, EXCLUSIVE_USB}) is True` in the T-AF file.
+
+---
+
+## Bars
+
+| Bar | Status |
+|-----|--------|
+| B1 silent never perpetual 0 | **PASS** |
+| B2 stalled + honest source | **PASS** |
+| B3 cold/active/menu grammar | **PASS** |
+| B4 DEGRADED still refuses | **PASS** |
+| B5 sealed clean / no flag flips | **PASS** |
+| B6 no NOMINAL-from-~120 test | **PASS** |
+
+---
+
+## FINAL
+
+**SHIP** — operator may commit the three surfaces + `bridge/tests/test_attest_feeds.py`.
+
+Next rig: eye-check `rate_counter_stalled` / `rate_source` / live fraction; Shell B greens only if **1a restores ~1 kHz NOMINAL** (or stays red honestly under stalled+DEGRADED).

@@ -95,7 +95,17 @@ def _make_bridge_health_fetcher(bridge_url: str, api_key: str, kind: str):
         if not isinstance(data, dict):
             return {} if kind == "activity" else None
         if kind == "activity":
-            return {"gameplay_context": data.get("latest_gameplay_context")}
+            # ATTEST-FEEDS (F-RIG27-2, grok attestfeeds-r02 B): the LIVE bridge-attested fraction is
+            # the honest activity path (the adjudication-time gameplay_context never stamps in a
+            # campaign config, and a stale/null ctx must never shadow live truth — so it is NOT
+            # passed here). Omit-when-cold: window_n < 3 -> {} -> the sealed classifier yields
+            # UNKNOWN -> challenge_live refuses (fail-closed). fraction==0 with a filled window ->
+            # MENU; > 0 -> ACTIVE_GAMEPLAY — the sealed grammar decides, the CLI never invents.
+            n = data.get("live_activity_window_n")
+            v = data.get("live_trigger_active_fraction")
+            if isinstance(n, int) and n >= 3 and isinstance(v, (int, float)):
+                return {"trigger_active_fraction": float(v)}
+            return {}
         return {"capture_state": data.get("capture_state"), "host_state": data.get("host_state")}
 
     return _fetch

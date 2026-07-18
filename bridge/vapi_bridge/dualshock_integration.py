@@ -420,6 +420,21 @@ class DualShockTransport:
         self._hid_counter_thread    = None
         self._hid_counter_running   = False
         self._hid_counter_restarts  = 0  # Phase 235-CONTENTION: self-healing retry count
+        # ATTEST-FEEDS (F-RIG27-1, first CFB 27 rig): the counter thread can be ALIVE but SILENT
+        # (0 reports under the RP topology while the main reader mints records) — aliveness != -
+        # productivity, so the len(frames) fallback never engaged and PCC read a fabricated 0
+        # (false-negative DISCONNECTED). These track silent iterations, expose the stall honestly,
+        # and let the session loop force the drain loop through its existing self-healing re-open.
+        self._hid_counter_silent_iters = 0
+        self._hid_counter_force_reopen = False
+        self._rate_counter_stalled  = False
+        self._rate_source           = "hid_interface3"   # | "main_reader_frames"
+        # ATTEST-FEEDS (F-RIG27-2): rolling window of the per-iteration live trigger_active bit
+        # (the same bit already computed for the PCC SPC binding) — surfaces a LIVE bridge-attested
+        # activity fraction on capture-health (no adjudicator dependency). ~20 iters ~= the GAD
+        # evidence-window spirit. The no-frames path appends 0 so a disconnect DECAYS the window
+        # (a frozen window must never hold a stale ACTIVE fraction).
+        self._live_activity_window: deque = deque(maxlen=20)
         # Controller hot-plug auto-reconnect (USB unplug/replug recovery without a bridge restart).
         # The session loop counts consecutive poll failures and, past the policy threshold, re-opens
         # the reader on a capped backoff (off the event loop). Default-on; disable via cfg.
@@ -843,6 +858,16 @@ class DualShockTransport:
                                  or getattr(self._cfg, "retina_hid_events_enabled", False))
                                 and self._retina_game_capture is not None)
                     while self._hid_counter_running:
+                        # ATTEST-FEEDS (F-RIG27-1): the session loop sets this when the counter is
+                        # ALIVE but SILENT (reads returning empty under RP while the main reader
+                        # delivers). Break to the finally -> handle closes -> the outer self-healing
+                        # loop re-enumerates + re-opens. Cheap attr check on the ~1kHz thread.
+                        if self._hid_counter_force_reopen:
+                            self._hid_counter_force_reopen = False
+                            self._hid_counter_restarts += 1
+                            log.warning("ATTEST-FEEDS: forced hid-counter re-open "
+                                        "(alive-but-silent; restart #%d)", self._hid_counter_restarts)
+                            break
                         data = handle.read(128, timeout_ms=200)
                         if data:
                             # CPython GIL makes single-producer safe without lock.
@@ -1682,6 +1707,9 @@ class DualShockTransport:
                 log.debug("Session loop iter=%d: no frames, sleeping", _loop_iter)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 1
                     self._pcc_monitor.update_sample(0, self._interval, **_spc_kwargs)
+                # ATTEST-FEEDS (F-RIG27-2 fabrication pin): a disconnect DECAYS the live activity
+                # window — a frozen window must never hold a stale ACTIVE fraction.
+                self._live_activity_window.append(0)
                 await self._handle_poll_failure("no_frames")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
 
@@ -1692,21 +1720,10 @@ class DualShockTransport:
                 self._reconnect_attempts = 0
 
             # Phase 234.7 Layer 1 — report poll rate for PCC.
-            # Phase 235-PCC-RATE-FIX: prefer the TRUE USB HID rate from the
-            # parallel hidapi counter on interface 3 (~1000 Hz on USB high-
-            # speed) over `len(frames)` (capped at ~120 Hz by the dt_ms=8
-            # sleep in _poll_frames, which is required to keep the L4
-            # tremor FFT bin spacing valid).  Falls back to len(frames) if
-            # the hidapi counter never started (no hidapi installed, or
-            # interface 3 unavailable).
-            if self._pcc_monitor is not None:
-                if self._hid_counter_thread is not None and self._hid_counter_thread.is_alive():
-                    _total = self._hid_report_total
-                    _delta = _total - self._last_hid_report_total
-                    self._last_hid_report_total = _total
-                    self._pcc_monitor.update_sample(_delta, self._interval, **_spc_kwargs)
-                else:
-                    self._pcc_monitor.update_sample(len(frames), self._interval, **_spc_kwargs)
+            # ATTEST-FEEDS (F-RIG27-1): extracted to _pcc_rate_feed — same counter-delta-vs-
+            # len(frames) preference PLUS silent-counter stall detection/healing (the alive-but-
+            # silent hole from the first CFB 27 rig) and the F-RIG27-2 live activity window append.
+            self._pcc_rate_feed(frames, _spc_kwargs)
 
             # VSD Cycle 25 tether prototype tick (after PCC so we know host_state context)
             # Only active if dual_grind_tether_enabled + typically when grind + EXCLUSIVE_USB.
@@ -3050,6 +3067,70 @@ class DualShockTransport:
             # --- Pace to interval ---
             elapsed = time.monotonic() - t_start
             await asyncio.sleep(max(0.0, self._interval - elapsed))
+
+    # ------------------------------------------------------------------
+    # ATTEST-FEEDS (F-RIG27-1): PCC rate feed with silent-counter healing
+    # ------------------------------------------------------------------
+    _PCC_STALL_ITERS = 3     # consecutive zero-delta iters (frames flowing) before stall confirms
+    _HID_RESTART_CAP = 10    # bound forced re-opens per process (no thrashing under permanent starve)
+
+    def _pcc_rate_feed(self, frames, spc_kwargs) -> None:
+        """Feed PCC the poll rate; heal the ALIVE-but-SILENT counter hole (first CFB 27 rig).
+
+        Phase 235-PCC-RATE-FIX preferred the interface-3 counter's delta over len(frames), guarded
+        only by thread.is_alive() — but under the RP topology the thread stayed alive while reads
+        returned empty, so a fabricated 0 fed PCC every iteration (false-negative DISCONNECTED)
+        while the main reader minted real records. Fix (grok attestfeeds-r02):
+          - silent-detect: N consecutive zero-delta iters WHILE frames flow -> stall confirmed;
+          - force the drain loop through its EXISTING self-healing re-open (capped);
+          - while stalled: feed len(frames) — the main reader's honest ~120Hz cadence, never a
+            fabricated 0. That yields DEGRADED, and the sealed PCC gate still refuses fires —
+            correct fail-closed until the true rate recovers (never a silent threshold loosen).
+        Also appends the live trigger_active bit to the F-RIG27-2 activity window (frames path).
+        Fabrication pins: empty frames NEVER take the len(frames) path (a real disconnect is never
+        masked); the stall flag only raises while frames flow.
+        """
+        self._live_activity_window.append(1 if spc_kwargs.get("trigger_active") else 0)
+        if self._pcc_monitor is None:
+            return
+        counter_alive = (
+            self._hid_counter_thread is not None and self._hid_counter_thread.is_alive()
+        )
+        if not counter_alive:
+            # counter never started (no hidapi / no iface 3) — documented len(frames) fallback
+            self._rate_source = "main_reader_frames"
+            self._pcc_monitor.update_sample(len(frames), self._interval, **spc_kwargs)
+            return
+
+        _total = self._hid_report_total
+        _delta = _total - self._last_hid_report_total
+        self._last_hid_report_total = _total
+
+        if _delta == 0 and frames:
+            self._hid_counter_silent_iters += 1
+        else:
+            self._hid_counter_silent_iters = 0
+            if self._rate_counter_stalled:
+                log.info("ATTEST-FEEDS: hid rate counter RECOVERED (delta=%d)", _delta)
+            self._rate_counter_stalled = False
+
+        if self._hid_counter_silent_iters >= self._PCC_STALL_ITERS:
+            if not self._rate_counter_stalled:
+                log.warning(
+                    "ATTEST-FEEDS: hid rate counter ALIVE but SILENT for %d iters while the main "
+                    "reader delivers — stall confirmed; feeding main-reader cadence + forcing re-open",
+                    self._hid_counter_silent_iters,
+                )
+            self._rate_counter_stalled = True
+            if (self._hid_counter_restarts < self._HID_RESTART_CAP
+                    and not self._hid_counter_force_reopen):
+                self._hid_counter_force_reopen = True
+            self._rate_source = "main_reader_frames"
+            self._pcc_monitor.update_sample(len(frames), self._interval, **spc_kwargs)
+            return
+
+        self._rate_source = "hid_interface3"
+        self._pcc_monitor.update_sample(_delta, self._interval, **spc_kwargs)
 
     # ------------------------------------------------------------------
     # POEP-HID-RING: nonce-bound fire on the single-HID L6b ring
