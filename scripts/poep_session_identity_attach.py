@@ -2,9 +2,12 @@
 
 DRY-FIRST (default): honest injected fire (`real_hardware=False`) -> the sealed model forces the
 presence candidate to False -> verdict IDENTITY_ONLY. Proves the whole attach pipeline end-to-end
-WITHOUT a rig. `--live` is GATED on POEP_LIVE_FIRE_ENABLED=1 and uses the operator rig fire path; it
-stays IDENTITY_ONLY (honest) until the L3 real fire+IMU adapter exists - it NEVER synthesizes
-`real_hardware=True`.
+WITHOUT a rig. `--live` (GATED on POEP_LIVE_FIRE_ENABLED=1, never CI) is served by the RUNNING
+bridge's single-HID ring: fire+capture via POST /operator/poep/fire (BridgeFireCaptureAdapter) and
+activity/PCC from the SAME bridge (GET /bridge/capture-health) - one reader attests everything, so
+`SYNCHRONIZED_CONTROLLER` is honestly reachable iff the bridge's gates (l6b_enabled - operator
+decision - + POEP_LIVE_FIRE_ENABLED) are open AND real fires verify. Every refusal fail-closes to an
+honest IDENTITY_ONLY; the CLI NEVER synthesizes `real_hardware=True`, activity, or PCC.
 
     python scripts/poep_session_identity_attach.py --dry            # -> IDENTITY_ONLY (no rig)
     POEP_LIVE_FIRE_ENABLED=1 python scripts/poep_session_identity_attach.py --live   # operator rig
@@ -16,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
 import sys
 import time
@@ -66,6 +70,36 @@ def _dry_pcc() -> dict:
     return {"capture_state": "NOMINAL", "host_state": "EXCLUSIVE_USB"}
 
 
+# ── LIVE attestation fetchers (hidring): activity/PCC from the REAL bridge, never fabricated ──
+def _make_bridge_health_fetcher(bridge_url: str, api_key: str, kind: str):
+    """GET /bridge/capture-health -> activity dict ({'gameplay_context': ...}) or PCC dict.
+
+    Fail-closed: bridge unreachable / malformed -> empty/None -> classify_activity yields UNKNOWN and
+    pcc_allows_challenge yields False -> the sealed challenge_live REFUSES. The live path never
+    fabricates activity or PCC - the bridge that fires is the bridge that attests (one reader).
+    """
+    import urllib.request
+
+    url = bridge_url.rstrip("/") + "/bridge/capture-health"
+
+    def _fetch():
+        try:
+            req = urllib.request.Request(url)
+            if api_key:
+                req.add_header("x-api-key", api_key)
+            with urllib.request.urlopen(req, timeout=3.0) as r:  # noqa: S310 - operator-local bridge
+                data = json.loads(r.read().decode())
+        except Exception:
+            return {} if kind == "activity" else None
+        if not isinstance(data, dict):
+            return {} if kind == "activity" else None
+        if kind == "activity":
+            return {"gameplay_context": data.get("latest_gameplay_context")}
+        return {"capture_state": data.get("capture_state"), "host_state": data.get("host_state")}
+
+    return _fetch
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -86,23 +120,37 @@ def main() -> int:
     ap.add_argument("--controller-nft-token-id", type=int, default=1)
     ap.add_argument("--challenges", type=int, default=2, help="GO challenges to run (>= MIN_GO_ISSUED)")
     ap.add_argument("--no-custody-seal", action="store_true", help="omit the seal v0.2 custody sidecar")
+    ap.add_argument("--bridge-url", default="http://localhost:8080", dest="bridge_url",
+                    help="running bridge base URL (live path: fire endpoint + capture-health attestation)")
+    ap.add_argument("--api-key", default=os.environ.get("OPERATOR_API_KEY", ""), dest="api_key",
+                    help="operator api key for the bridge (default: OPERATOR_API_KEY env; never printed)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
     live = bool(args.live)
+    activity_fetcher = _dry_activity
+    pcc_sampler = _dry_pcc
 
     if live:
-        from l9_presence.poep_gameplay_live import make_real_hid_fire, real_hid_fire_available
+        # HID-RING live path: fire+capture served by the RUNNING bridge's single-HID ring
+        # (POST /operator/poep/fire) + activity/PCC from the SAME bridge (capture-health) - one
+        # reader attests everything. Client-side env gate kept as defense-in-depth (never CI); the
+        # bridge enforces its own fail-closed gates (POEP_LIVE_FIRE_ENABLED + l6b_enabled) and a
+        # refused fire is honestly NOT a fire (no real_hardware synthesized anywhere).
+        from l9_presence.poep_gameplay_live import real_hid_fire_available
         if not real_hid_fire_available():
-            print("REFUSED: --live requires POEP_LIVE_FIRE_ENABLED=1 on the operator rig (never CI).",
-                  file=sys.stderr)
+            print("REFUSED: --live requires POEP_LIVE_FIRE_ENABLED=1 on this shell (and on the "
+                  "bridge process, which enforces its own gates; never CI).", file=sys.stderr)
             return 2
-        # Operator rig fire path. Honest today: the real fire is an L3 stub that returns fired=False
-        # until the pad-write + IMU adapter lands, so --live yields IDENTITY_ONLY - it NEVER fabricates.
-        fire_fn = make_real_hid_fire()
-        imu_fn = lambda _t: None  # noqa: E731  no real IMU adapter yet; GO refuses on fired=False first
-        print("[live] real fire path is gated + honest: expect IDENTITY_ONLY until the L3 "
-              "fire+IMU adapter exists (no real_hardware synthesized).")
+        from l9_presence.poep_bridge_fire_adapter import make_bridge_fire_adapter
+        adapter = make_bridge_fire_adapter(bridge_url=args.bridge_url, api_key=args.api_key)
+        fire_fn = adapter.fire_fn
+        imu_fn = adapter.imu_capture_fn
+        activity_fetcher = _make_bridge_health_fetcher(args.bridge_url, args.api_key, "activity")
+        pcc_sampler = _make_bridge_health_fetcher(args.bridge_url, args.api_key, "pcc")
+        print("[live] served by the bridge's single-HID ring: fire=/operator/poep/fire, "
+              "activity/PCC=/bridge/capture-health (same reader). Bridge gates refuse fail-closed "
+              "-> honest IDENTITY_ONLY when closed.")
     else:
         fire_fn = _dry_fire
         imu_fn = _dry_imu
@@ -117,8 +165,8 @@ def main() -> int:
         challenge_plan=plan,
         fire_fn=fire_fn,
         imu_capture_fn=imu_fn,
-        activity_fetcher=_dry_activity,   # dry activity source (bridge-attested activity is the rig path)
-        pcc_sampler=_dry_pcc,
+        activity_fetcher=activity_fetcher,   # live: the REAL bridge's attestation; dry: injected
+        pcc_sampler=pcc_sampler,
         ioid_identity={
             "owner_did": args.owner_did,
             "ioid_token_id": args.ioid_token_id,
