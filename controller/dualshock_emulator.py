@@ -170,6 +170,10 @@ class InputSnapshot:
     r2_effect_mode: int = 0
     # BT sequence counter byte (ds.states[0] for BT; -1 for USB / unavailable)
     bt_seq_byte: int = -1
+    # F-RIG27-8: DualSense on-device sensor timestamp — raw uint32 LE @ ~3MHz (states[28:32]),
+    # 0 when unavailable. NOT serialized (excluded from the serialized snapshot pack below) — it is a
+    # robust device clock for the PoEP reflex-latency companion, immune to bridge/RP processing lag.
+    sensor_ts_ticks: int = 0
 
     def serialize(self) -> bytes:
         """Deterministic big-endian serialization — same as firmware."""
@@ -739,6 +743,12 @@ class DualSenseReader:
             raw_az = struct.unpack_from('<h', _s, 20)[0]
             # BT sequence counter: ds.states[0] (BT = inReport[1:], so index 0 = BT seq byte)
             snap.bt_seq_byte = _states[0] & 0xFF
+            # F-RIG27-8: DualSense sensor timestamp — uint32 LE @ ~3MHz at offset 28, immediately
+            # after the IMU block states[16:28] and transport-normalized identically (the raw drain
+            # thread reads the same offset 28 for push_l2_raw). Robust device clock for the PoEP
+            # reflex-latency companion. Absent (len<32) -> stays 0 -> latency helper falls back to t_mono.
+            if len(_states) >= 32:
+                snap.sensor_ts_ticks = struct.unpack_from('<I', _s, 28)[0]
         else:
             # First-frame fallback: ds.states not yet populated.  Correct for USB;
             # may be off by 1 byte for BT on first frame only — acceptable.

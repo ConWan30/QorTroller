@@ -1,0 +1,93 @@
+I'll verify the F-RIG27-8 device-ts fix against the r02 spec and all 7 r03 bars. Starting with the A2A docs and the built diffs.Next I'll inspect the test suite, confirm `_f.timestamp_ms` is device-clock, and check wrap/rail handling against r02.Critical check: is `timestamp_ms` the real device 3 MHz clock or host wall time?Claude's claim that `timestamp_ms` is device-clock looks shaky — digging into the frame path that builds `_f`.Confirmed: `InputSnapshot` has no `timestamp_ms` — live wiring is dead. Running a short proof and checking remaining bars.## VERDICT: **FIX** (not SHIP)
+
+The resolve/prefer path and unit math are fine. **Live device-ts never populates.** Under real DualSense frames the “fix” always fails closed to t_mono — F-RIG27-8 remains unfixed on rig.
+
+---
+
+### Root cause of the miss (Claude’s “key finding” is wrong)
+
+| Claim | Reality |
+|--------|---------|
+| `_f.timestamp_ms` is already the device clock (cite “1820–1821”) | **False.** Lines 1820–21 are the Phase 61 replay ring. |
+| No drain-loop byte-threading needed | **False.** That *is* the required work. |
+
+`InputSnapshot` has **no** `timestamp_ms` field. `DualSenseReader.poll()` never sets one and only reads IMU via `ds.states[16:28]` — **not** sensor ts at 28–31:
+
+```python
+# live path today
+float(getattr(_f, "timestamp_ms", 0) or 0.0)  # → always 0.0
+```
+
+So:
+- every `_l6b_entry["device_ts"]` = `0`
+- `poep_probe_device_ts` = `0`
+- `_rp_device_latency_ms` → always `-1` (both-ends rail)
+- resolve always uses analyzer t_mono latency  
+**= rig-3 pathology unchanged**
+
+This is exactly the gap r02 called out:
+
+> *InputSnapshot / `_poll_frames` do not surface offset 28 today … Build must extract `states[28:32]`*
+
+---
+
+### 7 r03 bars
+
+| # | Bar | Result |
+|---|-----|--------|
+| 1 | t_mono / latency_ms / classification unchanged when device_ts absent | **PASS** (additive field; unit + design) |
+| 2 | 220-usable gate MET; `DEFAULT_BAND_MS` unchanged | **PASS** (`(80,350)` untouched; no `reflex_gate` edit) |
+| 3 | sealed `l9_presence` diff empty | **PASS** |
+| 4 | PV-CI 184; zero spend; no flag flips | **PASS** (gate PASS — 184) |
+| 5 | fabricated RP lag → device in-band, mono OOB | **PASS unit only** (injected dicts; not live frames) |
+| 6 | rails reject stale/forged/wrap | **PARTIAL** — rejects ≤0, >500, non-numeric, negative; **no wrap_u32**; **no** majority-duplicate progression rail (r02 E.4) |
+| 7 | rig-4 path reachable (device in-band + peak → verify_pass) | **FAIL** — device path never arms on hardware |
+
+---
+
+### Break attempts
+
+1. **Replay/forge device_ts stream?**  
+   With dead wire: N/A (always fail-closed). With a real wire: host can forge HID; rails (both-ends + (0,500ms] + peak + nonce + `real_hardware`) are the right *minimum* fail-closed. Progression/stale rail still missing; not the ship-blocker vs the dead wire.
+
+2. **Analyzer changes canonical / corpus?**  
+   **No.** `latency_ms` / `true_latency_ms` / classification still t_mono-only; `crossing_device_ts` additive default `-1`. Corpus path untouched. Good.
+
+3. **(0,500ms] + both-ends right?**  
+   **Yes as fail-closed shape** *when values are true ms on the same clock*. Today the rail only proves the dead path.
+
+4. **Same-frame `crossing_device_ts` as `crossing_t_mono`?**  
+   **Yes in code** (same first-crossing branch). Consistency is correct; **source of `device_ts` is empty**.
+
+5. **Units / wrap (latent bug if only “wire timestamp_ms” is fixed naïvely)**  
+   Raw offset 28 is **uint32 @ 3 MHz**, not ms. r02:
+
+   `device_latency_ms = wrap_u32(cross − probe) / 3000.0`
+
+   Helper treats floats as **already-ms** and rejects wrap as negative. Any fix must convert ticks→ms and be wrap-safe.
+
+---
+
+### Precise FIX (minimal surface)
+
+1. **`DualSenseReader.poll()`** (or snap build): if `len(states) >= 32`,  
+   `device_ts_ticks = u32_le(states[28:32])` → put on snap (new field, e.g. `device_ts_ticks` or convert once to ms).  
+   Do **not** use nonexistent `timestamp_ms`.
+
+2. **`_l6b_entry`**: `device_ts` from that field (0 / omit if missing) — keep additive.
+
+3. **`_rp_device_latency_ms`**: either  
+   - accept ticks + `wrap_u32(Δ)/3000.0`, or  
+   - store ms after wrap-safe conversion at extract time; keep (0, 500] + both-ends.
+
+4. **Test that would have caught this:** mock/real `states` with offset 28 set → after poll/entry build, `device_ts > 0` and RP-lag case still resolves device path (not only hand-built dicts).
+
+5. Optional (non-blocking vs #1): r02 E.4 progressive/stale-duplicate rail.
+
+**Do not commit** until (1)+(3)+(4) land. Analyzer additive + prefer-device wiring can stay; they are correct *plumbing* without a source.
+
+---
+
+### One-liner for operator
+
+**FIX — dead source: `getattr(_f, "timestamp_ms")` is always 0; extract HID sensor ts @ states[28:32] (3 MHz→ms, wrap-safe) or rig-4 still measures t_mono-inflated RP latency.**
