@@ -194,6 +194,63 @@ def _rating_tier(rating: int) -> str:
 # ---------------------------------------------------------------------------
 # SkillOracle tracker — mirrors contract logic locally, submits on-chain
 # ---------------------------------------------------------------------------
+# F-RIG27-8: DualSense sensor timestamp is a uint32 counter at ~3 MHz (documented ~0.33 µs/tick;
+# the raw drain thread + poll() both read offset 28). 3000 ticks/ms matches the existing "@3MHz"
+# codebase convention; the ~1% vs the 0.33µs figure is immaterial for the 80-350ms in-band check
+# (this is a robustness companion, NOT a corpus input). The counter wraps every 2^32/3000 ≈ 23.9 min.
+_DEVICE_TS_TICKS_PER_MS: float = 3000.0
+_U32: int = 1 << 32
+
+
+def _rp_device_latency_ms(crossing_device_ticks, probe_device_ticks, max_ms: float = 500.0) -> float:
+    """F-RIG27-8: DEVICE-clock reaction latency (ms) from raw uint32 sensor ticks (grok rplatency-r04).
+
+    latency_ms = wrap_u32(crossing_ticks - probe_ticks) / 3000  — the device sensor timestamp is immune
+    to the RP frame-PROCESSING lag that inflates the bridge t_mono canonical (rig-3: real reflexes
+    measured 594-4600ms via t_mono, never in the 80-280ms band). Fail-closed to -1 on any rail miss:
+      (1) BOTH ends required (>0; 0 = absent, e.g. len(states)<32 or first-frame fallback);
+      (2) inputs are non-negative uint32 ticks (negative/non-numeric -> reject);
+      (3) modular u32 wrap on the raw tick diff (a real ~24-min rollover recovers a small span; a
+          FROZEN/duplicate stream gives span 0 -> reject; a stale/regressed ts wraps to a huge span);
+      (4) resulting span in (0, max_ms] — implausible -> reject.
+    The caller falls back to the t_mono canonical when this returns -1. NEVER fabricates a latency; the
+    analyzer + the 220-usable corpus + the band are byte-untouched — this companion clock is used ONLY
+    on the nonce-bound RP verify path.
+    """
+    try:
+        c = float(crossing_device_ticks)
+        p = float(probe_device_ticks)
+    except (TypeError, ValueError):
+        return -1.0
+    if c <= 0.0 or p <= 0.0:                 # both ends required (0 = absent)
+        return -1.0
+    if c >= _U32 or p >= _U32:               # not a valid uint32 tick -> reject
+        return -1.0
+    span_ticks = (c - p) % _U32              # wrap-safe: real rollover -> small span; frozen -> 0
+    span_ms = span_ticks / _DEVICE_TS_TICKS_PER_MS
+    if not (0.0 < span_ms <= max_ms):        # plausible reaction span only
+        return -1.0
+    return span_ms
+
+
+def _build_l6b_report(frame, accel_scale: float, t_mono: float | None = None) -> dict:
+    """F-RIG27-8: build one L6b analyzer report dict from a controller frame (InputSnapshot).
+
+    Pure extraction of the session-loop entry build so the exact device-clock wiring
+    (`sensor_ts_ticks` -> `device_ts` as raw uint32 ticks) is PRODUCTION-covered by tests, not just a
+    re-implemented ternary (grok rplatency-r04 F3: a silent getattr-name typo must fail a test). accel is
+    scaled to raw LSB (InputSnapshot stores g); `t_mono` defaults to time.monotonic() per-frame, matching
+    the loop; `device_ts` is 0 when the frame lacks sensor_ts_ticks -> the resolve helper falls back to t_mono.
+    """
+    return {
+        "ax": getattr(frame, "accel_x", 0) * accel_scale,
+        "ay": getattr(frame, "accel_y", 0) * accel_scale,
+        "az": getattr(frame, "accel_z", 0) * accel_scale,
+        "t_mono": time.monotonic() if t_mono is None else t_mono,
+        "device_ts": int(getattr(frame, "sensor_ts_ticks", 0) or 0),
+    }
+
+
 class PoepFireRefused(RuntimeError):
     """POEP-HID-RING: a nonce-bound fire request was refused (gate closed / busy / bad input).
 
@@ -2749,12 +2806,9 @@ class DualShockTransport:
                     getattr(self._reader, "_accel_scale", None) or 8192.0
                 )
                 for _f in frames:
-                    _l6b_entry = {
-                        "ax": getattr(_f, "accel_x", 0) * _l6b_accel_scale,
-                        "ay": getattr(_f, "accel_y", 0) * _l6b_accel_scale,
-                        "az": getattr(_f, "accel_z", 0) * _l6b_accel_scale,
-                        "t_mono": time.monotonic(),
-                    }
+                    # F-RIG27-8: entry build extracted to _build_l6b_report (module-level) so the exact
+                    # device-clock wiring (sensor_ts_ticks -> device_ts raw ticks) is production-covered.
+                    _l6b_entry = _build_l6b_report(_f, _l6b_accel_scale)
                     if self._l6b_pending is None:
                         self._l6b_pre_buffer.append(_l6b_entry)
                     else:
@@ -2775,13 +2829,25 @@ class DualShockTransport:
                                 _l6b_result.classification,
                             )
                             self._cco_reflex_verdict = _reflex_verdict
+                            # F-RIG27-8: prefer the DEVICE-clock reaction latency (crossing device_ts
+                            # minus the probe's device_ts) for the nonce-bound resolve - immune to the
+                            # RP frame-processing lag that inflates the t_mono canonical. Rails
+                            # fail-closed to -1 (both ends required + uint32-range + wrap-safe span in
+                            # (0, 500ms]) -> then the analyzer's latency_ms is used (honest). The device
+                            # clock only changes the latency_ms VALUE fed to the sealed verify when the
+                            # rails pass; the sealed band check still owns pass/fail. Corpus never sees it.
+                            _dev_lat = _rp_device_latency_ms(
+                                getattr(_l6b_result, "crossing_device_ts", -1.0),
+                                float(self._l6b_pending.get("poep_probe_device_ts", 0.0)),
+                            )
                             # POEP-HID-RING: resolve a nonce-bound fire with the MEASURED features
                             # (raw pass-through; no band-fill — the sealed verify owns the verdict).
                             # No-op for auto-tick probes (no poep_future on the pending).
                             self._resolve_poep_fire(
-                                latency_ms=_l6b_result.latency_ms,
+                                latency_ms=(_dev_lat if _dev_lat > 0.0 else _l6b_result.latency_ms),
                                 peak_lsb=_l6b_result.accel_delta_peak,
                                 precursor_gap_ms=None,
+                                device_latency_ms=_dev_lat,
                             )
                             log.debug(
                                 "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f reflex=%s",
@@ -3179,6 +3245,9 @@ class DualShockTransport:
         self._poep_fire_inflight = True
         try:
             _pre_reports = list(self._l6b_pre_buffer)   # pre-window snapshot BEFORE the fire
+            # F-RIG27-8: the probe's DEVICE ts = the last pre-frame's device_ts, RAW uint32 ticks (same
+            # device clock as the crossing frame -> a lag-immune reaction latency under RP). 0 if absent.
+            _probe_device_ts = int(_pre_reports[-1].get("device_ts", 0) or 0) if _pre_reports else 0
             _mode = str(getattr(self._cfg, "l6b_probe_mode", "pulse")).strip().lower()
             if _mode not in ("pulse", "rigid"):
                 _mode = "pulse"
@@ -3211,6 +3280,7 @@ class DualShockTransport:
                 # nonce-binding (POEP-HID-RING): completion resolves THIS future with THIS nonce
                 "poep_nonce": nonce,
                 "poep_t_fire_ns": _t_fire_ns,
+                "poep_probe_device_ts": _probe_device_ts,   # F-RIG27-8 robust-clock anchor
                 "poep_future": _fut,
             }
             self._l6b_post_buffer = []
@@ -3234,6 +3304,7 @@ class DualShockTransport:
         peak_lsb: float,
         precursor_gap_ms,
         error: str = "",
+        device_latency_ms: float = -1.0,
     ) -> None:
         """Resolve the pending nonce-bound fire Future with MEASURED features (no-op for auto-tick).
 
@@ -3254,10 +3325,11 @@ class DualShockTransport:
         # timeout) from analyze-fail (log error!=ok / lat None -> RP post-buffer had no clean reflex).
         _nonce = _p.get("poep_nonce")
         _gone = " [client-gone]" if _fut.done() else ""
+        _clk = "device" if device_latency_ms > 0.0 else "t_mono"   # F-RIG27-8: which clock resolved
         log.info(
-            "POEP-HID-RING: resolve nonce=%s… lat=%s peak=%.0f post_n=%d error=%s%s",
-            (str(_nonce)[:16] if _nonce else "?"), latency_ms, float(peak_lsb),
-            len(self._l6b_post_buffer), (error or "ok"), _gone,
+            "POEP-HID-RING: resolve nonce=%s… lat=%s clock=%s dev_lat=%s peak=%.0f post_n=%d error=%s%s",
+            (str(_nonce)[:16] if _nonce else "?"), latency_ms, _clk, device_latency_ms,
+            float(peak_lsb), len(self._l6b_post_buffer), (error or "ok"), _gone,
         )
         if _fut.done():
             return   # client cancelled on timeout — logged for diagnostics; nothing to set

@@ -1,0 +1,107 @@
+# ASM-Loop F-RIG27-8 — r04 re-verify (grok auditor)
+# Charter (a): independent of the builder. Attack C1..C8 + r03 dispositions.
+# Date: 2026-07-18
+
+## Verdict: **PASS**
+
+r03 BLOCK (dead `timestamp_ms` wire) is closed. Live `DualSenseReader.poll()` now extracts
+uint32 LE @ `states[28:32]` into `InputSnapshot.sensor_ts_ticks`; ticks stay raw end-to-end;
+`_rp_device_latency_ms` is the only ticks→ms site and is wrap-safe. Canonical
+`latency_ms` / `true_latency_ms` / classification / corpus remain t_mono. Device clock is a
+nonce-bound resolve companion only. Residual notes are INFO (no BLOCK/WARN standing).
+
+---
+
+## Claim-by-claim
+
+### C1 — device path arms via real `poll()` (r03 dead-wire fix)
+**Checked:** `controller/dualshock_emulator.py` poll IMU block (`len(_states) >= 28` → bytes →
+offset 28 when `len >= 32`); `test_live_poll_populates_sensor_ts_ticks` builds a real
+`DualSenseReader`, injects `ds.states` with known uint32 @28, calls real `poll()`.
+**Also checked:** session loop uses `self._reader.poll()` (`_poll_frames`); `_l6b_entry` uses
+`getattr(_f, "sensor_ts_ticks", 0)` (not `timestamp_ms`); short states leave ticks 0.
+**Result:** HOLD-clearing. Claim wording is honest (real poll path + fake states, not full HID E2E).
+
+### C2 — units (ticks @3000/ms)
+**Checked:** `_DEVICE_TS_TICKS_PER_MS = 3000.0`; helper `span_ticks / 3000`;
+`test_helper_valid_span_ticks` (540_000 → 180.0); RP lag test 180ms device vs 3000ms t_mono.
+**Result:** holds. Matches l2_ads "@3MHz" convention already in tree.
+
+### C3 — wrap-safe
+**Checked:** `(c - p) % _U32`; wrap test probe near 2^32 → 180ms; frozen span0 → -1;
+small regress → huge modular span → -1 via (0,500] rail.
+**Result:** holds. Closes r03 bar-6 PARTIAL on wrap.
+
+### C4 — fail-closed rails
+**Checked:** both ends >0; non-numeric; `c/p >= 2^32`; span not in (0, max_ms=500].
+**Result:** holds.
+
+### C5 — canonical byte-stable
+**Checked:** analyzer still sets `true_latency_ms = (crossing_t_mono - probe_ts)*1000`;
+`crossing_device_ts` additive only; classify uses t_mono path (manual: true_lat=3000 → class 0.5
+while device companion would be 180ms); `insert_l6b_probe` still fed analyzer latency, not `_dev_lat`.
+**Result:** holds. Corpus/band/usable-gate surface untouched.
+
+### C6 — serialize byte-identical with new field
+**Checked:** `sensor_ts_ticks` not in `serialize()` pack; `InputSnapshot().serialize() ==
+InputSnapshot(sensor_ts_ticks=X).serialize()`; lengths equal (56 bytes each).
+**Result:** holds on identity. (Prose "50-byte" is a pre-existing miscount — INFO only.)
+
+### C7 — scope/rails
+**Checked:** `git status l9_presence/` empty; PV-CI **PASS — 184**; no flag/env flips in this
+increment; device preference only on `_resolve_poep_fire` latency argument for nonce-bound path
+(auto-tick no-ops without `poep_future`).
+**Result:** holds.
+
+### C8 — known limit (progression rail)
+**Checked:** full-stream monotonic progression rail not present; two-point span rails only.
+**Result:** correctly labeled, not over-claimed. Accept as residual INFO per operator ceiling.
+
+---
+
+## r03 disposition check
+
+| r03 finding | r04 status |
+|-------------|------------|
+| BLOCK dead `timestamp_ms` | **CLOSED** — real `sensor_ts_ticks` from `states[28:32]` |
+| units ticks not ms | **CLOSED** — raw ticks E2E; /3000 only in helper |
+| bar 6 wrap PARTIAL | **CLOSED** for wrap/frozen/regress pair rails |
+| bar 6 full-stream progression | **NOT built** — C8 labeled (acceptable under ceiling) |
+| bar 1–4 additive/sealed/PV-CI | **preserved** (re-checked) |
+
+---
+
+## Independent evidence re-run
+- `bridge/tests/test_rp_device_latency.py`: **13 passed**
+- `scripts/vapi_invariant_gate.py`: **PASS — 184**
+- poll inject proof: `states[28:32]=0x0A0B0C0D` → `sensor_ts_ticks` match
+- serialize equality with/without field: True
+
+---
+
+## Findings (F1..Fn)
+
+| ID | Sev | Claim | Note |
+|----|-----|-------|------|
+| F1 | INFO | C6 prose | Serialize length is **56** bytes today, not "50"; identity claim still true. |
+| F2 | INFO | C4 corner | Raw tick value **0** is treated as absent (fail-closed). True counter-at-zero is rare; fallback to t_mono is correct under ceiling. |
+| F3 | INFO | C8 | Full-stream progression/forgery rail still deferred — intentional, labeled. |
+| F4 | INFO | C1 depth | Unit test proves poll wire with injected `states`, not live Edge HID. Rig-4 is the empirical arming proof under RP. |
+
+No BLOCK. No WARN.
+
+---
+
+## Break attempts
+
+1. **Dead wire still?** No — `timestamp_ms` getattr removed; poll unpacks offset 28; `_poll_frames` uses that reader.
+2. **Canonical/corpus polluted?** No — classify + store still t_mono; only Future `latency_ms` prefers device when rails pass.
+3. **Wrap forge / regress?** Pair rails reject frozen and non-rollover regress; full-stream forge remains C8 residual (non-gating companion).
+4. **Fabricate in-band latency without real peak?** Device path still needs analyzer crossing + peak; sealed verify still owns band/peak/nonce/`real_hardware`.
+5. **Prefer device on auto-tick humanity?** Resolve no-ops without `poep_future`; auto-tick p_human stays t_mono (honest under ceiling).
+
+---
+
+## One-liner for operator
+
+**PASS — r03 dead wire closed; ticks@28 live on poll; wrap-safe helper; t_mono corpus byte-stable; device latency is nonce-bound resolve companion only. Ship when you fire the commit. Rig-4 is the empirical SYNCHRONIZED check under RP.**
