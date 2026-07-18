@@ -1,0 +1,124 @@
+# A2A POEP-CAMPAIGN r03 — grok ADVERSARIAL VERIFY (charter ruling (a))
+
+**Envelope:** campaign-r01 → r02 bars → r03 verify of (1b)+(1c)+(2a).
+**Spend: 0.** Independent re-run of the 13 fixed bars from r02. Claude build not trusted on claim alone.
+
+---
+
+## VERDICT: **SHIP**
+
+All 13 bars green under adversarial re-inspection. Residual non-blocking notes below do not reverse SHIP.
+
+---
+
+## 13-BAR SCORECARD
+
+| ID | Bar | Result | Evidence |
+|----|-----|--------|----------|
+| **B-FORMULA** | 5-signal baseline under campaign + N fires ≥1 | **PASS# r03 ADVERSARIAL VERIFY — **SHIP**
+
+Independent re-run of the 13 r02 bars against the built (1b)+(1c)+(2a) surface. Artifact: `docs/a2a/poep/round-campaign-03-grok-verify.txt`.
+
+## 13 bars
+
+| Bar | Result |
+|-----|--------|
+| **B-FORMULA** | **PASS** — V3 analyzer-not-driver + V1 `l6b_enabled` → campaign+driver+analyzer+probe_count≥1 stays **5-signal** (`0.28/0.27/0.20/0.15/0.10`). Old path would have been 7-signal. |
+| **B-L6-ACTIVE** | **PASS** — analyzer only under `l6_challenges_enabled` |
+| **B-L6B-ACTIVE** | **PASS** — requires `_l6b_enabled` |
+| **B-AUTOTICK** | **PASS** — dispatch never ORs campaign |
+| **B-FIRE** | **PASS** — campaign OR l6b + env arms |
+| **B-FIRE-OFF** | **PASS** — both-off 503; campaign sans env refused |
+| **B-POLICY** | **PASS** — nonce/campaign → `edge_operator_reflex_v1` |
+| **B-GATE-N** | **PASS** — real `is_usable_reflex` accepts campaign policy, rejects CCO_T0 |
+| **B-META** | **PASS** — pitl `poep_campaign_mode`; `l6b_enabled` stays hard flag |
+| **B-FLAGS** | **PASS** — default False; l6b/poep untouched |
+| **B-SEALED** | **PASS** — `l9_presence/` diff empty |
+| **B-PVCI** | **PASS** — independent gate **184** |
+| **B-STASH** | **PASS** — retina import clean; `stash@{0}` denser-sampling WIP (4 files) |
+
+## Break attempts
+
+- **T2–T9 unpinned seams:** genuinely non-gating once V1 holds (telemetry / progress / cfg flag). No scoring path found that ORs campaign into `poep_enabled` or humanity coeffs.
+- **`_l6b_applicable` NameError under campaign:** **no** — assigned `False` every frame-bearing iter before ring/auto-tick; `not frames` continues before both.
+- **R3 vs plain l6b:** **no behavior change** when campaign=False (`(l6b and applicable) or False`).
+- **B-POLICY auto-tick CCO_T0:** **correct** — N-growth is nonce/campaign only; plain l6b auto-tick stays CCO device-physics (denylisted). Campaign-only never auto-ticks (V4).
+
+## Residual (non-blocking)
+
+L6 strategic challenge dispatch still gates on **driver presence only** (pre-existing under plain `l6b_enabled`). Campaign inherits it; formula still safe under V3 (analyzer None). Optional future pin — **not a bar fail**.
+
+## Independent re-run
+
+- Campaign + humanity: **19 passed**
+- Broader touched battery (l6b/cco/hidring/reflex/dualshock): **130 passed**
+- PV-CI: **PASS 184**
+
+**FINAL: SHIP.** Operator next = seal (1c) commit if not yet, process-scoped campaign+live-fire env, runbook, rig GO.
+g/dualshock/retina). |
+
+---
+
+## B-POLICY JUDGMENT (auto-tick CCO_T0)
+
+**Correct as built. Do NOT stamp auto-tick with edge_operator_reflex_v1 when only l6b_enabled.**
+
+- N-growth rows are **nonce-bound / campaign** fires — those override to `edge_operator_reflex_v1`.
+- Plain L6b auto-tick under full enablement remains CCO device-physics path (`CCO_T0_POLICY_v1_OPTION_C`) — denylisted by design; not the corpus-growth vehicle.
+- Campaign-only: auto-tick never fires (V4), so the CCO inherit branch is unreachable under pure campaign.
+- Dual-on (campaign AND l6b): override fires because `_poep_campaign_mode` — auto-tick rows would count; acceptable, not a scoring leak.
+
+---
+
+## BREAK ATTEMPTS (T2–T9 + named risks)
+
+| Attack | Result |
+|--------|--------|
+| **T2** cco_reflex_verdict / skip after analyze | Telemetry-only; not in humanity formula. Non-gating after V1. |
+| **T3** session-status l6b_enabled | Reads cfg flag (stays False under campaign). OK. |
+| **T4** l6b_applicable under campaign | Stays False (only computed when l6b_enabled). Correct. Ring does not require it (R3 second OR). |
+| **T5** poep presence / gate_reached | Progress surfaces; no OR into `poep_enabled` in this build. |
+| **T6–T7** baseline tool / steward assert | cfg.l6b_enabled False. OK. |
+| **T8** insert policy | Pinned C. |
+| **T9** in-memory probe_count / p_human | Safe after V1 (count can rise; formula gated). |
+| **NameError `_l6b_applicable` under campaign** | **No.** Assigned `_l6b_applicable = False` at 2336 every frame-bearing iter before ring_live (2725) and auto-tick (2964). `not frames` continues *before* both. Campaign path does not need applicable. |
+| **R3 changes plain l6b mode?** | **No.** campaign=False → `_l6b_ring_live = (l6b and applicable) or False` ≡ prior gate. |
+| **Campaign fire when applicable never computed?** | Ring live uses `(campaign and analyzer is not None)` — independent of CCO applicability. Fire endpoint verifies reader+ds separately. |
+
+### Residual (non-blocking, pre-existing)
+
+**L6 strategic challenge dispatch** (≈2912) still gates on `_l6_driver is not None` only — not `l6_challenges_enabled` / analyzer. Campaign inits driver → first L6 challenge *can* dispatch; scoring path requires analyzer so formula stays 5-signal (V3). Same latent shape already existed under plain `l6b_enabled` without challenges. Optional future pin: require analyzer or challenges flag on L6 dispatch. **Not a r02 bar failure; not a formula leak.**
+
+Init-fail path sets `_l6b_enabled = False` but leaves `_poep_campaign_mode` True with analyzer None → fire 503 fail-closed. Fine.
+
+---
+
+## (2a) STASH / IMPORT
+
+- Half-pop conflict surface **not present** at HEAD for retina import (import clean).
+- `stash@{0}` holds the full denser-sampling WIP (4 files, +53/−4) for later validation.
+- Zero loss confirmed.
+
+## (1c) AMENDMENT
+
+- CLAUDE.md L6B hard rule append matches r02 draft intent: campaign inits ring only; auto-tick + formula strictly l6b-gated; no poep_enabled flip; process-scoped env.
+- Operator seal = commit of that text (Claude correctly does not claim chain authority beyond the drafted line).
+
+## INDEPENDENT TESTS RE-RUN
+
+- `test_poep_campaign_mode.py` + `test_humanity_formula_l6b.py`: **19 passed**
+- Broader touched battery (campaign + l6b + cco wiring + hidring fire + reflex gate + dualshock): **130 passed**
+- PV-CI: **PASS 184**
+
+---
+
+## FINAL
+
+| Call | Value |
+|------|-------|
+| **SHIP or FIX** | **SHIP** |
+| Load-bearing pins held | V1, V3, V4, R1–R5, C, T1 |
+| Operator next | Seal (1c) via commit if not yet; process-scoped `POEP_CAMPAIGN_MODE=1` + `POEP_LIVE_FIRE_ENABLED=1`; runbook `docs/poep-campaign-runbook.md`; rig GO |
+| Not required for SHIP | Pre-existing L6-dispatch-on-driver residual |
+
+Charter (a): independent verify complete. Build accepted against the 13 bars.

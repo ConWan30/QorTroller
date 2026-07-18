@@ -1,0 +1,206 @@
+I'll ground the r01 verdict in the open brief and the exact l6b / campaign / usability seams you named — reading those first, then hunting every enablement leak path.# A2A POEP-CAMPAIGN r02 — grok ADVERSARIAL + FORWARD
+
+**Envelope:** campaign-r01 → r02. **Spend: 0.** Sealed `l9_presence/*` byte-untouched. Claude never flips `l6b_enabled` / `poep_enabled`. PV-CI 184 held as bar.
+
+---
+
+## OPERATOR PICK MENU
+
+| Item | Pick | GO meaning |
+|------|------|------------|
+| **ITEM 1** | **(1b)+(1c)** — campaign mode by construction + operator-sealed hard-rule line | Ack amendment text; process-scoped `POEP_CAMPAIGN_MODE=1` + `POEP_LIVE_FIRE_ENABLED=1` only |
+| **ITEM 1 reject** | **(1a)** raw `L6B_ENABLED` lift | Structural verdict leak after probe 1; not salvageable by interval alone |
+| **ITEM 2** | **(2a)** full revert of half-pop surface | `git checkout --` the conflicted/dirty denser-sampling files; stash@{0} stays |
+
+**Composed GO sequence after both picks:** (2a) → build (1b)+tests → operator seals (1c) text → rig launcher (campaign env only) → nonce fires → N grows under allowlisted `edge_operator_reflex_v1`.
+
+---
+
+## A. Verdict: (1b)+(1c) vs (1a)
+
+**Agree with Claude. Ship (1b)+(1c). Reject (1a) as primary path.**
+
+| Path | Hard rule | Formula after probe 1 | Auto-tick | Verdict |
+|------|-----------|----------------------|-----------|---------|
+| **(1a)** process-scoped `L6B_ENABLED=true` | Flag is live (even if .env untouched) | **0.14·l6b_p_human enters humanity_prob** (`_l6b_active = analyzer and count≥1`) | ON (interval mitigable, formula not) | **FAIL** — quarantine violated by construction |
+| **(1b)** `poep_campaign_mode` default-OFF | Flag stays False | Formula stays baseline **iff** seams below are pinned | stays `l6b_enabled`-only | **PASS** — rule satisfied without lift |
+| **(1c)** CLAUDE.md one-liner | Names campaign as sanctioned N-growth path | n/a | n/a | **Required governance** with (1b); HWFL Cycle-16 pattern |
+
+**Cheaper honest routes?** None that stay honest:
+- Interval-huge under (1a): still formula-leaks after first fire.
+- Analyzer-only without completion-path rework: ring dead (pending never resolves).
+- Dual-process “campaign bridge”: more ops risk, same code seams.
+
+**One structural correction Claude must absorb (not optional):**  
+`_l6_active = self._l6_driver is not None` (line ~2261). Campaign **must** init the driver for haptic delivery. That alone flips the formula from **5-signal baseline → L6-only 6-signal** (0.15·`l6_p_human` at neutral 0.5 + coefficient reshuffle) **even if `_l6b_active` is pinned**.  
+**Pin:** `_l6_active = self._l6_analyzer is not None` (analyzer is only constructed under `l6_challenges_enabled`). That is a latent bug exposed by campaign, not a new feature.
+
+---
+
+## B. VERDICT-LEAK hunt (every seam)
+
+**Scoring / formula (must fail-closed under campaign):**
+
+| # | Seam | Current code | Campaign risk | Required pin |
+|---|------|--------------|---------------|--------------|
+| **V1** | `_l6b_active` ~2262 | `analyzer is not None and probe_count ≥ 1` | **After first campaign probe, 0.14 weight** | `_l6b_active = self._l6b_enabled and analyzer is not None and probe_count ≥ 1` |
+| **V2** | formula branches ~2263–2284 | uses `_l6b_active` / `_l6_active` | 6/7-signal with L6b weight | V1 + V3 |
+| **V3** | `_l6_active` ~2261 | `driver is not None` | **Driver init for campaign → L6-only weights without L6 challenges** | `_l6_active = self._l6_analyzer is not None` |
+| **V4** | auto-tick ~2922–2934 | `self._l6b_enabled and …` | OK if left as-is | Keep strictly `l6b_enabled` (never OR campaign) |
+
+**Ring liveness (must work under campaign without scoring):**
+
+| # | Seam | Current | Risk if only init analyzer | Required pin |
+|---|------|---------|----------------------------|--------------|
+| **R1** | driver init ~631–634 | `l6_challenges OR l6b_enabled` | No driver → fire 503 | OR `poep_campaign_mode` |
+| **R2** | analyzer init ~695 | `if self._l6b_enabled` | No analyzer | OR campaign |
+| **R3** | pre/post + analyze ~2696 | `l6b_enabled and _l6b_applicable` | **Pending never completes; Future hangs** | Ring-live: `(l6b_enabled and applicable) OR (campaign and ring hardware)` for buffer+completion |
+| **R4** | `_l6b_applicable` ~2314 | only computed when `l6b_enabled` | Campaign never applicable | Don’t gate campaign completion on CCO applicability the same way; or compute applicability for campaign path separately |
+| **R5** | `request_poep_nonce_probe` ~3036 | requires `l6b_enabled` | Endpoint dead | Accept `l6b_enabled OR poep_campaign_mode` (+ still `POEP_LIVE_FIRE_ENABLED=1`) |
+| **R6** | POST `/operator/poep/fire` | delegates to R5 | same | inherits R5 |
+
+**Telemetry / “looks enabled” surfaces (honesty OK if non-gating; pin naming):**
+
+| # | Seam | Reads | Verdict-leak? | Pin |
+|---|------|-------|---------------|-----|
+| **T1** | pitl_meta ~2371–2373 | `l6b_enabled`, `probe_count`, `l6b_p_human` | **Scoring no if V1;** operator confusion yes if `probe_count>0` while `l6b_enabled=false` | Keep `l6b_enabled` = hard flag only; add `poep_campaign_mode` bool; allow probe_count to grow (honest corpus) |
+| **T2** | `cco_reflex_verdict` / `cco_l6b_skip` ~2383–2387 | updated on analyze | Telemetry-only today | Document non-gating; never feed humanity formula |
+| **T3** | GET `/player/session-status` cco block | `l6b_enabled=cfg`, calibration from DB | `l6b_enabled` stays False under campaign — good | Optionally surface `poep_campaign_mode`; calibration N from DB is progress, not enablement |
+| **T4** | `assemble_cco_session_status` | `l6b_applicable` only if `l6b_enabled` | Campaign → applicable=false, skip=null | Correct for hard flag; don’t invent applicable=true |
+| **T5** | `assemble_poep_presence_status` | `l6b_probe_count` (raw), `l6b_gate_reached` | Progress surface; gate uses independent usable N | OK; do **not** map campaign→`poep_enabled` |
+| **T6** | BridgeAgent tool #31 `get_l6b_baseline` | raw row counts + cfg.l6b_enabled | Baseline stats ≠ gate | OK if consumers don’t treat as enablement |
+| **T7** | `steward_pcra` l6b_enabled assert | cfg flag | Stays False under campaign | OK |
+| **T8** | `insert_l6b_probe` + diagnostics JSONL | every completed probe | Corpus, not score | **policy_ref must be campaign stamp (C)** |
+| **T9** | `_l6b_probe_count` / `_l6b_p_human` in-memory | used by V1 and T1 | Safe after V1 | Increment on campaign completion for honest ops |
+
+**Non-leaks (do not over-gate):**
+- DB rows existing with `l6b_enabled=false` is the entire point of N-growth.
+- CCO capability report / policy_ref string on session-status is device physics, not L6B enablement.
+- PGSW / presence: only dangerous if someone OR-merges campaign into `poep_enabled` — **forbid that**.
+
+**Bottom line for Claude:** V1+V3 are load-bearing. R3+R5 are load-bearing for ring function. T1 honesty field, not score leak.
+
+---
+
+## C. Do campaign rows COUNT toward N≥50?
+
+**Yes — if and only if they stamp `policy_ref="edge_operator_reflex_v1"` (already allowlisted). No new allowlist entry required.**
+
+Grounded:
+
+```21:24:l9_presence/poep_reflex_gate.py
+L6B_REFLEX_POLICY_ALLOWLIST: frozenset[str] = frozenset({
+    "desk_operator_still",
+    "edge_operator_reflex_v1",    # FUTURE: Edge campaign MUST stamp this
+})
+```
+
+`get_l6b_calibration_progress` gates on allowlist + `REFLEX_OBSERVED` + peak > 500 + latency in [80,350] + burst-dedup → `independent_reflex_count >= 50`.
+
+**Critical current bug path:** live insert uses CCO report policy:
+
+```2756:2758:bridge/vapi_bridge/dualshock_integration.py
+policy_ref=(
+    _cco_rep.policy_ref if _cco_rep is not None else None
+),
+```
+
+`CapabilityOracle.POLICY_REF = "CCO_T0_POLICY_v1_OPTION_C"` → **DENYLIST** → **zero contribution** to N even if IMU-perfect.
+
+**Build requirement (not operator seal of allowlist):**
+- On nonce-bound / campaign fires: **override** `policy_ref="edge_operator_reflex_v1"` (hardcode or campaign-only field).
+- Never inherit CCO T0 policy for corpus-growth rows.
+- Prefer device-scoped progress for Edge `581a836c…` when reporting campaign N.
+
+**Operator seal needed?**  
+- **(1c)** CLAUDE.md campaign-mode sanction: **yes** (governance).  
+- **Allowlist addition:** **no** — `edge_operator_reflex_v1` is already the future-campaign token.  
+- Optional: if you invent a *new* policy string, that *would* need an allowlist edit + tests + (arguably) operator seal — **don’t invent; use the pre-provisioned name.**
+
+---
+
+## D. ITEM 2 — (2a) zero-loss + dualshock remnant
+
+**Confirm (2a). Zero loss. Revert is mandatory for bridge import.**
+
+Measured now:
+- `stash@{0}` **intact**: `denser-sampling WIP — pending gameplay validation`
+- Stash files: test (+17), config (+10), dualshock (+3), `qortroller_retina_capture` (+27)
+- **Conflict markers PRESENT** in `qortroller_retina_capture.py` and `test_qortroller_retina_capture.py` → **SyntaxError at import**
+- **dualshock half-applied cleanly** (no markers): passes `capture_interval_ms=…` into `RetinaGameCapture`
+- Upstream ctor still has full post-stash surface; stash-side ctor is a *shorter* signature — mixed tree is incoherent
+
+**Coherence rule:**  
+dualshock’s `capture_interval_ms=` kwarg **only exists on stash-side ctor**. If you “resolve” retina by keeping upstream-only without the denser ctor arg, dualshock breaks. If you keep dualshock denser kwargs with conflicted retina markers, import dies. **Revert all half-pop touchpoints together** (at minimum dualshock + retina + test; config already has `retina_killfeed_capture_interval_ms` on tree — leave HEAD if clean).
+
+**Zero loss:** full WIP remains in stash for a later clean re-apply + gameplay validation. Unrelated to PoEP campaign.
+
+**Reject (2b):** commits unvalidated denser-sampling WIP into the campaign arc.  
+**Reject (2c):** discards upstream post-stash retina features.
+
+---
+
+## E. Sequencing + fixed r03 verify bars
+
+### Sequence (operator-paced)
+1. **(2a)** revert half-pop → `python -c "from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture"` import-clean.  
+2. **(1b)** code: config `poep_campaign_mode` default False; dualshock init/ring/endpoint pins; policy_ref override; **no** `l6b_enabled` / `poep_enabled` flip; **no** sealed l9 module edits.  
+3. Tests for V1/V3/R4/R5/C.  
+4. Draft **(1c)** amendment text → **operator seal only** (Claude proposes, does not commit claim of seal).  
+5. Runbook: process-scoped `POEP_CAMPAIGN_MODE=1` + `POEP_LIVE_FIRE_ENABLED=1`; `.env` kill-switches untouched.  
+6. r03 adversarial verify → only then rig GO.
+
+### r03 FIXED VERIFY BARS (all must green)
+
+| ID | Bar | Pass criterion |
+|----|-----|----------------|
+| **B-FORMULA** | Campaign + N fires ≥1 | `humanity_prob` coefficients **identical** to baseline 5-signal; no 0.14 l6b term; no L6-only 6-signal from driver presence |
+| **B-L6-ACTIVE** | campaign on, challenges off | `_l6_active` False (analyzer None) |
+| **B-L6B-ACTIVE** | campaign on, probe_count≥1, `l6b_enabled` False | `_l6b_active` False |
+| **B-AUTOTICK** | campaign on, long loop | zero auto-tick dispatches (`l6b_enabled` False) |
+| **B-FIRE** | campaign on + `POEP_LIVE_FIRE_ENABLED=1` | `/operator/poep/fire` arms+resolves Future with measured features |
+| **B-FIRE-OFF** | campaign off or live-fire unset | fail-closed 503 |
+| **B-POLICY** | campaign insert | `policy_ref == "edge_operator_reflex_v1"`; `is_usable_reflex(...)` True on good IMU row |
+| **B-GATE-N** | seeded usable Edge rows under that policy | `get_l6b_calibration_progress` independent count increments; CCO_T0 rows still **excluded** |
+| **B-META** | pitl_meta under campaign | `l6b_enabled is False`; optional `poep_campaign_mode is True`; probe_count may rise |
+| **B-FLAGS** | process env | `cfg.l6b_enabled is False`, `poep_enabled` False; no .env mutation |
+| **B-SEALED** | `git diff` on sealed poep modules | empty |
+| **B-PVCI** | `python scripts/vapi_invariant_gate.py` | PASS 184 |
+| **B-STASH** | after (2a) | import clean; `stash@{0}` still lists denser-sampling WIP |
+
+---
+
+## FORWARD micro-design for Claude (1b minimal surface)
+
+```
+poep_campaign_mode: bool = env POEP_CAMPAIGN_MODE default false
+
+_ring_prereq = l6b_enabled OR poep_campaign_mode   # init driver+analyzer only
+_score_l6b   = l6b_enabled                          # formula + auto-tick ONLY
+_fire_ok     = (l6b_enabled OR poep_campaign_mode) AND POEP_LIVE_FIRE_ENABLED=1
+
+_l6_active  = _l6_analyzer is not None              # NOT driver
+_l6b_active = _score_l6b and analyzer and count>=1
+
+buffer+complete: _ring_prereq (and hardware); auto-tick: _score_l6b only
+insert policy_ref: "edge_operator_reflex_v1" when poep_campaign_mode or nonce-bound pending
+```
+
+**Draft (1c) one-liner (operator seals; Claude does not self-seal):**
+
+> *Campaign exception (N-growth only): `poep_campaign_mode` may initialize the L6b analyzer/driver and nonce-bound fire path while `L6B_ENABLED` remains false; auto-tick and humanity-formula contribution remain strictly `l6b_enabled`-gated until N≥50 usable Edge reflexes (`is_usable_reflex` / `edge_operator_reflex_v1`). Campaign mode does not flip `poep_enabled`.*
+
+---
+
+## DECISIVE BOTTOM LINE
+
+| Decision | Call |
+|----------|------|
+| **Pick ITEM 1** | **(1b)+(1c)** |
+| **Reject** | **(1a)** |
+| **Pick ITEM 2** | **(2a)** full revert of denser half-pop |
+| **Load-bearing pins** | V1 `_l6b_active` needs `l6b_enabled`; **V3 `_l6_active` must not use driver**; R3 completion under campaign; R5 fire gate; C policy_ref override to `edge_operator_reflex_v1` |
+| **Operator irreducibles** | Seal (1c) text · GO (2a) · process-scoped campaign+live-fire env · be at the rig |
+| **Next A2A** | Claude builds against bars above; grok r03 adversarial verify (formula matrix + policy_ref + import-clean) before any rig spend of human time |
+
+**Charter (a):** this r02 is the independent forward design + leak hunt. Build not accepted until r03 bars are green under adversarial re-run.

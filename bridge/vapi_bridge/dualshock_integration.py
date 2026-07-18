@@ -630,6 +630,9 @@ class DualShockTransport:
         _need_l6_driver = (
             getattr(self._cfg, "l6_challenges_enabled", False)
             or getattr(self._cfg, "l6b_enabled", False)
+            # POEP-CAMPAIGN R1: the ring's nonce-bound fires need the driver (delivery only —
+            # the humanity formula gates L6 on the ANALYZER, never the driver; see V3 pin below)
+            or getattr(self._cfg, "poep_campaign_mode", False)
         )
         if _need_l6_driver:
             try:
@@ -691,7 +694,12 @@ class DualShockTransport:
         # pending-arm (the await inside request_poep_nonce_probe yields the loop; this flag keeps the
         # auto-tick dispatcher from arming a second probe in that window — one stimulus at a time).
         self._poep_fire_inflight = False
-        if self._l6b_enabled:
+        # POEP-CAMPAIGN (grok campaign-r02, operator pick 1b): N-growth carve-out. Inits ONLY the ring
+        # prerequisites (analyzer+driver+endpoint) while L6B_ENABLED stays false — the auto-tick and
+        # the humanity-formula contribution remain STRICTLY l6b_enabled-gated (pins V1/V3/V4 below).
+        # The hard-rule flag never flips: the rule is satisfied by construction, not lifted.
+        self._poep_campaign_mode: bool = getattr(self._cfg, "poep_campaign_mode", False)
+        if self._l6b_enabled or self._poep_campaign_mode:
             try:
                 _proj_root_l6b = str(Path(__file__).parents[2])
                 if _proj_root_l6b not in sys.path:
@@ -702,7 +710,13 @@ class DualShockTransport:
                     human_max_ms=getattr(self._cfg, "l6b_human_max_ms", 280.0),
                     accel_delta_threshold_lsb=getattr(self._cfg, "l6b_accel_delta_threshold_lsb", 500.0),
                 )
-                log.info("Phase 63: L6b Neuromuscular Reflex enabled")
+                if self._l6b_enabled:
+                    log.info("Phase 63: L6b Neuromuscular Reflex enabled")
+                else:
+                    log.info(
+                        "POEP-CAMPAIGN: L6b analyzer initialized for RING CAPTURE ONLY "
+                        "(l6b_enabled stays False; scoring + auto-tick stay gated)",
+                    )
             except Exception as _l6b_exc:
                 log.warning("Phase 63: L6b init failed (non-fatal): %s", _l6b_exc)
                 self._l6b_enabled = False
@@ -2257,8 +2271,18 @@ class DualShockTransport:
             _p_l2c = _l2c_p_human  # already defaults to 0.5; phantom when L2C oracle is None
             # Phase 63: L6b is "active" once at least one probe has completed.
             # Until probe_count >= 1, l6b_p_human=0.5 neutral prior contributes no signal.
-            _l6_active  = self._l6_driver is not None
-            _l6b_active = self._l6b_analyzer is not None and self._l6b_probe_count >= 1
+            # POEP-CAMPAIGN formula pins (grok campaign-r02 V3+V1 — load-bearing):
+            # V3: L6 gates on the ANALYZER (constructed only under l6_challenges_enabled), NEVER the
+            #     driver — the driver also inits for L6b delivery + campaign fires, and gating on it
+            #     silently ran the L6-included formula with a neutral 0.5 (latent bug, now fixed).
+            # V1: the L6b contribution additionally requires l6b_enabled — campaign-mode probes grow
+            #     the corpus but NEVER feed the humanity score pre-N>=50 (the hard rule's quarantine).
+            _l6_active  = self._l6_analyzer is not None
+            _l6b_active = (
+                self._l6b_enabled
+                and self._l6b_analyzer is not None
+                and self._l6b_probe_count >= 1
+            )
             if _l6_active and _l6b_active:
                 # Both L6 + L6b active — 7-signal formula. Coefficients sum = 1.00.
                 _humanity_prob = (
@@ -2370,6 +2394,9 @@ class DualShockTransport:
                 "l6b_enabled":          self._l6b_enabled,
                 "l6b_probe_count":      self._l6b_probe_count,
                 "l6b_p_human":          self._l6b_p_human if self._l6b_probe_count > 0 else None,
+                # POEP-CAMPAIGN T1 honesty field: campaign state is visible, never conflated with
+                # enablement (l6b_enabled stays the hard flag; probe_count may grow under campaign).
+                "poep_campaign_mode":   self._poep_campaign_mode,
                 # CCO Phase B: T0 telemetry (read-only; non-gating)
                 "cco_t0_engine": (
                     self._cco_capability_report.t0_engine
@@ -2692,7 +2719,14 @@ class DualShockTransport:
                                     pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Phase 63: L6b Neuromuscular Reflex pre-buffer + probe window ---
-            if self._l6b_enabled and _l6b_applicable and frames:
+            # POEP-CAMPAIGN R3/R4: the ring (buffers + completion) must be LIVE under campaign mode or
+            # nonce-bound pendings never complete (orphaned Futures). The campaign path does NOT
+            # consult CCO applicability (the endpoint already verifies reader+ds); scoring stays gated.
+            _l6b_ring_live = (
+                (self._l6b_enabled and _l6b_applicable)
+                or (self._poep_campaign_mode and self._l6b_analyzer is not None)
+            )
+            if _l6b_ring_live and frames:
                 # L6bReflexAnalyzer expects raw accel LSB; InputSnapshot stores g only.
                 _l6b_accel_scale = float(
                     getattr(self._reader, "_accel_scale", None) or 8192.0
@@ -2752,8 +2786,15 @@ class DualShockTransport:
                                         cco_profile_id=(
                                             _cco_rep.profile_id if _cco_rep is not None else None
                                         ),
+                                        # POEP-CAMPAIGN (grok r02 C): nonce-bound/campaign fires stamp
+                                        # the ALLOWLISTED corpus policy so they COUNT toward the N>=50
+                                        # usable gate (the CCO T0 policy is denylisted by
+                                        # is_usable_reflex — inheriting it made campaign rows count 0).
                                         policy_ref=(
-                                            _cco_rep.policy_ref if _cco_rep is not None else None
+                                            "edge_operator_reflex_v1"
+                                            if (self._l6b_pending.get("poep_nonce")
+                                                or self._poep_campaign_mode)
+                                            else (_cco_rep.policy_ref if _cco_rep is not None else None)
                                         ),
                                         trigger_r2_at_probe=self._l6b_pending.get(
                                             "trigger_r2_at_probe"
@@ -3032,10 +3073,11 @@ class DualShockTransport:
         if os.environ.get("POEP_LIVE_FIRE_ENABLED", "") != "1":
             raise PoepFireRefused(
                 "poep fire gated: set POEP_LIVE_FIRE_ENABLED=1 on the operator rig (never CI)", 503)
-        if not self._l6b_enabled:
+        if not (self._l6b_enabled or getattr(self, "_poep_campaign_mode", False)):
             raise PoepFireRefused(
-                "poep fire refused: l6b_enabled is False (the ring runs under the gated L6B campaign "
-                "flag; enabling it is an operator decision — see CLAUDE.md hard rules)", 503)
+                "poep fire refused: neither l6b_enabled nor poep_campaign_mode is set — the ring runs "
+                "under the gated L6B flag OR the campaign carve-out (both operator decisions; see the "
+                "CLAUDE.md hard rules + campaign exception)", 503)
         if self._l6b_analyzer is None or self._l6_driver is None:
             raise PoepFireRefused("poep fire refused: L6b analyzer/driver not initialized", 503)
         if not (self._reader and self._reader.ds):
