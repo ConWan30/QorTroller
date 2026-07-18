@@ -102,3 +102,36 @@ landed in the 80–280 ms band**, so `n_go_verify_pass=0` and the verdict is `ID
 claim. `poep_enabled`/`L6B_ENABLED`/`L6_CHALLENGES_ENABLED` stay False; corpus/band/verdict untouched; zero
 spend; `bridge/.env` untouched. Rig-3 pipeline-E2E win stands; this is the silicon confirmation that
 F-RIG27-8's device clock does **not** yet rescue latency on the real Edge under RP.
+
+---
+
+## Launch-2 addendum — F-RIG27-8b device-clock READ (LIVE 2026-07-18, later same session)
+
+Relaunched the bridge with the F-RIG27-8b raw-tick log (`4af471aa`) and fired 4 probes to read the raw
+`cross_ts`/`probe_ts` off the resolve line. **The dead-wire hypothesis is REFUTED; F-RIG27-8's premise is
+REFUTED.**
+
+| fire | felt? | t_mono | cross_ts | probe_ts | device span | dev_lat |
+|---|---|---|---|---|---|---|
+| tickread-1 | yes (peak 3144) | 2516 ms | 2099636301 | 2087200588 | 12.44M tk = 4145 ms | -1.0 |
+| tickread-2 | no (peak 389) | — (no crossing) | -1 | 2378910415 | — | -1.0 |
+| tickread-3 | no (peak 13) | — (no crossing) | -1 | 2414325150 | — | -1.0 |
+| fastreact | yes (peak 1736) | 4027 ms | 3349318623 | 3338134746 | 11.18M tk = 3728 ms | -1.0 |
+
+1. **Device clock LIVE under RP.** `probe_ts` is a large nonzero counter on all 4 fires and **advances at
+   ~3.07 MHz** (291.7M ticks / 95 s between fires) — a near-perfect match to `_DEVICE_TS_TICKS_PER_MS=3000`.
+   Offset 28 populates fine on real silicon under RP.
+2. **`dev_lat=-1.0` = span-reject, never dead-wire.** Felt fires span 3.7–4.1 s > the 500 ms guard; unfelt
+   fires have no crossing (`cross_ts=-1`).
+3. **F-RIG27-8's premise REFUTED.** The device clock does NOT reveal a hidden sub-280 ms reflex — on felt
+   fires the device span (~3.7–4.1 s) agrees with / exceeds t_mono (~2.5–4 s). No fast reflex hides under
+   t_mono inflation.
+4. **Root cause = crossing detection.** Even a fast light-finger reaction (`fastreact`) spans ~3.7 s on
+   BOTH clocks → the analyzer's crossing is the MAX ACCEL PEAK over the ~4 s post-window (late hand motion),
+   NOT the trigger-onset. The clock is accurate; the crossing definition is wrong.
+5. **Haptic delivery inconsistent.** 2 of 4 felt fires didn't register (peaks 13/389) — a separate fix.
+
+**Roadmap redirect:** the device-clock avenue is NOT the SYNCHRONIZED unblocker (it works, but confirms the
+crossing is genuinely ~4 s). PRIMARY lever = **(ii) R2-analog onset detection** — define the crossing as the
+trigger release/re-press on the R2 analog channel (the reaction onset), which the live device clock can then
+time accurately. Secondary: haptic-delivery reliability. Increment (i) is DONE and did its job.
