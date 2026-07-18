@@ -143,6 +143,16 @@ def main() -> None:
     args = ap.parse_args()
 
     key = args.gamer_key or os.environ.get("GAMER_PRIVATE_KEY")
+    # Dev-self convenience (first-run ceremony): when the gamer IS the bridge wallet, sign with the
+    # BRIDGE_PRIVATE_KEY already in bridge/.env -- the operator never has to find/paste the raw key and
+    # it never enters a command or shell history. Honest note printed. A third-party gamer still needs
+    # an explicit --gamer-key / GAMER_PRIVATE_KEY (this fallback ONLY fires when gamer == bridge wallet).
+    _BRIDGE_WALLET = "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+    if not key and args.gamer and args.gamer.lower() == _BRIDGE_WALLET.lower():
+        key = os.environ.get("BRIDGE_PRIVATE_KEY")
+        if key:
+            print("dev-self: gamer == bridge wallet -> signing with BRIDGE_PRIVATE_KEY from bridge/.env "
+                  "(the operator wallet IS the gamer; the raw key never enters a command).")
     dry = args.dry_run or not args.confirm
 
     if args.confirm and not key:

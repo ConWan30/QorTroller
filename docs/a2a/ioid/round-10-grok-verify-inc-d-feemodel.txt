@@ -1,0 +1,37 @@
+I'll adversarially verify the fee-model fix by reading the register path, the error mapping, and the related tests—not the claim alone.Cross-checking the agent registration fee path and the apply-ioids ceremony against this registry model.Checking `activeIoID` / register fee logic against source and whether value=0 is always correct.## DELTA verify — F-INC-D-2 fee model (register real-send)
+
+Read `controller_ioid_registration.py:537–615`, ran 24/24 suite + independent value=0 probe on estimate/build.
+
+### (1) value=0 after `applyIoIDs` — double-pay / under-pay?
+
+**Correct.** Probe: `est_value=0`, `build_value=0` while `price()=0.1 IOTX`. Fee is prepaid on store; register must not re-attach `price` as `msg.value`. `buf_cost` is gas-only (buffered × gasPrice) — no double-count of fee. Under-pay only if prepay missing/exhausted → estimate reverts → no spend.
+
+### (2) Does register need `value` on any path now?
+
+**Not under the live-learned model.** Live fire: `"insufficient ioID"` at estimate (guard held, 0 spend). `register` is payable but `msg.value` does not fund project quota. After `applyIoIDs(N)`, surplus slots are consumed with **value=0**. Hardcoding 0 is right for this registry; optional pay-as-you-go via register is dead for this path.
+
+### (3) Broad `except Exception` around `estimate_gas` — mask F1 / revert-guard?
+
+**Safe.** Only `"insufficient ioID"` → actionable `RuntimeError(... apply-ioids ...)`; everything else re-raises. F1 (status=1 + mint Transfer + non-zero TBA) is **post-receipt**, not on this path. Revert-guard **is** estimate-first — other reverts still fail closed pre-send. Cap check still runs after successful estimate. `KeyboardInterrupt`/`SystemExit` are not `Exception`.
+
+### (4) `applyIoIDs(projectId, 1)` funds exactly one register?
+
+**Yes.** Store: `projectAppliedAmount += amount` with `msg.value >= amount * price`. One register increments actived by 1; amount=1 → one slot. Call is payable-anyone (not owner-gated); project owner bridge path is fine. Project type 0 (hardware) still required.
+
+### (5) Refund / leftover?
+
+**No issue for amount=1 + one register.** Unused prepaid inventory stays as project capacity (not stuck ETH on register). value=0 avoids orphan `msg.value` on the registry. No refund path needed for exact 1:1.
+
+### Non-blocking footguns (not code-blockers)
+
+| Site | Issue |
+|------|--------|
+| `scripts/operator_session_register_controller.py:237` | Still prints *“OPTIONAL pre-pay; register can pay-as-you-go”* — **stale** vs F-INC-D-2 |
+| happy-path test | Comment still says value==price; **no assert value==0** (probe proves code OK) |
+| agent `operator_session_register_agents.py` | Still defaults pay-as-you-go value=price — separate surface |
+
+Ceremony order **apply-ioids(1021,1){value:0.1} → register value=0** is the correct live path.
+
+---
+
+**VERDICT: PASS**

@@ -7,7 +7,7 @@ explicit operator decision:
   register-project      ProjectRegistry.register("QorTroller Controllers", 0)
                           -> prints PROJECT_TOKEN_ID (read from the Transfer log)
   set-device-contract   ioIDStore.setDeviceContract(PROJECT_TOKEN_ID, NFT)  (M4 1:1 map)
-  apply-ioids           ioIDStore.applyIoIDs(PROJECT_TOKEN_ID, N) {value: N*price}  (OPTIONAL pre-pay)
+  apply-ioids           ioIDStore.applyIoIDs(PROJECT_TOKEN_ID, N) {value: N*price}  (REQUIRED before register)
   mint                  VAPIGamerControllerNFT.mint(gamer)
                           -> prints CONTROLLER_TOKEN_ID (read from the Transfer log)
 
@@ -72,7 +72,18 @@ HARD_CAP = {
     "set-device-contract": 0.50,
     "apply-ioids": 1.00,
     "mint": 0.50,
+    "approve-nft": 0.50,
 }
+
+# The ioID PERMIT registry is the transferFrom operator that moves the device NFT into the new TBA
+# during register (ERC721InsufficientApproval(0x0A7e595C, tokenId) -- F-INC-D-3, learned live 2026-07-17).
+_IOID_PERMIT_REGISTRY = "0x0A7e595C7889dF3652A19aF52C18377bF17e027D"
+_ERC721_APPROVE_ABI = [
+    {"type": "function", "name": "approve", "stateMutability": "nonpayable",
+     "inputs": [{"name": "to", "type": "address"}, {"name": "tokenId", "type": "uint256"}], "outputs": []},
+    {"type": "function", "name": "getApproved", "stateMutability": "view",
+     "inputs": [{"name": "tokenId", "type": "uint256"}], "outputs": [{"name": "", "type": "address"}]},
+]
 
 
 # --- shared chain helpers -----------------------------------------------------
@@ -234,7 +245,8 @@ def cmd_apply_ioids(args):
     value_wei = price * amount
     print(f"  projectTokenId : {project_token_id}   amount={amount}")
     print(f"  ioIDStore.price: {w3.from_wei(price, 'ether')} IOTX/device -> value {w3.from_wei(value_wei, 'ether')} IOTX")
-    print("  (OPTIONAL pre-pay; the register step can pay-as-you-go value=price instead)")
+    print("  (REQUIRED before register: register consumes a PRE-PAID activeIoID, it does NOT "
+          "pay-as-you-go via msg.value -- F-INC-D-2, learned live 2026-07-17)")
     fn = store.functions.applyIoIDs(project_token_id, amount)
     _submit(w3, account, fn, value_wei=value_wei, cap=HARD_CAP["apply-ioids"],
             execute=args.execute, gas_limit_override=args.gas_limit, label="apply-ioids")
@@ -282,6 +294,38 @@ def cmd_mint(args):
           f"consumes CONTROLLER_TOKEN_ID={token_id} + device_contract={nft}.")
 
 
+def cmd_approve_nft(args):
+    token_id = assert_project_token_id(args.token_id)   # any positive minted tokenId (>0 guard)
+    deployed = _load_deployed()
+    nft = assert_nft_deployed(deployed)
+    w3, account = _connect()
+    registry = w3.to_checksum_address(args.registry or _IOID_PERMIT_REGISTRY)
+    nft_c = w3.eth.contract(address=w3.to_checksum_address(nft), abi=_ERC721_APPROVE_ABI + CONTROLLER_NFT_ABI)
+    owner = nft_c.functions.ownerOf(token_id).call()
+    print(f"  NFT            : {nft}")
+    print(f"  tokenId        : {token_id}   ownerOf={owner}")
+    print(f"  approve -> ioID registry (register's transferFrom operator): {registry}")
+    if owner.lower() != account.address.lower():
+        print(f"ERROR: caller {account.address} does not own tokenId {token_id} (owner={owner}) - "
+              f"cannot approve.", file=sys.stderr)
+        sys.exit(2)
+    existing = nft_c.functions.getApproved(token_id).call()
+    if existing.lower() == registry.lower():
+        print("  [ALREADY APPROVED] getApproved == ioID registry - nothing to do.")
+        return
+    fn = nft_c.functions.approve(registry, token_id)
+    rcpt = _submit(w3, account, fn, value_wei=0, cap=HARD_CAP["approve-nft"],
+                   execute=args.execute, gas_limit_override=args.gas_limit, label="approve-nft")
+    if rcpt is None:
+        return
+    after = nft_c.functions.getApproved(token_id).call()
+    print(f"\n  readback       : getApproved({token_id}) = {after}")
+    if after.lower() != registry.lower():
+        print(f"ERROR: approval readback {after} != {registry} - inspect the tx.", file=sys.stderr)
+        sys.exit(1)
+    print("  [APPROVED] the ioID registry can now move the device NFT into the TBA. Next: register.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="ioID controller ceremony prereq txs (Inc-C, "
                                              "one step per invoke, estimate-first + triple-gated).")
@@ -294,7 +338,7 @@ def main():
     p.add_argument("--project-token-id", required=True, help="from register-project's PROJECT_TOKEN_ID")
     p.set_defaults(func=cmd_set_device_contract)
 
-    p = sub.add_parser("apply-ioids", help="[optional] ioIDStore.applyIoIDs(projectTokenId, N) pre-pay")
+    p = sub.add_parser("apply-ioids", help="REQUIRED before register: ioIDStore.applyIoIDs(projectTokenId, N) pre-pay")
     p.add_argument("--project-token-id", required=True)
     p.add_argument("--amount", default="1", help="number of ioIDs to pre-pay (default 1)")
     p.set_defaults(func=cmd_apply_ioids)
@@ -302,6 +346,12 @@ def main():
     p = sub.add_parser("mint", help="VAPIGamerControllerNFT.mint(gamer)")
     p.add_argument("--to", required=True, help="gamer address (dev-self = the bridge wallet)")
     p.set_defaults(func=cmd_mint)
+
+    p = sub.add_parser("approve-nft",
+                       help="approve the ioID registry to transfer the controller NFT (register prereq, F-INC-D-3)")
+    p.add_argument("--token-id", required=True, help="the minted controller tokenId (from mint)")
+    p.add_argument("--registry", default=None, help="override the ioID permit registry (default 0x0A7e595C)")
+    p.set_defaults(func=cmd_approve_nft)
 
     for sp in (sub.choices.values()):
         sp.add_argument("--execute", action="store_true",
