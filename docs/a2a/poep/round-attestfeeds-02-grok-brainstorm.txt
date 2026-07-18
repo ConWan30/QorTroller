@@ -1,0 +1,112 @@
+I'll read the open, last night's session audit, and the named code seams so the A–E verdicts are grounded before Claude builds.# ATTEST-FEEDS r02 — FORWARD BUILD SPEC
+
+Grounded on open root causes, CFB27 session (448 rec / rate=0), and the named seams. Sealed: `classify_activity`, `pcc_allows_challenge`, live/session/did/presence/adapters **byte-untouched**. Additive bridge + CLI fetcher only.
+
+---
+
+## A. F-RIG27-1 layering — **SHIP as 1a+1b+1c (no silent NOMINAL)**
+
+**VERDICT: ACCEPT the three-layer shape. Do not invent a fourth silent path.**
+
+| Layer | Spec | Why |
+|-------|------|-----|
+| **1a silent-detect → restart** | When `thread.is_alive()` AND `_delta==0` AND `len(frames)>0` for **N=3 consecutive** session-loop iters (~3s @ `_interval≈1s`), force counter re-open via existing `_drain_loop` re-enum (close handle / break inner read so the outer while re-opens). Bound restarts (reuse `_hid_counter_restarts`; cap e.g. 10/hour — log + stop thrashing). | Aliveness ≠ productivity is the grounded hole; existing machinery already reconnects on exception — force the silent-alive case onto that path. |
+| **1b honest-degraded feed** | While stalled (or after N zeros before/while restart): feed **`len(frames)`** into `update_sample`, **not** `_delta=0`. Expose on capture-health: `rate_counter_stalled: true`, `rate_source: "main_reader_frames"`, optional `hid_counter_restarts`. When healthy: `rate_counter_stalled: false`, `rate_source: "hid_interface3"`. | Fabricated 0 Hz is the false-negative; ~120 Hz is true main-reader cadence. Visibility prevents papering. |
+| **1c RP re-attach unknown** | Surface truth only this arc. **Do not** add operator-acked main-reader NOMINAL band or lower 950 Hz in this build. | Next rig measures whether 1a restores ~1 kHz; if not, NOMINAL under RP is unreachable and that is an operator decision later — never silent threshold loosen. |
+
+**len(frames) masking risk?** **No**, if scoped: only when frames flow. Empty frames already take `update_sample(0)` + poll-failure path — disconnect stays disconnect. Stalled-with-frames → DEGRADED (~120) is honest, not a mask.
+
+**DEGRADED-under-fallback as its own field?** **Yes via `rate_counter_stalled` + `rate_source`**, not a new capture_state enum (PCC classifier stays NOMINAL/DEGRADED/DISCONNECTED). Avoid dual truths.
+
+---
+
+## B. F-RIG27-2 live activity — **SHIP rolling fraction + CLI map; omit-when-cold**
+
+**VERDICT: ACCEPT capture-health live surface + CLI grammar map. Do not touch sealed classifier.**
+
+| Decision | Spec | Why |
+|----------|------|-----|
+| **Surface** | Transport: `deque(maxlen=20)` of per-iter `trigger_active` (same bit already in `_spc_kwargs` / pitl_meta). capture-health adds: `live_trigger_active_fraction` (mean over filled slots), `live_activity_window_n` (int, filled count), `live_activity_source: "bridge_main_reader"`. | Same reader that mints records attests play; no adjudicator dependency. |
+| **Window** | **20 iterations** (~20s @ 1 Hz). | Matches GAD evidence-window spirit; long enough to survive CFB between-play R2 quiet without permanent MENU; short enough to leave menu quickly. |
+| **CLI map** | Activity fetcher returns `{"trigger_active_fraction": v}` **only when** `live_activity_window_n >= 1` (prefer `>= min(5, maxlen)` cold-start if you want less flappy first samples — **recommend ≥3**). **Do not** pass `latest_gameplay_context` on the live path (precedence would prefer stale/null adjudication over live). | Sealed precedence: ctx first, then fraction. Campaign never stamps ctx → live fraction is the honest path. |
+| **MENU vs UNKNOWN** | **Cold / absent field → UNKNOWN** (omit key). **`fraction == 0` with window filled → MENU**. **`fraction > 0` → ACTIVE_GAMEPLAY**. | Sealed grammar already does this; CLI must not invent a third label. |
+| **Fabrication seams** | (1) Never invent fraction from empty deque. (2) Never map null `latest_gameplay_context` to ACTIVE. (3) Source string fixed `"bridge_main_reader"` only from bridge assembly — CLI does not invent source. (4) Bool path unused on live (fraction is enough). | Keeps TRUSTED_ACTIVITY_SOURCE / bridge-attested model. |
+
+**Idle pad → ACTIVE?** No — `trigger_active` is L2/R2 onset this cycle (`onset_velocity > 0`); idle → zeros → MENU after window fill, UNKNOWN before.
+
+---
+
+## C. PCC gate line — **HOLD sealed refuse under DEGRADED**
+
+**VERDICT: HOLD. Fires wait for true-rate recovery (1a). No operator-acked loosen in this build.**
+
+- Sealed: `capture_state in {NOMINAL}` ∧ `host in {EXCLUSIVE_USB, UNKNOWN}`.
+- 1b correctly yields **DEGRADED** under len(frames) fallback → **pcc_allows_challenge stays False** — correct fail-closed against false-positive presence under RP-starved counter.
+- **Allowed later (not this PR):** explicit operator-acked config, e.g. `pcc_rate_source=main_reader` + separate NOMINAL band for ~100–150 Hz main-reader cadence, env-gated, never default-on, never silent. Document as open after next-rig 1c measurement.
+- **Forbidden:** editing `pcc_allows_challenge`, treating DEGRADED as OK, or lowering `pcc_nominal_hz` to make 120 pass.
+
+Shell B green this arc only if **1a restores NOMINAL** (or host is already EXCLUSIVE_USB/UNKNOWN with real counter). If RP structurally starves interface-3 forever, Shell B stays red **honestly** until the acked path.
+
+---
+
+## D. Fabrication hunt — **BOTH feeds clean under the above; three pins required**
+
+| Attack | Result under spec | Pin in tests |
+|--------|-------------------|--------------|
+| Idle pad → ACTIVE | Fail: onset bit false → fraction 0 → MENU | All-zero window → MENU (not ACTIVE) |
+| Disconnected pad → NOMINAL | Fail: no frames → `update_sample(0)` → DISCONNECTED; never feed len(frames) when frames empty | frames=[] + alive counter → still 0 / disconnect path |
+| Stalled counter masks real disconnect | Fail: frames empty dominates; stalled only when frames>0 (pad delivering to main reader) | stalled flag only when frames>0 ∧ delta=0 |
+| Stalled → false NOMINAL | Fail: len(frames)/interval ~120 → DEGRADED; sealed PCC refuses | rate_counter_stalled True ∧ capture_state ≠ NOMINAL under fallback |
+| Operator JSON inject ACTIVE | Fail: live path uses bridge capture-health only; dry stays injected dry | CLI live fetcher only maps bridge fields |
+| Stale `latest_gameplay_context` overrides live | Fail: live activity path omits gameplay_context | unit on fetcher payload keys |
+
+**No silent loosening = no new false-positive attestation path.** Residual risk is 1a thrashing under permanent RP starve — bound restarts + stalled visibility.
+
+---
+
+## E. Test shape + r03 bars — **fakes only; bars pre-registered**
+
+### Build surfaces (additive only)
+1. `dualshock_integration.py` — stall counter N=3; force restart; feed len(frames) while stalled; expose stall state on monitor or transport getters.
+2. `capture_continuity` / monitor `get_status()` if needed — pass-through only, or assemble in `agent_grind`.
+3. `agent_grind.py` capture-health — +`rate_counter_stalled`, `rate_source`, `live_trigger_active_fraction`, `live_activity_window_n`, `live_activity_source`.
+4. `scripts/poep_session_identity_attach.py::_make_bridge_health_fetcher` — activity branch maps live fraction; omit when cold; **never edit** sealed modules.
+5. Tests: bridge unit + CLI unit; import sealed `classify_activity` / `pcc_allows_challenge` as oracles.
+
+### Fake-based tests (no rig)
+| ID | Scenario | Assert |
+|----|----------|--------|
+| T-AF-1 | thread alive, `_hid_report_total` frozen, `frames` non-empty ×3 | after N: stalled True; `update_sample` called with `len(frames)`; restart attempt / restart count ↑ |
+| T-AF-2 | counter healthy, delta high | stalled False; rate_source hid; not forced to frames |
+| T-AF-3 | frames empty | no stall-as-healthy; sample 0 / disconnect path |
+| T-AF-4 | 20× trigger_active=1 | fraction=1.0; sealed → ACTIVE_GAMEPLAY |
+| T-AF-5 | 20× trigger_active=0 | fraction=0.0; sealed → MENU |
+| T-AF-6 | window empty / n=0 | key absent; sealed → UNKNOWN |
+| T-AF-7 | capture DEGRADED + stalled | `pcc_allows_challenge` **False** |
+| T-AF-8 | capture NOMINAL + EXCLUSIVE_USB | `pcc_allows_challenge` **True** (regression) |
+| T-AF-9 | CLI mapper: live fields only | payload has `trigger_active_fraction`, no fabricated `gameplay_context` |
+
+### Pre-registered r03 bars (verify must fail closed if any miss)
+1. **B1** — Silent-alive counter never feeds perpetual 0 while main frames flow (stalled or restart within N+1 iters).
+2. **B2** — capture-health exposes `rate_counter_stalled` + honest `rate_source` under fallback.
+3. **B3** — Live activity: cold → UNKNOWN; active onsets → ACTIVE; all quiet filled window → MENU.
+4. **B4** — Sealed PCC still refuses DEGRADED/DISCONNECTED (byte-identical gate behavior).
+5. **B5** — Sealed modules SHA / git diff empty for listed paths; PV-CI 184; zero spend / no flag flips in diff.
+6. **B6** — No test sets `capture_state=NOMINAL` from len(frames)-scale rates (~100–150 Hz).
+
+### Out of scope this build
+- Operator-acked main-reader NOMINAL band  
+- GAD / ruling_validation_log stamps in campaign  
+- Any edit to `classify_activity` / `pcc_allows_challenge` / l9 sealed stack  
+- Threshold or env flips (`L6B`, `poep_enabled`, kill-switch)
+
+---
+
+## Sequencing for Claude build
+
+```
+1a stall-detect+force-restart → 1b feed len(frames)+fields → capture-health keys
+→ live deque+fraction keys → CLI activity map (omit-cold) → T-AF-1..9 → r03 vs B1..B6
+```
+
+**Net product claim after ship:** next CFB27 session can green activity without adjudicator; PCC greens only if interface-3 recovers to true USB rate (or stays red with `rate_counter_stalled` visible — honest Shell B refuse).
