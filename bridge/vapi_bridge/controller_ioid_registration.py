@@ -534,7 +534,11 @@ def register_controller_ioid(
         raise ValueError(f"gamer_private_key address {acct.address} != gamer {device_cs} "
                          f"(Option A: the permit signer must be the tx sender)")
 
-    # Register fee = ioIDStore.price() pay-as-you-go value (applyIoIDs pre-pay is the alternative).
+    # ioID FEE MODEL (F-INC-D-2, learned live 2026-07-17): the register does NOT pay-as-you-go via
+    # msg.value -- it CONSUMES the project's PRE-PAID activeIoID balance, funded by ioIDStore.applyIoIDs
+    # (the Inc-C `apply-ioids` step). So the register is sent with value=0; without a prior applyIoIDs
+    # the live registry reverts "insufficient ioID" (register IS payable, but value here does NOT top up
+    # the balance). price() is read only for the honest prepay-cost hint.
     store = web3.eth.contract(address=web3.to_checksum_address(store_addr), abi=IOID_STORE_ABI)
     price_wei = int(store.functions.price().call())
 
@@ -545,12 +549,22 @@ def register_controller_ioid(
         did_hash_b, uri, int(v), r, s,
     )
 
-    # estimate-first (also the pre-send revert guard: a bad permit / consumed tokenId reverts here)
-    # + hard-cap. IoTeX gasPrice; 1.25x buffer per the ceremony convention.
-    est_gas = fn.estimate_gas({"from": device_cs, "value": price_wei})
+    # estimate-first (also the pre-send revert guard) + hard-cap. value=0: the fee is the applyIoIDs
+    # pre-pay, not msg.value. Map "insufficient ioID" to an actionable prepay instruction.
+    try:
+        est_gas = fn.estimate_gas({"from": device_cs, "value": 0})
+    except Exception as exc:  # noqa: BLE001 -- surface the prepay requirement actionably
+        if "insufficient ioID" in str(exc):
+            _fee = float(Web3.from_wei(price_wei, "ether"))
+            raise RuntimeError(
+                f"ioID register reverted 'insufficient ioID': the project has no prepaid ioID quota. "
+                f"Run the prepay first -- operator_session_register_controller.py apply-ioids "
+                f"--project-token-id <projectId> --amount 1 --execute (~{_fee} IOTX) -- then re-run "
+                f"register.") from exc
+        raise
     gas_price = web3.eth.gas_price
     buffered_gas = (est_gas * 125) // 100
-    buf_cost_iotx = float(Web3.from_wei(buffered_gas * gas_price + price_wei, "ether"))
+    buf_cost_iotx = float(Web3.from_wei(buffered_gas * gas_price, "ether"))
     log.info("register est_gas=%d buffered=%d fee_wei=%d buf_cost_iotx=%.6f cap=%.2f",
              est_gas, buffered_gas, price_wei, buf_cost_iotx, hard_cap_iotx)
     if buf_cost_iotx > hard_cap_iotx:
@@ -559,7 +573,7 @@ def register_controller_ioid(
     tx = fn.build_transaction({
         "from": device_cs,
         "nonce": web3.eth.get_transaction_count(device_cs),  # TX nonce (NOT the permit nonce)
-        "gas": buffered_gas, "gasPrice": gas_price, "chainId": 4690, "value": price_wei,
+        "gas": buffered_gas, "gasPrice": gas_price, "chainId": 4690, "value": 0,
     })
     signed = acct.sign_transaction(tx)
     raw = getattr(signed, "raw_transaction", None) or signed.rawTransaction

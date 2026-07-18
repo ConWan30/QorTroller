@@ -406,11 +406,12 @@ def _make_send_mock_web3(*, status, mint_logs, tba, price_wei=10**17, nonce=0):
         c.functions.price.return_value.call.return_value = price_wei
         reg = MagicMock()
         reg.estimate_gas.return_value = 120000
-        reg.build_transaction.side_effect = lambda p: {
-            "to": _W3.to_checksum_address(address), "data": "0x",
-            "nonce": p["nonce"], "gas": p["gas"], "gasPrice": p["gasPrice"],
-            "chainId": p["chainId"], "value": p["value"],
-        }
+        def _build(p):
+            w3._cap = {"est_value": None, "build_value": p["value"]}
+            return {"to": _W3.to_checksum_address(address), "data": "0x",
+                    "nonce": p["nonce"], "gas": p["gas"], "gasPrice": p["gasPrice"],
+                    "chainId": p["chainId"], "value": p["value"]}
+        reg.build_transaction.side_effect = _build
         c.functions.register.return_value = reg
         c.functions.wallet.return_value.call.return_value = (tba, "did:io:controller")
         return c
@@ -455,9 +456,9 @@ def test_inc_d_real_send_happy_path_returns_id_and_tba():
     assert res.tba_address.lower() == tba.lower()
     assert res.tx_hash and res.tx_hash.startswith("0x")
     assert res.pending_prereqs is None
-    # value == price was sent (pay-as-you-go fee)
-    sent = w3.eth.wait_for_transaction_receipt.called
-    assert sent
+    # F-INC-D-2: register sends value=0 (the fee is the applyIoIDs prepay, not msg.value).
+    assert w3.eth.wait_for_transaction_receipt.called
+    assert w3._cap["build_value"] == 0
 
 
 def test_inc_d_real_send_status1_but_no_mint_log_raises():
@@ -481,4 +482,25 @@ def test_inc_d_real_send_reverted_status_raises():
     w3 = _make_send_mock_web3(status=0, mint_logs=[], tba="0x" + "dd" * 20)
     pin = MagicMock(); pin.pin_json.return_value = "bafycid"
     with pytest.raises(RuntimeError, match="register reverted"):
+        _real_send(w3, Account.create(), pin)
+
+
+def test_inc_d_insufficient_ioid_maps_to_prepay_instruction():
+    """F-INC-D-2 (learned live): the ioID register consumes a project's PRE-PAID activeIoID; without
+    a prior applyIoIDs the live registry reverts 'insufficient ioID'. That revert must map to an
+    actionable prepay instruction (apply-ioids), not a raw ContractLogicError."""
+    w3 = _make_send_mock_web3(status=1, mint_logs=[], tba="0x" + "dd" * 20)
+
+    def _contract(address=None, abi=None):
+        c = MagicMock()
+        c.functions.nonces.return_value.call.return_value = 0
+        c.functions.price.return_value.call.return_value = 10 ** 17
+        reg = MagicMock()
+        reg.estimate_gas.side_effect = Exception("execution simulation is reverted due to the reason: insufficient ioID")
+        c.functions.register.return_value = reg
+        return c
+
+    w3.eth.contract.side_effect = _contract
+    pin = MagicMock(); pin.pin_json.return_value = "bafycid"
+    with pytest.raises(RuntimeError, match="apply-ioids"):
         _real_send(w3, Account.create(), pin)
