@@ -2836,10 +2836,11 @@ class DualShockTransport:
                             # (0, 500ms]) -> then the analyzer's latency_ms is used (honest). The device
                             # clock only changes the latency_ms VALUE fed to the sealed verify when the
                             # rails pass; the sealed band check still owns pass/fail. Corpus never sees it.
-                            _dev_lat = _rp_device_latency_ms(
-                                getattr(_l6b_result, "crossing_device_ts", -1.0),
-                                float(self._l6b_pending.get("poep_probe_device_ts", 0.0)),
-                            )
+                            # F-RIG27-8b: hoist both raw device ticks into locals so the resolve LOG
+                            # shows the EXACT values fed to _rp_device_latency_ms (no re-read/divergence).
+                            _cross_dev_ts = getattr(_l6b_result, "crossing_device_ts", -1.0)
+                            _probe_dev_ts = float(self._l6b_pending.get("poep_probe_device_ts", 0.0))
+                            _dev_lat = _rp_device_latency_ms(_cross_dev_ts, _probe_dev_ts)
                             # POEP-HID-RING: resolve a nonce-bound fire with the MEASURED features
                             # (raw pass-through; no band-fill — the sealed verify owns the verdict).
                             # No-op for auto-tick probes (no poep_future on the pending).
@@ -2848,6 +2849,8 @@ class DualShockTransport:
                                 peak_lsb=_l6b_result.accel_delta_peak,
                                 precursor_gap_ms=None,
                                 device_latency_ms=_dev_lat,
+                                crossing_device_ts=_cross_dev_ts,
+                                probe_device_ts=_probe_dev_ts,
                             )
                             log.debug(
                                 "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f reflex=%s",
@@ -2944,6 +2947,9 @@ class DualShockTransport:
                                 peak_lsb=0.0,
                                 precursor_gap_ms=None,
                                 error=f"l6b analysis failed (no score): {_exc!r}",
+                                probe_device_ts=float(
+                                    self._l6b_pending.get("poep_probe_device_ts", 0.0)
+                                ) if isinstance(self._l6b_pending, dict) else -1.0,
                             )
                         finally:
                             self._l6b_pending = None
@@ -3305,6 +3311,8 @@ class DualShockTransport:
         precursor_gap_ms,
         error: str = "",
         device_latency_ms: float = -1.0,
+        crossing_device_ts: float = -1.0,
+        probe_device_ts: float = -1.0,
     ) -> None:
         """Resolve the pending nonce-bound fire Future with MEASURED features (no-op for auto-tick).
 
@@ -3326,9 +3334,16 @@ class DualShockTransport:
         _nonce = _p.get("poep_nonce")
         _gone = " [client-gone]" if _fut.done() else ""
         _clk = "device" if device_latency_ms > 0.0 else "t_mono"   # F-RIG27-8: which clock resolved
+        # F-RIG27-8b (rig-4 finding): log the RAW device ticks that feed _rp_device_latency_ms so the
+        # next rig fire splits dead-wire (both ~0 -> sensor_ts_ticks not populating in the RP frame
+        # path) from span-reject (both large, span>500ms -> reaction genuinely slow). Diagnostic-only,
+        # non-gating; never touches latency_ms/verdict/corpus. Both raw ticks are PASSED AS PARAMS
+        # (not re-read here) so the log cannot diverge from what the helper actually consumed (grok 8b NIT).
         log.info(
-            "POEP-HID-RING: resolve nonce=%s… lat=%s clock=%s dev_lat=%s peak=%.0f post_n=%d error=%s%s",
+            "POEP-HID-RING: resolve nonce=%s… lat=%s clock=%s dev_lat=%s "
+            "cross_ts=%s probe_ts=%s peak=%.0f post_n=%d error=%s%s",
             (str(_nonce)[:16] if _nonce else "?"), latency_ms, _clk, device_latency_ms,
+            crossing_device_ts, probe_device_ts,
             float(peak_lsb), len(self._l6b_post_buffer), (error or "ok"), _gone,
         )
         if _fut.done():
