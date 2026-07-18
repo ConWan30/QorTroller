@@ -99,8 +99,18 @@ class BridgeFireCaptureAdapter:
         return self._stash.pop(int(t_fire_ns), None)   # consume+clear; miss / NO_GO(0) / replay -> None
 
 
+# F-RIG27-6 (grok firetimeout-r02 B): the client urllib timeout must OUTLAST the endpoint's
+# wait_for (the HTTP layer sits on the endpoint which sits on the Future). Ordering pin, enforced
+# by test: CLIENT_DEFAULT_TIMEOUT_S > endpoint default (POEP_FIRE_TIMEOUT_S=20) > max observed RP
+# drain (~11s). Endpoint clamps [5, 60]; the client default sits +5s above the endpoint default.
+ENDPOINT_FIRE_TIMEOUT_DEFAULT_S = 20.0
+CLIENT_DEFAULT_TIMEOUT_S = 25.0
+MAX_OBSERVED_RP_DRAIN_S = 11.0
+
+
 def make_bridge_fire_adapter(
-    *, bridge_url: str = "http://localhost:8080", api_key: str = "", timeout_s: float = 6.0,
+    *, bridge_url: str = "http://localhost:8080", api_key: str = "",
+    timeout_s: float = CLIENT_DEFAULT_TIMEOUT_S,
 ) -> BridgeFireCaptureAdapter:  # pragma: no cover - needs a live bridge (rig)
     """Wire a real HTTP `post_fire` to the running bridge's POST /operator/poep/fire endpoint.
 

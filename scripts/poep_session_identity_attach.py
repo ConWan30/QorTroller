@@ -135,6 +135,9 @@ def main() -> int:
                     help="running bridge base URL (live path: fire endpoint + capture-health attestation)")
     ap.add_argument("--api-key", default=os.environ.get("OPERATOR_API_KEY", ""), dest="api_key",
                     help="operator api key for the bridge (default: OPERATOR_API_KEY env; never printed)")
+    ap.add_argument("--fire-timeout", type=float, default=25.0, dest="fire_timeout",
+                    help="client fire-call timeout (s); MUST outlast the bridge's POEP_FIRE_TIMEOUT_S "
+                         "(default 25 vs endpoint 20; F-RIG27-6 RP capture-drain headroom)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -154,7 +157,11 @@ def main() -> int:
                   "bridge process, which enforces its own gates; never CI).", file=sys.stderr)
             return 2
         from l9_presence.poep_bridge_fire_adapter import make_bridge_fire_adapter
-        adapter = make_bridge_fire_adapter(bridge_url=args.bridge_url, api_key=args.api_key)
+        # F-RIG27-6: the client urllib timeout must OUTLAST the bridge's fire endpoint (which awaits
+        # the capture Future, 5-11s under RP). Default 25s (endpoint default 20 + 5). --fire-timeout
+        # overrides; keep it above the bridge's POEP_FIRE_TIMEOUT_S.
+        adapter = make_bridge_fire_adapter(
+            bridge_url=args.bridge_url, api_key=args.api_key, timeout_s=args.fire_timeout)
         fire_fn = adapter.fire_fn
         imu_fn = adapter.imu_capture_fn
         activity_fetcher = _make_bridge_health_fetcher(args.bridge_url, args.api_key, "activity")
