@@ -1,0 +1,59 @@
+I'll independently verify the attach CLI rewire: git diff on the single changed file, the bridge-fire client it wires, the sealed runner, and your residual note.Digging into sealed-module integrity, `challenge_live` fail-closed rails, denylist coverage, and dry/live behavior.# HIDRING rewire verify — attach CLI `--live` → bridge ring
+
+**Scope checked:** only `scripts/poep_session_identity_attach.py` (rewire). Client `poep_bridge_fire_adapter.py` + sealed runner read-only. Residual note = r03 follow-on = this rewire. F-HIDRING-1 was r04 ship; out of this single-file scope.
+
+---
+
+## (1) Honest topology / no fabrication seam
+
+| Attack | Result | Evidence |
+|--------|--------|----------|
+| Bridge down → fabricate activity/PCC | **HOLD** | `_make_bridge_health_fetcher` → `{}` / `None` on any exception; `classify_activity({})` → `UNKNOWN`; `pcc_allows_challenge(None)` → `False` → sealed `challenge_live` `refused_activity` / `refused_pcc` **before** fire |
+| Null/missing health fields | **HOLD** | `gameplay_context=None` → UNKNOWN; empty PCC dict → refuse |
+| Refused bridge fire mint `live_hardware` | **HOLD** | Client requires `fired is True` **and** `real_hardware is True` **and** nonce match; refuse / fake-200-without-RH / HTTP error → `FireResult(fired=False, real_hardware=False)`; sealed path never records a GO with `live_hardware` unless fire confirms |
+| CLI synthesize `real_hardware=True` | **HOLD** | Live only wires `adapter.fire_fn`; no local true-mint |
+| Overclaim / denylist | **HOLD** | No banned tokens in CLI source; no enablement flips; ceiling language is conditional (gates + real verify) |
+| One-bridge composition | **PASS** | Fire: `POST /operator/poep/fire` via `make_bridge_fire_adapter`; activity/PCC: same `bridge_url` `GET /bridge/capture-health` (`latest_gameplay_context` / `capture_state`+`host_state`) |
+| Client env gate | **PASS** | `real_hid_fire_available()` → exit 2; bridge still enforces own gates |
+| api-key never printed | **PASS** | Only header on request |
+
+Break-attempts re-run locally (down-bridge + refuse paths + denylist): all hold.
+
+---
+
+## (2) Dry path untouched
+
+- Non-live still: `_dry_fire` / `_dry_imu` / `_dry_activity` / `_dry_pcc`
+- `--dry` → **IDENTITY_ONLY**, exit **0**, `live_hardware=False`, `dry_plumbing_ok=True`
+- `--live` without `POEP_LIVE_FIRE_ENABLED=1` → **REFUSED**, exit **2**
+- L3 stub unwired: `make_real_hid_fire` gone from CLI
+
+---
+
+## (3) Sealed modules untouched
+
+| Module | Diff vs HEAD (rewire) |
+|--------|------------------------|
+| `poep_session_identity_run.py` | empty |
+| `poep_gameplay_live.py` / `session.py` | empty |
+| `poep_did_sync.py` / `controller_presence.py` | empty |
+| `poep_bridge_fire_adapter.py` | empty (already shipped in `92f6e848`) |
+| ring / dualshock fire path | not part of this rewire (unrelated retina `capture_max` noise elsewhere — ignore) |
+
+Runner purity preserved: still never assigns candidate / `effective_live` / `live_hardware`.
+
+---
+
+## Empirics (this verify)
+
+- Core poep packs: **83 passed** (identity-run + bridge client + did_sync + gameplay live/session + rig + presence + poep)
+- Denylist suite covering CLI source: green  
+- PV-CI: **PASS — 184**
+
+---
+
+## FINAL: **SHIP**
+
+Single-file rewire does what r03 residual asked: `--live` composes the honest single-bridge topology end-to-end with fail-closed activity/PCC/fire and dry path behavior preserved. No FIX.
+
+**Residual (non-blocking):** no dedicated unit test for `_make_bridge_health_fetcher` in-tree (logic is thin + fail-closed; covered by sealed rails + manual break). Optional follow-on only.
