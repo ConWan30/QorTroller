@@ -796,6 +796,14 @@ class Config:
         default_factory=lambda: _env("L6B_ENABLED", "false").lower() == "true"
     )
     """False by default — L6b disabled unless L6B_ENABLED=true env var set."""
+    poep_campaign_mode: bool = field(
+        default_factory=lambda: _env("POEP_CAMPAIGN_MODE", "false").lower() == "true"
+    )
+    """POEP-CAMPAIGN carve-out (N-growth ONLY; grok campaign-r02, operator pick 1b): inits the L6b
+    ring prerequisites (analyzer + driver + the nonce-bound fire endpoint) while L6B_ENABLED stays
+    false — auto-tick and the humanity-formula contribution remain STRICTLY l6b_enabled-gated.
+    Campaign fires stamp policy_ref=edge_operator_reflex_v1 so they COUNT toward the N>=50 usable
+    gate. Default False; process-scoped env lift only (never persisted to bridge/.env)."""
     poep_enabled: bool = field(
         default_factory=lambda: _env("POEP_ENABLED", "false").lower() == "true"
     )
