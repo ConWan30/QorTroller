@@ -10,7 +10,11 @@ growth, and enabling `L6B_ENABLED` is now an UNBLOCKED separate operator decisio
 `CHAIN_SUBMISSION_PAUSED` pattern.
 
 ## Preconditions
-- Edge `581a836c…` connected USB (dual-connect: BT->PS5 for play, USB->PC for the ring).
+- **TOPOLOGY (corrected 2026-07-18, first CFB 27 rig session — the dual-connection capture blind):**
+  the pad's ACTIVE host must be THIS PC. Edge `581a836c…` USB->PC ONLY (break the BT link to the
+  console) + **PS Remote Play** carries input to the PS5. Dual-connect (BT->PS5 + USB->PC) polls at
+  full rate but the USB frames carry NO live input content (2026-06-26 finding, re-confirmed live
+  2026-07-18: zero records dual-connect -> 448 records w/ real content in 18 min under RP).
 - `bridge/vapi_bridge/qortroller_retina_capture.py` imports clean (the denser-sampling stash is
   reverted; the WIP lives in `stash@{0}` for later validation).
 - `OPERATOR_API_KEY` at hand (the fire endpoint requires the full key).
@@ -36,8 +40,9 @@ $env:GAME_PROFILE_ID = "ncaa_cfb_27"     # R2-sprint config transfers from 26; D
 
 **Shell A — the bridge (process-scoped campaign env):**
 ```powershell
-$env:POEP_CAMPAIGN_MODE = "1"        # ring prerequisites only; scoring/auto-tick stay gated
-$env:POEP_LIVE_FIRE_ENABLED = "1"    # the fire gate (never CI)
+$env:POEP_CAMPAIGN_MODE = "true"     # ring prerequisites only; scoring/auto-tick stay gated
+                                     # (Config booleans parse "true" — "1" does NOT activate)
+$env:POEP_LIVE_FIRE_ENABLED = "1"    # the fire gate (this one parses "1" — legacy convention)
 python -m bridge.vapi_bridge.main
 ```
 Startup log must show: `POEP-CAMPAIGN: L6b analyzer initialized for RING CAPTURE ONLY`.
