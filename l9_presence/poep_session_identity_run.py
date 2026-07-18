@@ -30,6 +30,7 @@ from l9_presence.poep_gameplay_live import (
     start_live_session,
     summarize_live_session,
 )
+from l9_presence.poep_gameplay_session import LOW_AMPLITUDE_FORCE_DEFAULT
 
 RUN_SCHEMA = "qortroller-poep-session-identity-attach-run-v0"  # CANDIDATE - orchestration, not a domain tag
 
@@ -61,13 +62,15 @@ def run_session_identity_attach(
                                    # vmdr_pubkey_hash, controller_nft, controller_nft_token_id
     session_id: Optional[str] = None,
     include_custody_seal: bool = True,
+    amplitude: int = LOW_AMPLITUDE_FORCE_DEFAULT,
 ) -> dict:
     """start_live_session -> challenge_live* -> summarize_live_session -> attach_session_identity.
 
     Returns the identity-attach artifact dict. Every I/O boundary (fire / imu / activity / pcc) is an
     INJECTED callable, so the whole path is deterministic + rig-free in tests. PURITY: the presence
     summary comes ONLY from the sealed summarize_live_session; this function never touches the
-    candidate / effective_live / live_hardware bits.
+    candidate / effective_live / live_hardware bits. ``amplitude`` is a thin pass-through to sealed
+    ``challenge_live`` (CLI override); never invents activity/PCC/candidate bits.
     """
     session, seal = start_live_session(
         device_id=device_id,
@@ -88,6 +91,7 @@ def run_session_identity_attach(
             fire_fn=fire_fn,
             imu_capture_fn=imu_capture_fn,
             pcc_sample=pcc_sampler(),
+            amplitude=amplitude,
         )
 
     # The ONLY source of the presence summary (never hand-built / mutated here):

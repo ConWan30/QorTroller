@@ -1,0 +1,77 @@
+# A2A SYNC-GO r03 — GROK VERIFY
+# Charter (a) · 2026-07-18 · Builder: Cursor · Auditor: Grok
+
+## Verdict: **PASS**
+
+All r02 §C bars hold. Claims C1–C10 checked against code + independent re-run.
+No BLOCK / WARN. Residual INFO only. Silicon attach still operator next (ceiling).
+
+---
+
+## Bars (r02 §C)
+
+| # | Bar | Result |
+|---|-----|--------|
+| 1 | Diff confined; sealed fail-closed unchanged | **PASS** — git: attach CLI + runner amp kwarg + docs + tests; `poep_gameplay_live.py` / `poep_gameplay_session.py` **no diff** |
+| 2 | Preflight live-only; dry IDENTITY_ONLY | **PASS** — wait only under `if live:`; T6 dry IDENTITY_ONLY |
+| 3 | Ready fields + PCC == sealed | **PASS** — `window_n>=3`, `frac>0`, `pcc_allows_challenge` (NOMINAL + EXCLUSIVE_USB\|UNKNOWN); DEGRADED fails T3 |
+| 4 | Timeout honest exit 3 | **PASS** — `EXIT_PREFLIGHT_TIMEOUT=3`; no `run_session_identity_attach` on fail; PREFLIGHT TIMEOUT banner |
+| 5 | amplitude 60 default, max 80, wired | **PASS** — clamp_cli + threaded to challenge_live; T5 |
+| 6 | Tests + PV-CI 184 + no flag flips | **PASS** — independent: **19 passed** (syncgo preflight + session identity run); gate **PASS 184** |
+| 7 | Operator card + copy-paste cmd | **PASS** — `syncgo-operator-card.md` + runbook Shell B |
+| 8 | Next-rig readiness | **PASS** — wait READY or exit 3 explains cold; no silent n_go=0 default path |
+
+---
+
+## Claim-by-claim
+
+| ID | Result | Checked |
+|----|--------|---------|
+| C1 | **PASS** | `eval_preflight_ready` 107–142; empty health → not ready (T6 empty) |
+| C2 | **PASS** | Uses `pcc_allows_challenge`; matches `_PCC_OK_*` frozensets |
+| C3 | **PASS** | defaults 45; wait_s≤0 skip; timeout return False → main exit 3 |
+| C4 | **PASS** | wait gated on `live` |
+| C5 | **PASS** | clamp 255→80, ≤0→60 |
+| C6 | **PASS** | runner `amplitude=` → `challenge_live`; T5 seen=[80] |
+| C7 | **PASS** | runner purity; no candidate assignment |
+| C8 | **PASS** | card + runbook command |
+| C9 | **PASS** | T1–T6 present + green |
+| C10 | **PASS** | PV-CI 184; no flag edits; sealed refused_activity T6 |
+
+---
+
+## Independent evidence
+```
+python -m pytest l9_presence/tests/test_poep_syncgo_preflight.py \
+  l9_presence/tests/test_poep_session_identity_run.py -q
+# 19 passed
+
+python scripts/vapi_invariant_gate.py
+# PASS — 184 invariants verified
+```
+
+## Findings
+
+| ID | Sev | Note |
+|----|-----|------|
+| F1 | INFO | `--wait-active-s 0` still allows legacy cold live attach (documented). Default 45 is the safe path. |
+| F2 | INFO | Brief race after PREFLIGHT READY before challenge poll can still `refused_activity` if play stops — sealed path holds; not a free-fire. |
+| F3 | INFO | Silicon / SYNCHRONIZED still operator fire (ceiling) — not this build’s claim. |
+
+No BLOCK. No WARN.
+
+---
+
+## Break attempts
+1. **Invent frac?** No — only bridge JSON keys; missing → not ready.  
+2. **Timeout still attaches?** No — return 3 before adapter/run.  
+3. **Amp 255?** Clamped to 80.  
+4. **PCC loosen?** DEGRADED not ready; uses sealed helper.  
+5. **Dry free SYNCHRONIZED?** real_hardware=False → IDENTITY_ONLY.
+
+---
+
+## One-liner for operator
+
+**PASS — commit when ready. Then mid-drive:  
+`python scripts/poep_session_identity_attach.py --live --api-key $env:OPERATOR_API_KEY --fire-timeout 25 --wait-active-s 45 --amplitude 80 --challenges 2`**
