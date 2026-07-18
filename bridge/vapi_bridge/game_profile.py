@@ -183,3 +183,55 @@ COD_WARZONE = GameProfile(
 )
 
 register_profile(COD_WARZONE)
+
+
+# ---------------------------------------------------------------------------
+# EA Sports College Football 27 (2026-07-18; A2A cfb27 r02 — grok-steered v1)
+# ---------------------------------------------------------------------------
+#
+# Released mid-July 2026. Web-researched input deltas vs CFB 26 (cfb27-r01 D1-D4):
+#   D1  Tackle Stick — the right stick is ACTIVE in-play on BOTH sides (defense: hit/cut/lunge/wrap
+#       + rip/bull-rush/club-swim; offense: ball-carrier moves + R2+RS QB specials). The CFB-26
+#       "dead-zone stick game" L2C assumption does NOT transfer: L2C may compute non-None values
+#       in 27. Advisory weight (0.10) unchanged — a telemetry-shape note, not a reweight.
+#   D2  Timing-based catching — RELEASE the catch button (triangle/cross) inside a green window.
+#       New precision-timing input; L5 sees shifted press/release IBI shapes on catch buttons.
+#   D3  QB Sneak Meter + kick meters — pre-snap timing-meter inputs (precision windows).
+#   D4  L2 repurposed — free-form pass placement (offense) / strafe (defense): more aim-like holds.
+#
+# HONEST v1 (grok cfb27-r02 A): R2 IS STILL SPRINT on both sides, so the 26 biometric config
+# transfers — same L5 priority (priority is sample sufficiency, not full scheme ontology; D2/D4
+# change the RHYTHM SHAPE of L2/catch buttons, not which button wins bootstrap first) and the same
+# L6-Passive R2 observation. Reorders/reweights WAIT for a CFB-27 corpus (N-gated, never assumed).
+NCAA_CFB_27 = GameProfile(
+    profile_id="ncaa_cfb_27",
+    display_name="EA Sports College Football 27",
+    publisher="EA Sports",
+    platform="ps5",
+
+    # R2 sprint verified still primary in 27 (controls research 2026-07-18) — clone of 26 priority.
+    l5_button_priority=["r2", "cross", "l2_dig", "triangle"],
+
+    l6_passive_enabled=True,
+    l6_passive_button="r2",
+    l6_passive_ema_alpha=0.15,   # same as 26 — sprint-hold variance shape unchanged by D1-D4
+    l6_passive_baseline_n=20,
+    l6_passive_flag_ratio=1.5,
+
+    button_map={
+        "r2":       "Sprint / Bullet pass modifier (primary — held every play; unchanged from 26)",
+        "l2":       "Free-form pass placement (off) / Strafe (def) — D4: more aim-like sustained holds",
+        "cross":    "Snap ball / Receiver select / Possession catch (D2: timing-RELEASE window)",
+        "circle":   "QB slide / Pitch / Receiver routes",
+        "square":   "Juke cut / Speed rush / Aggressive-dive tackle",
+        "triangle": "Switch player / Aggressive catch (D2: timing-RELEASE window) / Throw away",
+        "r1":       "Fake snap / Defensive keys / Hot route",
+        "l1":       "Custom adjustments / Audible / Motion",
+        "r_stick":  "D1 ACTIVE IN-PLAY: Tackle Stick (hit/cut/lunge/wrap) + rip/club-swim (def); "
+                    "ball-carrier moves + R2+RS QB specials (off) — NOT dead-zone in 27",
+        "l_stick":  "Player movement (360 analog)",
+        "d_pad":    "Formation / Play selection / Coverage shells",
+    },
+)
+
+register_profile(NCAA_CFB_27)

@@ -1,0 +1,90 @@
+I'll independently verify Claude's CFB 27 prereq increment against the r02 MUST list and the NOT-in-this-PR fence. Reading the steer docs and the built diffs first.Next I'll compare the 26 vs 27 profile fields for byte-equality, read the new tests, and confirm the fence held.Running the game-profile tests and checking the runbook wording for overclaim or operator-misleading language.# CFB27 r03 — Grok independent verify (charter (a))
+
+**Verdict: SHIP**
+
+Tests re-ran here: **18/18** (`test_game_profile_cfb27.py` + `test_game_profile.py`, 0.65s). Scope of the *intended* increment matches the r02 prereq list. Fence holds. Honest-v1 claims hold. No FIX required for this micro-PR.
+
+---
+
+## (1) 5 MUST items
+
+| # | MUST | Delivered? |
+|---|------|------------|
+| 1 | `ncaa_cfb_27` registered; same L5 + L6-P; D1–D4 annotated | **Yes** — `NCAA_CFB_27` + `register_profile`; docstring D1–D4; `r_stick` carries D1; L2/cross/triangle carry D2/D4 |
+| 2 | Runbook: `GAME_PROFILE_ID` + eye-check | **Yes** — process-scoped `$env:GAME_PROFILE_ID = "ncaa_cfb_27"` + 6-item first-minutes sheet |
+| 3 | CLAUDE.md L2C scoped to 26 + 27 caveat | **Yes** — 3 lines under humanity formula; weight stays 0.10 advisory |
+| 4 | Campaign path unchanged (process-scoped only) | **Yes** — addendum sits *above* existing Shell A; no `.env` edit; no `L6B`/`poep` language in the addendum |
+| 5 | Optional scoreboard dumps; no live OCR required | **Yes** — item 6 offline ROI dumps + explicit **“No live OCR this session”** |
+
+---
+
+## (2) NOT-in-this-PR fence
+
+| Fence | Status |
+|-------|--------|
+| Scoreboard OCR live path | Clean — dumps only |
+| S1–S6 product | Clean — zero code |
+| Formula reweights | Clean — prose only, weight fixed |
+| Flag flips | Clean |
+| PV-CI / allowlist | Clean (not in intentional diff) |
+| Sealed l9 modules | Clean |
+
+Intentional surface is only:
+
+- `bridge/vapi_bridge/game_profile.py` (append-only after Warzone)
+- `CLAUDE.md` (+3 lines)
+- `docs/poep-campaign-runbook.md` (+17 lines)
+- `bridge/tests/test_game_profile_cfb27.py` (new, 5 tests)
+
+---
+
+## (3) Honest-v1 transfer
+
+| Claim | Check |
+|-------|--------|
+| L5 priority BYTE-EQUAL to 26 | `["r2", "cross", "l2_dig", "triangle"]` — pinned by `test_cfb27_l5_priority_r2_first_and_equal_to_26` |
+| L6-Passive config BYTE-EQUAL | `enabled/button/α/N/flag_ratio` identical — pinned by transfer test |
+| D1 annotated (dead-zone cannot silent-transfer) | `button_map["r_stick"]` has Tackle Stick + **NOT dead-zone**; docstring D1; test asserts 26 map has no Tackle Stick language |
+| 26 untouched | Diff does not edit `NCAA_CFB_26` block; registry still resolves `ncaa_cfb_26` |
+
+---
+
+## (4) CLAUDE.md caveat scope
+
+Correct:
+
+- Dead-zone note remains CFB **26**.
+- 27: RS active → L2C **may** be non-None.
+- **“weight stays advisory 0.10 (telemetry-shape change, not a reweight)”** — no formula rewrite, no “should raise weight,” no neutrality-prior change language.
+
+Default “Active profile: ncaa_cfb_26” elsewhere in CLAUDE.md left alone (right).
+
+---
+
+## (5) BREAK pass
+
+**button_map / comments — research vs corpus**
+
+- Header frames D1–D4 as **web-researched** and HONEST v1 as transfer-until-corpus.
+- Config comment “verified still primary … (controls research 2026-07-18)” is research-qualified, not biometric-corpus claim.
+- Map strings are control labels + D-tags, not “validated by N=…” / LOO / separation language.
+- No overclaim that fails the “27-corpus-validated” bar.
+
+**Runbook operator trap**
+
+- Live OCR: blocked by “No live OCR this session” + offline-prep framing.
+- Flags: addendum only sets `GAME_PROFILE_ID`; campaign flags remain in existing Shell A pattern.
+- L2C item is “note whether… NOT a gate.”
+- Item 2’s parenthetical “re-verified on 27” is slightly past-tense for an *to-do* eye-check (true re-verify is the session). **Non-blocking nit** — does not induce OCR or flag expectation. Optional operator polish: “to re-verify on 27” — not required for SHIP.
+
+---
+
+## Commit discipline (operator)
+
+Working tree is **dirty beyond this PR** (artifacts, `wiki/contradictions.md`, contracts cache, settings, etc.). Stage **only** the four intentional paths above. Do not fold unrelated noise into the cfb27 commit.
+
+---
+
+## Close
+
+Small prereq PR as specified. Register honesty, document eye-check, claim nothing novel. **SHIP** — operator may commit the four-file surface.
