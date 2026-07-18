@@ -1418,8 +1418,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except PoepFireRefused as _e:
             raise HTTPException(getattr(_e, "status_code", 503), str(_e))
         try:
-            # ~350ms capture window + analysis; generous bound. On stall the client fails honestly.
-            return await asyncio.wait_for(fut, timeout=5.0)
+            # F-RIG27-6 (rig-2, grok firetimeout-r02): the 350-frame capture window drains at
+            # len(frames)/~1s-iter, which under Remote Play's sparse frame cadence took 5-11s -
+            # over the old 5s bound, so every real fire 504'd -> honest IDENTITY_ONLY. Raise +
+            # make configurable (env POEP_FIRE_TIMEOUT_S, default 20, ~2x headroom over the observed
+            # drain), clamped. This only makes the handler WAIT LONGER for a REAL confirmed fire -
+            # a 504 is still a pure fail-closed (no fired=True on timeout).
+            _fire_to = float(os.environ.get("POEP_FIRE_TIMEOUT_S", "20") or 20)
+            _fire_to = max(5.0, min(60.0, _fire_to))
+            return await asyncio.wait_for(fut, timeout=_fire_to)
         except asyncio.TimeoutError:
             raise HTTPException(
                 504, "fire dispatched but capture did not complete (IMU frames stalled)")

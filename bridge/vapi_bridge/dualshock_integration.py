@@ -3245,12 +3245,26 @@ class DualShockTransport:
         if not isinstance(_p, dict):
             return
         _fut = _p.get("poep_future")
-        if _fut is None or _fut.done():
-            return
+        if _fut is None:
+            return   # auto-tick probe (no poep_future) — stays quiet
+        # F-RIG27-6 (grok firetimeout-r02 C + r03 residual): INFO-log the resolve outcome for
+        # NONCE-BOUND fires. Logged BEFORE the done-check so the "client already 504'd" case still
+        # records (Py3.13 wait_for CANCELS the Future on timeout -> _fut.done() True). Lets the next
+        # rig DISTINGUISH late-completion (log shows "client-gone" + client got 504 -> drain still >
+        # timeout) from analyze-fail (log error!=ok / lat None -> RP post-buffer had no clean reflex).
+        _nonce = _p.get("poep_nonce")
+        _gone = " [client-gone]" if _fut.done() else ""
+        log.info(
+            "POEP-HID-RING: resolve nonce=%s… lat=%s peak=%.0f post_n=%d error=%s%s",
+            (str(_nonce)[:16] if _nonce else "?"), latency_ms, float(peak_lsb),
+            len(self._l6b_post_buffer), (error or "ok"), _gone,
+        )
+        if _fut.done():
+            return   # client cancelled on timeout — logged for diagnostics; nothing to set
         _fut.set_result({
             "fired": True,
             "real_hardware": True,
-            "nonce": _p.get("poep_nonce"),
+            "nonce": _nonce,
             "t_fire_ns": _p.get("poep_t_fire_ns"),
             "latency_ms": latency_ms,
             "peak_lsb": float(peak_lsb),

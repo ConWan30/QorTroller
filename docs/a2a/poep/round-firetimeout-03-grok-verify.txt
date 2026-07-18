@@ -1,0 +1,51 @@
+I'll verify the firetimeout increment against the 7 pre-registered r03 bars: read the A2A open + your r02 spec, then audit the listed diffs and tests.Digging into resolve-path gating, frames_remaining untouched status, and the new tests against the r03 bars.Confirming resolve gating, frames_remaining, adapter honesty, and running the test suites.Fire-timeout 8/8 green. Running the correct hidring/adapter/campaign regression set and a quick PV-CI count check.Checking whether `wait_for` cancels the Future on timeout — that would break late resolve / INFO diagnostics.# r03 VERDICT: **SHIP**
+
+Independent re-verify of the r02 bars. Claude’s build matches the allowed surface; honesty rails hold.
+
+## Bars
+
+| # | Bar | Result |
+|---|-----|--------|
+| 1 | Diff confined; session-loop drain/analyze/classify/pcc byte-identical except resolve INFO | **PASS** — only `_app.py` wait_for, adapter constants/default, CLI wire, one INFO hunk in `_resolve_poep_fire`, + `test_fire_timeout.py`. `frames_remaining=350` still at both arm sites; no analyze/classify/pcc edits |
+| 2 | Defaults 20 / 25; pin `client > endpoint > 11` | **PASS** — `ENDPOINT=20`, `CLIENT=25`, `MAX_DRAIN=11`; `timeout_s` kwdefault `25.0`; CLI `--fire-timeout` default 25 |
+| 3 | 504 pure fail-closed | **PASS** — `TimeoutError` → `HTTPException(504, …)` only; no body with `fired=True` |
+| 4 | INFO only nonce-bound; auto-tick quiet | **PASS** — guard is `poep_future` (auto-tick has none → early return). Equivalent to nonce-bound; `request_poep_nonce_probe` always sets both |
+| 5 | Weakest-seam green; no `real_hardware` synthesis on errors | **PASS** — adapter logic untouched; timeout/no-confirm/nonce-mismatch all `fired=False, real_hardware=False` |
+| 6 | PV-CI 184; zero spend; no flag edits | **PASS** — gate `PASS — 184`; no `.env` / `config.py` / `L6B_ENABLED` / `poep_enabled` / kill-switch in diff |
+| 7 | Next-rig readiness | **PASS** — 20s covers observed 5–11s drain; in-window resolve INFO carries `lat` / `peak` / `post_n` / `error=ok|…` for success vs analyze-fail |
+
+## Evidence (this verifier)
+
+- fire-timeout: **8/8**
+- hidring + adapter + campaign: **34/34**
+- + session_identity: **42** total (Claude’s 44 likely includes one more attest file; core suites green)
+- PV-CI: **184 PASS**
+- constants: `25.0 20.0 11.0`, kwdefault `timeout_s=25.0`
+
+## Break attempts
+
+| Attack | Outcome |
+|--------|---------|
+| Longer wait / high `POEP_FIRE_TIMEOUT_S` → false GO | **No.** Only waits longer for a real Future resolve after a real write. Adapter still requires `fired+real_hardware+nonce`. Band-fill still absent (`latency_ms=None` → 0 → verify fails). SYNCHRONIZED still needs MIN_GO_VERIFY_PASS |
+| Env gaming | Floor 5 / ceiling 60 is sane: short → more honest 504; long → hang, not fabrication. Client independent of endpoint (client < endpoint ⇒ client 504 first — still fail-closed) |
+| Resolve INFO touches buffer math? | **No.** `len(self._l6b_post_buffer)` read-only freebie per r02 C |
+| `frames_remaining=350` r04 deferred? | **Yes.** Untouched; window redesign correctly deferred |
+
+## Residual (non-blocking)
+
+On Py3.13, `asyncio.wait_for` **cancels** the bare Future on timeout → `_resolve_poep_fire` hits `done()` and returns **before** INFO. So the r02 tertiary case “log + client 504 ⇒ late-complete” will **not** fire after a true 504. In-window completes (the intended path under 20s) still log fully. Not a fabrication hole; only a post-timeout diagnostic gap. Do not block commit for it.
+
+## Commit scope
+
+Stage **only**:
+- `bridge/vapi_bridge/operator_api/_app.py`
+- `l9_presence/poep_bridge_fire_adapter.py`
+- `scripts/poep_session_identity_attach.py`
+- `bridge/vapi_bridge/dualshock_integration.py`
+- `bridge/tests/test_fire_timeout.py`
+
+Worktree has unrelated dirt (wiki/audits/artifacts) — leave it out.
+
+---
+
+**SHIP** → operator commit → Shell B rig-3. Expect either measured GOs or in-window INFO proving analyze class for r04.
