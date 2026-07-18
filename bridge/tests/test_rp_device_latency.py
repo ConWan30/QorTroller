@@ -219,3 +219,17 @@ def test_integration_production_build_absent_ticks_falls_back():
     entry = _build_l6b_report(snap, 8192.0, t_mono=100.2)
     assert entry["device_ts"] == 0                          # absent ticks -> 0
     assert _rp_device_latency_ms(entry["device_ts"], 1_000_000) == -1.0   # both-ends rail -> fallback
+
+
+# ── (ii) R2-onset Increment-0: report carries the RAW R2 channel for the offline coupling study ──
+def test_build_l6b_report_carries_r2_channel_for_onset_study():
+    # the report must carry raw r2/l2/adaptive-mode WITHOUT disturbing the analyzer-consumed keys
+    # (the reflex analyzer reads only ax/ay/az/t_mono/device_ts and IGNORES r2 — pass-through instrument).
+    from bridge.vapi_bridge.dualshock_integration import _build_l6b_report
+
+    snap = InputSnapshot(accel_x=0.0, accel_z=0.0, sensor_ts_ticks=123456,
+                         r2_trigger=200, l2_trigger=64, r2_effect_mode=2)
+    entry = _build_l6b_report(snap, 8192.0, t_mono=50.0)
+    assert entry["r2"] == 200 and entry["l2"] == 64 and entry["r2_mode"] == 2   # new instrument keys
+    assert {"ax", "ay", "az", "t_mono", "device_ts"}.issubset(entry)            # analyzer keys intact
+    assert entry["device_ts"] == 123456 and entry["t_mono"] == 50.0             # unchanged behavior
