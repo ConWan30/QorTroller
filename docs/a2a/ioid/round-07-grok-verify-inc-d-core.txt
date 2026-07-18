@@ -1,0 +1,143 @@
+I'll adversarially verify the Inc-D CORE real-spend register path: read the implementation, tests, and agent-registration precedent, then hammer the six risk surfaces you listed.Digging into agent register ABI, price/applyIoIDs semantics, and how token-id readback is done on the agent path.## Findings-first (adversarial)
+
+### F1 — **FIX / HIGH: success-path None-leak after a paid status=1**
+
+```573:593:bridge/vapi_bridge/controller_ioid_registration.py
+    ioid_token_id = _ioid_minted_token_id(rcpt.logs, ioid_addr)
+    tba = None
+    if ioid_token_id is not None:
+        ioid_c = web3.eth.contract(address=web3.to_checksum_address(ioid_addr), abi=IOID_ABI)
+        w = ioid_c.functions.wallet(int(ioid_token_id)).call()
+        tba = (w[0] if isinstance(w, (list, tuple)) else w)
+    log.info("register OK tx=%s ioid_token_id=%s tba=%s", tx_hex, ioid_token_id, tba)
+
+    return ControllerRegistrationResult(
+        ...
+        ioid_token_id=ioid_token_id,  # can be None
+        tba_address=tba,              # can be None
+        dry_run=False,
+```
+
+If the tx mines with `status=1` but log parse fails (wrong `ioid` address override, unexpected log shape, empty `rcpt.logs` under a flaky RPC decode), this returns **`dry_run=False` + real `tx_hash` + `ioid_token_id=None` + `tba=None`** and still logs “register OK”.
+
+That is the same honesty class as fabricated dry-run IDs: the **spend succeeded**, the **product of the spend is silently missing**. Real-spend must fail-closed:
+
+- if `ioid_token_id is None` → `raise RuntimeError(...)` (do not return success)
+- if TBA is zero/empty after `wallet()` → raise
+- optional hardener: fall back to on-chain `deviceTokenId(device)` / `ids[device]` (registry stores this after mint — see source below)
+
+No test covers the status=1 + missing-mint-log path.
+
+---
+
+### F2 — **PASS with notes: the six hammers**
+
+| Hammer | Verdict | Evidence |
+|--------|---------|----------|
+| **(1) Permit nonce vs TX nonce** | **PASS** | Permit uses `nonces(gamer)` + EIP-712 digest; tx uses `get_transaction_count(gamer)`. Explicit comment at build_transaction. No mix. |
+| **(2) 8-param `device` = gamer** | **PASS** | `device_cs = checksum(gamer)`; register args `(deviceContract, tokenId, device_cs, hash, uri, v,r,s)`; Option-A guard + key==sender. Matches live registry: 8-param wrapper sets `user=msg.sender`, ecrecover target is `device`. With Option A, `user==device==gamer`. |
+| **(3) ioID tokenId readback** | **PASS (parser) / soft risk (fail-open)** | Filters **ioID contract only** + **from==0** + **4 topics**. DeviceNFT `safeTransferFrom(user → TBA)` is on `0x93b77e…`, `from!=0` → skipped. `ioID.mint` does exactly one ERC-721 mint (`++nextId; _mint(owner,id)`); TBA is ERC-6551 `createAccount`, not a second mint Transfer. First mint-wins is correct for a single register. **Risk is F1 fail-open, not wrong Transfer grab.** |
+| **(4) `value=price` vs applyIoIDs** | **PASS for Inc-D as stated** | Canonical `ioIDStore.activeIoID`: if `applied==actived` (no prepaid left), `require(msg.value >= price)`. Pay-as-you-go `value=price` is correct when Inc-C did **not** prepay. If prepaid remains, extra `value=price` does **not** revert but can leave **0.1 IOTX stuck in the store** (value not forwarded in the prepaid branch). Operator should not double-pay if applyIoIDs was used. |
+| **(5) Fabrication / None-leak** | **FAIL → F1** | Dry-run honest. Real path rejects zero key, zero sig, wrong signer, bad prereqs. **Post-receipt None is the leak.** |
+| **(6) `raw_transaction` vs `rawTransaction`** | **PASS** | `getattr(signed, "raw_transaction", None) or signed.rawTransaction`. Local eth_account only exposes `raw_transaction`; pattern matches bridge `chain.py` dual-compat. |
+
+---
+
+### F3 — **PASS: on-chain permit math matches Option A**
+
+Live `ioIDRegistry.register` (iotexproject/ioID-contracts):
+
+```solidity
+// 8-param: user = msg.sender
+digest = EIP712 Permit(user, nonces(device))  // _useNonce(device)
+require(ecrecover(digest,v,r,s) == device);
+...
+_ioID.mint(projectId, device, user);
+IERC721(deviceContract).safeTransferFrom(user, tba, tokenId);
+```
+
+Controller path:
+
+- signs `Permit(gamer, nonces(gamer))`
+- sends from gamer
+- passes `device=gamer`
+
+That is exactly Option A. The agent precedent only `.call()`s; your real send + readback is new, but the **permit/device/user triangle is coherent**.
+
+---
+
+### F4 — **PASS: status / gas / fee rails**
+
+- `int(rcpt.status) != 1` → raise (Python-safe; avoids the `status!==1n` class of miss)
+- `estimate_gas({from, value: price})` is a real pre-send revert guard (bad permit, used NFT, missing ownership/approval, unmapped deviceContract)
+- 1.25× gas + 0.75 IOTX hard-cap includes fee+gas
+- `chainId: 4690` correct for testnet
+
+---
+
+### F5 — **LOW (library) / HIGH if fire via current CLI**
+
+`scripts/register_controller_ioid.py` is **not Inc-D ready**:
+
+- never passes `device_contract` / `token_id` → assert fails or defaults to zero
+- always uses stub Pinata (unresolvable `ipfs://bafy…` on-chain if forced)
+- always prints “DRY RUN …” even after a real result
+- still catches `NotImplementedError` (real path now raises `ValueError`/`RuntimeError`)
+
+Library can be correct and CLI still unsafe to fire. If operator fires only via a hand-built caller with real Pinata + NFT `0x93b77eB6` + `token_id=1`, CLI is out of scope for CORE.
+
+---
+
+### F6 — **Note (not a spend bug): `assert_option_a_register_ready` device check is tautological here**
+
+```python
+assert_option_a_register_ready(
+    device=device_cs, gamer_address=device_cs,  # both already gamer
+)
+```
+
+`device==gamer` cannot fail at this call site; real enforcement is `device_cs = checksum(gamer)` + `Account.from_key == gamer`. Contract/token_id checks still load-bearing.
+
+---
+
+### F7 — **Architecture note (Option A ceiling)**
+
+On-chain `records` / `device exists` is keyed by **`device` address**. With `device=gamer`, **one register per gamer EOA**. Second controller under the same gamer hits `device exists`. Physical Edge binds via DID content hash + birth cert, not a second `device` slot. Fine for first fire; not multi-controller.
+
+---
+
+## What is solid (do not thrash)
+
+1. Dry-run unchanged and honest (`None` IDs, `pending_prereqs`).
+2. Real branch prereq + zero-sig + signer==sender fail-closed before broadcast.
+3. ABI order matches live 8-param register (selector path via `IOID_REGISTRY_ABI`).
+4. Fee = `ioIDStore.price()` pay-as-you-go matches `activeIoID` when no prepaid quota.
+5. Mint Transfer parse is owner-agnostic for the right reason (mint `to` is `user`; TBA is separate).
+6. Tests: **19 passed** (parser unit tests good; **no** end-to-end mock of estimate→send→receipt→readback).
+
+---
+
+## VERDICT: **FIX**
+
+Not a “do not fire the permit math” verdict — **(1)(2)(4)(6) and the core encode path are sound**. Blocked on **F1**: real spend must not return success-shaped `None` for `ioid_token_id` / `tba` after `status=1`.
+
+### Minimum fix before any real send
+
+```python
+ioid_token_id = _ioid_minted_token_id(rcpt.logs, ioid_addr)
+if ioid_token_id is None:
+    # optional: ioid_token_id = registry.functions.deviceTokenId(device_cs).call()
+    raise RuntimeError(f"register status=1 but no ioID mint Transfer in receipt tx={tx_hex}")
+...
+if not tba or int(str(tba), 16) == 0:
+    raise RuntimeError(f"ioID.wallet({ioid_token_id}) returned zero/empty tx={tx_hex}")
+```
+
+Plus a unit test: status=1, empty/foreign logs → raises; status=1, mint log present → returns id + TBA.
+
+### Optional (recommended)
+
+- Prefer `deviceTokenId(gamer)` as primary or fallback readback (registry is authoritative after success).
+- Wire CLI: `device_contract`, `token_id`, real Pinata, env confirm gate, stop always-printing DRY RUN.
+
+After F1 fail-closed: re-verify → **PASS** for first operator fire (NFT `0x93b77eB6`, tokenId=1, project 1021, gamer key funded ≥ ~0.15 IOTX, no conflicting prepaid double-pay).

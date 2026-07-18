@@ -364,6 +364,45 @@ def assemble_register_calldata(
     )
 
 
+_TRANSFER_TOPIC0 = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+
+def _ioid_minted_token_id(logs, ioid_contract_addr: str) -> Optional[int]:
+    """The ioID DID tokenId MINTED (from==0x0) by the ioID contract in a register receipt.
+
+    Owner-AGNOSTIC by design (Inc-D): the DID NFT's owner is set by the ioID internal
+    ERC-6551 flow, so we filter only on (contract == ioID) + (from == 0x0) and take the
+    minted tokenId — NEVER equate it with the DeviceNFT tokenId (an agent bug already fixed
+    in step-7). Robust to bare/0x/HexBytes/dict log shapes; requires a 4-topic ERC-721
+    Transfer (a 3-topic ERC-20-shaped Transfer is skipped); never IndexErrors."""
+    want = str(ioid_contract_addr).lower()
+
+    def _hx(x):
+        h = x.hex() if hasattr(x, "hex") else str(x)
+        h = h.lower()
+        return h if h.startswith("0x") else "0x" + h
+
+    for lg in logs:
+        addr = getattr(lg, "address", None)
+        if addr is None and isinstance(lg, dict):
+            addr = lg.get("address")
+        if str(addr).lower() != want:
+            continue
+        topics = getattr(lg, "topics", None)
+        if topics is None and isinstance(lg, dict):
+            topics = lg.get("topics")
+        topics = list(topics or [])
+        if len(topics) < 4:
+            continue
+        t = [_hx(x) for x in topics[:4]]
+        if t[0] != _TRANSFER_TOPIC0:
+            continue
+        if int(t[1][-40:] or "0", 16) != 0:   # from == 0x0 (mint)
+            continue
+        return int(t[3], 16)
+    return None
+
+
 def register_controller_ioid(
     *,
     web3: Web3,
@@ -378,6 +417,11 @@ def register_controller_ioid(
     project_id: int = 0,  # must be pre-registered "QorTroller Controllers" project
     dry_run: bool = True,
     on_chain_pubkey_hash_hex: Optional[str] = None,
+    device_contract: str = _ZERO_ADDR,   # Inc-A NFT (real for the Inc-D send; placeholder in dry-run)
+    token_id: int = 0,                    # minted controller tokenId (real for Inc-D)
+    ioid_store_address: Optional[str] = None,    # ioIDStore (register fee price()); default = canonical
+    ioid_contract_address: Optional[str] = None, # ioID NFT (wallet() TBA readback); default = canonical
+    hard_cap_iotx: float = 0.75,          # Inc-D send spend cap (fee ~0.1 + gas)
 ) -> ControllerRegistrationResult:
     """End-to-end (or dry-run) registration for a gamer controller.
 
@@ -436,22 +480,11 @@ def register_controller_ioid(
         # Dry run: leave sig zero; caller will replace with real gamer sig
         v, r, s = 27, b"\x00" * 32, b"\x00" * 32
 
-    # Canonical register calldata. Inc-B F2: `device` is the GAMER EOA (the permit signer /
-    # ecrecover target), NOT the controller's truncated device_id — the physical Edge binds via the
-    # DID doc + birth cert / VMDR, not this slot. deviceContract/tokenId are controller prerequisites
-    # (VAPIGamerControllerNFT + a minted tokenId) — placeholders here, so dry-run-shape only.
-    calldata = assemble_register_calldata(
-        device_contract=_ZERO_ADDR,   # VAPIGamerControllerNFT — PREREQ, not deployed
-        token_id=0,                   # minted controller tokenId — PREREQ, not minted
-        device=Web3.to_checksum_address(gamer_address),
-        # grok r02 F1: Web3.keccak(...).hex() has NO 0x prefix here, so [2:] would drop the first
-        # BYTE -> a 31-byte hash. removeprefix handles both prefixed + bare, always 32 bytes.
-        did_hash=bytes.fromhex(did_hash.removeprefix("0x")),
-        uri=f"ipfs://{cid}",
-        v=v,
-        r=r,
-        s=s,
-    )
+    device_cs = Web3.to_checksum_address(gamer_address)
+    # grok r02 F1: Web3.keccak(...).hex() has NO 0x prefix here, so [2:] would drop the first BYTE
+    # -> a 31-byte hash. removeprefix handles both prefixed + bare, always 32 bytes.
+    did_hash_b = bytes.fromhex(did_hash.removeprefix("0x"))
+    uri = f"ipfs://{cid}"
 
     # The controller registration prerequisites (D-CONTROLLER-IOID-1 Option A + Phase 1B).
     prereqs = [
@@ -462,27 +495,107 @@ def register_controller_ioid(
         "a real gamer EIP-712 permit signature (gamer-sovereign, Option A)",
     ]
 
-    if not dry_run:
-        # HONEST: the real broadcast path is NOT wired and the prerequisites above are unmet.
-        # Refuse to fabricate a tx / tokenId / TBA (the old skeleton returned fake success).
-        raise NotImplementedError(
-            "controller ioID registration broadcast is not wired — dry-run only. "
-            "Blocked on: " + "; ".join(prereqs) + ". "
-            "The registry + permit interface are proven live (see the dry-run result); "
-            "registration is a separate operator-GO ceremony once the prereqs exist."
+    if dry_run:
+        # Prove the interface: assemble canonical calldata with placeholder prereqs; NO broadcast,
+        # NO fabricated tokenId/TBA. `device` is the GAMER EOA (permit signer / ecrecover target),
+        # NOT the controller's device_id -- the Edge binds via the DID doc + birth cert / VMDR.
+        assemble_register_calldata(
+            device_contract=_ZERO_ADDR, token_id=0, device=device_cs,
+            did_hash=did_hash_b, uri=uri, v=v, r=r, s=s,
+        )
+        return ControllerRegistrationResult(
+            device_id=device_id_hex, ioid_token_id=None, tba_address=None,
+            did_cid=cid, tx_hash=None, dry_run=True,
+            ioid_registry_address=ioid_registry_address, device_nonce=nonce,
+            pending_prereqs=prereqs,
         )
 
-    # Dry-run: honest result — no fabricated tokenId / TBA. The registry resolved, the
-    # nonce read live, the permit + canonical calldata assembled; a real registration is
-    # blocked on `pending_prereqs`.
+    # -- Inc-D: the REAL Option-A register broadcast (operator-fired, gamer-signed) -------------
+    # Gamer-sovereign: the gamer signs the permit AND sends the tx (msg.sender = user = gamer;
+    # dev-self => gamer == bridge). Fail-closed on every missing prerequisite; never fabricate.
+    if not gamer_private_key:
+        raise ValueError("real register requires gamer_private_key (Option A: the gamer signs + sends)")
+    assert_option_a_register_ready(
+        device_contract=device_contract, token_id=token_id,
+        device=device_cs, gamer_address=device_cs,
+    )
+    if not (r and s and r != b"\x00" * 32):
+        raise ValueError("real register requires a real gamer permit signature -- dry-run left v,r,s zero")
+
+    # Canonical ioID system anchors (imported lazily -- heavy deps; keeps dry-run/tests light).
+    from vapi_bridge.agent_registration import (
+        IOID_REGISTRY_ABI, IOID_STORE_ADDR, IOID_STORE_ABI, IOID_CONTRACT_ADDR, IOID_ABI,
+    )
+    store_addr = ioid_store_address or IOID_STORE_ADDR
+    ioid_addr = ioid_contract_address or IOID_CONTRACT_ADDR
+
+    acct = Account.from_key(gamer_private_key)
+    if acct.address.lower() != device_cs.lower():
+        raise ValueError(f"gamer_private_key address {acct.address} != gamer {device_cs} "
+                         f"(Option A: the permit signer must be the tx sender)")
+
+    # Register fee = ioIDStore.price() pay-as-you-go value (applyIoIDs pre-pay is the alternative).
+    store = web3.eth.contract(address=web3.to_checksum_address(store_addr), abi=IOID_STORE_ABI)
+    price_wei = int(store.functions.price().call())
+
+    registry = web3.eth.contract(
+        address=web3.to_checksum_address(ioid_registry_address), abi=IOID_REGISTRY_ABI)
+    fn = registry.functions.register(
+        web3.to_checksum_address(device_contract), int(token_id), device_cs,
+        did_hash_b, uri, int(v), r, s,
+    )
+
+    # estimate-first (also the pre-send revert guard: a bad permit / consumed tokenId reverts here)
+    # + hard-cap. IoTeX gasPrice; 1.25x buffer per the ceremony convention.
+    est_gas = fn.estimate_gas({"from": device_cs, "value": price_wei})
+    gas_price = web3.eth.gas_price
+    buffered_gas = (est_gas * 125) // 100
+    buf_cost_iotx = float(Web3.from_wei(buffered_gas * gas_price + price_wei, "ether"))
+    log.info("register est_gas=%d buffered=%d fee_wei=%d buf_cost_iotx=%.6f cap=%.2f",
+             est_gas, buffered_gas, price_wei, buf_cost_iotx, hard_cap_iotx)
+    if buf_cost_iotx > hard_cap_iotx:
+        raise ValueError(f"register buffered cost {buf_cost_iotx} IOTX exceeds hard cap {hard_cap_iotx}")
+
+    tx = fn.build_transaction({
+        "from": device_cs,
+        "nonce": web3.eth.get_transaction_count(device_cs),  # TX nonce (NOT the permit nonce)
+        "gas": buffered_gas, "gasPrice": gas_price, "chainId": 4690, "value": price_wei,
+    })
+    signed = acct.sign_transaction(tx)
+    raw = getattr(signed, "raw_transaction", None) or signed.rawTransaction
+    tx_hash = web3.eth.send_raw_transaction(raw)
+    rcpt = web3.eth.wait_for_transaction_receipt(tx_hash, timeout=180)
+    tx_hex = "0x" + (tx_hash.hex() if hasattr(tx_hash, "hex") else str(tx_hash)).removeprefix("0x")
+    if int(getattr(rcpt, "status", 0)) != 1:
+        raise RuntimeError(f"register reverted: status={rcpt.status} tx={tx_hex} "
+                           f"https://testnet.iotexscan.io/tx/{tx_hex}")
+
+    # Readback (FAIL-CLOSED, grok r07 F1): after a status=1 register the ioID mint MUST be present --
+    # never return a success-shaped None id/TBA (the mint-None bug class). Parse the minted ioID DID
+    # tokenId from the ioID contract's Transfer(0x0->owner) in THIS receipt (owner-agnostic; NEVER the
+    # DeviceNFT tokenId), then ioID.wallet(id) -> the ERC-6551 TBA (must be non-zero).
+    ioid_token_id = _ioid_minted_token_id(rcpt.logs, ioid_addr)
+    if ioid_token_id is None:
+        raise RuntimeError(
+            f"register mined status=1 but NO ioID mint Transfer in the receipt -- refusing to report "
+            f"success without a tokenId. Inspect: https://testnet.iotexscan.io/tx/{tx_hex}")
+    ioid_c = web3.eth.contract(address=web3.to_checksum_address(ioid_addr), abi=IOID_ABI)
+    w = ioid_c.functions.wallet(int(ioid_token_id)).call()
+    tba = (w[0] if isinstance(w, (list, tuple)) else w)
+    if not tba or int(str(tba), 16) == 0:
+        raise RuntimeError(
+            f"ioID.wallet({ioid_token_id}) returned a zero/empty TBA after register -- refusing to "
+            f"report success. tx https://testnet.iotexscan.io/tx/{tx_hex}")
+    log.info("register OK tx=%s ioid_token_id=%s tba=%s", tx_hex, ioid_token_id, tba)
+
     return ControllerRegistrationResult(
         device_id=device_id_hex,
-        ioid_token_id=None,
-        tba_address=None,
+        ioid_token_id=ioid_token_id,
+        tba_address=tba,
         did_cid=cid,
-        tx_hash=None,
-        dry_run=True,
+        tx_hash=tx_hex,
+        dry_run=False,
         ioid_registry_address=ioid_registry_address,
         device_nonce=nonce,
-        pending_prereqs=prereqs,
+        pending_prereqs=None,
     )

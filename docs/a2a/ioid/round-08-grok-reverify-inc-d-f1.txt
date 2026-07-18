@@ -1,0 +1,38 @@
+I'll re-verify the F1 fix as a tight delta: read the registration path and the four new tests, then adversarially probe the zero-TBA check and any remaining success-shaped-None leak.Checking agent-path TBA readback and `IOID_ABI.wallet` return shape for the zero-TBA check.Confirming web3 `address` return shape and running the four Inc-D tests.## r08 DELTA — F1 re-verify (ioID Inc-D)
+
+**F1 CLOSED.** Real-spend path (`dry_run=False`) cannot return success-shaped `None` id/TBA after a mined register.
+
+### Real path (post-receipt)
+
+| Gate | Behavior |
+|------|----------|
+| `status != 1` | `RuntimeError("register reverted")` |
+| no ioID mint Transfer | `RuntimeError("NO ioID mint Transfer…")` |
+| zero/empty TBA | `RuntimeError("zero/empty TBA…")` |
+| happy | returns real `ioid_token_id` + non-zero `tba` |
+
+Only the **dry-run** path still returns `None`/`None` — no spend, honest placeholders, not F1.
+
+### Zero-TBA check vs real shape
+
+`IOID_ABI.wallet` returns `(address, string)`. web3.py decodes `address` as a **checksum hex string** (e.g. `"0xDd…"`), which is what the production unpack does:
+
+```python
+tba = (w[0] if isinstance(w, (list, tuple)) else w)
+if not tba or int(str(tba), 16) == 0: raise …
+```
+
+- `"0x" + "00"*20` → fail-closed  
+- mixed-case checksum non-zero → pass-through  
+- `None` / `""` → fail-closed via `not tba`  
+- bare `bytes`/`HexBytes` would `ValueError` on `int(str(…), 16)` — still not success; not the ABI path
+
+### Tests
+
+4/4 green: happy (497 + TBA), status=1 no mint, zero TBA, status=0 revert.
+
+### Residual (non-blocking, not F1)
+
+Mint log with `tokenId=0` is not `None` so it passes the mint gate (then `wallet(0)` + zero-TBA check still fail-closed if TBA is empty). Not a success-shaped-None leak.
+
+**VERDICT: PASS**
