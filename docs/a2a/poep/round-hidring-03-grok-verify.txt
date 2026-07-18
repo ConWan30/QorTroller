@@ -1,0 +1,70 @@
+I'll verify the hidring increment as independent r03: read the charter docs, both halves of the build, and the diffs, then run the break-attempt checklist against the code.Next I'll inspect the dualshock and operator_api diffs for the POEP fire path only, ignoring the retina-killfeed stash remnant.Checking `send_l6b_probe` off-loop delivery, sealed-module diffs, and a few edge cases in the resolve path.Running the focused test suites and confirming `send_l6b_probe` stays off-loop.One real race remains: auto-tick does not claim the inflight slot during its own `send_l6b_probe` await. Confirming that hole is the only ship-blocker.# POEP-HID-RING r03 — INDEPENDENT VERIFY
+
+Rails checked by reading code (not claim-trust). Tests re-run: **21/21** client+bridge in 0.73s. Sealed module diffs empty. Retina `capture_max`/`capture_interval_ms` remnant ignored.
+
+---
+
+## (1) r02 build-shape
+
+| Item | Verdict | Evidence |
+|------|---------|----------|
+| HTTP arms | **PASS** | `POST /operator/poep/fire` → `request_poep_nonce_probe` |
+| Transport `to_thread` fire | **PASS** | `send_l6b_probe` → `asyncio.to_thread(_sync_write)` (`l6_trigger_driver.py:103`) |
+| Complete in session loop | **PASS** | `_resolve_poep_fire` only from L6b completion (success + analysis-fail paths) |
+| HTTP `wait_for`, no HID/busy-wait | **PASS** | `await asyncio.wait_for(fut, 5.0)`; no spin/sleep on capture |
+| Shape matches r02 (HTTP first, not Phase-D runner) | **PASS** | Additive methods + route only |
+
+---
+
+## (2) Pre-registered FIX list 1–9
+
+| # | Bar | Verdict | Notes |
+|---|-----|---------|-------|
+| 1 | Sealed untouched | **PASS** | Empty diff on gp-live/session/did_sync/presence/rig/`_fire_probe_silent` paths; only new client module |
+| 2 | No fire/HID on event loop / no HTTP capture spin | **PASS** | Fire off-loop; HTTP only awaits Future |
+| 3 | No fabricated / band-filled / client-supplied reflex | **PASS** | Bridge measures only; client requires `fired+real_hardware+nonce`; `latency None/≤0 → 0` + measured peak |
+| 4 | No `poep_enabled` / L6B enablement flip | **PASS** | Gates on existing `_l6b_enabled`; never assigns enablement; claim ceiling documents candidate-only |
+| 5 | Nonce / concurrent alias / result reuse | **FAIL → FIX** | Nonce+one-shot+done-check OK **for poep→auto**; **auto-tick→poep mid-arm not airtight** (below) |
+| 6 | `l6b_enabled=False` hard refuse | **PASS** | `PoepFireRefused` 503; tested |
+| 7 | HTTP-first scope (no Phase-D session runner) | **PASS** | Phase-D untouched as ownership |
+| 8 | No PV-CI / FROZEN / 228B / spend | **PASS** | Additive Python only (no gate/sol edits in this surface) |
+| 9 | Client fake-bridge tests + transport harness | **PASS** | 11 client + 10 bridge incl. contract e2e; route glue thin/untested (residual, not ship-blocker) |
+
+---
+
+## (3) Break attempts
+
+| Attack | Verdict | Detail |
+|--------|---------|--------|
+| Auto-tick race during **poep** arm await | **PASS** | `_poep_fire_inflight=True` before `await send_l6b_probe`; auto-tick guard checks it |
+| Auto-tick race during **auto-tick** arm await | **FAIL** | Auto-tick does **not** set inflight around its fire→arm window. Interleave: auto past guard → yield → poep arms pending+future → auto resumes and **overwrites** `_l6b_pending` (no `poep_future`) → poep Future orphaned → 504; dual HID write possible. Reproduced on one loop (final pending=`auto` after both armed). |
+| Stale resolve after `wait_for` timeout | **PASS** | `wait_for` cancels Future; `_resolve` `done()` guard → no `set_result` / no `InvalidStateError` (proved) |
+| Alias auto-tick result onto poep nonce | **PASS** (when pending not clobbered) | Auto pending has no `poep_future` → resolve no-op; client still requires nonce match |
+| Second fire while pending | **PASS** | 409 on pending or inflight (poep path) |
+| HTTP blocks loop | **PASS** | Pure await; analysis stays on pre-existing session-loop path |
+| Client 200 without real fire | **PASS** | Weakest-seam pin; tests cover missing `real_hardware` / nonce / not-fired |
+| Analysis-fail still `fired=True` | **PASS** (honest) | Force wrote; `latency=None` → client lat 0 → sealed verify fails |
+
+---
+
+## (4) Honest scope
+
+| Claim | Verdict |
+|-------|---------|
+| Candidate / campaign only | **PASS** |
+| `poep_enabled` not flipped by any path | **PASS** |
+| L6B enablement not flipped by any path | **PASS** (requires pre-existing operator `l6b_enabled`) |
+| `advances_poep_enabled` not implied True in new code | **PASS** |
+
+---
+
+## FINAL: **FIX** (precise)
+
+**F-HIDRING-1 (ship-blocker):** single-slot is **one-way**. Poep claims `_poep_fire_inflight` during arm; auto-tick L6b dispatch (`dualshock_integration.py` ~2922–2969) does not. Concurrent `request_poep_nonce_probe` can pass busy-check during auto-tick’s `await send_l6b_probe`, dual-fire, and clobber `_l6b_pending` (orphan poep Future). Not a SYNCHRONIZED fabrication path (client 504/fail), but violates r02 “one stimulus” + break-attempt airtightness.
+
+**Minimal fix:**
+1. Shared flag (rename or keep `_poep_fire_inflight` as `_l6b_probe_inflight`) set **True** on the auto-tick path **before** `await send_l6b_probe`, cleared in `finally` after pending arm or dispatch failure — same shape as poep.
+2. Optional belt: refuse to assign `_l6b_pending` if already non-None (log + drop).
+3. Add test: schedule fake auto-tick mid-await vs concurrent `request_poep_nonce_probe` → second path 409, no pending overwrite.
+
+Everything else on the r02 shape + FIX list 1–4, 6–9 is clean. Re-verify only F-HIDRING-1 + the new race test; no need to re-open sealed/client honesty if that patch is tight.

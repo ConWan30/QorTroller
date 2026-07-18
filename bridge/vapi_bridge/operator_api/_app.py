@@ -1378,6 +1378,53 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         }
 
 
+    # POEP-HID-RING — POST /operator/poep/fire (nonce-bound fire on the single-HID L6b ring)
+    # ------------------------------------------------------------------
+    # Serves ONE nonce-bound low-amp probe from the bridge's OWN reader (the same one that attests
+    # activity/PCC) so the gameplay-live path gets a real fire+capture without a second HID open.
+    # Event-loop discipline: this handler ARMS (transport does the to_thread write) then AWAITS a
+    # Future the session-loop completion resolves — it never touches HID and never busy-waits.
+    # Fail-closed: full operator key; 503 gated (POEP_LIVE_FIRE_ENABLED + l6b_enabled) / 409 busy.
+    # CANDIDATE/CAMPAIGN mechanism only — does NOT flip poep_enabled / L6B enablement.
+    @app.post("/operator/poep/fire")
+    async def poep_ring_fire(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Fire one nonce-bound probe on the ring; returns the MEASURED reflex features.
+
+        Body: {"nonce": str, "amplitude": int}. Response (the BridgeFireCaptureAdapter contract):
+        {fired, real_hardware, nonce, t_fire_ns, latency_ms, peak_lsb, precursor_gap_ms, error?}.
+        """
+        _check_key(x_api_key)   # full operator key; 503 when unconfigured (fail-closed, it FIRES haptics)
+        transport = getattr(app, "_transport", None)
+        if transport is None or not hasattr(transport, "request_poep_nonce_probe"):
+            raise HTTPException(503, "dualshock transport not running")
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, 'JSON body required: {"nonce": str, "amplitude": int}')
+        nonce = str(body.get("nonce") or "")
+        if not nonce:
+            raise HTTPException(400, "nonce required")
+        try:
+            amplitude = int(body.get("amplitude", 60))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "amplitude must be an int")
+
+        from ..dualshock_integration import PoepFireRefused
+        try:
+            fut = await transport.request_poep_nonce_probe(nonce, amplitude)
+        except PoepFireRefused as _e:
+            raise HTTPException(getattr(_e, "status_code", 503), str(_e))
+        try:
+            # ~350ms capture window + analysis; generous bound. On stall the client fails honestly.
+            return await asyncio.wait_for(fut, timeout=5.0)
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                504, "fire dispatched but capture did not complete (IMU frames stalled)")
+
+
     # Phase B item ② P4b — GET /operator/poep-registry/{device_id}
     # ------------------------------------------------------------------
     # Read-only: returns a device's registered composite pubkey (integrity-verified via the
