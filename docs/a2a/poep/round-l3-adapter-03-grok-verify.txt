@@ -1,0 +1,69 @@
+I'll independently verify the L3 adapter against r01 bars, your r02 FIX list, and break-attempt paths by reading the code and reports—not the builder claims.Next I'll inspect sealed surfaces, `challenge_live`/`verify` rails, and git status so the break-attempt and sealed-byte checks are grounded in code.## r03 VERIFY — L3 adapter (code-read + mechanical; not Claude’s report)
+
+**Evidence run:** adapter **12/12**, sealed-adjacent regression **67/67**, HID-free import `HID_mods=[]`, PV-CI **PASS — 184**, sealed paths **empty git diff**, new files untracked only.
+
+---
+
+### (1) r01 fixed bars
+
+| # | Bar | Verdict | Evidence |
+|---|-----|---------|----------|
+| 1 | Sealed byte-untouched (runner/live/session/did_sync/presence/`_fire_probe_silent`) | **HOLD** | `git diff` empty on those paths; only `poep_rig_reflex_adapter.py` + test + selftest new |
+| 2 | `real_hardware=True` only after real write path (not import-only / pre-write abort) | **HOLD** | Bridge refuse + `fire_probe` exception → `fired=False, real_hardware=False`; success only after `fire_probe` returns; factory uses `stimulus=True` → `_sync_write` |
+| 3 | No fabricated reflex / no forced GO pass on no-peak | **HOLD** | `latency None/≤0 → 0.0`, peak measured; E2E + live break: `go_verify_pass=False`, `candidate=False` |
+| 4 | Flags stay False; no L6B flip | **HOLD** | No flag writes; no DB persist; `CLAIM_CEILING` + selftest non-claim |
+| 5 | Fakes unit-tested; real HID `# pragma: no cover`; no HID at module load | **HOLD** | Top-level: `os/secrets/typing` + `poep_gameplay_live` only; HID imports only inside factory; import check empty |
+| 6 | Zero spend / no FROZEN-PoAC / PV-CI 184 | **HOLD** | No chain/Solidity touch in increment; gate **PASS 184** |
+
+---
+
+### (2) r02 FIX list (12)
+
+| # | FIX | Verdict |
+|---|-----|---------|
+| 1 | Refuse dual-open when bridge running | **HOLD** — `bridge_running_dual_writer`, no stash; bridge-check exception → refuse (fail-closed) |
+| 2 | One-shot stash consume+clear | **HOLD** — `dict.pop`; 2nd read / key `0` → `None` |
+| 3 | `real_hardware=True` only post successful probe (write path) | **HOLD** — pre-write abort never True; analyze-fail keeps True (write happened) + no window |
+| 4 | No band-filled latency | **HOLD** — no-peak → `latency_ms=0`, peak as measured; sealed verify owns band |
+| 5 | Gameplay amp clamp, not desk 255 | **HOLD** — `clamp_amplitude` → max **80** |
+| 6 | Lazy HID imports | **HOLD** |
+| 7 | Factory env-gated `POEP_LIVE_FIRE_ENABLED=1` | **HOLD** — raises before HID import |
+| 8 | Claim ceiling present | **HOLD** — module docstring + `CLAIM_CEILING` + selftest banner |
+| 9 | No L6B write; sealed untouched | **HOLD** |
+| 10 | Unit tests = injected fakes (dual-open / stash / no-peak / no-write / amp / env + E2E) | **HOLD** |
+| 11 | Gameplay delay 0.5–2.5s CSPRNG | **HOLD** — `GAMEPLAY_MIN/MAX_DELAY_S` |
+| 12 | Adapter passes raw features only; never sets candidate / `live_hardware` | **HOLD** — only `FireResult`/`ImuWindow`; source regex test; sealed `challenge_live` sets `live_hardware` from `fire.real_hardware` |
+
+---
+
+### (3) BREAK ATTEMPT (try hard)
+
+| Attack | Result |
+|--------|--------|
+| Pre-write abort → GO issued / candidate | **Blocked** — `fire_failed`, 0 challenges |
+| No-clean-peak → `go_verify_pass` / candidate | **Blocked** — verify False ×2; `presence_session_candidate_ok=False` (summary `live_hardware` can be True = “force fired”, not candidate/SYNCHRONIZED) |
+| Stash replay / NO_GO key `0` steals GO window | **Blocked** — GO path pops immediately; 2nd pop `None` |
+| Dual-open success + garbage IMU | **Blocked** — refuse before probe |
+| Adapter short-circuits with desk `HUMAN` class | **N/A** — adapter never reads classification; raw features only |
+| Factory / CI silent success | **Blocked** — env gate raise |
+| Injected `real_hardware=False` → SYNCHRONIZED | **Blocked by sealed model** — needs `all(GO.live_hardware)` + verify quorum; adapter refuse paths never mint True `real_hardware` with `fired=True` |
+| Host-trust injected `fire_probe` success + in-band analyze | **Expected FLIP-A** — unit-test surface; production path is env-gated real `_fire_probe_silent` only; **no second mint path** beyond sealed `FireResult` |
+| Selftest session/presence claim | **None** — direct `fire_fn`/`imu_capture_fn` only; prints mechanism counts + ceiling |
+
+**No sealed-path fabrication path found** for GO pass / SYNCHRONIZED from dual-open, no-peak, stash replay, or selftest.
+
+---
+
+### (4) Honest scope
+
+- Adapter is **mechanism only** under exclusive HID; docstring + selftest state **SYNCHRONIZED needs single-stream later**.
+- Topology: bridge UP ⇒ refuse fire; bridge DOWN ⇒ real fire possible but no bridge-attested activity ⇒ not a rig-honest SYNCHRONIZED path.
+- `scripts/poep_session_identity_attach.py --live` **still wires the stub** `make_real_hid_fire` (stale “until adapter exists” comment). That is **out of this micro-arc claim** (r02: don’t sell `--live` SYNCHRONIZED); not a fabrication, just **not rewired yet**.
+
+---
+
+## FINAL: **SHIP**
+
+No blocking FIX. Optional non-blocking follow-on (not required to commit this increment): rewire attach `--live` to `make_edge_reflex_adapter` + refresh stub comment **after** operator decides exclusive-HID vs single-reader arc — still won’t honest-SYNCHRONIZE under dual topology.
+
+**Rails held:** zero spend · `poep_enabled`/L6B/L6_CHALLENGES untouched · sealed byte-untouched · PV-CI 184.
