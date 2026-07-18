@@ -70,6 +70,45 @@ def fresh_nonce() -> str:
     return secrets.token_hex(16)
 
 
+def audit_session_stamp(when: datetime | None = None) -> str:
+    """UTC HHMMSS stamp so same-day multi-block captures do not overwrite (T2)."""
+    t = when or datetime.now(timezone.utc)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    else:
+        t = t.astimezone(timezone.utc)
+    return t.strftime("%H%M%S")
+
+
+def audit_capture_path(
+    out_dir: Path,
+    player: str,
+    *,
+    when: datetime | None = None,
+    date_str: str | None = None,
+) -> Path:
+    """``audits/poep_live_capture_{player}_{YYYY-MM-DD}_{HHMMSS}.json`` (UTC).
+
+    Round-25 T2: never clobber a prior same-day block for the same player.
+    """
+    t = when or datetime.now(timezone.utc)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    else:
+        t = t.astimezone(timezone.utc)
+    day = date_str or t.strftime("%Y-%m-%d")
+    stamp = audit_session_stamp(t)
+    safe_player = (player or "UNKNOWN").strip() or "UNKNOWN"
+    return out_dir / f"poep_live_capture_{safe_player}_{day}_{stamp}.json"
+
+
+def local_session_id(player: str, t0_ns: int) -> str:
+    """Local bookkeeping id only — NOT a FROZEN-v1 family."""
+    import hashlib
+    pre = f"{player or ''}||{t0_ns}".encode("utf-8")
+    return hashlib.sha256(pre).hexdigest()[:16]
+
+
 # --- FLIP-A rung 2: raw reflex waveform (pure, testable) --------------------------------------------
 
 def _accel_mag(report: dict) -> float:
@@ -223,8 +262,10 @@ def _iso_date() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def _fire_probe_silent(ds, cfg, *, delay_s, reader, reissue=True):  # pragma: no cover - hardware path
+def _fire_probe_silent(ds, cfg, *, delay_s, reader, reissue=True, stimulus: bool = True):  # pragma: no cover - hardware path
     """F-POEP-LIVE-1 (i): SILENT, CONTINUOUS-POLL nonce-scheduled fire — the A-PRE-TELL fix.
+
+    stimulus=False → catch-trial NO_GO: same arm/delay/poll window, **no** adaptive-trigger write.
 
     grok round-19 caught the naive fix (sleep -> then dense collect -> fire) leaves a POLL-BURST tell:
     a process watching USB HID poll cadence sees the silence->burst transition ~200-600 ms BEFORE the
@@ -266,20 +307,21 @@ def _fire_probe_silent(ds, cfg, *, delay_s, reader, reissue=True):  # pragma: no
 
     profile = l6b_probe_profile(cfg.r2_force, mode=cfg.mode)
     probe_ts = time.monotonic()
-    t_challenge_ns = time.time_ns()     # exact stimulus onset == the force write
-    L6TriggerDriver._sync_write(ds, profile)
+    t_challenge_ns = time.time_ns()     # schedule instant (force write IFF stimulus)
+    if stimulus:
+        L6TriggerDriver._sync_write(ds, profile)
 
     hold_s = cfg.hold_ms / 1000.0
     capture_s = cfg.capture_window_ms / 1000.0
     deadline = time.monotonic() + hold_s + capture_s
     clear_at = time.monotonic() + hold_s
-    cleared = False
+    cleared = not stimulus  # no-go: nothing to clear
     driver = L6TriggerDriver()
     post_reports: list[dict] = []
     last_reissue = probe_ts
     while time.monotonic() < deadline:
         now = time.monotonic()
-        if not cleared:
+        if stimulus and not cleared:
             # RE-ISSUE the stimulus through the hold so it's a sustained, perceptible buzz that
             # pydualsense's report-sender thread cannot overwrite (single-shot writes went unfelt).
             # --sharp disables this: a single brief jolt -> clean reflex waveform (needs a reliable actuator).
@@ -293,7 +335,7 @@ def _fire_probe_silent(ds, cfg, *, delay_s, reader, reissue=True):  # pragma: no
         post_reports.append(accel_report_from_snapshot(snap, accel_scale=accel_scale))
         if cfg.poll_interval_s > 0:
             time.sleep(cfg.poll_interval_s)
-    if not cleared:
+    if stimulus and not cleared:
         asyncio.run(driver.clear_triggers(ds))
 
     return probe_ts, pre_reports, post_reports, r2_at_probe, t_arm_ns, t_challenge_ns
@@ -352,29 +394,44 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
     print("=" * 66)
     print(f"  Device ID:  {device_id}")
     print(f"  Policy ref: {policy_ref}   CCO profile: {args.cco_profile_id}")
+    catch_on = bool(getattr(args, "catch", False))
+    trial_kinds = None
+    if catch_on:
+        from l9_presence.poep_catch_trials import plan_trial_kinds, score_trial, score_session
+        trial_kinds = plan_trial_kinds(args.count, go_per_no_go=int(args.catch_ratio))
+
     print(f"  Challenges: {args.count}   delay window: {args.min_delay}-{args.max_delay}s (independent CSPRNG)")
     print(f"  Actuator:   mode={cfg.mode} force={cfg.r2_force} hold_ms={cfg.hold_ms}")
+    if catch_on:
+        n_nogo = sum(1 for k in trial_kinds if k == "NO_GO")
+        print(f"  Catch:      ON  go:no_go ~{args.catch_ratio}:1  (NO_GO={n_nogo}/{args.count})")
     print(f"  DB:         {(args.db or Config().db_path) if store else '(dry-run -- not persisting)'}")
     print("-" * 66)
     print("  Hold the controller relaxed with a finger RESTING on R2 (don't press it).")
     print(f"  {args.count} {cfg.mode.upper()} challenges (force {cfg.r2_force}/255, {cfg.hold_ms}ms) fire SILENTLY")
     print("  at random moments over the next ~minute -- NO on-screen cue before each fire.")
     print("  React (a small grip jerk) the instant you feel R2 BUZZ. Results print AFTER.")
+    if catch_on:
+        print("  Catch trials: some slots are NO_GO (no buzz) — stay relaxed; do not twitch.")
     print("  poep_enabled STAYS FALSE -- this is candidate live evidence.")
     print("=" * 66)
     print("  Armed. Hold relaxed, finger on R2...")
 
     ds = reader.ds
     records: list[dict] = []
+    catch_scores = []
     n_ok = 0
     try:
         for idx in range(1, args.count + 1):
+            kind = trial_kinds[idx - 1] if trial_kinds else "GO"
+            stimulus = kind == "GO"
             nonce = fresh_nonce()                                     # binding only
             delay_s = csprng_delay_s(min_s=args.min_delay, max_s=args.max_delay)  # (ii) independent CSPRNG
             # SILENT fire: no pre-fire print, randomized unprinted pre-window (F-POEP-LIVE-1 (i))
             (probe_ts, pre_reports, post_reports, r2_at_probe,
              t_arm_ns, t_challenge_ns) = _fire_probe_silent(
-                ds, cfg, delay_s=delay_s, reader=reader, reissue=not args.sharp)
+                ds, cfg, delay_s=delay_s, reader=reader, reissue=not args.sharp,
+                stimulus=stimulus)
 
             result, diagnostic_json = analyze_desk_probe(pre_reports, post_reports, probe_ts, cfg)
             diag = {}
@@ -398,10 +455,25 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
             )
             record["reflex_verdict"] = map_l6b_classification_to_reflex_verdict(result.classification)
             record["r2_at_probe"] = r2_at_probe
+            record["trial_kind"] = kind
+            if catch_on:
+                from l9_presence.poep_catch_trials import score_trial as _score_trial
+                sc = _score_trial(
+                    kind,
+                    peak_lsb=float(result.accel_delta_peak or 0.0),
+                    latency_ms=result.latency_ms,
+                    live_verify_ok=bool(record["verify"]["ok"]),
+                )
+                catch_scores.append(sc)
+                record["catch"] = {
+                    "human_ok": sc.human_ok,
+                    "reason": sc.reason,
+                    "always_fire_caught": sc.always_fire_caught,
+                }
             records.append(record)
 
-            # persist the reflex to the corpus too (same path as the N=52 edge-reflex corpus)
-            if store is not None:
+            # persist GO reflexes to corpus; skip NO_GO so they don't pollute usable N
+            if store is not None and stimulus:
                 try:
                     persist_desk_probe(
                         store,
@@ -421,7 +493,7 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
             # SILENT during the run — no per-fire output (a post-fire cadence marks challenge
             # boundaries; keeping it silent removes that inter-challenge structure entirely). Results
             # print AFTER the run.
-            if record["verify"]["ok"]:
+            if record["verify"]["ok"] and stimulus:
                 n_ok += 1
     except KeyboardInterrupt:
         print("\n  (interrupted)")
@@ -439,6 +511,10 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
             pass
 
     # write the audit artifact (P-LIVE-0 candidate evidence; NOT a flip)
+    # T2: session-stamped filename — same player same day no longer overwrites prior blocks.
+    now_utc = datetime.now(timezone.utc)
+    t0_ns = records[0]["t_challenge_ns"] if records else time.time_ns()
+    sid = local_session_id(args.player, int(t0_ns))
     audit = {
         "schema": "qortroller-poep-live-capture-v1",
         "candidate": True,
@@ -446,13 +522,19 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
         "device_id": device_id,
         "policy_ref": policy_ref,
         "player": args.player,
-        "captured_utc": datetime.now(timezone.utc).isoformat(),
+        "session_id": sid,                 # local bookkeeping only — not FROZEN-v1
+        "captured_utc": now_utc.isoformat(),
         "reaction_band_ms": list(REACTION_BAND_MS),
         "silent_fire": True,               # F-POEP-LIVE-1 (i): silent continuous-poll fire (no stdout / poll-burst tell)
         "schedule_bound": True,            # F-POEP-LIVE-1 (ii): independent CSPRNG delay + schedule commitment
         "waveform_captured": True,         # FLIP-A rung 2: raw reflex curve stored per record (run poep_waveform_analyze.py)
         "n_challenges": len(records),
         "n_live_verify_pass": n_ok,
+        "catch_trials": bool(catch_on),
+        "catch_summary": (
+            __import__("l9_presence.poep_catch_trials", fromlist=["score_session"]).score_session(catch_scores)
+            if catch_on and catch_scores else None
+        ),
         "claim": "candidate live nonce-challenge evidence on the registered Edge; each PASS = a reflex "
                  "causally bound to a live unpredictable stimulus. Closes replay + pre-scheduled + "
                  "stdout-tell + poll-burst pre-tell macros (silent CONTINUOUS-poll fire + independent-CSPRNG "
@@ -464,18 +546,29 @@ def run_live_capture(args: argparse.Namespace) -> int:  # pragma: no cover - har
     }
     out_dir = REPO_ROOT / "audits"
     out_dir.mkdir(exist_ok=True)
-    out_path = out_dir / f"poep_live_capture_{args.player}_{_iso_date()}.json"
+    out_path = audit_capture_path(out_dir, args.player, when=now_utc)
     out_path.write_text(json.dumps(audit, indent=2), encoding="utf-8")
 
     print("=" * 66)
     print("  RESULTS (printed after the run — the session itself was silent):")
     for r in records:
         v = r["verify"]
-        line = (f"  #{r['challenge_index']:>2}  latency={r['latency_ms']}ms  peak={r['peak_lsb']} LSB  "
+        kind = r.get("trial_kind", "GO")
+        line = (f"  #{r['challenge_index']:>2}  [{kind:<5}]  latency={r['latency_ms']}ms  peak={r['peak_lsb']} LSB  "
                 f"class={r['classification']}  -> LIVE-VERIFY {'PASS' if v['ok'] else 'FAIL'}")
+        if r.get("catch"):
+            line += f"  catch_human_ok={r['catch']['human_ok']}"
         print(line)
-        if not v["ok"]:
+        if not v["ok"] and kind == "GO":
             print(f"        reasons: {', '.join(v['reasons'])}")
+        if kind == "NO_GO" and r.get("catch") and not r["catch"]["human_ok"]:
+            print(f"        catch: {r['catch']['reason']} (peak on no-go — FA or twitch)")
+    if catch_on and catch_scores:
+        from l9_presence.poep_catch_trials import score_session
+        summ = score_session(catch_scores)
+        print("-" * 66)
+        print(f"  CATCH SUMMARY: nogo={summ['n_nogo']}  human_fa_rate={summ['human_fa_rate']}  "
+              f"fa_ok={summ['human_fa_ok']}  (always-fire bar is harness-measured)")
     print("-" * 66)
     print(f"  LIVE-VERIFY PASS: {n_ok}/{len(records)}   (poep_enabled=False -- candidate only)")
     print(f"  Audit: {out_path}")
@@ -519,6 +612,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-store", action="store_true", help="Dry-run: do not persist reflexes to DB")
     parser.add_argument("--bridge-url", default="http://localhost:8080", dest="bridge_url",
                         help="Health check URL (must be down)")
+    parser.add_argument("--catch", action="store_true",
+                        help="Enable go/no-go catch trials (~20%% NO_GO, no force write)")
+    parser.add_argument("--catch-ratio", type=int, default=4, dest="catch_ratio",
+                        help="GO per NO_GO (default 4 → 4:1)")
     return parser
 
 

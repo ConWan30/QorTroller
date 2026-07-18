@@ -238,6 +238,7 @@ def persist_desk_probe(
             cco_profile_id=cco_profile_id,
             policy_ref=policy_ref,   # campaign tag when overridden (e.g. edge_operator_reflex_v1)
             trigger_r2_at_probe=r2_at_probe,
+            player=player,           # A2A-POEP-CORPUS-TOOLING: multi-op corpus tag
         )
         store.insert_l6b_probe_diagnostic(
             device_id=device_id,

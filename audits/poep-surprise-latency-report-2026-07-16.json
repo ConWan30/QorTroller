@@ -1,0 +1,170 @@
+{
+  "schema": "qortroller-poep-surprise-latency-report-v0",
+  "date": "2026-07-16",
+  "policy_ref": "edge_operator_reflex_v1",
+  "band_ms": [
+    80.0,
+    450.0
+  ],
+  "peak_floor_lsb": 1000.0,
+  "held_out_rule": "per-player chronological verify-pass: train=70%, holdout rest",
+  "ceiling_draft_rule": "min(450.0, ceil(p95_train+15.0))",
+  "poep_enabled": false,
+  "band_frozen": false,
+  "player_source": "column",
+  "n_rows": 134,
+  "players": {
+    "P1": {
+      "n_all": 78,
+      "n_verify": 57,
+      "latency": {
+        "n": 57,
+        "mean": 347.0,
+        "stdev": 43.76,
+        "min": 253.7,
+        "p5": 276.982,
+        "median": 346.426,
+        "p95": 419.834,
+        "max": 449.6
+      },
+      "held_out": {
+        "n_train": 39,
+        "n_holdout": 18,
+        "train": {
+          "n": 39,
+          "mean": 351.99,
+          "stdev": 48.24,
+          "min": 253.7,
+          "p5": 261.187,
+          "median": 358.426,
+          "p95": 426.522,
+          "max": 449.6
+        },
+        "holdout": {
+          "n": 18,
+          "mean": 336.2,
+          "stdev": 30.42,
+          "min": 280.75,
+          "p5": 282.934,
+          "median": 342.36,
+          "p95": 372.683,
+          "max": 373.35
+        }
+      }
+    },
+    "P2": {
+      "n_all": 36,
+      "n_verify": 31,
+      "latency": {
+        "n": 31,
+        "mean": 329.61,
+        "stdev": 33.4,
+        "min": 271.66,
+        "p5": 274.503,
+        "median": 324.427,
+        "p95": 380.773,
+        "max": 387.96
+      },
+      "held_out": {
+        "n_train": 21,
+        "n_holdout": 10,
+        "train": {
+          "n": 21,
+          "mean": 331.91,
+          "stdev": 33.6,
+          "min": 271.66,
+          "p5": 275.736,
+          "median": 337.195,
+          "p95": 378.182,
+          "max": 383.36
+        },
+        "holdout": {
+          "n": 10,
+          "mean": 324.78,
+          "stdev": 34.23,
+          "min": 273.27,
+          "p5": 284.62,
+          "median": 319.182,
+          "p95": 378.611,
+          "max": 387.96
+        }
+      }
+    },
+    "P3": {
+      "n_all": 20,
+      "n_verify": 19,
+      "latency": {
+        "n": 19,
+        "mean": 334.59,
+        "stdev": 63.93,
+        "min": 230.72,
+        "p5": 254.43,
+        "median": 317.916,
+        "p95": 430.383,
+        "max": 430.4
+      },
+      "held_out": {
+        "n_train": 13,
+        "n_holdout": 6,
+        "train": {
+          "n": 13,
+          "mean": 365.55,
+          "stdev": 50.92,
+          "min": 292.3,
+          "p5": 293.284,
+          "median": 376.544,
+          "p95": 430.388,
+          "max": 430.4
+        },
+        "holdout": {
+          "n": 6,
+          "mean": 267.5,
+          "stdev": 24.4,
+          "min": 230.72,
+          "p5": 237.307,
+          "median": 266.07,
+          "p95": 296.212,
+          "max": 299.88
+        }
+      }
+    }
+  },
+  "pooled": {
+    "n_verify": 107,
+    "latency": {
+      "n": 107,
+      "mean": 339.76,
+      "stdev": 45.66,
+      "min": 230.72,
+      "p5": 264.837,
+      "median": 341.166,
+      "p95": 423.331,
+      "max": 449.6
+    }
+  },
+  "held_out": {
+    "train": {
+      "n": 73,
+      "mean": 348.63,
+      "stdev": 45.97,
+      "min": 253.7,
+      "p5": 274.106,
+      "median": 350.041,
+      "p95": 427.822,
+      "max": 449.6
+    },
+    "holdout": {
+      "n": 34,
+      "mean": 320.72,
+      "stdev": 39.2,
+      "min": 230.72,
+      "p5": 257.295,
+      "median": 325.075,
+      "p95": 372.84,
+      "max": 387.96
+    },
+    "p95_train": 427.822,
+    "ceiling_draft_ms": 443,
+    "margin_ms": 15.0
+  }
+}
