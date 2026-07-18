@@ -117,15 +117,16 @@ def test_register_dry_run_honest_shape():
     assert res.pending_prereqs and any("VAPIGamerControllerNFT" in p for p in res.pending_prereqs)
 
 
-def test_register_non_dry_run_refuses_to_fabricate():
-    """A non-dry-run call must RAISE (registration is blocked on prereqs + real send not
-    wired), never fabricate a tx/tokenId/TBA like the old skeleton did."""
+def test_register_non_dry_run_without_prereqs_fails_closed():
+    """Inc-D: a non-dry-run call WITHOUT the Inc-A/Inc-C prerequisites (a real deployed
+    device_contract + a minted tokenId) must FAIL-CLOSED via assert_option_a_register_ready --
+    never fabricate a tx/tokenId/TBA. device_contract defaults to the zero placeholder here."""
     w3 = _make_mock_web3(nonce_return=0)
     pin = MagicMock()
     pin.pin_json.return_value = "bafytestcid456"
     gamer = Account.create()
 
-    with pytest.raises(NotImplementedError, match="not wired"):
+    with pytest.raises(ValueError, match="device_contract"):
         register_controller_ioid(
             web3=w3,
             device_id_hex=GOLDEN_DEVICE_ID,
@@ -137,7 +138,51 @@ def test_register_non_dry_run_refuses_to_fabricate():
             pinata_client=pin,
             ioid_registry_address=PERMIT_REGISTRY,
             dry_run=False,
+        )  # device_contract/token_id default to placeholders -> the guard refuses
+
+
+def test_register_non_dry_run_option_a_signer_must_be_sender():
+    """Inc-D: with real prereqs but a gamer_private_key whose address != the gamer EOA, the send
+    is refused (Option A: the permit signer MUST be the tx sender; ecrecover would fail otherwise).
+    Trips before any chain write."""
+    w3 = _make_mock_web3(nonce_return=0)
+    pin = MagicMock(); pin.pin_json.return_value = "bafytestcid456"
+    gamer = Account.create()          # the declared gamer EOA
+    other = Account.create()          # a DIFFERENT key
+    with pytest.raises(ValueError, match="signer must be the tx sender"):
+        register_controller_ioid(
+            web3=w3, device_id_hex=GOLDEN_DEVICE_ID, p256_pubkey_hex=GOLDEN_PUBKEY,
+            gamer_address=gamer.address, gamer_private_key=other.key.hex(),
+            birth_cert_cid="bafyreal", mfg_registry_tx=None, pinata_client=pin,
+            ioid_registry_address=PERMIT_REGISTRY, dry_run=False,
+            device_contract="0x" + "cc" * 20, token_id=1,
         )
+
+
+def test_ioid_minted_token_id_parser():
+    """Inc-D: the ioID DID tokenId readback parser (load-bearing, per the Inc-C lesson).
+    Owner-AGNOSTIC (any `to`), requires the ioID contract + from==0x0 + a 4-topic Transfer;
+    skips ERC-20-shaped 3-topic logs and foreign contracts; never IndexErrors."""
+    from vapi_bridge.controller_ioid_registration import _ioid_minted_token_id, _TRANSFER_TOPIC0
+    IOID = "0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7"
+    zero = "0x" + "00" * 32
+    to_topic = "0x" + "00" * 12 + "ab" * 20
+
+    class _L:
+        def __init__(s, address, topics): s.address, s.topics = address, topics
+
+    def mint(tid, contract=IOID):
+        return _L(contract, [_TRANSFER_TOPIC0, zero, to_topic, "0x" + f"{tid:064x}"])
+
+    assert _ioid_minted_token_id([mint(497)], IOID) == 497                       # owner-agnostic hit
+    assert _ioid_minted_token_id([mint(5, contract="0x" + "ee" * 20)], IOID) is None  # foreign contract
+    # from != 0 (a plain transfer, not a mint) -> skipped
+    non_mint = _L(IOID, [_TRANSFER_TOPIC0, to_topic, to_topic, "0x" + f"{9:064x}"])
+    assert _ioid_minted_token_id([non_mint], IOID) is None
+    # ERC-20-shaped 3-topic Transfer with the same topic0 -> skipped, no IndexError
+    erc20 = _L(IOID, [_TRANSFER_TOPIC0, zero, to_topic])
+    assert _ioid_minted_token_id([erc20], IOID) is None
+    assert _ioid_minted_token_id([], IOID) is None
 
 
 def test_permit_flow_reads_live_nonce_with_mocked_web3():
@@ -346,3 +391,94 @@ def test_inc_b_f1_assembled_hash_is_full_32_bytes_and_device_is_gamer(monkeypatc
     assert captured["did_hash"] == bytes(expected)
     # F4: device slot is the gamer (checksummed), not the truncated device_id.
     assert captured["device"].lower() == gamer.lower()
+
+
+# ── Inc-D real-send end-to-end (mocked web3), incl. grok r07 F1 fail-closed ────
+def _make_send_mock_web3(*, status, mint_logs, tba, price_wei=10**17, nonce=0):
+    """Mock web3 for the Inc-D real send: nonces/price/register(estimate+build)/send/receipt/wallet."""
+    from web3 import Web3 as _W3
+    w3 = MagicMock()
+    w3.to_checksum_address = staticmethod(lambda a: _W3.to_checksum_address(a))
+
+    def _contract(address=None, abi=None):
+        c = MagicMock()
+        c.functions.nonces.return_value.call.return_value = nonce
+        c.functions.price.return_value.call.return_value = price_wei
+        reg = MagicMock()
+        reg.estimate_gas.return_value = 120000
+        reg.build_transaction.side_effect = lambda p: {
+            "to": _W3.to_checksum_address(address), "data": "0x",
+            "nonce": p["nonce"], "gas": p["gas"], "gasPrice": p["gasPrice"],
+            "chainId": p["chainId"], "value": p["value"],
+        }
+        c.functions.register.return_value = reg
+        c.functions.wallet.return_value.call.return_value = (tba, "did:io:controller")
+        return c
+
+    w3.eth.contract.side_effect = _contract
+    w3.eth.gas_price = 10 ** 12
+    w3.eth.get_transaction_count.return_value = nonce
+    w3.eth.send_raw_transaction.return_value = bytes.fromhex("ab" * 32)
+    rcpt = MagicMock(); rcpt.status = status; rcpt.logs = mint_logs
+    w3.eth.wait_for_transaction_receipt.return_value = rcpt
+    return w3
+
+
+def _ioid_mint_log(token_id, to_addr):
+    from vapi_bridge.controller_ioid_registration import _TRANSFER_TOPIC0
+    IOID = "0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7"
+
+    class _L:
+        def __init__(s, address, topics): s.address, s.topics = address, topics
+    zero = "0x" + "00" * 32
+    to_t = "0x" + "00" * 12 + to_addr.replace("0x", "")
+    return _L(IOID, [_TRANSFER_TOPIC0, zero, to_t, "0x" + f"{token_id:064x}"])
+
+
+def _real_send(w3, gamer, pin):
+    return register_controller_ioid(
+        web3=w3, device_id_hex=GOLDEN_DEVICE_ID, p256_pubkey_hex=GOLDEN_PUBKEY,
+        gamer_address=gamer.address, gamer_private_key=gamer.key.hex(),
+        birth_cert_cid="bafyreal", mfg_registry_tx=None, pinata_client=pin,
+        ioid_registry_address=PERMIT_REGISTRY, dry_run=False,
+        device_contract="0x" + "cc" * 20, token_id=1)
+
+
+def test_inc_d_real_send_happy_path_returns_id_and_tba():
+    tba = "0x" + "dd" * 20
+    w3 = _make_send_mock_web3(status=1, mint_logs=[_ioid_mint_log(497, "0x" + "ab" * 20)], tba=tba)
+    pin = MagicMock(); pin.pin_json.return_value = "bafycid"
+    gamer = Account.create()
+    res = _real_send(w3, gamer, pin)
+    assert res.dry_run is False
+    assert res.ioid_token_id == 497
+    assert res.tba_address.lower() == tba.lower()
+    assert res.tx_hash and res.tx_hash.startswith("0x")
+    assert res.pending_prereqs is None
+    # value == price was sent (pay-as-you-go fee)
+    sent = w3.eth.wait_for_transaction_receipt.called
+    assert sent
+
+
+def test_inc_d_real_send_status1_but_no_mint_log_raises():
+    """grok r07 F1: mined status=1 with no ioID mint Transfer must NOT return success-shaped None."""
+    w3 = _make_send_mock_web3(status=1, mint_logs=[], tba="0x" + "dd" * 20)
+    pin = MagicMock(); pin.pin_json.return_value = "bafycid"
+    with pytest.raises(RuntimeError, match="NO ioID mint Transfer"):
+        _real_send(w3, Account.create(), pin)
+
+
+def test_inc_d_real_send_zero_tba_raises():
+    """grok r07 F1: a zero TBA from ioID.wallet() must fail-closed, not report success."""
+    w3 = _make_send_mock_web3(status=1, mint_logs=[_ioid_mint_log(497, "0x" + "ab" * 20)],
+                              tba="0x" + "00" * 20)
+    pin = MagicMock(); pin.pin_json.return_value = "bafycid"
+    with pytest.raises(RuntimeError, match="zero/empty TBA"):
+        _real_send(w3, Account.create(), pin)
+
+
+def test_inc_d_real_send_reverted_status_raises():
+    w3 = _make_send_mock_web3(status=0, mint_logs=[], tba="0x" + "dd" * 20)
+    pin = MagicMock(); pin.pin_json.return_value = "bafycid"
+    with pytest.raises(RuntimeError, match="register reverted"):
+        _real_send(w3, Account.create(), pin)
