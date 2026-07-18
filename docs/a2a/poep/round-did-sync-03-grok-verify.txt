@@ -1,0 +1,102 @@
+I'll verify the poep-did-sync build against the five r01 bars and your r02 refinements — adversarial, identity/provenance only.Next I'll check sealed modules for empty diffs, run the test suite, and scan for overclaim/lane-leak tokens.Empty-device guard is a residual anti-assertion gap, not a r01 bar hit. Confirming one more composition edge, then writing the r03 verdict.# r03 VERIFY — poep-did-sync BUILD
+
+**VERDICT: PASS**  
+Identity/provenance only. Zero liveness. Charter (a).
+
+---
+
+## Findings first
+
+**Bar hits: none.**
+
+Residual notes (not bar failures; not blocking):
+
+1. **Empty/missing `presence_summary.device_id` does not refuse attach** — guard is `if ps_dev and link_dev and ps_dev != link_dev`, so empty/absent session device_id still attaches (verdict `IDENTITY_ONLY`). Mismatch when both are non-empty **does** refuse. Soft anti-assertion gap vs r02 “fail closed”; does **not** invent `device_did` or advance candidate bits.
+2. **Denylist is shorter than full r02 list** — covers the load-bearing tokens (`device_did`, edge-did variants, sovereign-device phrases, `stronger liveness`). Mechanical on JSON + keys + `poep_did_sync.py` source. Not a bar-1 miss: no banned token appears in emit path or module.
+3. **Naming nits only** — `compute_live_seal_v2` vs r02’s `v02`; `attach_session_identity` vs brainstorm’s `enrich_summary_with_identity`. Behavior matches H2 / wrap design.
+
+---
+
+## Bar scorecard
+
+| # | Bar | Result |
+|---|-----|--------|
+| 1 | Overclaim (DID names silicon) | **PASS** |
+| 2 | Lane-leak (candidate/liveness stronger) | **PASS** |
+| 3 | Presence model byte-untouched + dry honest-null | **PASS** |
+| 4 | `poep_enabled` / L6B / L6_CHALLENGES stay False | **PASS** |
+| 5 | Non-goals (no opt 3/4, zero spend, zero new flags) | **PASS** |
+
+---
+
+### Bar 1 — overclaim
+
+- Schema wrap: `qortroller-poep-session-identity-attach-v0` (not flat-merge into v0.1).
+- `owner_did` **outside** `device_to_owner_link`; link keys only  
+  `{device_id, vmdr_pubkey_hash, controller_nft, controller_nft_token_id, tba_address}` — **no** `did` / `device_did` in link.
+- Machine subject: `did_subject == "gamer_wallet"`, `did_names_silicon is False`.
+- Grep of module: no `device_did`, no sovereign-device phrasing, no “Edge’s DID”.
+- Nested `controller_presence.ioid.did` is the gamer DID on the identity surface (not a silicon DID field).
+
+### Bar 2 — lane-leak
+
+- Top-level `advances_poep_enabled` / `advances_presence_session_candidate` both **False**; `advisory: True`; `identity_lane == "identity-provenance"`.
+- `presence_summary` deep-copied; candidate / plumbing / `effective_live` not re-scored.
+- Dry input (`presence_session_candidate_ok=False`) → nested summary stays False; composition verdict `IDENTITY_ONLY` (not SYNCHRONIZED). No “stronger liveness” / promotion language.
+
+### Bar 3 — model untouched
+
+- `git diff` on `poep_gameplay_session.py` + `poep_gameplay_live.py` = **empty**.
+- `compute_live_seal` v0 golden preimage unchanged (test + recompute).
+- `compute_live_seal_v2` is a **new** domain  
+  `QORTROLLER-POEP-GAMEPLAY-LIVESEAL-v0.2-CANDIDATE` with H2 preimage  
+  `|nft|token_id|tba` — different TBA ⇒ different seal; v0 path not dual-accepted under one function.
+
+### Bar 4 — flags
+
+- Module never reads/writes config or env; only emits hard non-claims `False`.
+- No path sets `poep_enabled` / L6B / L6_CHALLENGES.
+
+### Bar 5 — non-goals
+
+- No option-3 node-ledger genesis; no option-4 TBA self-attest; no chain write; no new flags.
+
+---
+
+## r02 design compliance (build facts)
+
+| r02 item | Build |
+|----------|--------|
+| Wrap schema not flat-merge | `ATTACH_SCHEMA` + nested `presence_summary` |
+| `device_to_owner_link` (not `device_identity_chain`) | Yes |
+| Explicit `did_subject` + `did_names_silicon` | Yes |
+| Seal H2 custody (nft + token_id + tba) | Yes |
+| Reuse `build_controller_presence` dual-bit + mismatch | Yes |
+| `claim_ceiling` byte-equal r01 open | **Yes** (362 == 362; test reads `round-did-sync-01-claude-open.md` `>` lines) |
+| Pytest denylist mechanical | JSON dumps + key walk + source file for `device_did` and peers |
+
+---
+
+## Mechanical gates run
+
+| Gate | Result |
+|------|--------|
+| `test_poep_did_sync` (10) | pass |
+| + controller_presence + gameplay session/live | **46 pass** (user’s 36 = 10+10+16 without live file; live golden also green) |
+| PV-CI | **PASS — 184** |
+| Sealed gameplay modules | empty git diff |
+
+---
+
+## Denylist / ceiling confirmation (adversarial)
+
+- **Token denylist is mechanical**, not prose-only:  
+  - full `json.dumps(out).lower()`  
+  - recursive key walk for `device_did`  
+  - `poep_did_sync.py` source lowercased  
+  Injecting `device_did` into JSON would fail the test.
+- **Ceiling test is real file-read**, not a self-echo: extracts r01 blockquote lines and asserts `para == CLAIM_CEILING` (ASCII `->` / `...`; Windows `splitlines` safe).
+
+---
+
+**Staging gate:** bars clear. Residual empty-device guard is optional follow-up polish, not a r03 FIX. Operator may commit with `controller_presence.py` + this arc as planned.

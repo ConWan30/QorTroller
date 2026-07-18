@@ -1,0 +1,385 @@
+# A2A POEP-DID-SYNC r02 — GROK FORWARD BRAINSTORM (options 1+2)
+# Charter ruling (a): design guidance + FIX-before-build. NOT a verdict. NOT a build.
+# Identity/provenance only. ZERO liveness content. Ceiling pinned in r01 open.
+
+Envelope: poep-did-sync-r02.
+Spend: ZERO. Flags: unchanged. No code. No c# POEP-DID-SYNC r02 — Forward brainstorm (not a verdict)
+
+Written to `docs/a2a/poep/round-did-sync-02-grok-brainstorm.txt`. Design guidance + FIX-before-build only.
+
+Claude’s skeleton is pointed correctly (new module, no sealed edit, `owner_did` not `device_did`, new seal domain). The failures that will still hit r03 bars 1–2 live in **field names**, **schema seam**, and **one false seal claim**.
+
+---
+
+### 1) Copy-not-mutate — right sealed seam, wrong schema seam if flat-merged
+
+Copy-not-mutate is the right way to leave `summarize_session` / v0.1 alone.
+
+**Pitfall:** deep-copy + flat-merge that still advertises `schema: qortroller-poep-gameplay-session-v0.1` makes identity look like presence-schema growth (soft lane-leak).
+
+**Prefer wrap (A):**
+
+```text
+schema: qortroller-poep-session-identity-attach-v0
+presence_summary: <exact v0.1 summary copy>
+identity: { owner_did, link, ioid_token_id, registration_tx, ... }
+claim_ceiling / identity_lane / advances_*=false
+```
+
+Join/guard: `presence_summary.device_id` must match link `device_id`. Never re-score candidate/plumbing bits.
+
+---
+
+### 2) Ceiling + `identity_lane` are not enough against “device DID”
+
+Prose drops first; names survive.
+
+| Problem | Fix before build |
+|--------|------------------|
+| `device_identity_chain` reads as device identity | Rename → `device_to_owner_link` or `device_custody_chain` |
+| No machine subject | **`did_subject: "gamer_wallet"`** (+ optional `did_names_silicon: false`) |
+| DID nested in “device” blob | Keep `owner_did` **outside** the link; no `did` / `device_did` keys inside |
+
+Link keys only: `device_id`, `vmdr_pubkey_hash`, `controller_nft`, `controller_nft_token_id`, `tba_address`.
+
+---
+
+### 3) Seal v0.2 — new domain yes; **custody-epoch claim is currently false**
+
+**New domain is correct** (`…-v0.2-CANDIDATE`). Do not same-domain-append.
+
+**Critical FIX:** binding only `controller_nft_token_id` does **not** distinguish NFT/TBA-custody epochs. TokenId is stable across transfer.
+
+Pick one and pin in the module docstring:
+
+- **H1 (minimal):** token_id only → claim **NFT-instance epoch** only; drop “custody” language.
+- **H2 (if you want open-doc custody prose):** preimage must include a holder that moves on transfer, e.g. `|nft|token_id|tba_address` (and/or `owner_did`).
+
+Do not dual-accept v0/v0.2 under one verify without an explicit version. Leave `compute_live_seal` v0 golden vectors untouched.
+
+---
+
+### 4) Names that still overclaim
+
+- Flat `owner_did` / `ioid_token_id` on the presence blob → “ioID-authenticated play session.”
+- `identity_advisory` alone is soft — mirror `controller_presence`: `advances_poep_enabled: false`, `advances_presence_session_candidate: false`.
+- Don’t overwrite presence `claim`; identity uses `claim_ceiling` only.
+- Ban keys/phrases: `device_did`, sovereign-device, edge-DID, “stronger liveness,” etc.
+
+Align with existing `controller_presence` dual-bit composition; don’t invent a third “session proves ownership” story.
+
+---
+
+### 5) Tests that make r03 bars 1–2 mechanical
+
+- **Token denylist** on full JSON, all keys, all string values, and `poep_did_sync.py` source (`device_did`, “edge’s did”, “sovereign identity of the device”, “stronger liveness”, …).
+- **Byte-equal** `claim_ceiling` to the r01 pinned paragraph.
+- **Pass-through:** enrich never changes `presence_session_candidate_ok` / `dry_plumbing_ok` / `effective_live` / `poep_enabled`.
+- **Mutation:** input summary unchanged after call.
+- **Guard:** device_id mismatch → hard fail.
+- **Seal:** v0 golden unchanged; v0.2 new domain; H1 vs H2 tested honestly (if H2, different `tba` ⇒ different seal).
+- Optional: feed attach into `build_controller_presence` → IDENTITY_ONLY vs SYNCHRONIZED without OR-merge.
+
+---
+
+### One-line for Claude
+
+Ship a **wrap-schema identity attachment** with explicit **`did_subject: gamer_wallet`**, a link object that **cannot be named as a DID**, seal **v0.2 under a new domain** with an **honest epoch claim** (token_id alone ≠ TBA custody), and a **pytest denylist** for overclaim. Perfect prose does not fix bad field names or a false seal sentence.
+
+Full checklist is in the brainstorm file. Ready for Claude r02 build against those FIX-before-build items — still not a PASS/FAIL from me.
+ pin in tests):
+       preferred:  `device_to_owner_link`  or  `device_custody_chain`
+       avoid:      `device_identity_chain`, `device_did_chain`, `ioid_device`
+  2. Add explicit subject field (boolean-machine, not prose):
+       `"did_subject": "gamer_wallet"`
+     Optional dual-negative for scanners:
+       `"did_names_silicon": false`
+  3. NEVER place any key named `did`, `device_did`, or `did:io:...` *inside*
+     the chain object. Chain keys only:
+       device_id, vmdr_pubkey_hash, controller_nft, controller_nft_token_id,
+       tba_address
+     (owner_did / ioid_token_id live *outside* the chain, as wallet-side fields.)
+  4. Optional hop-order list for stranger walk (no collapse to one token):
+       `"link_hops": ["device_pubkey_hash", "controller_nft", "tba", "owner_did"]`
+     documentary; not a commitment preimage unless you later decide so.
+
+Ceiling paragraph still ships **verbatim** as `claim_ceiling` (r01 requirement).
+Lane tag still ships. They are necessary; they are not sufficient without (1)+(2).
+
+Mirror controller_presence discipline: identity material is a *surface*, not a
+rename of the device.
+
+----------------------------------------------------------------------
+3. SEAL v0.2 — NEW DOMAIN vs SAME-DOMAIN-APPEND
+----------------------------------------------------------------------
+
+**New domain is correct.** Do not same-domain-append.
+
+  v0 domain (SEALED behavior):  QORTROLLER-POEP-GAMEPLAY-LIVESEAL-v0-CANDIDATE
+  v0.2 domain (NEW):            QORTROLLER-POEP-GAMEPLAY-LIVESEAL-v0.2-CANDIDATE
+
+Why not append on the same domain string:
+  - Verifiers that only know v0 will mis-handle longer preimages or silently
+    accept wrong length if they slice/stop early.
+  - Cross-version confusion: same tag, different field count = audit nightmare.
+  - Repo convention for candidate tags is version-in-tag (v0 / v0.2), not silent
+    preimage growth.
+
+**Binding subtlety — CRITICAL FIX before build (claim vs preimage mismatch):**
+
+Claude / open doc claim:
+  "v0.2 distinguishes NFT/TBA-custody epochs… If the controller NFT were ever
+   transferred out of the TBA / the DID reissued, pre- and post-custody seals
+   are cryptographically distinguishable."
+
+Proposed preimage append: only `|controller_nft_token_id`.
+
+**That claim is false under that preimage.** ERC-721 tokenId is stable across
+transfer. tokenId 1 remains 1 whether TBA holds it or a stranger does. Binding
+only token_id distinguishes *which NFT instance*, not *who holds it*.
+
+Honest options (pick before code; do not ship the false epoch claim):
+
+  (H1) **Honest narrow claim (minimal preimage):**
+       Append only controller_nft_token_id (and optionally contract address).
+       Document epoch as: **NFT-instance epoch** (different tokenId → different
+       seal). Explicitly: **does NOT** detect TBA transfer / custody change.
+       Rename mental model away from "custody epoch" in every string/test doc.
+
+  (H2) **True custody-epoch claim (recommended if you want the open-doc prose):**
+       Preimage append must include a custody locator that *changes* on transfer,
+       e.g. `|controller_nft|token_id|tba_address` (or `|owner_did`).
+       Then the open-doc custody-epoch sentence is true.
+       Still NEW domain v0.2. Still candidate.
+
+  (H3) **Do not bind registration_tx into the live seal** as a stand-in for
+       custody — that is ceremony provenance (one-time), not ongoing custody.
+
+Also pin:
+  - `compute_live_seal(...)` v0 stays byte-identical (golden vectors in
+    test_poep_gameplay_live.py must not move).
+  - Prefer `compute_live_seal_v02(...)` (or kwargs only on a *new* function) —
+    never add optional trailing args to v0 that change default domain.
+  - `verify_live_seal` stays v0-only unless a separate `verify_live_seal_v02`
+    is added; do not dual-accept under one function without an explicit
+    `seal_version` argument (version-confusion risk).
+
+Process nonce + session_id + device_id + t_start_ns remain; v0.2 only *adds*
+custody/instance fields after a new domain tag.
+
+----------------------------------------------------------------------
+4. FIELD NAMES THAT STILL ENABLE OVERCLAIM
+----------------------------------------------------------------------
+
+Even with correct values, these names greases wrong narratives:
+
+| Name / shape                         | Risk                                      | Safer shape |
+|--------------------------------------|-------------------------------------------|-------------|
+| `device_identity_chain`               | "device DID" collapse                     | `device_to_owner_link` / `device_custody_chain` |
+| flat `owner_did` on presence schema  | "this presence session is DID-certified"  | nest under `identity` + new schema |
+| `identity_advisory` alone            | soft; without advances_* looks optional  | + `advances_poep_enabled: false` + `advances_presence_session_candidate: false` (mirror controller_presence) |
+| `ioid_token_id` at top level         | "ioID authenticated this play session"    | nest; comment: ceremony id, not session auth |
+| `registration_tx` without role       | "tx proves presence"                      | keep; pair with claim_ceiling; role = ioID register only |
+| `controller_nft` naming              | fine if inside link object                | do not call it `device_did_nft` |
+| any key `*sovereign*`                | bar-1 magnet                              | ban in denylist |
+| `lane: "identity-provenance"`        | good                                      | keep exact string; test equality |
+| reusing summary key `claim`          | presence claim string is liveness-shaped  | use `claim_ceiling` only for identity attach; do not overwrite summary["claim"] |
+
+**Non-claim machine fields (strongly recommend, already proven pattern):**
+  advances_poep_enabled: false
+  advances_presence_session_candidate: false
+  identity_advisory: true          # or advisory: true inside identity block
+  identity_lane: "identity-provenance"
+  did_subject: "gamer_wallet"
+  did_names_silicon: false
+
+Do **not** add:
+  device_did, sovereign_did, edge_did, presence_did, authenticated_did,
+  identity_verified_session, did_bound_presence, custody_proves_human, etc.
+
+Constants from r01 table are fine as test fixtures / optional defaults behind
+an explicit "live ceremony constants" helper — but the wrapper should take them
+as **arguments**, not hard-bind the single Edge as the only legal device without
+a guard. Guard already requires summary.device_id == chain.device_id — keep that;
+do not silently overwrite summary.device_id with the ceremony Edge.
+
+Normalize comparison: hex case / 0x prefix. Fail closed on mismatch (ValueError),
+never "soft warn and attach."
+
+----------------------------------------------------------------------
+5. WHAT TESTS MUST ASSERT SO r03 BARS 1–2 ARE MECHANICAL
+----------------------------------------------------------------------
+
+Bars 1–2 are string/field overclaim + lane-leak. Make them greppable and
+pytest-hard, not human prose review only.
+
+### 5.1 Token denylist (bar 1) — apply to:
+  - entire emitted JSON (json.dumps(sort_keys=True))
+  - all keys (recursive)
+  - all string values
+  - module source of poep_did_sync.py
+  - docstring / claim_ceiling if assembled in code
+
+DENYLIST tokens (case-insensitive substring scan; expand as needed):
+  device_did
+  edge's did
+  edge did
+  device's sovereign
+  sovereign identity of the device
+  silicon did
+  did names the device
+  did names the silicon
+  did names the edge
+  the edge whose sovereign
+  device sovereign
+  presence strengthened
+  stronger liveness
+  liveness improved
+  humanity
+  proves human
+  poep_enabled.*true   (as claim text; flags stay false)
+  advances_poep_enabled.: true
+  advances_presence_session_candidate.: true
+
+Positive allowlist anchors:
+  owner_did present
+  did_subject == "gamer_wallet"   (if adopted)
+  "gamer wallet" appears in claim_ceiling
+  claim_ceiling == PINNED_CEILING_VERBATIM (byte equality, not "contains")
+  identity_lane == "identity-provenance"
+  no key == "device_did" anywhere in tree
+
+### 5.2 Lane-leak scan (bar 2) — assert identity attach never:
+  - changes presence_session_candidate_ok / dry_plumbing_ok / effective_live /
+    live_hardware / activity_trusted vs the input summary (deep equality on
+    those keys after wrap)
+  - sets poep_enabled True
+  - sets is_presence_verdict True
+  - rewrites summary["claim"] (presence FLIP-A string stays inside
+    presence_summary only)
+  - introduces keys that look like presence upgrades
+    (e.g. identity_presence_ok, did_session_candidate)
+
+### 5.3 Model byte-untouched (bar 3) — mechanical:
+  - test that does not import-patch summarize_session behavior: call real
+    summarize_session, enrich, assert presence_summary (or merged presence
+    keys) match original field-for-field for the v0.1 set
+  - golden: compute_live_seal(session_id, device_id, t_start_ns, nonce)
+    hex equals pre-recorded v0 vector
+  - optional: file hash / source line check that poep_gameplay_session.py
+    path is not in the did-sync diff (CI-side; or skip if too heavy)
+
+### 5.4 Seal v0.2 tests:
+  - domain tag bytes exact for v0.2
+  - v0.2(seal) != v0(seal) for same session fields when token_id (and custody
+    fields if H2) differ
+  - two different token_ids → two different v0.2 seals
+  - if H2: two different tba_address → two different seals (custody claim true)
+  - if H1: document test name that custody-transfer is NOT covered
+  - empty / missing token_id → ValueError (fail closed), not silent v0 fallback
+    under the v0.2 function name
+
+### 5.5 Guard tests:
+  - summary["device_id"] != chain.device_id → raises (no partial attach)
+  - missing required identity args → raises
+  - input summary dict identity unchanged after call (mutation)
+
+### 5.6 Fixture hygiene:
+  - use r01 table values as fixtures, not as the only accepted constants
+  - one test with a *different* synthetic device_id + matching chain proves
+    the wrapper is not hard-coded to 581a836c alone (hard-code is ok for a
+    named LIVE_CEREMONY_CONSTANTS helper, not for the only code path)
+
+### 5.7 Integration with controller_presence (optional but high leverage):
+  - one test: build identity attach → feed ioid dict into
+    build_controller_presence → IDENTITY_ONLY when presence_candidate false;
+    SYNCHRONIZED only when presence summary already has candidate_ok true
+  - proves composition-not-conflation without inventing a third verdict enum
+    inside poep_did_sync
+
+----------------------------------------------------------------------
+6. SHAPE RECOMMENDATION (design only — Claude may refine)
+----------------------------------------------------------------------
+
+```
+# l9_presence/poep_did_sync.py  (NEW)
+
+PINNED_CLAIM_CEILING = """This increment strengthens..."""  # r01 verbatim
+
+def enrich_summary_with_identity(
+    summary: dict,
+    *,
+    owner_did: str,
+    ioid_token_id: int | str,
+    tba_address: str,
+    registration_tx: str,
+    device_id: str,
+    vmdr_pubkey_hash: str,
+    controller_nft: str,
+    controller_nft_token_id: int | str,
+) -> dict:
+    # 1) validate args (non-empty, did:io:0x prefix on owner_did)
+    # 2) refuse if summary["device_id"] normalized != device_id normalized
+    # 3) refuse if "device_did" in summary keys (don't re-export poison)
+    # 4) deep-copy summary into presence_summary
+    # 5) return WRAP schema (A), never mutate input
+    ...
+
+def compute_live_seal_v02(
+    session_id, device_id, t_start_ns, process_nonce,
+    controller_nft_token_id,
+    *,
+    controller_nft: str | None = None,   # if H2
+    tba_address: str | None = None,      # if H2
+) -> str:
+    # NEW domain; v0 function untouched
+    ...
+```
+
+Decision Claude must lock in r02 build commit message / module docstring:
+  **H1 or H2 for seal epoch claim.** No third "custody epoch" prose with
+  token_id-only preimage.
+
+----------------------------------------------------------------------
+7. FIX-BEFORE-BUILD CHECKLIST (for Claude r02)
+----------------------------------------------------------------------
+
+[ ] Schema wrap (A) or bumped schema (B) — never v0.1 + identity flat-merge
+[ ] Rename device_identity_chain → device_to_owner_link or device_custody_chain
+[ ] did_subject: "gamer_wallet" (+ optional did_names_silicon: false)
+[ ] owner_did never inside chain object; no device_did key anywhere
+[ ] claim_ceiling = r01 paragraph byte-identical
+[ ] advances_poep_enabled=false + advances_presence_session_candidate=false
+[ ] identity_lane exact "identity-provenance"
+[ ] Guard: summary.device_id == chain.device_id (normalized), fail closed
+[ ] Seal: NEW domain v0.2; v0 compute_live_seal byte-identical
+[ ] Seal epoch claim honest: H1 (instance only) OR H2 (token_id+tba[/owner])
+[ ] Token denylist tests on JSON + keys + module strings
+[ ] Pass-through tests: candidate/plumbing bits unchanged by enrich
+[ ] Mutation test: input summary unchanged
+[ ] No edit to poep_gameplay_session.py; no flag flips; no option 3/4
+[ ] Align with controller_presence ioid field names where easy (token_id/did/tba)
+
+----------------------------------------------------------------------
+8. NON-GOALS (reaffirm for r03)
+----------------------------------------------------------------------
+
+- Option 3 node-ledger genesis: HELD
+- Option 4 TBA self-attest: OUT
+- Zero spend, zero chain write, zero new env flags
+- poep_enabled / L6B / L6_CHALLENGES stay False
+- No liveness strength claim; identity attach does not promote FLIP-A → FLIP-B
+- No FROZEN-v1 / 228B PoAC / PV-CI pin edits for this micro-arc
+
+----------------------------------------------------------------------
+9. ONE-LINE GUIDANCE FOR CLAUDE
+----------------------------------------------------------------------
+
+Ship a **wrap-schema identity attachment** with an explicit **gamer_wallet
+subject field** and a custody/link object that **cannot be named or nested as a
+DID**; ship seal **v0.2 under a new domain** with an **honest epoch claim**
+(token_id alone ≠ TBA custody); make overclaim **pytest-denylist mechanical**.
+Do not let perfect prose paper over field names or a false seal epoch sentence.
+
+— grok r02 brainstorm (charter a). Not a PASS/FAIL. Not a build.
+)
