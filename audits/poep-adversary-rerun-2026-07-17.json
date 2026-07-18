@@ -1,0 +1,63 @@
+{
+  "schema": "qortroller-poep-adversary-rerun-v0",
+  "poep_enabled": false,
+  "flip_authorized": false,
+  "reaction_band_ms": [
+    80.0,
+    450.0
+  ],
+  "tell_watcher": {
+    "far_stdout_tell": 1.0,
+    "far_pollburst_naive": 0.795,
+    "far_pollburst_fixed": 0.0325,
+    "bar_stdout_min": 0.9,
+    "bar_flaw_min": 0.3,
+    "bar_fix_max": 0.15,
+    "passes_tell_removal_proof": true,
+    "n_trials": 400,
+    "delay_window_s": [
+      3.0,
+      12.0
+    ],
+    "claim": "the CONTINUOUS-poll silent fire (not merely removing the stdout print) is what collapses the poll-burst pre-tell macro from ~0.56 (naive sleep-then-burst) to ~chance; stdout-tell macro forges ~1.0. A-REACTIVE (HID force-command watcher) is out of claim; poep_enabled stays False."
+  },
+  "catch_trials": {
+    "n_schedule": 200,
+    "n_nogo": 40,
+    "always_fire_catch_rate": 1.0,
+    "always_fire_catch_bar": 0.9,
+    "always_fire_catch_ok": true,
+    "honest_human_sim": {
+      "mode": "human",
+      "n_trials": 500,
+      "n_go": 400,
+      "n_nogo": 100,
+      "n_go_human_ok": 345,
+      "go_human_pass_rate": 0.8625,
+      "n_nogo_human_fa": 2,
+      "human_fa_rate": 0.02,
+      "human_fa_budget": 0.05,
+      "human_fa_ok": true,
+      "poep_enabled": false,
+      "note": "Catch gate is necessary for FLIP-A consideration, not sufficient alone."
+    },
+    "human_fa_budget": 0.05,
+    "human_fa_ok_sim": true
+  },
+  "band_only_macro": {
+    "attack": "A-RAND_band_only",
+    "n": 400,
+    "n_accept": 400,
+    "far": 1.0,
+    "note": "FAR\u22481 expected \u2014 live-verify alone without catch/shape is not presence."
+  },
+  "software_gate_pass": true,
+  "software_gate_means": "tell-removal proof + always-fire catch bar (structural). Human FA sim is advisory; live FA measured on-rig with --catch. NOT FLIP-A flip.",
+  "human_fa_sim_ok": true,
+  "still_required_for_poep_enabled": [
+    "live catch-trial sessions with measured human FA <=5%",
+    "operator review of claim language (FLIP-A only)",
+    "two-key operator fire of poep_enabled",
+    "A-REACTIVE still out of claim"
+  ]
+}
