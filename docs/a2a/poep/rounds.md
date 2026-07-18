@@ -37,4 +37,15 @@ only; poep_enabled/L6B_ENABLED stay False; canonical latency_ms/classification b
   analyze → _rp_device_latency_ms → in-band 180ms; + absent-ticks→0→fallback). A silent getattr-name
   typo now fails a test. Behavior-identical extraction. 15 device tests + 120 session-loop regression +
   PV-CI 184 green. F3 residual CLOSED. Remaining residuals = rig-inherent only (silicon confirmation = rig-4).
-- commit: (operator only — uncommitted until you fire)
+- commit: c7ba84b7 (F-RIG27-8, operator-fired) + 782df5a9 (SYNC-GO, operator-fired)
+- rig-4 (LIVE 2026-07-18): 9 real-hardware fires under RP → `dev_lat=-1.0` on ALL; t_mono floors ~1.2s
+  (tracks reaction: 4.7s natural → 1.2s big-jerk); clean trigger reflex invisible to IMU accel
+  (peaks 62–459 < threshold). SYNCHRONIZED not reached; honest IDENTITY_ONLY (n_go_issued=1). The device
+  clock is DEAD on silicon under RP (or span>500ms — not yet split). Banked:
+  `audits/rig-session-cfb27-4-2026-07-18.md`. Next: (i) raw-tick log, (ii) R2-analog reflex, (iii) accel threshold.
+- r06 (F-RIG27-8b raw-tick instrumentation — log-only, non-gating): `cross_ts`/`probe_ts` added to the
+  `POEP-HID-RING: resolve` INFO line so ONE rig fire splits dead-wire (both ~0) vs span-reject
+  (both large, span>500ms). grok 8b verify = **SHIP** + 1 NIT (`probe_ts` re-read) → NIT APPLIED (both raw
+  ticks hoisted into locals + passed as params → log == exact `_rp_device_latency_ms` inputs). 38 tests +
+  PV-CI 184. Envelope `round-rplatency-8b-envelope.md`; grok raw `scratchpad/grok-rplatency-8b-verify.txt`.
+  **STAGED — operator commits.**
