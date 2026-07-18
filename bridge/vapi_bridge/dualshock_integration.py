@@ -194,6 +194,18 @@ def _rating_tier(rating: int) -> str:
 # ---------------------------------------------------------------------------
 # SkillOracle tracker — mirrors contract logic locally, submits on-chain
 # ---------------------------------------------------------------------------
+class PoepFireRefused(RuntimeError):
+    """POEP-HID-RING: a nonce-bound fire request was refused (gate closed / busy / bad input).
+
+    Fail-closed refusals from DualShockTransport.request_poep_nonce_probe. `status_code` maps the
+    refusal onto the operator endpoint's HTTP surface (503 gate/unavailable, 409 busy, 400 bad input).
+    """
+
+    def __init__(self, msg: str, status_code: int = 503) -> None:
+        super().__init__(msg)
+        self.status_code = int(status_code)
+
+
 class _SkillOracleTracker:
     """
     Local SkillOracle state tracker.
@@ -675,6 +687,10 @@ class DualShockTransport:
         self._cco_l6b_skip_reason = None
         # CCO Phase D: PoEP runner inputs (dormant until poep_enabled)
         self._poep_runner_inputs = None
+        # POEP-HID-RING: single-slot claim while a nonce-bound fire is between its busy-check and its
+        # pending-arm (the await inside request_poep_nonce_probe yields the loop; this flag keeps the
+        # auto-tick dispatcher from arming a second probe in that window — one stimulus at a time).
+        self._poep_fire_inflight = False
         if self._l6b_enabled:
             try:
                 _proj_root_l6b = str(Path(__file__).parents[2])
@@ -2708,6 +2724,14 @@ class DualShockTransport:
                                 _l6b_result.classification,
                             )
                             self._cco_reflex_verdict = _reflex_verdict
+                            # POEP-HID-RING: resolve a nonce-bound fire with the MEASURED features
+                            # (raw pass-through; no band-fill — the sealed verify owns the verdict).
+                            # No-op for auto-tick probes (no poep_future on the pending).
+                            self._resolve_poep_fire(
+                                latency_ms=_l6b_result.latency_ms,
+                                peak_lsb=_l6b_result.accel_delta_peak,
+                                precursor_gap_ms=None,
+                            )
                             log.debug(
                                 "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f reflex=%s",
                                 _l6b_result.latency_ms,
@@ -2789,6 +2813,14 @@ class DualShockTransport:
                                     log.debug("Phase 63: L6b store insert failed (non-fatal): %s", _store_exc)
                         except Exception as _exc:
                             log.warning("Phase 63: L6b analysis failed (non-fatal): %s", _exc)
+                            # POEP-HID-RING: the force DID fire but scoring failed — resolve honestly
+                            # with no clean features (latency None -> client maps 0 -> verify fails).
+                            self._resolve_poep_fire(
+                                latency_ms=None,
+                                peak_lsb=0.0,
+                                precursor_gap_ms=None,
+                                error=f"l6b analysis failed (no score): {_exc!r}",
+                            )
                         finally:
                             self._l6b_pending = None
                             self._l6b_post_buffer = []
@@ -2891,6 +2923,8 @@ class DualShockTransport:
                 and _l6b_applicable
                 and self._l6b_analyzer is not None
                 and self._l6b_pending is None
+                # POEP-HID-RING: never race a nonce-bound fire that is mid-arm (one stimulus at a time)
+                and not getattr(self, "_poep_fire_inflight", False)
                 and self._l6b_loop_count % _l6b_interval == 0
                 and self._l6b_loop_count > 0
                 and self._reader and self._reader.ds
@@ -2898,6 +2932,10 @@ class DualShockTransport:
                 and _l6b_r2_quiet_ok
             ):
                 try:
+                    # POEP-HID-RING F-HIDRING-1: claim the single stimulus slot for the auto-tick's
+                    # OWN fire->arm window too (two-way exclusion — a poep request arriving during
+                    # this await must see busy, exactly as the auto-tick sees the poep window).
+                    self._poep_fire_inflight = True
                     _l6b_r2_force = int(
                         getattr(self._cfg, "l6b_probe_r2_force", 60)
                     )
@@ -2923,16 +2961,23 @@ class DualShockTransport:
                             self._l6_driver.clear_triggers(self._reader.ds)
                         ) if self._reader and self._reader.ds else None,
                     )
-                    self._l6b_pending = {
-                        "probe_ts": _probe_ts,
-                        "pre_reports": list(self._l6b_pre_buffer),
-                        "frames_remaining": int(350),  # 350ms capture window at ~1 report/ms
-                        "trigger_r2_at_probe": _l6b_r2_at_probe,
-                        "probe_r2_force": _l6b_r2_force,
-                        "probe_mode": _l6b_mode,
-                        "probe_hold_ms": _l6b_hold_ms,
-                    }
-                    self._l6b_post_buffer = []
+                    # POEP-HID-RING F-HIDRING-1 belt: never clobber a pending armed by another path
+                    # (defensive — the two-way inflight flag makes this unreachable; log if ever hit).
+                    if self._l6b_pending is not None:
+                        log.warning(
+                            "L6B: pending already armed during auto-tick dispatch — dropping auto probe"
+                        )
+                    else:
+                        self._l6b_pending = {
+                            "probe_ts": _probe_ts,
+                            "pre_reports": list(self._l6b_pre_buffer),
+                            "frames_remaining": int(350),  # 350ms capture window at ~1 report/ms
+                            "trigger_r2_at_probe": _l6b_r2_at_probe,
+                            "probe_r2_force": _l6b_r2_force,
+                            "probe_mode": _l6b_mode,
+                            "probe_hold_ms": _l6b_hold_ms,
+                        }
+                        self._l6b_post_buffer = []
                     log.info(
                         "L6B: probe dispatched mode=%s r2_force=%d hold_ms=%d "
                         "r2_at_probe=%s quiet_threshold=%d",
@@ -2944,6 +2989,9 @@ class DualShockTransport:
                     )
                 except Exception as _exc:
                     log.warning("Phase 63: L6b probe dispatch failed (non-fatal): %s", _exc)
+                finally:
+                    # POEP-HID-RING F-HIDRING-1: release the single stimulus slot (two-way exclusion)
+                    self._poep_fire_inflight = False
             elif (
                 self._l6b_enabled
                 and _l6b_applicable
@@ -2961,6 +3009,131 @@ class DualShockTransport:
             # --- Pace to interval ---
             elapsed = time.monotonic() - t_start
             await asyncio.sleep(max(0.0, self._interval - elapsed))
+
+    # ------------------------------------------------------------------
+    # POEP-HID-RING: nonce-bound fire on the single-HID L6b ring
+    # ------------------------------------------------------------------
+    # The gameplay-live path (l9_presence challenge_live) needs a REAL fire+capture from the SAME
+    # reader that attests activity — this bridge already runs that ring under l6b_enabled. This method
+    # serves ONE nonce-bound probe from it: fail-closed gates -> claim the single slot -> the SAME
+    # to_thread fire path the auto-tick uses (send_l6b_probe) -> arm _l6b_pending carrying the nonce +
+    # a Future -> the EXISTING session-loop completion block resolves the Future with the MEASURED
+    # features. HTTP awaits the Future (never touches HID, never busy-waits on the event loop).
+    # CANDIDATE/CAMPAIGN mechanism only: does NOT flip poep_enabled / L6B enablement.
+    _POEP_FIRE_AMP_MAX = 80  # gameplay LOW band ceiling (mirrors l9 LOW_AMPLITUDE_FORCE_MAX; never desk 255)
+
+    async def request_poep_nonce_probe(self, nonce: str, amplitude: int) -> "asyncio.Future":
+        """Fire ONE nonce-bound low-amp probe on the ring; returns a Future of the result dict.
+
+        Result dict (resolved by the session-loop completion): {fired, real_hardware, nonce,
+        t_fire_ns, latency_ms, peak_lsb, precursor_gap_ms, error?} — raw measured features only.
+        Raises PoepFireRefused fail-closed (503 gate/unavailable, 409 busy, 400 bad input).
+        """
+        if os.environ.get("POEP_LIVE_FIRE_ENABLED", "") != "1":
+            raise PoepFireRefused(
+                "poep fire gated: set POEP_LIVE_FIRE_ENABLED=1 on the operator rig (never CI)", 503)
+        if not self._l6b_enabled:
+            raise PoepFireRefused(
+                "poep fire refused: l6b_enabled is False (the ring runs under the gated L6B campaign "
+                "flag; enabling it is an operator decision — see CLAUDE.md hard rules)", 503)
+        if self._l6b_analyzer is None or self._l6_driver is None:
+            raise PoepFireRefused("poep fire refused: L6b analyzer/driver not initialized", 503)
+        if not (self._reader and self._reader.ds):
+            raise PoepFireRefused("poep fire refused: controller not connected", 503)
+        if not nonce or not isinstance(nonce, str):
+            raise PoepFireRefused("poep fire refused: non-empty string nonce required", 400)
+        if self._l6b_pending is not None or getattr(self, "_poep_fire_inflight", False):
+            raise PoepFireRefused("poep fire busy: a probe capture is already in flight", 409)
+
+        try:
+            amp = int(amplitude)
+        except (TypeError, ValueError):
+            raise PoepFireRefused("poep fire refused: amplitude must be an int", 400)
+        amp = max(1, min(amp, self._POEP_FIRE_AMP_MAX))
+
+        # Claim the slot BEFORE the await (the fire yields the loop; the auto-tick dispatcher checks
+        # this flag so exactly one stimulus is ever in flight).
+        self._poep_fire_inflight = True
+        try:
+            _pre_reports = list(self._l6b_pre_buffer)   # pre-window snapshot BEFORE the fire
+            _mode = str(getattr(self._cfg, "l6b_probe_mode", "pulse")).strip().lower()
+            if _mode not in ("pulse", "rigid"):
+                _mode = "pulse"
+            _hold_ms = int(getattr(self._cfg, "l6b_probe_hold_ms", 15))
+
+            # The SAME off-loop fire path the auto-tick uses (send_l6b_probe -> asyncio.to_thread write).
+            _probe_ts = await self._l6_driver.send_l6b_probe(
+                self._reader.ds, r2_force=amp, mode=_mode,
+            )
+            _t_fire_ns = time.time_ns()
+
+            _loop = asyncio.get_event_loop()
+            _hold_s = max(0.015, _hold_ms / 1000.0)
+            _loop.call_later(
+                _hold_s,
+                lambda: asyncio.ensure_future(
+                    self._l6_driver.clear_triggers(self._reader.ds)
+                ) if self._reader and self._reader.ds and self._l6_driver else None,
+            )
+
+            _fut: asyncio.Future = _loop.create_future()
+            self._l6b_pending = {
+                "probe_ts": _probe_ts,
+                "pre_reports": _pre_reports,
+                "frames_remaining": int(350),  # same 350ms capture window as the auto-tick
+                "trigger_r2_at_probe": None,
+                "probe_r2_force": amp,
+                "probe_mode": _mode,
+                "probe_hold_ms": _hold_ms,
+                # nonce-binding (POEP-HID-RING): completion resolves THIS future with THIS nonce
+                "poep_nonce": nonce,
+                "poep_t_fire_ns": _t_fire_ns,
+                "poep_future": _fut,
+            }
+            self._l6b_post_buffer = []
+            log.info(
+                "POEP-HID-RING: nonce-bound probe dispatched mode=%s r2_force=%d nonce=%s…",
+                _mode, amp, nonce[:16],
+            )
+            return _fut
+        except PoepFireRefused:
+            raise
+        except Exception as _exc:
+            # Pre/at-write failure: no pending armed, no future — surfaces as an honest refusal.
+            raise PoepFireRefused(f"poep fire aborted pre/at write: {_exc!r}", 503)
+        finally:
+            self._poep_fire_inflight = False
+
+    def _resolve_poep_fire(
+        self,
+        *,
+        latency_ms,
+        peak_lsb: float,
+        precursor_gap_ms,
+        error: str = "",
+    ) -> None:
+        """Resolve the pending nonce-bound fire Future with MEASURED features (no-op for auto-tick).
+
+        fired/real_hardware are True here BY CONSTRUCTION: this is only reachable from the completion
+        block of a pending that request_poep_nonce_probe armed AFTER a successful real send_l6b_probe
+        write. Raw pass-through — never clamps/synthesizes a latency into the human band.
+        """
+        _p = self._l6b_pending
+        if not isinstance(_p, dict):
+            return
+        _fut = _p.get("poep_future")
+        if _fut is None or _fut.done():
+            return
+        _fut.set_result({
+            "fired": True,
+            "real_hardware": True,
+            "nonce": _p.get("poep_nonce"),
+            "t_fire_ns": _p.get("poep_t_fire_ns"),
+            "latency_ms": latency_ms,
+            "peak_lsb": float(peak_lsb),
+            "precursor_gap_ms": precursor_gap_ms,
+            "error": error,
+        })
 
     # ------------------------------------------------------------------
     # Sync helpers (executed in thread pool)
