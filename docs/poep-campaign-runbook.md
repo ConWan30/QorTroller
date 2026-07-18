@@ -50,10 +50,14 @@ Startup log must show: `POEP-CAMPAIGN: L6b analyzer initialized for RING CAPTURE
 **Shell B — the one-command capture (after the bridge is up + you are playing):**
 ```powershell
 $env:POEP_LIVE_FIRE_ENABLED = "1"
-python scripts/poep_session_identity_attach.py --live --api-key $env:OPERATOR_API_KEY
+python scripts/poep_session_identity_attach.py --live --api-key $env:OPERATOR_API_KEY `
+  --fire-timeout 25 --wait-active-s 45 --amplitude 80 --challenges 2
 ```
 Fires sparse nonce-bound low-amp R2 challenges during active play; react the instant you feel the
 buzz. The artifact lands in `audits/poep_session_identity_attach_<sid>.json` (gitignored).
+**SYNC-GO (2026-07-18):** `--wait-active-s` blocks until ACTIVE_GAMEPLAY (warm window + frac>0 +
+PCC); timeout exits 3 so cold attach never looks like a silent `n_go=0` success. Full checklist:
+`docs/a2a/poep/syncgo-operator-card.md`.
 
 ## Honest outcomes (all are wins)
 - `SYNCHRONIZED_CONTROLLER` — identity bound + real fires verified during bridge-attested play.
