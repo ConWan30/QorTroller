@@ -18,7 +18,14 @@ from population_band import (  # noqa: E402
 )
 from qortroller_anticheat import detect_session, GO_LO_MS, GO_HI_MS  # noqa: E402
 from poep_r2onset_adversarial import _synth_rec, detect_voluntary_go, attack_dead_feed  # noqa: E402
+import json  # noqa: E402
 import random  # noqa: E402
+
+
+def _write_dumps(tmp_path, onset_ms, n):
+    for i in range(n):
+        (tmp_path / f"d{i}.json").write_text(json.dumps(_synth_rec(float(onset_ms))), encoding="utf-8")
+    return str(tmp_path)
 
 
 # --- the population-safe sub-floor (F5) ---------------------------------------------------------
@@ -202,3 +209,40 @@ def test_far_note_edge_explicit_sub_equal_go_lo_uses_single_op_prose():
     recs = [_synth_rec(345.0) for _ in range(6)]
     r = detect_session(recs, sub_floor_ms=GO_LO_MS)          # explicit sub == go_lo == 320
     assert "3.2e-4" in r["far_note"] and "does NOT apply" not in r["far_note"]
+
+
+# --- runner CLI: --sub-floor / --population knobs (grok r07 F14) ---------------------------------
+
+def test_runner_default_path_flags_fast_session_as_bot(tmp_path, monkeypatch, capsys):
+    # No band knobs -> single-operator config: a fast (200ms) session hits the 320ms sub-floor -> SUSPECTED_BOT.
+    import qortroller_anticheat_report as rpt
+    d = _write_dumps(tmp_path, 200.0, 6)
+    monkeypatch.setattr(sys, "argv", ["report", "--dir", d, "--isi-ms", "3000"])
+    rc = rpt.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "single-operator" in out and "SUSPECTED_BOT" in out and "3.2e-4" in out
+
+
+def test_runner_sub_floor_knob_makes_fast_session_soft_not_bot(tmp_path, monkeypatch, capsys):
+    # grok r07 F14: --sub-floor 120 -> POPULATION config: the SAME fast session is SOFT (retry), not a bot,
+    # and the FAR note is the population one (3.2e-4 explicitly disclaimed).
+    import qortroller_anticheat_report as rpt
+    d = _write_dumps(tmp_path, 200.0, 6)
+    monkeypatch.setattr(sys, "argv", ["report", "--dir", d, "--isi-ms", "3000", "--sub-floor", "120"])
+    rc = rpt.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "POPULATION" in out and "SOFT=6" in out and "sub_floor=0" in out
+    assert "SUSPECTED_BOT" not in out and "does NOT apply" in out
+
+
+def test_runner_population_flag_uses_anticipation_floor(tmp_path, monkeypatch, capsys):
+    # --population (no explicit --sub-floor) uses the ~120ms anticipation floor with the honest "uncited" note.
+    import qortroller_anticheat_report as rpt
+    d = _write_dumps(tmp_path, 200.0, 6)
+    monkeypatch.setattr(sys, "argv", ["report", "--dir", d, "--isi-ms", "3000", "--population"])
+    rc = rpt.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "sub-floor 120ms" in out and "uncited anticipation prior" in out and "SOFT=6" in out
