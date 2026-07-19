@@ -246,3 +246,61 @@ def test_runner_population_flag_uses_anticipation_floor(tmp_path, monkeypatch, c
     out = capsys.readouterr().out
     assert rc == 0
     assert "sub-floor 120ms" in out and "uncited anticipation prior" in out and "SOFT=6" in out
+
+
+# --- population-band pooling runner (poep_population_band.py) ------------------------------------
+
+def _write_live_file(tmp_path, player, latencies):
+    recs = [{"challenge_index": i, "nonce": f"n{i}", "latency_ms": (float(x) if x is not None else None)}
+            for i, x in enumerate(latencies)]
+    p = tmp_path / f"poep_live_capture_{player}_2026-07-19_00000{len(list(tmp_path.glob('*.json')))}.json"
+    p.write_text(json.dumps({"schema": "qortroller-poep-live-capture-v1", "player": player, "records": recs}),
+                 encoding="utf-8")
+    return p
+
+
+def test_pooling_groups_by_player_and_reaches_non_provisional(tmp_path, monkeypatch, capsys):
+    import poep_population_band as pb
+    rnd = random.Random(11)
+    _write_live_file(tmp_path, "alice", [rnd.gauss(340, 20) for _ in range(20)])
+    _write_live_file(tmp_path, "bob", [rnd.gauss(330, 25) for _ in range(20)])
+    monkeypatch.setattr(sys, "argv", ["pb", "--dir", str(tmp_path)])
+    rc = pb.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "operator alice: n=20" in out and "operator bob: n=20" in out
+    assert "operators: 2" in out and "PROVISIONAL: False" in out
+    # the load-bearing honesty rail: labels != verified people
+    assert "distinct LABELS, NOT verified distinct people" in out
+
+
+def test_pooling_drops_no_reaction_latencies_and_windows(tmp_path, monkeypatch, capsys):
+    import poep_population_band as pb
+    # 20 clean + 3 None (no reaction) + 2 slow outliers (F-RIG27-8-style). None dropped always; slow dropped by --max-ms.
+    _write_live_file(tmp_path, "alice", [340.0] * 20 + [None, None, None] + [1600.0, 1800.0])
+    monkeypatch.setattr(sys, "argv", ["pb", "--dir", str(tmp_path), "--max-ms", "800"])
+    rc = pb.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "FILTER APPLIED" in out
+    assert "operator alice: n=20" in out          # 3 None + 2 slow all excluded
+
+
+def test_pooling_players_filter_scopes_to_real_operators(tmp_path, monkeypatch, capsys):
+    import poep_population_band as pb
+    _write_live_file(tmp_path, "alice", [340.0] * 20)
+    _write_live_file(tmp_path, "bob", [330.0] * 20)
+    _write_live_file(tmp_path, "OLD_TESTLABEL", [500.0] * 20)      # ambiguous old label to exclude
+    monkeypatch.setattr(sys, "argv", ["pb", "--dir", str(tmp_path), "--players", "alice,bob"])
+    rc = pb.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "operator alice" in out and "operator bob" in out and "OLD_TESTLABEL" not in out
+    assert "operators: 2" in out
+
+
+def test_pooling_no_samples_returns_2(tmp_path, monkeypatch, capsys):
+    import poep_population_band as pb
+    monkeypatch.setattr(sys, "argv", ["pb", "--dir", str(tmp_path)])     # empty dir
+    rc = pb.main()
+    assert rc == 2
