@@ -70,10 +70,10 @@ Real multi-operator reaction corpus (≥5 operators × ≥20 samples) to promote
 anticipation floor; age/fatigue/session covariates; the fire-time-observing-bot residual (unchanged, defended by
 the named HMAC frame-commitment follow-on, not this module).
 
-**Tests:** 21 fixture tests (`l9_presence/tests/test_population_band.py`, CI-safe, no gitignored dumps) +
+**Tests:** 24 fixture tests (`l9_presence/tests/test_population_band.py`, CI-safe, no gitignored dumps) +
 regression: 17 anti-cheat (`l9_presence/tests/test_qortroller_anticheat.py`) + 9 adversarial
-(`bridge/tests/test_poep_r2onset_adversarial.py`) — **47 green total**. PV-CI **184**. Zero spend; sealed
-FROZEN/PoAC untouched. Files uncommitted (operator is sole committer).
+(`bridge/tests/test_poep_r2onset_adversarial.py`) — **50 green total**. PV-CI **184**. Zero spend; sealed
+FROZEN/PoAC untouched.
 
 ## Loop outcome — grok r07 PASS (2026-07-19)
 6 rounds (r02 build → r03 HOLD 2 BLOCK/4 WARN → r04 fix → r05 HOLD 3 new WARN → r06 fix → **r07 PASS**).
@@ -81,9 +81,13 @@ grok independently re-ran the 47-test suite + PV-CI 184 + live numeric attacks (
 FAR threading, config-conditional note) and returned **PASS**. Post-PASS hardening (INFO-level, no new round):
 **F12** — `far_note` now branches on effective `sub >= go_lo` (not `is None`), so an explicit `sub == go_lo`
 gets the correct single-op note; **F13** — the module docstring's `3.2e-4` now carries the population caveat.
-**Accepted residual F14 (INFO):** the runner `qortroller_anticheat_report.py` has no `--sub-floor`/band CLI
-knobs, so live dumps always print the single-op FAR note — population correctness is library/API-only today
-(a product gap, not a correctness defect; the operator accepts it for this increment).
+**F14 CLOSED (follow-up increment):** the runner `qortroller_anticheat_report.py` now has `--go-lo`,
+`--go-hi`, `--sub-floor`, and a `--population` convenience flag (uses the ~120ms anticipation floor with an
+explicit "uncited prior" label). It prints the active config (single-operator vs POPULATION) and threads the
+band + sub-floor into `detect_session`, so live dumps can now be scored under a population config from the CLI
+— e.g. the same fast (~200ms) session reads `SUSPECTED_BOT` under the default (single-op) config but
+`SOFT`/not-a-bot under `--sub-floor 120`. 3 CI-safe runner tests (default / `--sub-floor` / `--population`)
+drive the real arg parser over synthetic tmp dumps.
 
 ## r06 disposition (grok r05 re-verify — both BLOCKs cleared, 3 new WARNs)
 - **F7 WARN** (broken committed consumer `qortroller_anticheat_report.py` reading `n_soft_slow`; false
