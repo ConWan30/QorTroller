@@ -480,6 +480,11 @@ class DualShockTransport:
         # internal read loop.  Single producer / single consumer => safe with
         # CPython's GIL; no lock needed for the increment-only int.
         self._hid_report_total      = 0
+        # F-R2ONSET-1 read-at-fire (C): the raw drain thread (~1 kHz, one report per read — NOT
+        # burst-drained) keeps this fresh with the pad's latest offset-28 device tick. The nonce-bound
+        # fire reads it at the fire instant for a gold-standard t0 in device space (immune to the
+        # session-loop pre-buffer staleness that F-R2ONSET-1 exposed). Single-writer int, GIL-safe.
+        self._last_raw_device_ts: int = 0
         self._last_hid_report_total = 0
         self._hid_counter_thread    = None
         self._hid_counter_running   = False
@@ -936,6 +941,13 @@ class DualShockTransport:
                         if data:
                             # CPython GIL makes single-producer safe without lock.
                             self._hid_report_total += 1
+                            # F-R2ONSET-1 read-at-fire (C): keep the freshest device tick UNCONDITIONALLY
+                            # (independent of _push_l2 / retina — the drain reads every report at ~1 kHz),
+                            # so the nonce-bound fire can read a gold-standard t0 even in LEAN mode.
+                            if len(data) > 31:
+                                self._last_raw_device_ts = (
+                                    data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
+                                )
                             if _push_l2 and len(data) > 31:
                                 _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
                                 _now_wall = time.time() * 1000.0
@@ -3271,6 +3283,10 @@ class DualShockTransport:
                 self._reader.ds, r2_force=amp, mode=_mode,
             )
             _t_fire_ns = time.time_ns()
+            # F-R2ONSET-1 read-at-fire (C): the freshest drain device tick AT the fire instant = t0 in
+            # device space, gold-standard (no session-loop pre-buffer staleness). 0 if the drain has not
+            # populated yet -> the offline study falls back to mono-extrap/stale_pre honestly.
+            _t0_read_device_ts = int(getattr(self, "_last_raw_device_ts", 0) or 0)
 
             _loop = asyncio.get_event_loop()
             _hold_s = max(0.015, _hold_ms / 1000.0)
@@ -3294,6 +3310,7 @@ class DualShockTransport:
                 "poep_nonce": nonce,
                 "poep_t_fire_ns": _t_fire_ns,
                 "poep_probe_device_ts": _probe_device_ts,   # F-RIG27-8 robust-clock anchor
+                "poep_t0_read_device_ts": _t0_read_device_ts,   # F-R2ONSET-1 read-at-fire (C) gold t0
                 "poep_future": _fut,
             }
             self._l6b_post_buffer = []
@@ -3402,6 +3419,7 @@ class DualShockTransport:
             "probe_mode": pending.get("probe_mode"),
             "probe_hold_ms": pending.get("probe_hold_ms"),
             "probe_device_ts": probe_device_ts,
+            "t0_read_device_ts": int(pending.get("poep_t0_read_device_ts", 0) or 0),   # C gold t0
             "resolved_latency_ms": latency_ms,
             "device_latency_ms": device_latency_ms,
             "crossing_device_ts": crossing_device_ts,
