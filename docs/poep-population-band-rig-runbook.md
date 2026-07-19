@@ -39,14 +39,26 @@ per finding **F-RIG27-8**).
    python scripts/poep_live_capture.py --help
    ```
 
+> **⚠ MODE + TECHNIQUE (learned the hard way 2026-07-19 — cost an hour):**
+> - **Use `--mode pulse`** (the default). Pulse *vibrates* and is felt at rest, like rumble. Do **NOT** use
+>   `--mode rigid` — rigid is a *resistance* only felt on a hard R2 pull, so it reads as "the buzz is dead"
+>   even though the actuator is fine.
+> - **Keep light pressure on R2** (finger resting *with slight engagement*, not feather-light) so the pulse
+>   transmits through the trigger. A feather-rest may not feel it.
+> - Sanity: a clean capture shows `class=HUMAN` / `LIVE-VERIFY PASS` with latencies ~230–400 ms and peaks in
+>   the thousands of LSB. If everything is `NO_RESPONSE` / peak ~7 LSB, the buzz isn't being felt (check mode,
+>   R2 pressure, and that `--mode pulse`). To isolate a truly-dead actuator: lightbar+rumble use the *same*
+>   output report — if those work but the trigger doesn't, it's mode/perception, not hardware.
+
 ## Step 1 — Person A capture (≥20 fires)
 Person A holds the pad. Run (pick a **real** label — use the person's name, not P1/P2):
 ```
-python scripts/poep_live_capture.py --player alice --count 25 --db "C:/Users/Contr/.vapi/bridge.db"
+python scripts/poep_live_capture.py --player alice --count 25 --mode pulse --no-store
 ```
-Per fire: the runner arms silently, then after an unpredictable delay fires an **R2 adaptive-trigger buzz** —
-Person A **presses R2 as soon as they feel it**. Repeat ×25 (~a few minutes). It writes one labelled session
-file: `audits/poep_live_capture_alice_<date>_<time>.json`.
+Per fire: the runner arms silently, then after an unpredictable delay fires an **R2 adaptive-trigger PULSE
+buzz** — Person A **presses R2 as soon as they feel it**. Repeat ×25 (~a few minutes). It writes one labelled
+session file: `audits/poep_live_capture_alice_<date>_<time>.json`. (`--no-store` skips the bridge DB; the JSON
+artifact — which the band reads — is still written.)
 
 > Aim for ≥20 *clean* reactions. No-reaction fires (you missed the buzz) are recorded with `latency_ms=null`
 > and are dropped automatically at pooling — so capture a few extra (25) to clear 20 clean.
@@ -54,7 +66,7 @@ file: `audits/poep_live_capture_alice_<date>_<time>.json`.
 ## Step 2 — Person B capture (≥20 fires)
 **A different person** holds the same pad. Run with a different real label:
 ```
-python scripts/poep_live_capture.py --player bob --count 25 --db "C:/Users/Contr/.vapi/bridge.db"
+python scripts/poep_live_capture.py --player bob --count 25 --mode pulse --no-store
 ```
 
 ## Step 3 — Pool + score the population band
@@ -65,8 +77,9 @@ python scripts/poep_population_band.py --players alice,bob --min-ms 120 --max-ms
 - `--min-ms 120 --max-ms 800` drops no-reaction / slow-outlier fires (disclosed in the output). 120 ms = the
   anticipation floor; 800 ms is a generous voluntary-reaction ceiling.
 
-**What good looks like** (from clean desk capture): per-operator median ≈ **330–345 ms**, band roughly
-**(235, 620] ms**, `degenerate_band: False`, **`PROVISIONAL: False`**, low per-operator FRR. A wide band gives
+**What good looks like** — the first real run (Con + Fari, 2026-07-19, window [120,450]; see
+`audits/poep-population-band-con-fari-2026-07-19.md`): per-operator median **263 / 295 ms**, band
+**(202, 410] ms**, `degenerate_band: False`, **`PROVISIONAL: False`**, per-operator FRR **0.0 / 0.0**. A wide band gives
 a high single-shot `worst_case_far_population_band` (e.g. ~0.18) — that is expected and honest: the anti-cheat
 strength comes from **multi-challenge compounding (K=5)**, not one shot. Tighten the band (more/cleaner data)
 or raise K to lower it.
