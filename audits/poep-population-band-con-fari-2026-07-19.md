@@ -20,16 +20,23 @@ to a live nonce-bound haptic R2 challenge on the registered Edge (`581a836c…`)
 
 Total 66 pooled reactions, 2 operators.
 
-## Held-out validation (the real generalization test)
-A **fresh Con capture** (`ConHeldout`, distinct label, 25/25 LIVE-VERIFY PASS, 202–305 ms) — **not** part of
-the data that fit the band — scored against the **frozen (202, 410] band** via
-`poep_population_band.py --players ConHeldout --min-ms 120 --score-band 202,410`:
-- **in-band = 25/25 · held-out FRR = 0.0 · (below=0, above=0).** Identical against the precise (202.4, 409.6].
-- This is a *held-out* number (unlike the in-sample FRR above): the scored reactions never touched the fit.
-  It confirms the band **generalizes across sessions for Con** — not overfit to his first run.
-- **Still open:** a true *population* generalization test scores a THIRD person (never used to fit) against
-  the frozen band. Con-held-out validates cross-session stability for a known member, not cross-person
-  coverage; and both fitted members are fast reactors, so a slower person could still land above 410 ms.
+## Held-out validation (the real generalization tests) — BOTH PASSED
+Scored via `poep_population_band.py --players <label> --min-ms 120 --score-band 202,410` (held-out mode:
+`frr_for_band` against the FROZEN band, NOT a re-fit). Held-out numbers, unlike the in-sample FRR above —
+the scored reactions never touched the fit.
+
+1. **Cross-session (Con):** a fresh `ConHeldout` run (25/25 PASS, 202–305 ms) → **in-band 25/25, FRR 0.0**
+   (below=0 above=0). The band is not overfit to Con's first session.
+2. **Cross-person (Khamari) — the TRUE population test:** a THIRD person never used to fit (`Khamari`, 25/25
+   PASS, 203–346 ms) → **in-band 25/25, FRR 0.0** (below=0 above=0). Identical against the precise
+   (202.4, 409.6]. The band **generalizes to a new person** — it is a genuine population band, not a
+   Con+Fari artifact.
+
+**What is now proven:** cross-session stability + cross-person generalization across **3 distinct people**.
+**What is STILL open — population BREADTH:** all three sampled people are **fast reactors** (medians 254–295;
+all reactions inside 202–365 ms). The band has not yet seen a **slow** reactor — someone at ~400–600 ms would
+land above the 410 ms ceiling. Generalization is validated *within the fast-reactor cluster*, not across the
+full human reaction range. Widening to cover slower players requires capturing a slower reactor and re-fitting.
 
 ## Provenance
 - Live capture: `scripts/poep_live_capture.py --player <Con|Fari> --count 25 --mode pulse --no-store` on the
