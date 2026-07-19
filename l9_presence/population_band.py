@@ -30,7 +30,8 @@ from qortroller_anticheat import worst_case_true_far, GO_LO_MS, GO_HI_MS, K_REQU
 # Hard human-impossibility sub-floor: a voluntary reaction to an UNPREDICTABLE stimulus cannot beat this
 # (below = anticipation / scripted). Conservative general psychophysics, NOT our measurement, NOT a cite.
 ANTICIPATION_FLOOR_MS = 120.0
-MIN_OPERATORS_FOR_POPULATION = 5     # below this the band is PROVISIONAL (not a population claim)
+MIN_OPERATORS_FOR_POPULATION = 2     # below this the band is PROVISIONAL. 2 = the near-term realistic target
+                                     # (operator + 1); it is a MINIMAL population sample, not a robust one.
 MIN_SAMPLES_PER_OPERATOR = 20
 
 

@@ -51,6 +51,12 @@ framework; re-scope the sub-floor (F5: fast humans <320ms would false-positive t
   config-conditional). New INFO only: F12 (far_note branches on is None not effective sub>=go_lo), F13 (module
   docstring 3.2e-4 lacks pop caveat), F14 (runner has no --sub-floor CLI knob). No new BLOCK/WARN. -> PASS.
 - r08 post-PASS hardening (Claude, INFO-level, no new round): F12 far_note keys on (sub_floor_ms is None or
-  sub_floor_ms >= go_lo_ms) + edge test; F13 module docstring gains the population caveat. F14 accepted as a
-  product-scope residual (library/API correct; runner CLI knobs deferred). 47 green; PV-CI 184.
-commit: PENDING operator (sole committer).
+  sub_floor_ms >= go_lo_ms) + edge test; F13 module docstring gains the population caveat. 47 green; PV-CI 184.
+- commit `45922cb7` (operator): population band + anticipation sub-floor — ASM-Loop r07 PASS.
+- F14 CLOSED (follow-up increment, commit `9286388e`): runner qortroller_anticheat_report.py gains --go-lo /
+  --go-hi / --sub-floor / --population knobs (prints active config; threads band+sub_floor into detect_session).
+  +3 CI-safe runner tests (default -> SUSPECTED_BOT; --sub-floor 120 -> SOFT/not-a-bot; --population). 50 green.
+- MIN_OPERATORS_FOR_POPULATION 5 -> 2 (operator directive 2026-07-19): 2 = the near-term realistic target
+  (operator + 1), a MINIMAL population sample, not a robust one; the band stays advisory + honestly-labeled.
+  Promote PROVISIONAL -> measured needs >=2 operators x >=20 samples (was >=5). Tests key off the constant.
+commit: operator (sole committer).

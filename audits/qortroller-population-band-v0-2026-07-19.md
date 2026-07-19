@@ -18,7 +18,8 @@ PROVISIONAL population-band estimator.
   (`population_safe_sub_floor_ms()`), NOT the 320 ms band edge.
 - **`estimate_population_band(operator_samples)`** pools per-operator reaction samples → a band
   (`floor = max(anticipation, p1 − margin)`, `ceiling = p99 + margin`) + per-operator FRR, tagged
-  **PROVISIONAL** until `≥ MIN_OPERATORS_FOR_POPULATION (5)` operators each with `≥ MIN_SAMPLES_PER_OPERATOR (20)`.
+  **PROVISIONAL** until `≥ MIN_OPERATORS_FOR_POPULATION (2)` operators each with `≥ MIN_SAMPLES_PER_OPERATOR (20)`
+  — 2 is the near-term realistic target (operator + 1), a MINIMAL population sample, not a robust one.
 - **FAR is recomputed for the (wider) band** with the SAME grok-audited math (`worst_case_true_far`): it reports
   the joint worst-case FAR for the population band **and** the single-operator band side by side.
 
@@ -66,7 +67,7 @@ would falsely read as a tight, safe band and reverse the `pop_far ≥ single_op_
 - Advisory: emits a band + verdict, **gates nothing**; `poep_enabled`/`L6B` stay False.
 
 ## Rig/data remainder (not resolved here)
-Real multi-operator reaction corpus (≥5 operators × ≥20 samples) to promote PROVISIONAL → measured; a measured
+Real multi-operator reaction corpus (≥2 operators × ≥20 samples) to promote PROVISIONAL → measured; a measured
 anticipation floor; age/fatigue/session covariates; the fire-time-observing-bot residual (unchanged, defended by
 the named HMAC frame-commitment follow-on, not this module).
 
