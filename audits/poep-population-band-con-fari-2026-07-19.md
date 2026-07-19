@@ -1,24 +1,32 @@
-# POEP population reaction-time band — FIRST MEASURED (Con + Fari) · 2026-07-19
+# POEP population reaction-time band — MEASURED, N=3 (Con + Fari + Khamari) · 2026-07-19
 
 **Candidate / advisory — gates nothing.** `poep_enabled` / `L6B` / `L6_CHALLENGES` stay **False**; zero spend;
 no chain; no flag flip. This is the first time the `l9_presence.population_band` estimator crossed from
 **PROVISIONAL** (framework + prior) to **measured** on real hardware — two genuinely different people reacting
 to a live nonce-bound haptic R2 challenge on the registered Edge (`581a836c…`).
 
-## Result (window [120, 450] ms — clean voluntary-reaction cluster)
-- **Band: (202, 410] ms** · `degenerate_band: False` · **`PROVISIONAL: False`** (2 operators ≥ the
+## Result — CURRENT band, N=3 (window [120, 450] ms — clean voluntary-reaction cluster)
+Khamari folded in after his held-out PASS (below), giving the current official N=3 band:
+- **Band: (192, 404] ms** · `degenerate_band: False` · **`PROVISIONAL: False`** (3 operators ≥ the
   `MIN_OPERATORS_FOR_POPULATION=2` gate, each ≥ 20 samples).
-- **Per-operator FRR: Con 0.0 / Fari 0.0** (see in-sample caveat below).
-- Joint worst-case single-shot blind-bot FAR (sub_floor = 120 ms anticipation): **0.060** vs the
-  single-operator-band reference **3.2e-4**. A wider population band RAISES the single-shot FAR (F4); the
-  anti-cheat strength is the **K=5 multi-challenge compounding**, not one shot.
+- **Per-operator FRR (in-sample): Con 0.024 / Fari 0.0 / Khamari 0.0** (Con's single 405 ms sample is just
+  above the 404 ceiling — a p99 boundary effect).
+- Joint worst-case single-shot blind-bot FAR (sub_floor = 120 ms anticipation): **0.063** vs the
+  single-operator-band reference **3.2e-4**. A wider band RAISES the single-shot FAR (F4); the anti-cheat
+  strength is the **K=5 multi-challenge compounding**, not one shot.
 
 | operator | n (windowed) | min | median | max |
 |---|---|---|---|---|
-| Con  | 41 | 228 | 295 | 405 |
-| Fari | 25 | 213 | 263 | 365 |
+| Con     | 41 | 228 | 295 | 405 |
+| Fari    | 25 | 213 | 263 | 365 |
+| Khamari | 25 | 203 | 254 | 346 |
 
-Total 66 pooled reactions, 2 operators.
+Total 91 pooled reactions, 3 operators. `poep_population_band.py --players Con,Fari,Khamari --min-ms 120 --max-ms 450`.
+
+**Original N=2 fit (Con + Fari), for the record:** band **(202, 410] ms**, 66 samples, FRR 0.0/0.0, FAR 0.060.
+Folding Khamari in (he was already inside) barely moved it — floor 202→192, ceiling 410→404 — confirming
+stability, not a re-shape. Khamari's held-out FRR 0.0 (below) is the evidence that justified folding him in;
+he is now in-sample for the N=3 band.
 
 ## Held-out validation (the real generalization tests) — BOTH PASSED
 Scored via `poep_population_band.py --players <label> --min-ms 120 --score-band 202,410` (held-out mode:
