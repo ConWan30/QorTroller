@@ -485,6 +485,10 @@ class DualShockTransport:
         # fire reads it at the fire instant for a gold-standard t0 in device space (immune to the
         # session-loop pre-buffer staleness that F-R2ONSET-1 exposed). Single-writer int, GIL-safe.
         self._last_raw_device_ts: int = 0
+        # DIAG (r2-blind investigation): freshest RAW R2 byte (data[6]) from the drain, to compare against
+        # the session-loop ds.state.R2_value path that populates the dump. Distinguishes a code read-path
+        # issue (drain sees R2, ds.state doesn't) from a true topology blind (both 0).
+        self._last_raw_r2: int = 0
         self._last_hid_report_total = 0
         self._hid_counter_thread    = None
         self._hid_counter_running   = False
@@ -948,6 +952,8 @@ class DualShockTransport:
                                 self._last_raw_device_ts = (
                                     data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
                                 )
+                            if len(data) > 6:
+                                self._last_raw_r2 = data[6]   # DIAG: raw R2 from the drain (vs ds.state)
                             if _push_l2 and len(data) > 31:
                                 _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
                                 _now_wall = time.time() * 1000.0
@@ -3420,6 +3426,7 @@ class DualShockTransport:
             "probe_hold_ms": pending.get("probe_hold_ms"),
             "probe_device_ts": probe_device_ts,
             "t0_read_device_ts": int(pending.get("poep_t0_read_device_ts", 0) or 0),   # C gold t0
+            "raw_r2_at_fire": int(getattr(self, "_last_raw_r2", 0) or 0),   # DIAG: drain's raw R2 vs ds.state
             "resolved_latency_ms": latency_ms,
             "device_latency_ms": device_latency_ms,
             "crossing_device_ts": crossing_device_ts,
