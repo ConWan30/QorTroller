@@ -107,6 +107,31 @@ def test_read_at_fire_accepts_fresh_tick_beyond_stale_post0():
     assert out["reference_gap_ms"] < 5.0                # tight (one drain interval), not the pre->post gap
 
 
+def test_read_at_fire_certified_uses_measured_staleness():
+    # C-precision: with a MEASURED read staleness (t0_read_age_s), uncertainty is CERTIFIED, not a proxy:
+    # delta = max(median_frame_gap, measured_age). age=2ms dominates the tiny frame gap here.
+    post = [_f(0, _A + 65_000, 100.05),
+            _f(60, _A + 800_000, 100.40), _f(66, _A + 803_000, 100.401), _f(70, _A + 806_000, 100.402)]
+    rec = _rec(post)
+    rec["t0_read_device_ts"] = _A + 200_000
+    rec["t0_read_age_s"] = 0.002                     # 2 ms measured -> 6000 ticks @ 3 MHz
+    out = analyze_fire(rec)
+    assert out["t0_method"] == "read_at_fire_certified"
+    assert out["plausible"] is True
+    assert 1.5 <= out["reference_gap_ms"] <= 3.0     # certified ref_gap = max(frame_gap, 2ms) ~= 2ms
+    assert out["lat_lo_ms"] <= out["lat_pt_ms"] <= out["lat_hi_ms"]
+
+
+def test_read_at_fire_falls_back_to_proxy_without_measured_age():
+    # no t0_read_age_s -> proxy method (uncertainty is the median frame gap, honestly labeled)
+    post = [_f(0, _A + 65_000, 100.05),
+            _f(60, _A + 800_000, 100.40), _f(66, _A + 803_000, 100.401), _f(70, _A + 806_000, 100.402)]
+    rec = _rec(post)
+    rec["t0_read_device_ts"] = _A + 200_000          # no t0_read_age_s
+    out = analyze_fire(rec)
+    assert out["t0_method"] == "read_at_fire"         # proxy
+
+
 def test_read_at_fire_ignored_when_wildly_out_of_window():
     # a garbage/zero read tick must NOT be trusted -> fall back to mono_extrap (honest).
     post = [_f(60, _A + 660_000, 100.30), _f(66, _A + 663_000, 100.301), _f(70, _A + 666_000, 100.302)]

@@ -83,8 +83,17 @@ def _resolve_t0(rec: dict, anchor: dict, tpms: float, post0_rel: float | None,
         # accept if the gold tick lands after the (stale) anchor and within the captured window
         if -skew <= t0r_rel <= last_post_rel + skew:
             t0_rel = max(t0r_rel, 0.0)
-            earliest = max(t0_rel - max(drain_delta_rel, 0.0), 0.0)   # read could be one drain interval stale
-            return t0_rel, "read_at_fire", earliest, t0_rel
+            # C-precision: if the bridge measured the read's ACTUAL staleness (t0_read_age_s), the certified
+            # uncertainty is delta = max(median_frame_gap, measured_age) (grok). Else fall back to the proxy.
+            age_s = rec.get("t0_read_age_s")
+            if age_s is not None and float(age_s) >= 0.0:
+                delta = max(max(drain_delta_rel, 0.0), float(age_s) * 1000.0 * tpms)
+                method = "read_at_fire_certified"
+            else:
+                delta = max(drain_delta_rel, 0.0)
+                method = "read_at_fire"
+            earliest = max(t0_rel - delta, 0.0)
+            return t0_rel, method, earliest, t0_rel
     probe_mono = rec.get("probe_ts_mono")
     a_mono = anchor.get("t_mono")
     if probe_mono is None or a_mono is None:
@@ -242,13 +251,16 @@ def main() -> int:
     if plaus:
         pts = [r["lat_pt_ms"] for r in plaus]
         gaps = [r["reference_gap_ms"] for r in plaus]
-        n_raf = sum(1 for r in plaus if r["t0_method"] == "read_at_fire")
+        n_proxy = sum(1 for r in plaus if r["t0_method"] == "read_at_fire")
+        n_cert = sum(1 for r in plaus if r["t0_method"] == "read_at_fire_certified")
         print(f"  plausible lat_pt: min={min(pts):.0f} median={statistics.median(pts):.0f} max={max(pts):.0f} ms")
-        print(f"  plausible ref_gap: median={statistics.median(gaps):.0f} ms  ({n_raf} read_at_fire)")
-        if n_raf:
-            print("  HONESTY: read_at_fire ref_gap is a typical-cadence PROXY (median frame gap), NOT a certified")
-            print("  uncertainty bound - the drain's actual staleness at fire is UNMEASURED (needs a drain-wall")
-            print("  age; next increment). Treat lat as band-scale, not +/-ref_gap metrology.")
+        print(f"  plausible ref_gap: median={statistics.median(gaps):.0f} ms  ({n_cert} certified, {n_proxy} proxy)")
+        if n_cert:
+            print(f"  CERTIFIED: {n_cert} fire(s) use the MEASURED drain-read staleness "
+                  "(delta=max(frame_gap,age)) -> ref_gap is a real bound, not a proxy.")
+        if n_proxy:
+            print("  PROXY: read_at_fire fires without a measured age -> ref_gap is a typical-cadence proxy,")
+            print("  NOT certified; treat those lat as band-scale. Re-capture with the C-precision bridge.")
     # GREENLIT = channel viable UNDER HONEST t0 (NOT 'band cleared'); require majority plausible + R2 moves
     go = (len(plaus) >= (len(rows) + 1) // 2 and statistics.median(post_moves) > DELTA)
     verdict = "CHANNEL VIABLE under honest t0" if go else "NO-GO / insufficient — inspect"

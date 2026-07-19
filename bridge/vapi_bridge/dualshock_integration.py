@@ -485,6 +485,10 @@ class DualShockTransport:
         # fire reads it at the fire instant for a gold-standard t0 in device space (immune to the
         # session-loop pre-buffer staleness that F-R2ONSET-1 exposed). Single-writer int, GIL-safe.
         self._last_raw_device_ts: int = 0
+        # C-precision: monotonic wall time when _last_raw_device_ts was last written, so the fire can
+        # measure the read's ACTUAL staleness (fire_mono - drain_mono) -> a CERTIFIED read-at-fire
+        # uncertainty bound instead of the median-frame-gap proxy (grok C-verify residual).
+        self._last_raw_wall: float = 0.0
         # DIAG (r2-blind investigation): freshest RAW R2 byte (data[6]) from the drain, to compare against
         # the session-loop ds.state.R2_value path that populates the dump. Distinguishes a code read-path
         # issue (drain sees R2, ds.state doesn't) from a true topology blind (both 0).
@@ -952,6 +956,7 @@ class DualShockTransport:
                                 self._last_raw_device_ts = (
                                     data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
                                 )
+                                self._last_raw_wall = time.monotonic()   # C-precision: read timestamp
                             if len(data) > 6:
                                 self._last_raw_r2 = data[6]   # DIAG: raw R2 from the drain (vs ds.state)
                             if _push_l2 and len(data) > 31:
@@ -3293,6 +3298,11 @@ class DualShockTransport:
             # device space, gold-standard (no session-loop pre-buffer staleness). 0 if the drain has not
             # populated yet -> the offline study falls back to mono-extrap/stale_pre honestly.
             _t0_read_device_ts = int(getattr(self, "_last_raw_device_ts", 0) or 0)
+            # C-precision: the read's ACTUAL staleness at the fire instant (_probe_ts and the drain stamp
+            # are both time.monotonic()). Gives the study a CERTIFIED uncertainty bound (not a proxy).
+            # -1.0 when the drain hasn't stamped yet -> study falls back to the median-frame-gap proxy.
+            _drain_wall = float(getattr(self, "_last_raw_wall", 0.0) or 0.0)
+            _t0_read_age_s = max(0.0, float(_probe_ts) - _drain_wall) if _drain_wall > 0.0 else -1.0
 
             _loop = asyncio.get_event_loop()
             _hold_s = max(0.015, _hold_ms / 1000.0)
@@ -3317,6 +3327,7 @@ class DualShockTransport:
                 "poep_t_fire_ns": _t_fire_ns,
                 "poep_probe_device_ts": _probe_device_ts,   # F-RIG27-8 robust-clock anchor
                 "poep_t0_read_device_ts": _t0_read_device_ts,   # F-R2ONSET-1 read-at-fire (C) gold t0
+                "poep_t0_read_age_s": _t0_read_age_s,   # C-precision: measured drain-read staleness
                 "poep_future": _fut,
             }
             self._l6b_post_buffer = []
@@ -3426,6 +3437,7 @@ class DualShockTransport:
             "probe_hold_ms": pending.get("probe_hold_ms"),
             "probe_device_ts": probe_device_ts,
             "t0_read_device_ts": int(pending.get("poep_t0_read_device_ts", 0) or 0),   # C gold t0
+            "t0_read_age_s": float(pending.get("poep_t0_read_age_s", -1.0)),   # C-precision: read staleness
             "raw_r2_at_fire": int(getattr(self, "_last_raw_r2", 0) or 0),   # DIAG: drain's raw R2 vs ds.state
             "resolved_latency_ms": latency_ms,
             "device_latency_ms": device_latency_ms,
