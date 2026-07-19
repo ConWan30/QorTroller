@@ -28,7 +28,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "l9_presence"))
 sys.path.insert(0, os.path.join(_ROOT, "scripts"))
 from population_band import (  # noqa: E402
-    estimate_population_band, MIN_OPERATORS_FOR_POPULATION, MIN_SAMPLES_PER_OPERATOR,
+    estimate_population_band, frr_for_band, MIN_OPERATORS_FOR_POPULATION, MIN_SAMPLES_PER_OPERATOR,
 )
 from poep_ring_coupling_study import analyze_fire  # noqa: E402
 
@@ -88,6 +88,11 @@ def main() -> int:
                     help="drop reactions below this (no-reaction / spurious-fast); disclosed in output")
     ap.add_argument("--max-ms", type=float, default=None,
                     help="drop reactions above this (no-reaction / F-RIG27-8-inflated RP outliers); disclosed")
+    ap.add_argument("--score-band", default=None, metavar="LO,HI",
+                    help="HELD-OUT MODE: instead of FITTING a band, score the loaded captures against a FROZEN "
+                         "band LO,HI (e.g. 202,410). Reports held-out FRR = fraction of a FRESH capture's "
+                         "reactions OUTSIDE the frozen band -> the real generalization test (not in-sample fit). "
+                         "Use with --players <new_label> pointing at a capture NOT used to fit the band.")
     args = ap.parse_args()
 
     ops = latencies_from_live_files(sorted(glob.glob(os.path.join(args.dir, "poep_live_capture_*.json"))))
@@ -117,6 +122,27 @@ def main() -> int:
         flag = "" if len(s) >= MIN_SAMPLES_PER_OPERATOR else f"  (< {MIN_SAMPLES_PER_OPERATOR} - thin)"
         print(f"  operator {op}: n={len(s)}  min={min(s):.0f} median={statistics.median(s):.0f} "
               f"max={max(s):.0f} ms{flag}")
+
+    # HELD-OUT SCORING: score a FRESH capture against a FROZEN band (generalization test, NOT a re-fit).
+    if args.score_band is not None:
+        try:
+            lo_s, hi_s = args.score_band.split(",")
+            lo, hi = float(lo_s), float(hi_s)
+        except Exception:
+            print(f"  bad --score-band '{args.score_band}' (want LO,HI e.g. 202,410)"); return 2
+        print(f"\n  === HELD-OUT SCORING against the FROZEN band ({lo:.0f}, {hi:.0f}] ms ===")
+        print("  held-out FRR = fraction of THIS (fresh, not-used-to-fit) capture OUTSIDE the frozen band.")
+        for op, s in sorted(ops.items()):
+            frr = frr_for_band(s, lo, hi)
+            n_in = sum(1 for x in s if lo <= x <= hi)
+            below = sum(1 for x in s if x < lo)
+            above = sum(1 for x in s if x > hi)
+            print(f"  operator {op}: n={len(s)}  in-band={n_in}/{len(s)}  held-out FRR={frr}  "
+                  f"(below={below} above={above})")
+        print("  NOTE: this is the real generalization test — a low held-out FRR means the frozen band")
+        print("  captures a fresh capture well; a high one means the band doesn't generalize (widen/recapture).")
+        print("  candidate/advisory; gates nothing; poep_enabled/L6B/L6_CHALLENGES stay False.")
+        return 0
 
     r = estimate_population_band(ops)
     print(f"\n  operators: {r['n_operators']} (need >= {MIN_OPERATORS_FOR_POPULATION}) | "
