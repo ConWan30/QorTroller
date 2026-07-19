@@ -41,7 +41,7 @@ def main() -> int:
     res = detect_session(recs, k_required=args.k, rate_min=args.rate_min, isi_ms=args.isi_ms)
     print(f"=== QorTroller anti-cheat detector (advisory; gates nothing) ===")
     print(f"  session: {res['n_challenges']} challenges from {args.dir}")
-    print(f"  per-fire: GO={res['n_go']} SOFT_slow={res['n_soft_slow']} sub_floor={res['n_sub_floor']} "
+    print(f"  per-fire: GO={res['n_go']} SOFT={res['n_soft']} sub_floor={res['n_sub_floor']} "
           f"no_reaction={res['n_no_reaction']} bad_ref={res['n_bad_reference']}")
     print(f"  go_rate={res['go_rate']}  threshold={res['go_threshold']} (=max(K={res['k_required']}, "
           f"{res['rate_min']:.0%}*N))  blind-bot p_go={res['blind_bot_p_go']} p_sub_floor={res['blind_bot_p_sub_floor']}")

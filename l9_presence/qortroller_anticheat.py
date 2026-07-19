@@ -19,6 +19,9 @@ reaction consistency:
   This is small — not "astronomically" universally — while a live human who FEELS each buzz clears it. The
   FAR is NON-MONOTONE in both N (worst-in-N at the K-floor crossover N~=25 AT FIXED ISI) and ISI; the JOINT
   (N,ISI) worst case is (band/GO_HI)^K = 3.2e-4 at N=K, ISI=GO_HI (see worst_case_true_far / the audit).
+  CAVEAT (grok r07 F13): 3.2e-4 is the SINGLE-OPERATOR config (sub_floor == go_lo). A POPULATION config
+  (sub_floor < go_lo; see l9_presence.population_band) has a HIGHER joint worst case whose argmax shifts off
+  N=K — call worst_case_true_far(..., sub_floor_ms=...) for that config's number; do NOT reuse 3.2e-4.
 
 VERDICTS (fail-closed): HUMAN_PRESENT / SUSPECTED_BOT / DEAD_FEED / INSUFFICIENT. This module EMITS a verdict
 and gates NOTHING — poep_enabled / L6B / L6_CHALLENGES stay False; no on-chain, no presence-API flip.
@@ -51,14 +54,20 @@ DEFAULT_ISI_MS = 3000.0         # inter-stimulus interval assumed for the blind-
 _BAND_MS = GO_HI_MS - GO_LO_MS
 
 
-def blind_bot_probs(isi_ms: float = DEFAULT_ISI_MS) -> tuple[float, float]:
+def blind_bot_probs(isi_ms: float = DEFAULT_ISI_MS, go_lo_ms: float = GO_LO_MS,
+                    go_hi_ms: float = GO_HI_MS, sub_floor_ms: float | None = None) -> tuple[float, float]:
     """Per-challenge (p_GO, p_SUB_FLOOR) of a fire-time-BLIND uniform-timing bot: its press latency vs the
-    UNKNOWN fire is ~Unif[0, ISI]. INTERSECTION measure (F18) so p_go+p_fast <= 1 even for ISI < GO_HI:
-    p_go = |(GO_LO, min(GO_HI,ISI)]| / ISI ; p_fast = min(GO_LO, ISI) / ISI."""
+    UNKNOWN fire is ~Unif[0, ISI]. INTERSECTION measure (F18) so p_go+p_fast <= 1 even for ISI < go_hi:
+    p_go = |(go_lo, min(go_hi,ISI)]| / ISI ; p_fast = |[0, min(sub, ISI)]| / ISI where sub is the FATAL
+    sub-floor. sub_floor defaults to go_lo (single-operator config, where sub==go_lo). A POPULATION config
+    (l9_presence.population_band) sets sub < go_lo, which SHRINKS the fatal zone -> the (sub_floor, go_lo]
+    'soft' band becomes p_OTHER (non-fatal, non-GO), which RAISES the TRUE FAR (F4). The soft zone is
+    surfaced through this smaller p_fast, not hidden."""
     if isi_ms <= 0:
         return 1.0, 0.0
-    p_go = max(0.0, (min(GO_HI_MS, isi_ms) - GO_LO_MS)) / isi_ms
-    p_fast = min(GO_LO_MS, isi_ms) / isi_ms
+    sub = go_lo_ms if sub_floor_ms is None else sub_floor_ms
+    p_go = max(0.0, (min(go_hi_ms, isi_ms) - go_lo_ms)) / isi_ms
+    p_fast = min(sub, isi_ms) / isi_ms
     return p_go, p_fast
 
 
@@ -77,40 +86,45 @@ def binom_tail_ge(n: int, k: int, p: float) -> float:
     return sum(math.comb(n, i) * (p ** i) * ((1.0 - p) ** (n - i)) for i in range(k, n + 1))
 
 
-def blind_bot_far(n: int, k: int, isi_ms: float = DEFAULT_ISI_MS) -> float:
+def blind_bot_far(n: int, k: int, isi_ms: float = DEFAULT_ISI_MS,
+                  go_lo_ms: float = GO_LO_MS, go_hi_ms: float = GO_HI_MS,
+                  sub_floor_ms: float | None = None) -> float:
     """TRUE blind-bot false-accept probability for a uniform-timing bot = P(>= k GOs AND ZERO sub-floor).
     HUMAN_PRESENT requires n_go>=k AND n_sub_floor==0, so every non-GO press must be OTHER (not FAST):
     sum_{i=k}^{n} C(n,i) p_go^i * p_other^(n-i), p_other = 1 - p_go - p_fast. Always <= the binomial UB.
     NON-MONOTONE in ISI (F16/F19): rapid cadence raises BOTH p_go AND p_fast. At LARGE fixed N the sub-floor
-    trap lowers the TRUE FAR at short ISI; but the JOINT adversary picks SMALL N + ISI near GO_HI, where the
-    TRUE FAR is MAXIMAL = (band/GO_HI)^K = 3.2e-4 at N=K=5, ISI=GO_HI=400ms (see worst_case_true_far). Do NOT
-    read 'short ISI is safer' — the joint worst case IS a short ISI."""
+    trap lowers the TRUE FAR at short ISI; but the JOINT adversary picks SMALL N + ISI near go_hi, where the
+    TRUE FAR is MAXIMAL (see worst_case_true_far). Do NOT read 'short ISI is safer'. go_lo/go_hi default to
+    the single-operator band; a WIDER band RAISES the FAR (band grows). sub_floor defaults to go_lo; a
+    POPULATION config with sub_floor < go_lo shrinks the fatal zone (soft escape) -> RAISES the FAR (F4)."""
     if k <= 0:
         return 1.0
     if k > n:
         return 0.0
-    p_go, p_fast = blind_bot_probs(isi_ms)
+    p_go, p_fast = blind_bot_probs(isi_ms, go_lo_ms, go_hi_ms, sub_floor_ms)
     p_other = max(0.0, 1.0 - p_go - p_fast)
     return sum(math.comb(n, i) * (p_go ** i) * (p_other ** (n - i)) for i in range(k, n + 1))
 
 
 def worst_case_true_far(k_required: int = K_REQUIRED_DEFAULT, rate_min: float = RATE_MIN_DEFAULT,
-                        isi_hi_ms: float = 4000.0, isi_step_ms: float = 5.0,
-                        n_max: int = 80) -> tuple[int, float, float]:
-    """JOINT worst-case TRUE FAR over (N, ISI) — the honest security number (F19). Analytically it is
-    (band/GO_HI)^K at ISI=GO_HI, N=K: p_go is MAXIMAL there (= band/GO_HI) and p_other=0 forces every
-    non-GO press to be sub-floor, so the only HUMAN_PRESENT path is ALL-K-GO. Grid-verified (the grid
-    includes ISI=GO_HI exactly). Returns (n, isi_ms, far). Do NOT publish a slice as the envelope max."""
+                        isi_hi_ms: float = 4000.0, isi_step_ms: float = 5.0, n_max: int = 80,
+                        go_lo_ms: float = GO_LO_MS, go_hi_ms: float = GO_HI_MS,
+                        sub_floor_ms: float | None = None) -> tuple[int, float, float]:
+    """JOINT worst-case TRUE FAR over (N, ISI) — the honest security number (F19). For the single-operator
+    config (sub_floor==go_lo) it is (band/go_hi)^K at ISI=go_hi, N=K: p_go is MAXIMAL there (= band/go_hi)
+    and p_other=0 forces every non-GO press to be sub-floor, so the only HUMAN_PRESENT path is ALL-K-GO. For
+    a POPULATION config (sub_floor < go_lo) p_other > 0 even at ISI=go_hi (the soft escape), so the max is
+    HIGHER and the argmax can shift off N=K — the grid finds it (F4). Grid includes ISI=go_hi exactly.
+    Returns (n, isi_ms, far). Do NOT publish a slice as the envelope max."""
     best = (0, 0.0, 0.0)
-    isi = GO_HI_MS                                     # the analytic argmax; then sweep above it
-    grid = [GO_HI_MS]
-    x = GO_LO_MS + 1.0
+    grid = [go_hi_ms]                                  # the analytic argmax (single-op); then sweep above it
+    x = go_lo_ms + 1.0
     while x <= isi_hi_ms:
         grid.append(x)
         x += isi_step_ms
     for isi in grid:
         for n in range(1, n_max):
-            f = blind_bot_far(n, go_threshold(n, k_required, rate_min), isi)
+            f = blind_bot_far(n, go_threshold(n, k_required, rate_min), isi, go_lo_ms, go_hi_ms, sub_floor_ms)
             if f > best[2]:
                 best = (n, isi, f)
     return best
@@ -136,20 +150,26 @@ def go_threshold(n: int, k_required: int = K_REQUIRED_DEFAULT,
 
 
 def detect_session(recs: list[dict], k_required: int = K_REQUIRED_DEFAULT,
-                   rate_min: float = RATE_MIN_DEFAULT, isi_ms: float = DEFAULT_ISI_MS) -> dict[str, Any]:
-    """Emit a session-level anti-cheat verdict from a list of nonce-bound fire dumps. Gates nothing."""
-    per = [detect_voluntary_go(r) for r in recs]
+                   rate_min: float = RATE_MIN_DEFAULT, isi_ms: float = DEFAULT_ISI_MS,
+                   go_lo_ms: float = GO_LO_MS, go_hi_ms: float = GO_HI_MS,
+                   sub_floor_ms: float | None = None) -> dict[str, Any]:
+    """Emit a session-level anti-cheat verdict from a list of nonce-bound fire dumps. Gates nothing. go_lo/
+    go_hi default to the single-operator band; supply a POPULATION band (l9_presence.population_band) +
+    sub_floor_ms=anticipation floor to be population-safe (F5). All FAR is recomputed for the given band."""
+    per = [detect_voluntary_go(r, go_lo_ms, go_hi_ms, sub_floor_ms) for r in recs]
     n = len(recs)
     n_go = sum(1 for v in per if v["verdict"] == "GO")
-    n_soft = sum(1 for v in per if v["verdict"] == "SOFT_TOO_SLOW")
+    n_soft = sum(1 for v in per if v["verdict"] in ("SOFT_TOO_SLOW", "SOFT_TOO_FAST"))
     n_fast = sum(1 for v in per if v["verdict"] == "REJECT_TOO_FAST")
     n_noreact = sum(1 for v in per if v["verdict"] == "REJECT_NO_REACTION")
     n_badref = sum(1 for v in per if v["verdict"] == "REJECT")
 
     thr = go_threshold(n, k_required, rate_min)
     obs_isi = observed_isi_ms(recs)
-    p_go, p_fast = blind_bot_probs(isi_ms)                                 # FAR at the ASSUMED (stated) ISI
-    far_true = blind_bot_far(n, thr, isi_ms) if n > 0 else 1.0             # TRUE multinomial (zero sub-floor)
+    # FAR threads the CONFIGURED sub-floor (grok r05 F8): a population sub_floor < go_lo shrinks the fatal
+    # zone -> RAISES this session's blind-bot FAR. Default (None -> go_lo) keeps the single-op numerics.
+    p_go, p_fast = blind_bot_probs(isi_ms, go_lo_ms, go_hi_ms, sub_floor_ms)   # FAR at ASSUMED ISI + band + sub
+    far_true = blind_bot_far(n, thr, isi_ms, go_lo_ms, go_hi_ms, sub_floor_ms) if n > 0 else 1.0  # TRUE multinom
     far_binom_ub = binom_tail_ge(n, thr, p_go) if n > 0 else 1.0           # loose upper bound (F2)
     go_rate = (n_go / n) if n else 0.0
 
@@ -157,10 +177,13 @@ def detect_session(recs: list[dict], k_required: int = K_REQUIRED_DEFAULT,
     if n == 0:
         verdict, why = "INSUFFICIENT", "no challenges in the session window"
     elif n_fast > 0:
-        # a press below the SINGLE-OPERATOR PROVISIONAL floor. Heuristic bot signal, NOT a proof of
-        # non-humanity (F5): a population human faster than the floor would trip this -> a known residual.
+        # a press below the CONFIGURED sub-floor. Heuristic bot signal, NOT a proof of non-humanity (F5): on
+        # the DEFAULT (single-op) path sub==go_lo=320ms so a fast human trips it (the residual the population
+        # band closes); on a POPULATION path sub is the ~120ms anticipation floor, so only sub-human presses
+        # trip it. The message reports the ACTUAL sub-floor in force, not a hardcoded 320 (grok r03 F5).
+        eff_sub = go_lo_ms if sub_floor_ms is None else sub_floor_ms
         verdict, why = "SUSPECTED_BOT", (
-            f"{n_fast} press(es) below the provisional floor {GO_LO_MS:.0f}ms (heuristic, not proof)")
+            f"{n_fast} press(es) below the configured sub-floor {eff_sub:.0f}ms (heuristic, not proof)")
     elif n < k_required:
         verdict, why = "INSUFFICIENT", f"only {n} challenges (< K={k_required}); keep challenging"
     elif n_go >= thr:
@@ -179,7 +202,7 @@ def detect_session(recs: list[dict], k_required: int = K_REQUIRED_DEFAULT,
         "verdict": verdict,
         "why": why,
         "n_challenges": n,
-        "n_go": n_go, "n_soft_slow": n_soft, "n_sub_floor": n_fast,
+        "n_go": n_go, "n_soft": n_soft, "n_sub_floor": n_fast,   # n_soft aggregates SOFT_TOO_SLOW + SOFT_TOO_FAST
         "n_no_reaction": n_noreact, "n_bad_reference": n_badref,
         "k_required": k_required, "rate_min": rate_min, "go_threshold": thr,
         "go_rate": round(go_rate, 3),
@@ -188,10 +211,21 @@ def detect_session(recs: list[dict], k_required: int = K_REQUIRED_DEFAULT,
         "blind_bot_p_go": round(p_go, 5), "blind_bot_p_sub_floor": round(p_fast, 5),
         "blind_bot_far": far_true,               # TRUE multinomial FALSE-ACCEPT vs a fire-time-BLIND bot
         "blind_bot_far_binom_ub": far_binom_ub,  # loose upper bound (counts sub-floor paths -> SUSPECTED_BOT; F2)
-        "far_note": ("TRUE FAR at the ASSUMED ISI; NON-MONOTONE in ISI (F16/F19). At large fixed N a short "
-                     "ISI LOWERS the TRUE FAR (sub-floor trap); but the JOINT worst case is SMALL N + ISI near "
-                     "GO_HI: max TRUE FAR = (band/GO_HI)^K = 3.2e-4 at N=K=5, ISI=400ms (worst_case_true_far). "
-                     "observed_isi_ms is advisory context (inflated if the dir concatenates sessions)"),
+        # far_note is CONFIG-CONDITIONAL (grok r05 F9): the hardcoded (band/GO_HI)^K=3.2e-4 envelope is ONLY
+        # the SINGLE-OPERATOR config (sub==go_lo). A population config (sub < go_lo) has a HIGHER joint
+        # envelope whose argmax shifts off N=K — do NOT report 3.2e-4 for it; point at worst_case_true_far.
+        "far_note": (
+            ("TRUE FAR at the ASSUMED ISI; NON-MONOTONE in ISI (F16/F19). At large fixed N a short ISI LOWERS "
+             "the TRUE FAR (sub-floor trap); the JOINT worst case is SMALL N + ISI near GO_HI: max TRUE FAR = "
+             "(band/GO_HI)^K = 3.2e-4 at N=K=5, ISI=400ms (worst_case_true_far). observed_isi_ms is advisory.")
+            # single-op note applies when sub >= go_lo (fatal zone >= band floor -> FAR <= 3.2e-4); the
+            # population-config note only when the sub-floor is STRICTLY below go_lo (grok r07 F12 harden).
+            if (sub_floor_ms is None or sub_floor_ms >= go_lo_ms) else
+            (f"TRUE FAR at the ASSUMED ISI for a POPULATION config (sub-floor {sub_floor_ms:.0f}ms < go_lo "
+             f"{go_lo_ms:.0f}ms). The single-op (band/GO_HI)^K=3.2e-4 envelope does NOT apply — the smaller "
+             f"fatal zone RAISES the joint worst-case AND shifts its argmax off N=K; compute the exact "
+             f"envelope with worst_case_true_far(go_lo={go_lo_ms:.0f}, go_hi={go_hi_ms:.0f}, "
+             f"sub_floor_ms={sub_floor_ms:.0f}). observed_isi_ms is advisory.")),
         "advisory": True,                         # emits a verdict; gates nothing
         "residual_note": ("blind-bot FAR only, and assumes a TIMING-ONLY adversary that already produces gold "
                           "device-clock dumps (synthetic privilege, F13); a fire-time-OBSERVING bot (host APIs "

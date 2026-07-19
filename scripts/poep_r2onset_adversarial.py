@@ -48,9 +48,14 @@ _TPMS = 3000.0
 _A = 1_000_000      # synthetic anchor device tick
 
 
-def detect_voluntary_go(rec: dict[str, Any]) -> dict[str, Any]:
+def detect_voluntary_go(rec: dict[str, Any], go_lo_ms: float = GO_LO_MS, go_hi_ms: float = GO_HI_MS,
+                        sub_floor_ms: float | None = None) -> dict[str, Any]:
     """v0 anti-cheat verdict for one nonce-bound fire dump. GO requires a gold read-at-fire t0, a real R2
-    reaction, and lat in (GO_LO, GO_HI]. Returns {verdict, reason, lat_pt_ms, t0_method}."""
+    reaction, and lat in (go_lo, go_hi]. go_lo/go_hi default to the single-operator band; a POPULATION band
+    (l9_presence.population_band) can be supplied. sub_floor_ms (below = REJECT_TOO_FAST, non-human) defaults
+    to go_lo (single-op behavior); a population config sets it to the anticipation floor (~120ms) so a fast
+    human BELOW the band is SOFT_TOO_FAST (retry), NOT falsely flagged as a bot (F5). Returns the verdict."""
+    sub = go_lo_ms if sub_floor_ms is None else sub_floor_ms
     r = analyze_fire(rec)
     t0m = r["t0_method"]
     lat = r["lat_pt_ms"]
@@ -62,11 +67,13 @@ def detect_voluntary_go(rec: dict[str, Any]) -> dict[str, Any]:
         out.update(verdict="REJECT_NO_REACTION", reason="no plausible in-window reaction"); return out
     if r["max_dR2_post"] <= DELTA:
         out.update(verdict="REJECT_NO_REACTION", reason="flat R2 (no reaction on the channel)"); return out
-    if lat <= GO_LO_MS:
-        out.update(verdict="REJECT_TOO_FAST", reason=f"lat {lat:.0f}ms <= human floor {GO_LO_MS:.0f}ms"); return out
-    if lat > GO_HI_MS:
-        out.update(verdict="SOFT_TOO_SLOW", reason=f"lat {lat:.0f}ms > band {GO_HI_MS:.0f}ms (retry, not a bot)"); return out
-    out.update(verdict="GO", reason=f"lat {lat:.0f}ms in ({GO_LO_MS:.0f},{GO_HI_MS:.0f}] on gold t0")
+    if lat <= sub:
+        out.update(verdict="REJECT_TOO_FAST", reason=f"lat {lat:.0f}ms <= sub-floor {sub:.0f}ms (non-human)"); return out
+    if lat <= go_lo_ms:
+        out.update(verdict="SOFT_TOO_FAST", reason=f"lat {lat:.0f}ms below band {go_lo_ms:.0f}ms but above sub-floor (retry, not a bot)"); return out
+    if lat > go_hi_ms:
+        out.update(verdict="SOFT_TOO_SLOW", reason=f"lat {lat:.0f}ms > band {go_hi_ms:.0f}ms (retry, not a bot)"); return out
+    out.update(verdict="GO", reason=f"lat {lat:.0f}ms in ({go_lo_ms:.0f},{go_hi_ms:.0f}] on gold t0")
     return out
 
 
