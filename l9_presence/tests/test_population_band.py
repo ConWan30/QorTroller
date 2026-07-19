@@ -304,3 +304,28 @@ def test_pooling_no_samples_returns_2(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["pb", "--dir", str(tmp_path)])     # empty dir
     rc = pb.main()
     assert rc == 2
+
+
+def test_pooling_score_band_is_held_out_not_refit(tmp_path, monkeypatch, capsys):
+    # --score-band scores a FRESH capture against a FROZEN band (generalization), it does NOT re-fit.
+    import poep_population_band as pb
+    # a held-out Con run: 18 inside (202,410], 2 below, 0 above
+    lat = [250.0] * 18 + [150.0, 190.0]
+    _write_live_file(tmp_path, "ConHeldout", lat)
+    monkeypatch.setattr(sys, "argv", ["pb", "--dir", str(tmp_path), "--players", "ConHeldout",
+                                      "--min-ms", "120", "--score-band", "202,410"])
+    rc = pb.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "HELD-OUT SCORING against the FROZEN band (202, 410]" in out
+    assert "in-band=18/20" in out and "held-out FRR=0.1" in out and "below=2 above=0" in out
+    # crucially it did NOT print the fitting output (no PROVISIONAL / band-fit line)
+    assert "PROVISIONAL:" not in out
+
+
+def test_pooling_score_band_rejects_bad_arg(tmp_path, monkeypatch, capsys):
+    import poep_population_band as pb
+    _write_live_file(tmp_path, "X", [250.0] * 20)
+    monkeypatch.setattr(sys, "argv", ["pb", "--dir", str(tmp_path), "--score-band", "not-a-band"])
+    rc = pb.main()
+    assert rc == 2

@@ -20,6 +20,17 @@ to a live nonce-bound haptic R2 challenge on the registered Edge (`581a836c…`)
 
 Total 66 pooled reactions, 2 operators.
 
+## Held-out validation (the real generalization test)
+A **fresh Con capture** (`ConHeldout`, distinct label, 25/25 LIVE-VERIFY PASS, 202–305 ms) — **not** part of
+the data that fit the band — scored against the **frozen (202, 410] band** via
+`poep_population_band.py --players ConHeldout --min-ms 120 --score-band 202,410`:
+- **in-band = 25/25 · held-out FRR = 0.0 · (below=0, above=0).** Identical against the precise (202.4, 409.6].
+- This is a *held-out* number (unlike the in-sample FRR above): the scored reactions never touched the fit.
+  It confirms the band **generalizes across sessions for Con** — not overfit to his first run.
+- **Still open:** a true *population* generalization test scores a THIRD person (never used to fit) against
+  the frozen band. Con-held-out validates cross-session stability for a known member, not cross-person
+  coverage; and both fitted members are fast reactors, so a slower person could still land above 410 ms.
+
 ## Provenance
 - Live capture: `scripts/poep_live_capture.py --player <Con|Fari> --count 25 --mode pulse --no-store` on the
   registered Edge over USB (silent, nonce-scheduled unpredictable R2 **pulse** buzz; react → grip/R2 tap;
