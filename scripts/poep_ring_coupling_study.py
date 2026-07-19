@@ -61,14 +61,34 @@ def _first_post0(post: list[dict]) -> dict | None:
     return None
 
 
-def _resolve_t0(rec: dict, anchor: dict, post0: dict | None, tpms: float) -> tuple[float, str, float | None]:
-    """Return (t0_rel_ticks, method, post0_rel_ticks) — all relative to anchor.device_ts (wrap-safe)."""
+def _resolve_t0(rec: dict, anchor: dict, tpms: float, post0_rel: float | None,
+                last_post_rel: float | None, drain_delta_rel: float) -> tuple[float, str, float, float]:
+    """Return (t0_rel, method, earliest_rel, latest_rel) — all relative to anchor.device_ts (wrap-safe).
+
+    The uncertainty interval is [earliest_rel, latest_rel] (earliest -> largest latency lat_hi, latest ->
+    smallest lat_lo). Precedence:
+      1. read_at_fire (C): the ~1 kHz drain captured the fire-instant tick. Gold t0 — and note the drain is
+         FRESHER than post0 under RP (post0 is a stale buffered sample), so t0_read can exceed post0. The
+         uncertainty is ONE drain interval (the read could be that stale), NOT the pre->post frame gap:
+         t0 in [t0_read - drain_delta, t0_read] -> a TIGHT interval.
+      2. mono_extrap: extrapolate the monotonic fire into device space from the anchor (known 3 MHz rate).
+         t0 in [anchor, post0] -> the full frame-gap interval.
+      3. stale_pre: t0 = anchor (honest fallback when the monotonic anchor is absent).
+    """
     a_dev = float(anchor["device_ts"])
-    post0_rel = _wrap(float(post0["device_ts"]) - a_dev) if post0 else None
+    t0_read = rec.get("t0_read_device_ts")
+    if t0_read and last_post_rel is not None:
+        t0r_rel = _wrap(float(t0_read) - a_dev)
+        skew = 5.0 * tpms
+        # accept if the gold tick lands after the (stale) anchor and within the captured window
+        if -skew <= t0r_rel <= last_post_rel + skew:
+            t0_rel = max(t0r_rel, 0.0)
+            earliest = max(t0_rel - max(drain_delta_rel, 0.0), 0.0)   # read could be one drain interval stale
+            return t0_rel, "read_at_fire", earliest, t0_rel
     probe_mono = rec.get("probe_ts_mono")
     a_mono = anchor.get("t_mono")
     if probe_mono is None or a_mono is None:
-        return 0.0, "stale_pre", post0_rel   # honest fallback: t0 = anchor device_ts
+        return 0.0, "stale_pre", 0.0, (post0_rel if post0_rel is not None else 0.0)
     elapsed_ms = (float(probe_mono) - float(a_mono)) * 1000.0
     t0_rel = elapsed_ms * tpms
     method = "mono_extrap"
@@ -76,7 +96,7 @@ def _resolve_t0(rec: dict, anchor: dict, post0: dict | None, tpms: float) -> tup
         t0_rel, method = 0.0, "extrap_clamped"
     elif post0_rel is not None and t0_rel > post0_rel:
         t0_rel, method = post0_rel, "extrap_clamped"
-    return t0_rel, method, post0_rel
+    return t0_rel, method, 0.0, (post0_rel if post0_rel is not None else t0_rel)   # [anchor, post0]
 
 
 def analyze_fire(rec: dict[str, Any]) -> dict[str, Any]:
@@ -106,8 +126,19 @@ def analyze_fire(rec: dict[str, Any]) -> dict[str, Any]:
         return base
 
     a_dev = float(anchor["device_ts"])
-    t0_rel, method, post0_rel = _resolve_t0(rec, anchor, post0, tpms)
-    reference_gap_ms = (post0_rel / tpms) if post0_rel is not None else None
+    post_devs = [_wrap(float(f["device_ts"]) - a_dev)
+                 for f in post if isinstance(f, dict) and f.get("device_ts")]
+    post0_rel = post_devs[0] if post_devs else None
+    last_post_rel = post_devs[-1] if post_devs else None
+    # drain interval = median consecutive post-frame device gap = the read-at-fire staleness bound
+    _diffs = sorted(post_devs[i + 1] - post_devs[i] for i in range(len(post_devs) - 1)
+                    if post_devs[i + 1] >= post_devs[i])
+    drain_delta_rel = _diffs[len(_diffs) // 2] if _diffs else 0.0
+    t0_rel, method, earliest_rel, latest_rel = _resolve_t0(
+        rec, anchor, tpms, post0_rel, last_post_rel, drain_delta_rel)
+    # reference_gap = t0 uncertainty = latest possible t0 minus earliest possible t0.
+    # read_at_fire -> ONE drain interval (tight); mono/stale -> the full anchor->post0 frame gap (wide).
+    reference_gap_ms = (latest_rel - earliest_rel) / tpms
     legacy_probe = rec.get("probe_device_ts")
     t0_legacy_delta_ms = None
     if legacy_probe:
@@ -121,12 +152,13 @@ def analyze_fire(rec: dict[str, Any]) -> dict[str, Any]:
         rel = _wrap(float(f["device_ts"]) - a_dev)
         timeline.append(((rel - t0_rel) / tpms, abs(float(f.get("r2", 0) or 0) - pre_mean), rel))
 
-    max_act = max((d for t, d, _ in timeline if t <= act_end_ms), default=0.0)
+    # windows are relative to the recovered fire t0; frames with t<0 are pre-fire (stale-buffered) -> excluded
+    max_act = max((d for t, d, _ in timeline if 0.0 <= t <= act_end_ms), default=0.0)
     max_post = max((d for t, d, _ in timeline if t > act_end_ms), default=0.0)
 
     naive_ms, naive_in_act = None, None
     for t, d, _ in timeline:
-        if d > DELTA:
+        if t >= 0.0 and d > DELTA:
             naive_ms, naive_in_act = t, (t <= act_end_ms)
             break
 
@@ -148,9 +180,9 @@ def analyze_fire(rec: dict[str, Any]) -> dict[str, Any]:
 
     lat_lo = lat_pt = lat_hi = None
     if onset_rel is not None:
-        lat_hi = onset_rel / tpms                                    # t0 = anchor (earliest) -> largest
-        lat_pt = (onset_rel - t0_rel) / tpms                         # t0 = extrapolation
-        lat_lo = ((onset_rel - post0_rel) / tpms) if post0_rel is not None else lat_pt   # t0 = post0 -> smallest
+        lat_hi = (onset_rel - earliest_rel) / tpms                   # t0 = earliest possible -> largest latency
+        lat_pt = (onset_rel - t0_rel) / tpms                         # t0 = chosen (read_at_fire / extrap / stale)
+        lat_lo = (onset_rel - latest_rel) / tpms                     # t0 = latest possible -> smallest latency
 
     plausible = bool(
         onset_rel is not None and lat_pt is not None and 0.0 < lat_pt <= GATED_CEIL_MS
@@ -210,8 +242,13 @@ def main() -> int:
     if plaus:
         pts = [r["lat_pt_ms"] for r in plaus]
         gaps = [r["reference_gap_ms"] for r in plaus]
+        n_raf = sum(1 for r in plaus if r["t0_method"] == "read_at_fire")
         print(f"  plausible lat_pt: min={min(pts):.0f} median={statistics.median(pts):.0f} max={max(pts):.0f} ms")
-        print(f"  plausible ref_gap: median={statistics.median(gaps):.0f} ms (precision floor without read-at-fire)")
+        print(f"  plausible ref_gap: median={statistics.median(gaps):.0f} ms  ({n_raf} read_at_fire)")
+        if n_raf:
+            print("  HONESTY: read_at_fire ref_gap is a typical-cadence PROXY (median frame gap), NOT a certified")
+            print("  uncertainty bound - the drain's actual staleness at fire is UNMEASURED (needs a drain-wall")
+            print("  age; next increment). Treat lat as band-scale, not +/-ref_gap metrology.")
     # GREENLIT = channel viable UNDER HONEST t0 (NOT 'band cleared'); require majority plausible + R2 moves
     go = (len(plaus) >= (len(rows) + 1) // 2 and statistics.median(post_moves) > DELTA)
     verdict = "CHANNEL VIABLE under honest t0" if go else "NO-GO / insufficient — inspect"

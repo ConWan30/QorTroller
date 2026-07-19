@@ -75,3 +75,42 @@ def test_handles_missing_device_ts_frames():
     post = [{"r2": 90}, {"r2": 90}, _f(90, _A + 660_000, 100.30)]   # first two lack device_ts
     out = analyze_fire(_rec(post))
     assert out["n_post_with_dev_ts"] == 1
+
+
+def test_read_at_fire_gold_t0_gives_tight_interval():
+    # C read-at-fire: a fresh drain tick just BEFORE post0 -> method read_at_fire + a TIGHT uncertainty
+    # interval (vs the wide mono-extrap gap). post0 = _A+65000; t0_read = _A+63000 (0.67ms before post0).
+    post = [_f(0, _A + 65_000, 100.05),
+            _f(60, _A + 660_000, 100.30), _f(66, _A + 663_000, 100.301), _f(70, _A + 666_000, 100.302)]
+    rec = _rec(post)
+    rec["t0_read_device_ts"] = _A + 63_000
+    out = analyze_fire(rec)
+    assert out["t0_method"] == "read_at_fire"
+    assert out["plausible"] is True
+    assert out["reference_gap_ms"] < 5.0                        # gold read -> tight t0 uncertainty
+    assert out["lat_hi_ms"] - out["lat_lo_ms"] < 5.0           # tight [lo, hi] interval
+    assert out["lat_lo_ms"] <= out["lat_pt_ms"] <= out["lat_hi_ms"]
+
+
+def test_read_at_fire_accepts_fresh_tick_beyond_stale_post0():
+    # LIVE RP regime (grok C-verify): post0 is a stale BUFFERED sample (sampled before the fire, delivered
+    # late in a burst); the drain read-at-fire tick is FRESHER and EXCEEDS post0. Must still resolve
+    # read_at_fire (the window must NOT require t0_read <= post0).
+    post = [_f(0, _A + 65_000, 100.05),                  # stale-buffered pre-fire sample (before t0_read)
+            _f(60, _A + 800_000, 100.40), _f(66, _A + 803_000, 100.401), _f(70, _A + 806_000, 100.402)]
+    rec = _rec(post)
+    rec["t0_read_device_ts"] = _A + 200_000              # fresh drain tick AFTER post0 (_A+65000)
+    out = analyze_fire(rec)
+    assert out["t0_method"] == "read_at_fire"
+    assert out["plausible"] is True
+    assert out["lat_lo_ms"] <= out["lat_pt_ms"] <= out["lat_hi_ms"]
+    assert out["reference_gap_ms"] < 5.0                # tight (one drain interval), not the pre->post gap
+
+
+def test_read_at_fire_ignored_when_wildly_out_of_window():
+    # a garbage/zero read tick must NOT be trusted -> fall back to mono_extrap (honest).
+    post = [_f(60, _A + 660_000, 100.30), _f(66, _A + 663_000, 100.301), _f(70, _A + 666_000, 100.302)]
+    rec = _rec(post)
+    rec["t0_read_device_ts"] = _A + 999_999_999          # far outside [anchor, post0] window
+    out = analyze_fire(rec)
+    assert out["t0_method"] == "mono_extrap"
