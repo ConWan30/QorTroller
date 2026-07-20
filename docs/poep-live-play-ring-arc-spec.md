@@ -126,9 +126,37 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   hardware-level reference for when the physical reaction actually happened, uncoupled from the bridge's
   frame processing, the device's own HID timestamp, and the analyzer's crossing-detection logic, all three
   of which are now in question. RP-4 (`cross-lobe latency — BLOCKED (needs capture card + controlled
-  stimulus)`) was scoped for exactly this measurement, before tonight's session existed — continuing to
-  fire more RP-topology probes will not resolve which of (a)/(b) is correct; only an outside reference can.
-  **Left open, no further live-ring fires attempted this session pending a capture-card session.**
+  stimulus)`) was scoped for exactly this measurement, before tonight's session existed.
+
+  **Retest with a capture card + Remote Play FULLY CLOSED, same session, later that night:** operator
+  connected a capture card, closed the RP app entirely (input never routed through it anyway — the
+  controller BT-pairs directly to the PS5; RP only ever carried the video feed for the operator's screen),
+  re-established dual-connection (USB→PC + BT→PS5), and restarted the bridge for a clean HID handle after
+  ~11 reconnect cycles during the physical reconfiguration left the read in a degraded state (`frac=0.0`
+  on two consecutive 45s preflight windows despite confirmed active play; resolved immediately on bridge
+  restart — a real, separate finding: heavy USB/BT reconnect churn can leave the bridge's HID interface
+  handle stale even while basic poll-rate/connectivity checks still pass). With RP fully closed and a
+  fresh bridge: 2 more real fires, `latency_ms=2818.0/1029.0`, device-clock span `2416.8/899.9ms` (computed
+  the same way as before) — **same order of magnitude as every RP-topology fire tonight, no improvement
+  from removing RP.** This weakens the "RP frame-processing lag is the cause" theory further rather than
+  confirming it: if RP were the cause, removing it should have produced short latencies. It didn't.
+
+  **Sharper finding from `logs/l6b_probe_diagnostic.jsonl`** (a raw per-probe waveform record that exists
+  for this exact purpose, checked after the no-RP retest): for one recent probe (`probe_r2_force=200,
+  probe_hold_ms=300` — this specific entry's params don't match either of the operator's two manual fires,
+  most likely the auto-tick's own independent periodic probe rather than one of the two logged above, so
+  treat as characterizing the probe class on this rig rather than those two specific fires), the buffer
+  shows `precursor_t_mono` and `crossing_t_mono` **13 microseconds apart** (`reflex_gap_ms=0.013`) — the
+  "reflex" is detected essentially AT THE FIRST SAMPLE of the post-fire buffer, not found deep within a
+  long search window. The entire measured `true_latency_ms=1488.9` is the gap between `probe_ts` (when the
+  fire happened) and `crossing_t_mono` (when the post-fire buffer's first samples were collected) — i.e.
+  **the ~1.5s "latency" looks like a delay before the bridge's session loop resumes collecting samples
+  after firing, not time spent identifying the reflex within a promptly-collected buffer.** This is a more
+  specific and more actionable lead than either "RP lag" or "slow human reaction": something in the
+  session-loop's own scheduling around the fire moment (independent of RP, independent of the device vs.
+  wall clock question) may be the real cause. Needs code review of the fire→post-buffer-collection path,
+  not more live fires — that's the next real step for a future session.
+  **Left open. No further live-ring fires attempted this session.**
 - **INC-4 — corpus + honesty spine.** Grow a corpus of SYNCHRONIZED-under-real-play sessions (N target TBD by
   the operator). The honesty spine (inherited): `effective_live = mode==live AND all(GO.live_hardware)`;
   `live_hardware = fire.real_hardware`; a dry/injected fire can NEVER reach SYNCHRONIZED (round-04 F-GP-4
