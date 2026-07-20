@@ -58,15 +58,19 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   reads **only accelerometer motion** (`ax/ay/az`) — it explicitly ignores the R2 trigger channel — so even
   a felt press-reaction (the technique the population-band captures used) is invisible to this specific
   measurement; the ring needs a physical hand/wrist jolt, not a controlled trigger press. Restarted the
-  bridge with `L6B_PROBE_MODE=pulse` (process-scoped override, `bridge/.env` left untouched by operator
-  choice) → next fire: `{"fired": true, "real_hardware": true, "nonce": "<echoed exactly>",
-  "latency_ms": 1503.3, "peak_lsb": 5793.4, "error": ""}` — a genuine, unambiguous accelerometer spike
-  (vs the 0.0 floor before) from a real human startle-reaction. `latency_ms` used the `t_mono` fallback
-  clock (device-clock cross-check rejected it via the existing wrap-safe-span rail — honest fallback, not
-  a bug); 1.5s is plausible for an unprompted startle jolt vs. the population-band's 195-416ms *trained*
-  R2-press reflex — different motor response, not comparable numbers. `presence_candidate` composition
-  (via `controller_presence.py`) not yet separately re-verified against this fire — that's the next check
-  before calling INC-1 fully closed.
+  bridge with `L6B_PROBE_MODE=pulse` (process-scoped override at first) → next fire: `{"fired": true,
+  "real_hardware": true, "nonce": "<echoed exactly>", "latency_ms": 1503.3, "peak_lsb": 5793.4,
+  "error": ""}` — a genuine, unambiguous accelerometer spike (vs the 0.0 floor before) from a real human
+  startle-reaction. **Repeated once more to check it wasn't a fluke: `latency_ms=1102.1`,
+  `peak_lsb=5429.5`** — same order of magnitude on both peak and latency, 2/2 since the fix. `bridge/.env`
+  since fixed PERMANENTLY (`L6B_PROBE_MODE=rigid` → `pulse`, surgical single-line edit with a `.bak`
+  taken first; the file's CRLF line-ending convention was preserved) so future bridge restarts default
+  correctly without needing the process-scoped override. `latency_ms` used the `t_mono` fallback clock
+  both times (device-clock cross-check rejected it via the existing wrap-safe-span rail — honest
+  fallback, not a bug); 1.1-1.5s is plausible for an unprompted startle jolt vs. the population-band's
+  195-416ms *trained* R2-press reflex — different motor response, not comparable numbers.
+  `presence_candidate` composition (via `controller_presence.py`) not yet separately re-verified against
+  either fire — that's the next check before calling INC-1 fully closed.
   **Residual, non-blocking:** `sensor_ts_ticks` (the device-clock field used for `dev_lat`) was observed
   frozen at an identical value across 3 fires spanning ~7 minutes on the prior bridge instance — consistent
   with the previously-documented device-clock fragility under Remote Play topology (no RP session was
