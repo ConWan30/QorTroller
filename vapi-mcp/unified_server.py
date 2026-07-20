@@ -976,14 +976,14 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
     s = _parse_claude_md()
 
     result: dict[str, Any] = {
-        "source": "CLAUDE.md + unified_server (fallbacks refreshed 2026-05-23 to Guardian-KMS HEAD)",
+        "source": "CLAUDE.md (live parse via claude_md_parser.py) + unified_server (2026-07-20 Tier-1/2/3 MCP audit)",
         "protocol": {
             "phase":        s.get("phase_label", "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"),
             "bridge":       s.get("bridge",    "4330"),     # 2026-05-23 fallback
             "sdk":          s.get("sdk",       "604"),      # 2026-05-23 fallback
             "hardhat":      s.get("hardhat",   "674"),      # 2026-05-23 fallback
             "agents":       "29 standalone + 3 stewards (9 absorbed; 38-ID roster)",  # post-STABILITY-9 steward absorption
-            "contracts":    f"{s.get('contracts', '49')} ALL LIVE (IoTeX Testnet 4690)",  # 49 live as of 2026-05-23
+            "contracts":    f"{s.get('contracts', '49')} ALL LIVE (IoTeX Testnet 4690)",  # live via SENSOR-A-LIVE:CONTRACTS anchor
             "dry_run":      True,
             "ioswarm":      "emulator_only",
         },
@@ -992,12 +992,29 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
             "l4_continuity_threshold": s.get("l4_continuity", "5.367"),
             "l4_stale":               True,
             "l4_stale_reason":        "live_dim=13 vs calib_dim=12 (touchpad_spatial_entropy added Phase 121)",
-            "separation_ratio_current": "0.728 (diagonal+LOO, N=35, touchpad_corners, 2026-04-11)",
-            "separation_ratio_best":    "1.261 (diagonal+LOO, N=11, Phase 143 — THIN)",
-            "all_pairs_p0_ok":          False,
-            "p1vp3_distance":           "P1vP3=1.133 touchpad; P1vP3_tremor=0.032 CRITICAL BLOCKER",
+            # AIT (Phase 229-231) is the CURRENT primary tournament-gate metric —
+            # superseded touchpad_corners/tremor_resting per the 2026-05-09 policy
+            # adjustment. Legacy probes kept below for history, clearly labeled.
+            "ait_ratio":                s.get("ait_ratio"),
+            "ait_n":                    s.get("ait_n"),
+            "ait_all_pairs_above_1":    s.get("ait_all_pairs_above_1"),
+            "ait_defensibility_ok":     s.get("ait_defensibility_ok"),
+            "separation_ratio_legacy_touchpad_corners": (
+                f"{s.get('touchpad_corners_ratio', 0.728)} (N={s.get('touchpad_corners_n', 35)}, "
+                "diagonal+LOO, 2026-04-11) — still BLOCKS full tournament BLOCK enforcement"
+            ),
+            "separation_ratio_legacy_tremor_resting": (
+                f"{s.get('tremor_resting_ratio', 1.177)} (N={s.get('tremor_resting_n', 27)}) — "
+                "P1vP3=0.032 CAST OUT as a dev-progress blocker per 2026-05-09 operator policy "
+                "adjustment; NOT currently gating anything"
+            ),
+            "all_pairs_p0_ok":          False,  # touchpad_corners P0 gate specifically — see ait_defensibility_ok above for AIT's own (separate) gate
             "tournament_blocker":       True,
-            "tournament_blocker_reason": "per-pair gate fails: P2/P3 proximity + P1vP3 tremor overlap",
+            "tournament_blocker_reason": (
+                "touchpad_corners per-pair gate (P2/P3 proximity) still blocks full tournament BLOCK "
+                "enforcement; AIT is CLEARED (sufficient for testnet/non-tournament demonstration) — "
+                "these are two different gates, do not conflate"
+            ),
         },
         "invariants_frozen": {
             "poac_wire_format":      "228 bytes (164B body + 64B ECDSA-P256 sig) — FROZEN",
@@ -1005,7 +1022,7 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
             "zk_circuit":            "Poseidon(8), C3, nPublic=5 — FROZEN",
             "stable_ema":            "NOMINAL sessions only — FROZEN",
             "gsr_enabled":           False,
-            "l6b_enabled":           False,
+            "l6b_enabled":           "operator-controlled per-run flag; N>=50 gate MET 2026-07-18 (was N=0) — check bridge GET /player/session-status for the live value, don't assume False",
             "block_quorum":          0.67,
             "mint_quorum":           0.80,
             "epistemic_threshold":   0.65,
