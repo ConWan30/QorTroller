@@ -19,7 +19,7 @@ def test_valid_in_band_reaction_goes():
 
 
 def test_sub_floor_press_rejected():
-    v = detect_voluntary_go(attack_fixed_delay_bot(150.0))   # below the 320ms floor
+    v = detect_voluntary_go(attack_fixed_delay_bot(80.0))    # below the 120ms anticipation floor (non-human)
     assert v["verdict"] == "REJECT_TOO_FAST"
 
 
