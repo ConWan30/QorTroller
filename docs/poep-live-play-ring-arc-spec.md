@@ -50,9 +50,28 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   "real_hardware": true, "nonce": "<echoed exactly>", "error": ""}`. `latency_ms=-1.0`/`peak_lsb≈3.8`/
   `precursor_gap_ms=null` — no reflex captured, correctly honest since no human was holding the controller
   ready to react. The mechanism itself is proven; INC-1 (a human actually reacting) is the next open step.
-- **INC-1 — presence-candidate under the bridge.** With the bridge UP and `activity_source=="bridge"` (bridge
-  reading the pad live), a fired nonce probe + human reflex → `controller_presence` yields
-  `presence_candidate=True`. Still no game; proves the candidate path is reachable when the bridge owns the pad.
+- **INC-1 — presence-candidate under the bridge. REFLEX CAPTURED 2026-07-20.** First 3 fires post-INC-0
+  (amplitude 60/255/255) all read `latency_ms=-1.0`/`peak_lsb=0.0` — no reflex, despite the operator
+  actively reacting. Root-caused, not a rig failure: (a) `bridge/.env` had **`L6B_PROBE_MODE=rigid`** set
+  (meant for desk bench-testing only, per its own docstring — never switched back), so the ring was firing
+  a resistance profile only felt on a hard deliberate R2 pull, never a passive buzz; (b) the L6b analyzer
+  reads **only accelerometer motion** (`ax/ay/az`) — it explicitly ignores the R2 trigger channel — so even
+  a felt press-reaction (the technique the population-band captures used) is invisible to this specific
+  measurement; the ring needs a physical hand/wrist jolt, not a controlled trigger press. Restarted the
+  bridge with `L6B_PROBE_MODE=pulse` (process-scoped override, `bridge/.env` left untouched by operator
+  choice) → next fire: `{"fired": true, "real_hardware": true, "nonce": "<echoed exactly>",
+  "latency_ms": 1503.3, "peak_lsb": 5793.4, "error": ""}` — a genuine, unambiguous accelerometer spike
+  (vs the 0.0 floor before) from a real human startle-reaction. `latency_ms` used the `t_mono` fallback
+  clock (device-clock cross-check rejected it via the existing wrap-safe-span rail — honest fallback, not
+  a bug); 1.5s is plausible for an unprompted startle jolt vs. the population-band's 195-416ms *trained*
+  R2-press reflex — different motor response, not comparable numbers. `presence_candidate` composition
+  (via `controller_presence.py`) not yet separately re-verified against this fire — that's the next check
+  before calling INC-1 fully closed.
+  **Residual, non-blocking:** `sensor_ts_ticks` (the device-clock field used for `dev_lat`) was observed
+  frozen at an identical value across 3 fires spanning ~7 minutes on the prior bridge instance — consistent
+  with the previously-documented device-clock fragility under Remote Play topology (no RP session was
+  necessarily active this time; not fully root-caused). Diagnostic-only — never gates the verdict, the
+  system correctly fell back to `t_mono` throughout.
 - **INC-2 — LIVE PLAY.** Operator plays a REAL game through Remote Play (pad USB→PC to the bridge; game on the
   PS5). During play the bridge (or `/operator/operator/poep/fire`) serves nonce challenges; the human reacts mid-play;
   the ring captures the reflex from its own reader. Verify: reflex `real_hardware=True`, latency in the
