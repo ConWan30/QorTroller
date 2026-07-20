@@ -53,10 +53,14 @@ Each was scored held-out FIRST (against the then-frozen band), which justified f
 **What is now proven:** **4 held-out exercises across 4 people** (ConHeldout cross-session + Khamari + Pookie
 + Roy cross-person) on the N=5 fit; the ceiling **stretched** to a moderate reactor (Roy). (Fari has no
 separate held-out score as a new person — she is in-sample only; do not count her as a held-out person.)
-**What is STILL open — population BREADTH:** all five are **fast-to-moderate** reactors (medians 254–295).
-No genuinely **slow** reactor sampled yet — someone reacting ~450–600 ms would be `SOFT_TOO_SLOW` (retry, not
-bot — FRR-safe) but sits above the 416 ceiling, so the band's upper edge is untested there. Widening for slow
-players needs a slow-reactor capture + re-fit.
+**Scope (operator decision 2026-07-20):** the target population is **competitive players**, who are
+fast-to-moderate reactors (reaction time is a selected trait in competitive play) — so the (195,416] band
+**targets the intended population, not a convenient subset.** A genuinely **slow** reactor (~450–600 ms) is
+**out of scope by design**; if one plays they are handled gracefully — `SOFT_TOO_SLOW` (retry), **never
+false-flagged as a bot** (FRR-safe by construction). The one honest coverage note: a reactor whose reactions
+*all* exceed 416 ms would be *un-verifiable* (stuck `INSUFFICIENT`, not falsely-bot) — accepted, as they are
+outside the competitive-player scope. **Still true within scope:** N=5 is a *small* sample of competitive-class
+reactors; the band widens/re-fits if that scope's distribution is later found broader.
 
 ## Provenance
 - Live capture: `scripts/poep_live_capture.py --player <Con|Fari> --count 25 --mode pulse --no-store` on the

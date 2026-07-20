@@ -30,8 +30,10 @@ VERDICTS (fail-closed): HUMAN_PRESENT / SUSPECTED_BOT / DEAD_FEED / INSUFFICIENT
 and gates NOTHING — poep_enabled / L6B / L6_CHALLENGES stay False; no on-chain, no presence-API flip.
 
 CLAIM CEILING: voluntary-reaction liveness CANDIDATE on a MEASURED N=5 population band (195,416] (Con/Fari/
-Khamari/Roy/Pookie in-sample; 4 held-out exercises across 4 people — ConHeldout/Khamari/Pookie/Roy, NOT Fari;
-widen + re-fit as slower cohorts are sampled — all 5 are fast-to-moderate reactors); hardware-class
+Khamari/Roy/Pookie in-sample; 4 held-out exercises across 4 people — ConHeldout/Khamari/Pookie/Roy, NOT Fari).
+SCOPE (operator 2026-07-20): the target population is COMPETITIVE PLAYERS = fast-to-moderate reactors, so the
+band targets them by design; a genuinely slow reactor is out of scope (handled gracefully: SOFT_TOO_SLOW /
+retry, never false-flagged). Still a SMALL N=5 sample within that scope. Hardware-class
 "exclusive" to the certified Edge (silicon-clock + adaptive-trigger haptic + device-clock binding), NOT
 "unbreakable". The reported FAR is against a fire-time-BLIND bot ONLY. A bot that OBSERVES the fire time
 (host APIs / hardware injector) defeats the compounding and is a PUBLISHED rig/crypto residual — its defense

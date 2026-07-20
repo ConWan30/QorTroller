@@ -26,8 +26,9 @@ ATTACKS (synthetic, by construction):
 
 CLAIM CEILING (PASS): construction attacks (A1, A2, A3, A4) REJECT by design; the human fast-cluster mostly
 GOes (low FRR on that subset); A1'/A5/A6 residual FAR is MEASURED and PUBLISHED, not waved away. This stays
-a VOLUNTARY-reaction liveness CANDIDATE on a MEASURED N=5 population band (fast-to-moderate reactors; widen
-for slower cohorts). It does NOT prove: sub-280 ms
+a VOLUNTARY-reaction liveness CANDIDATE on a MEASURED N=5 population band SCOPED to competitive players
+(fast-to-moderate reactors, by operator decision; slow reactors out of scope, handled gracefully as
+SOFT_TOO_SLOW/retry). It does NOT prove: sub-280 ms
 reflex, population biometric, tournament-ready poep_enabled, defeat of a fixed-delay bot on a SINGLE
 challenge, or a bot that learns the fire time from host APIs / a hardware injector (all rig/crypto-gated).
 """
