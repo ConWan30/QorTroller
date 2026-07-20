@@ -1,5 +1,16 @@
 # POEP live-play ring arc — spec (what earns `poep_enabled`) · 2026-07-20
 
+**Correction 2026-07-20 (post-INC-0 empirical fire):** every `/operator/poep/fire` reference below is
+the wrong URL — this doc assumed a single `/operator/` prefix before the endpoint was ever actually
+tested. The real, working path is **`/operator/operator/poep/fire`** (doubled prefix: the sub-app is
+mounted at `/operator` in `main.py`, and the route itself is declared as `/operator/poep/fire` inside
+that sub-app — an established, already-integrated convention, not a defect to fix here).
+`l9_presence/poep_bridge_fire_adapter.py` already uses the doubled path with its own comment
+documenting why; `audits/rig-session-cfb27-first-2026-07-18.md` and two other rig-session docs
+independently confirm it from real hardware sessions. Left as-is by operator decision 2026-07-20 —
+changing the server route would break the already-working client + break continuity with prior
+hardware-fire records.
+
 **Goal:** reach **SYNCHRONIZED_CONTROLLER under REAL gameplay** — a live human, proven present by a
 nonce-bound haptic reflex *while actually playing a game* — which is the presence proof `poep_enabled` gates.
 Everything to date proved presence **at a desk with the game OFF** (exclusive-HID reflex captures); this arc
@@ -18,7 +29,8 @@ proves it **during play**. Candidate/campaign throughout; flips NOTHING until th
 ## What already EXISTS (reuse, do not rebuild) — commit `92f6e848`
 - `DualShockTransport.request_poep_nonce_probe(nonce, amplitude)` — nonce-bound probe served from the
   bridge's OWN reader (fail-closed: `POEP_LIVE_FIRE_ENABLED=1` + `l6b_enabled` + driver + controller; 409 busy).
-- `POST /operator/poep/fire` — operator endpoint (arms `_l6b_pending` w/ nonce + Future, awaits w/ timeout).
+- `POST /operator/operator/poep/fire` (doubled-prefix — see correction above) — operator endpoint (arms
+  `_l6b_pending` w/ nonce + Future, awaits w/ timeout).
 - The bridge's single-reader ring under `l6b_enabled`: `_l6b_pre_buffer` → `_l6_driver` fire →
   `_l6b_post_buffer` → `_l6b_analyzer` → `_l6b_pending`; two-way auto-tick exclusion (F-HIDRING-1 fixed, r04).
 - Client `l9_presence/poep_bridge_fire_adapter.py::BridgeFireCaptureAdapter` (weakest-seam pin: a 200 without
@@ -32,15 +44,17 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
 (after F-L6B-SEAL-1 is resolved) unblocks the ring campaign. This arc does not start live until L6B is on.
 
 ## Increments (staged, each with a verify-hold; grok-audited per charter (a))
-- **INC-0 — L6B live + ring dry-check (no play).** After the L6B seal fires: `POST /operator/poep/fire` with a
-  nonce while the bridge holds the pad → confirm a REAL fire (`fired + real_hardware=True + nonce` echoed),
-  MEASURED features (never band-filled), 409-on-busy. This is the ring working WITHOUT a game — the mechanism,
-  not yet the claim. Verify: `poep_rig_reflex_selftest`-class check through the bridge endpoint.
+- **INC-0 — L6B live + ring dry-check (no play). CONFIRMED 2026-07-20.** After the L6B seal fired
+  (`L6B_ENABLED=true` + `POEP_LIVE_FIRE_ENABLED=1`, process-scoped, bridge restarted): fired one nonce-bound
+  probe via `POST /operator/operator/poep/fire` while the bridge held the pad → `{"fired": true,
+  "real_hardware": true, "nonce": "<echoed exactly>", "error": ""}`. `latency_ms=-1.0`/`peak_lsb≈3.8`/
+  `precursor_gap_ms=null` — no reflex captured, correctly honest since no human was holding the controller
+  ready to react. The mechanism itself is proven; INC-1 (a human actually reacting) is the next open step.
 - **INC-1 — presence-candidate under the bridge.** With the bridge UP and `activity_source=="bridge"` (bridge
   reading the pad live), a fired nonce probe + human reflex → `controller_presence` yields
   `presence_candidate=True`. Still no game; proves the candidate path is reachable when the bridge owns the pad.
 - **INC-2 — LIVE PLAY.** Operator plays a REAL game through Remote Play (pad USB→PC to the bridge; game on the
-  PS5). During play the bridge (or `/operator/poep/fire`) serves nonce challenges; the human reacts mid-play;
+  PS5). During play the bridge (or `/operator/operator/poep/fire`) serves nonce challenges; the human reacts mid-play;
   the ring captures the reflex from its own reader. Verify: reflex `real_hardware=True`, latency in the
   competitive band, nonce-bound, activity_source=bridge — DURING a live match.
 - **INC-3 — SYNCHRONIZED_CONTROLLER under play.** `identity_bound` (ioID/VMDR) + `presence_candidate` (live
