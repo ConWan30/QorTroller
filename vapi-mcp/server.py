@@ -76,102 +76,19 @@ PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", "."))
 
 import re as _re
 
-_CLAUDE_CACHE: dict = {"mtime": 0.0, "state": {}}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from claude_md_parser import parse_claude_md as _parse_claude_md_shared  # noqa: E402
+
 
 def _parse_claude_md() -> dict:
     """
-    Parse CLAUDE.md and return current protocol state. Cached by file mtime —
-    re-parsed automatically whenever CLAUDE.md changes (i.e., after every phase).
-    Falls back to last known state on read error; never raises.
+    Parse CLAUDE.md and return current protocol state. Thin adapter over the
+    shared parser (claude_md_parser.py, 2026-07-20 Tier-1 fix) — kept as its
+    own function so every existing `_parse_claude_md()` call site in this
+    file needs no change. See claude_md_parser.py for the actual parsing
+    logic (anchor-first, regex fixes, AIT/PV-CI/wallet-balance fields).
     """
-    claude_path = PROJECT_ROOT / "CLAUDE.md"
-    try:
-        mtime = claude_path.stat().st_mtime
-    except OSError:
-        return _CLAUDE_CACHE.get("state", {})
-
-    if mtime <= _CLAUDE_CACHE["mtime"] and _CLAUDE_CACHE["state"]:
-        return _CLAUDE_CACHE["state"]
-
-    try:
-        text = claude_path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return _CLAUDE_CACHE.get("state", {})
-
-    s: dict = {}
-
-    # Current phase: legacy "Current phase: Phase NNN — COMPLETE" OR post-Phase-238
-    # HEAD-commit milestone format "Current phase: HEAD `<sha>` — <headline>" (2026-05+)
-    m = _re.search(r"Current phase:\s*Phase\s*(\d+)", text)
-    if m:
-        s["phase_num"] = m.group(1)
-        s["phase"] = f"{m.group(1)} COMPLETE"
-    else:
-        mh = _re.search(r"Current phase:\s*HEAD\s*`?([0-9a-f]{6,40})`?\s*[—\-]+\s*\*{0,2}([^.\n]{5,90})", text)
-        if mh:
-            s["phase_num"] = mh.group(1)[:8]
-            s["phase"] = f"HEAD {mh.group(1)[:8]} — {mh.group(2).strip()}"
-        else:
-            s["phase_num"] = "238+"
-            s["phase"] = "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"
-
-    # Test counts: "Bridge: 2510 passing. Contract: 528. SDK: 539." (Phase 237-EXTEND, 2026-04-26)
-    # Fallbacks used only when CLAUDE.md parse fails — updated to current truth.
-    m = _re.search(r"Bridge:\s*(\d+)\s*passing", text)
-    s["bridge"] = int(m.group(1)) if m else 4330
-    m = _re.search(r"Contract:\s*(\d+)", text)
-    s["hardhat"] = int(m.group(1)) if m else 674
-    m = _re.search(r"SDK:\s*(\d+)", text)
-    s["sdk"] = int(m.group(1)) if m else 604
-    m = _re.search(r"Hardware:\s*(\d+)", text)
-    s["hardware"] = int(m.group(1)) if m else 37
-    m = _re.search(r"E2E:\s*(\d+)", text)
-    s["e2e"] = int(m.group(1)) if m else 14
-    s["total_ci"] = s["bridge"] + s["hardhat"] + s["sdk"]
-
-    # Contracts: "46 contracts ALL LIVE on testnet" (Phase 237-EXTEND deploy)
-    m = _re.search(r"(\d+)\s+contracts\s+ALL\s+LIVE", text)
-    s["contracts_live"] = int(m.group(1)) if m else 46
-
-    # Agent count: max across both signal sources — "agents N→M" transitions
-    # and explicit "agent #N" references. Either alone misses recent phases:
-    # transitions stop at 36 (Phase 193) while `agent #38` lives in Phase 222/235.
-    arrows = _re.findall(r"agents\s+(\d+)→(\d+)", text)
-    agent_refs = _re.findall(r"agent\s+#(\d+)", text)
-    candidates = [int(p[1]) for p in arrows] + [int(n) for n in agent_refs]
-    s["agents"] = max(candidates) if candidates else 36
-
-    # L4 thresholds
-    m = _re.search(r"L4 anomaly threshold:\s*\*\*([0-9.]+)\*\*", text)
-    s["l4_anomaly"] = float(m.group(1)) if m else 7.009
-    m = _re.search(r"L4 continuity threshold:\s*\*\*([0-9.]+)\*\*", text)
-    s["l4_continuity"] = float(m.group(1)) if m else 5.367
-
-    # Recent phases: "Phase NNN — COMPLETE (desc...)"
-    recent: dict = {}
-    for pm in _re.finditer(r"Phase\s+(\d+)\s*[—-]\s*COMPLETE\s*\(([^)]{5,})", text):
-        pn = pm.group(1)
-        if pn not in recent:
-            recent[pn] = pm.group(2).split(";")[0].strip()[:120]
-    sorted_p = sorted(recent.keys(), key=lambda x: int(x), reverse=True)[:10]
-    s["recent_phases"] = {p: recent[p] for p in sorted_p}
-
-    # Separation ratio state
-    m = _re.search(r"tremor_resting[^:]*:\s*\*\*([0-9.]+)\*\*[^N]*N=(\d+)", text)
-    s["tremor_resting_ratio"] = float(m.group(1)) if m else 1.177
-    s["tremor_resting_n"]     = int(m.group(2))    if m else 27
-
-    m = _re.search(r"Separation ratio:\s*\*\*([0-9.]+)\*\*[^)]*diagonal\+LOO[^)]*N=(\d+)", text)
-    s["touchpad_corners_ratio"] = float(m.group(1)) if m else 0.728
-    s["touchpad_corners_n"]     = int(m.group(2))   if m else 35
-
-    # Wallet
-    m = _re.search(r"Active wallet[^`]*`(0x[0-9a-fA-F]{40})`", text)
-    s["wallet"] = m.group(1) if m else "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
-
-    _CLAUDE_CACHE["mtime"] = mtime
-    _CLAUDE_CACHE["state"] = s
-    return s
+    return _parse_claude_md_shared(PROJECT_ROOT)
 
 # ============================================================
 # MCP Protocol (stdio transport — no external dependency)
@@ -270,6 +187,21 @@ async def vapi_protocol_state(**_):
         "agent_fleet": {},
         "contracts": {},
         "recent_phases": s.get("recent_phases", {}),
+        "pv_ci_invariant_count": s.get("pv_ci_count"),
+        "latest_note_headline": s.get("latest_note"),
+        "wallet_balance_iotx": s.get("wallet_balance_iotx"),
+        "wallet_balance_as_of": s.get("wallet_balance_as_of"),
+        "ait_separation": {
+            "ratio": s.get("ait_ratio"),
+            "n": s.get("ait_n"),
+            "all_pairs_above_1": s.get("ait_all_pairs_above_1"),
+            "ait_defensibility_ok": s.get("ait_defensibility_ok"),
+            "note": (
+                "AIT (Phase 229-231) is the CURRENT primary tournament-gate separation "
+                "metric — supersedes tremor_resting/touchpad_corners below as the headline "
+                "number per the 2026-05-09 policy adjustment."
+            ),
+        },
     }
 
     # Live bridge endpoints
@@ -329,9 +261,16 @@ async def vapi_protocol_state(**_):
             "touchpad_corners_phase143_best": 1.261,
             "all_pairs_p0_ok": False,
             "p1vp3_blocker": 0.032,
+            "ait_ratio": s.get("ait_ratio"),
+            "ait_n": s.get("ait_n"),
+            "ait_all_pairs_above_1": s.get("ait_all_pairs_above_1"),
             "target": 1.0,
             "status": "ABOVE_1.0 but all_pairs_p0_ok FAILS" if _tr >= 1.0 else "TOURNAMENT BLOCKER",
-            "note": "Parsed from CLAUDE.md — auto-updates every phase. No live DB snapshot.",
+            "note": (
+                "Parsed from CLAUDE.md — auto-updates every phase. No live DB snapshot. "
+                "AIT (see top-level ait_separation) is the current primary gate metric; "
+                "tremor_resting/touchpad_corners are legacy probes retained for history."
+            ),
             "source": "claude_md_live",
         }
 
@@ -359,7 +298,8 @@ async def vapi_protocol_state(**_):
     }
 
     state["contracts"] = {
-        "total_live": s.get("contracts_live", 46),  # Phase 237-EXTEND deploy
+        "total_live": s.get("contracts_live", 46),  # live via SENSOR-A-LIVE:CONTRACTS anchor or deployed-addresses.json count
+        "total_live_source": s.get("contracts_live_source", "unknown"),
         "network": "IoTeX Testnet 4690",
         "key_addresses": {
             "AdjudicationRegistry":    "0x44CF981f46a52ADE56476Ce894255954a7776fb4",
