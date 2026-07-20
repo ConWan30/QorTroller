@@ -255,7 +255,14 @@ def test_t212_6_engineering_decision_structure():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_t212_7_autonomous_gap_scan_ranking():
-    """vapi_autonomous_gap_scan returns ranked_gaps with G-001 (CRITICAL, 2h) first."""
+    """vapi_autonomous_gap_scan returns ranked_gaps sorted CRITICAL/HIGH first, non-hardware.
+
+    G-001 was RESOLVED+SUPERSEDED 2026-07-20 (Tier-1 MCP audit: the AccelTremorFFT
+    fix it proposed shipped in Phase 205, and the tremor_resting/touchpad_corners
+    metric it targeted was superseded as the tournament gate by AIT). It's now
+    severity=INFO and correctly sorts LAST, not first — G-003 (HIGH, no fix
+    pending) is the legitimate top actionable non-hardware gap.
+    """
     import asyncio
     mod = _import_unified()
 
@@ -276,9 +283,13 @@ def test_t212_7_autonomous_gap_scan_ranking():
     assert len(result["ranked_gaps"]) >= 1
 
     top = result["ranked_gaps"][0]
-    assert top["severity"] == "CRITICAL"
+    assert top["severity"] == "HIGH"
     assert top["hardware"] is False
-    assert top["id"] == "G-001"
+    assert top["id"] == "G-003"
+
+    # G-001 is present but demoted to INFO/last — resolved, not actionable.
+    g001 = next(g for g in result["ranked_gaps"] if g["id"] == "G-001")
+    assert g001["severity"] == "INFO"
 
     assert "separation_path_analysis" in result
     assert "autonomous_action_recommendation" in result

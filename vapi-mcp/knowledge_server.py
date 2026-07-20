@@ -72,73 +72,18 @@ PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", str(_DEFAULT_PROJECT_ROOT)))
 # Identical to server.py's _parse_claude_md(). CLAUDE.md is the single
 # authoritative source updated every phase — both MCP servers read it.
 
-_CLAUDE_CACHE_KS: dict = {"mtime": 0.0, "state": {}}
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from claude_md_parser import parse_claude_md as _parse_claude_md_shared  # noqa: E402
+
 
 def _parse_claude_md() -> dict:
-    """Parse CLAUDE.md into current protocol state. Mtime-cached — O(1) per call."""
-    claude_path = PROJECT_ROOT / "CLAUDE.md"
-    try:
-        mtime = claude_path.stat().st_mtime
-    except OSError:
-        return _CLAUDE_CACHE_KS.get("state", {})
-
-    if mtime <= _CLAUDE_CACHE_KS["mtime"] and _CLAUDE_CACHE_KS["state"]:
-        return _CLAUDE_CACHE_KS["state"]
-
-    try:
-        text = claude_path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return _CLAUDE_CACHE_KS.get("state", {})
-
-    s: dict = {}
-    # Legacy "Current phase: Phase NNN" OR post-Phase-238 "Current phase: HEAD <sha>" format
-    m = re.search(r"Current phase:\s*Phase\s*(\d+)", text)
-    if m:
-        s["phase_num"] = m.group(1)
-        s["phase"] = f"{m.group(1)} COMPLETE"
-    else:
-        mh = re.search(r"Current phase:\s*HEAD\s*`?([0-9a-f]{6,40})`?\s*[—\-]+\s*\*{0,2}([^.\n]{5,90})", text)
-        if mh:
-            s["phase_num"] = mh.group(1)[:8]
-            s["phase"] = f"HEAD {mh.group(1)[:8]} — {mh.group(2).strip()}"
-        else:
-            s["phase_num"] = "238+"
-            s["phase"] = "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"
-
-    m = re.search(r"Bridge:\s*(\d+)\s*passing", text)
-    s["bridge"] = int(m.group(1)) if m else 2252
-    m = re.search(r"Contract:\s*(\d+)", text)
-    s["hardhat"] = int(m.group(1)) if m else 482
-    m = re.search(r"SDK:\s*(\d+)", text)
-    s["sdk"] = int(m.group(1)) if m else 448
-    m = re.search(r"(\d+)\s+contracts\s+ALL\s+LIVE", text)
-    s["contracts_live"] = int(m.group(1)) if m else 43
-
-    arrows = re.findall(r"agents\s+(\d+)→(\d+)", text)
-    agent_refs = re.findall(r"agent\s+#(\d+)", text)
-    candidates = [int(p[1]) for p in arrows] + [int(n) for n in agent_refs]
-    s["agents"] = max(candidates) if candidates else 36
-
-    m = re.search(r"L4 anomaly threshold:\s*\*\*([0-9.]+)\*\*", text)
-    s["l4_anomaly"] = float(m.group(1)) if m else 7.009
-    m = re.search(r"L4 continuity threshold:\s*\*\*([0-9.]+)\*\*", text)
-    s["l4_continuity"] = float(m.group(1)) if m else 5.367
-
-    m = re.search(r"tremor_resting[^:]*:\s*\*\*([0-9.]+)\*\*[^N]*N=(\d+)", text)
-    s["tremor_resting_ratio"] = float(m.group(1)) if m else 1.177
-    s["tremor_resting_n"]     = int(m.group(2))    if m else 27
-
-    m = re.search(r"Separation ratio:\s*\*\*([0-9.]+)\*\*[^)]*diagonal\+LOO[^)]*N=(\d+)", text)
-    s["touchpad_corners_ratio"] = float(m.group(1)) if m else 0.728
-    s["touchpad_corners_n"]     = int(m.group(2))   if m else 35
-
-    # WIF corpus — count open entries
-    wif_open = len(re.findall(r"Status.*?OPEN", text))
-    s["wif_open_count"] = wif_open
-
-    _CLAUDE_CACHE_KS["mtime"] = mtime
-    _CLAUDE_CACHE_KS["state"] = s
-    return s
+    """
+    Parse CLAUDE.md into current protocol state. Thin adapter over the shared
+    parser (claude_md_parser.py, 2026-07-20 Tier-1 fix) — kept as its own
+    function so every existing `_parse_claude_md()` call site in this file
+    needs no change. See claude_md_parser.py for the actual parsing logic.
+    """
+    return _parse_claude_md_shared(PROJECT_ROOT)
 
 CORPUS_FILES = {
     "invariants":   "VAPI_INVARIANTS.md",
