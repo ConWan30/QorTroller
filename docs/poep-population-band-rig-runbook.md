@@ -77,10 +77,10 @@ python scripts/poep_population_band.py --players alice,bob --min-ms 120 --max-ms
 - `--min-ms 120 --max-ms 800` drops no-reaction / slow-outlier fires (disclosed in the output). 120 ms = the
   anticipation floor; 800 ms is a generous voluntary-reaction ceiling.
 
-**What good looks like** — the real N=3 run (Con + Fari + Khamari, 2026-07-19, window [120,450]; see
+**What good looks like** — the real N=5 run (Con+Fari+Khamari+Roy+Pookie, 2026-07-20, window [120,450]; see
 `audits/poep-population-band-con-fari-2026-07-19.md`): per-operator medians **254–295 ms**, band
-**(192, 404] ms**, `degenerate_band: False`, **`PROVISIONAL: False`**, per-operator FRR ~0. Held-out validated
-across 3 people (Con cross-session + Khamari cross-person, both FRR 0.0). A wide band gives
+**(195, 416] ms** (now the detector default), `degenerate_band: False`, **`PROVISIONAL: False`**, per-op FRR
+~0 (Roy 0.043). 4 held-out exercises across 4 people (ConHeldout/Khamari/Pookie/Roy, NOT Fari); Roy the moderate reactor stretched the ceiling. A wide band gives
 a high single-shot `worst_case_far_population_band` (e.g. ~0.18) — that is expected and honest: the anti-cheat
 strength comes from **multi-challenge compounding (K=5)**, not one shot. Tighten the band (more/cleaner data)
 or raise K to lower it.

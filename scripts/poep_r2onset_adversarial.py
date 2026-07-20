@@ -2,8 +2,10 @@
 """(ii) R2-onset — ADVERSARIAL harness v0 (offline, grok adversarial-consult design).
 
 Tests whether the R2-onset voluntary-reaction liveness primitive is "indistinguishable enough" for
-anti-cheat, OFFLINE against dumps + the study verifier. Operator decisions (2026-07-19):
-  * GO band = (320, 400] ms, FAST-cluster only. Slow honest taps -> SOFT (retry), NOT bot flags.
+anti-cheat, OFFLINE against dumps + the study verifier. Operator decisions:
+  * GO band DEFAULT = the MEASURED N=5 population band (195, 416] ms + a 120ms anticipation sub-floor
+    (2026-07-20). Slow honest taps -> SOFT_TOO_SLOW (retry); fast humans below the band -> SOFT_TOO_FAST
+    (retry), NOT bot flags. (The old single-operator (320,400]/sub=320 default was empirically WRONG.)
   * The one attack a single challenge cannot beat (a fixed-delay in-band bot) -> PUBLISH the residual FAR.
 
 DETECTOR: detect_voluntary_go(rec) -> verdict. A GO requires a GOLD read-at-fire t0 (mono_extrap/stale are
@@ -16,7 +18,7 @@ ATTACKS (synthetic, by construction):
   A1' re-anchor     -> attacker who KNOWS the new t0 re-times the response to land at ~345 ms. If it still
                        GOes it is a FINDING (offline dumps carry no cryptographic frame-commitment) -> the
                        rig/crypto upgrade is HMAC(nonce||t0||onset) at fire. Reported, not silently passed.
-  A2 sub-floor bot  -> presses faster than the human floor (<=320 ms) -> REJECT_TOO_FAST.
+  A2 sub-floor bot  -> presses faster than the 120ms anticipation floor -> REJECT_TOO_FAST.
   A3 dead feed      -> flat R2 -> REJECT_NO_REACTION.
   A4 absurd t0      -> t0 outside window / no gold read -> REJECT_BAD_T0.
   A5 fixed-delay bot-> presses at a constant ~345 ms -> GOes single-shot -> RESIDUAL FAR (published).
@@ -24,7 +26,8 @@ ATTACKS (synthetic, by construction):
 
 CLAIM CEILING (PASS): construction attacks (A1, A2, A3, A4) REJECT by design; the human fast-cluster mostly
 GOes (low FRR on that subset); A1'/A5/A6 residual FAR is MEASURED and PUBLISHED, not waved away. This stays
-a VOLUNTARY-reaction liveness CANDIDATE on a single-operator provisional band. It does NOT prove: sub-280 ms
+a VOLUNTARY-reaction liveness CANDIDATE on a MEASURED N=5 population band (fast-to-moderate reactors; widen
+for slower cohorts). It does NOT prove: sub-280 ms
 reflex, population biometric, tournament-ready poep_enabled, defeat of a fixed-delay bot on a SINGLE
 challenge, or a bot that learns the fire time from host APIs / a hardware injector (all rig/crypto-gated).
 """
@@ -42,8 +45,17 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from poep_ring_coupling_study import analyze_fire, DELTA  # noqa: E402
 
-GO_LO_MS = 320.0    # soft floor below the measured 339 (avoid overfitting one operator/one night)
-GO_HI_MS = 400.0    # fast-cluster ceiling (operator decision 2026-07-19)
+# DETECTOR DEFAULT = the MEASURED population band (not a single-operator guess). Fit on N=5 distinct people
+# (Con/Fari/Khamari/Roy/Pookie, 139 clean reactions, window [120,450], 2026-07-20); 4 held-out exercises
+# (ConHeldout cross-session + Khamari/Pookie cross-person FRR 0.0 + Roy the moderate reactor, held-out FRR
+# 0.083 vs the pre-fold N=3 band -> in-sample FRR 0.043 on N=5, ceiling raised 404->416). NOT Fari held-out. The old
+# single-operator (320,400] guess was empirically WRONG — it flagged every one of those real humans (medians
+# 254-295ms) as a sub-floor bot. This is the current measured band; widen + re-fit as more/slower people are
+# sampled. See audits/poep-population-band-con-fari-2026-07-19.md. Advisory: gates nothing.
+GO_LO_MS = 195.0    # measured N=5 band floor (p1 - margin, clamped >= anticipation)
+GO_HI_MS = 416.0    # measured N=5 band ceiling (p99 + margin; covers Roy the moderate reactor)
+SUB_FLOOR_MS = 120.0  # anticipation floor = the population-safe sub-floor (F5). BELOW = REJECT_TOO_FAST
+                      # (non-human anticipation); (sub, go_lo] = SOFT_TOO_FAST (fast human retries, NOT a bot).
 _TPMS = 3000.0
 _A = 1_000_000      # synthetic anchor device tick
 
@@ -51,11 +63,11 @@ _A = 1_000_000      # synthetic anchor device tick
 def detect_voluntary_go(rec: dict[str, Any], go_lo_ms: float = GO_LO_MS, go_hi_ms: float = GO_HI_MS,
                         sub_floor_ms: float | None = None) -> dict[str, Any]:
     """v0 anti-cheat verdict for one nonce-bound fire dump. GO requires a gold read-at-fire t0, a real R2
-    reaction, and lat in (go_lo, go_hi]. go_lo/go_hi default to the single-operator band; a POPULATION band
-    (l9_presence.population_band) can be supplied. sub_floor_ms (below = REJECT_TOO_FAST, non-human) defaults
-    to go_lo (single-op behavior); a population config sets it to the anticipation floor (~120ms) so a fast
-    human BELOW the band is SOFT_TOO_FAST (retry), NOT falsely flagged as a bot (F5). Returns the verdict."""
-    sub = go_lo_ms if sub_floor_ms is None else sub_floor_ms
+    reaction, and lat in (go_lo, go_hi]. go_lo/go_hi DEFAULT to the MEASURED N=5 population band (195,416];
+    sub_floor_ms DEFAULTS to the anticipation floor SUB_FLOOR_MS (120ms) so a fast human BELOW the band is
+    SOFT_TOO_FAST (retry), NOT flagged as a bot (F5 fixed by default). Pass sub_floor_ms=go_lo for the old
+    strict single-operator behavior. Returns the verdict."""
+    sub = SUB_FLOOR_MS if sub_floor_ms is None else sub_floor_ms
     r = analyze_fire(rec)
     t0m = r["t0_method"]
     lat = r["lat_pt_ms"]
@@ -154,10 +166,10 @@ def main() -> int:
     gold = [r for r in reals if r.get("t0_read_device_ts")]
     verds = [detect_voluntary_go(r)["verdict"] for r in gold]
     n_go = verds.count("GO"); n_soft = verds.count("SOFT_TOO_SLOW")
-    n_fast = sum(1 for r in gold if (analyze_fire(r)["lat_pt_ms"] or 1e9) <= 400)
+    n_fast = sum(1 for r in gold if (analyze_fire(r)["lat_pt_ms"] or 1e9) <= GO_HI_MS)
     print(f"\n[HUMAN] real gold dumps N={len(gold)}: GO={n_go} SOFT(slow)={n_soft} other={len(gold)-n_go-n_soft}")
     if n_fast:
-        print(f"  fast-cluster (<=400ms) GO-rate = {n_go}/{n_fast} = {100*n_go/max(1,n_fast):.0f}%  "
+        print(f"  fast-cluster (<={GO_HI_MS:.0f}ms) GO-rate = {n_go}/{n_fast} = {100*n_go/max(1,n_fast):.0f}%  "
               f"(slow tail -> SOFT, not bot)")
 
     # --- attacks ---
@@ -182,7 +194,7 @@ def main() -> int:
           f"(a bot that guesses ~345ms AND the fire time passes ONE challenge -> defense = multi-challenge variance)")
     print(f"  A6 random-timing bot (ISI={args.isi_ms:.0f}ms): FAR = {far_rand:.4f} = band_width/ISI = {(GO_HI_MS-GO_LO_MS)/args.isi_ms:.4f}")
     print("\n  CLAIM CEILING: construction attacks (A1/A2/A3/A4) REJECT by design; A5/A6 residual FAR is")
-    print("  PUBLISHED. Voluntary-reaction liveness CANDIDATE, single-operator provisional band. NOT sub-280")
+    print("  PUBLISHED. Voluntary-reaction liveness CANDIDATE, MEASURED N=5 population band. NOT sub-280")
     print("  reflex, NOT population, NOT bot-proof on one challenge, NOT tournament-ready. Rig/crypto remainder:")
     print("  live host-API bot, hardware injector, HMAC(nonce||t0||onset) frame-commitment, multi-session FRR.")
 

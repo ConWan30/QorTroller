@@ -1,6 +1,6 @@
 """Population reaction-time band — fixture tests (CI-safe, no gitignored dumps).
 
-Verifies (a) the anticipation floor is the population-safe sub-floor (NOT the single-operator 320ms band
+Verifies (a) the anticipation floor is the population-safe sub-floor (NOT a band edge like the old 320ms
 edge, grok F5), (b) the data-driven band estimator is honestly PROVISIONAL until enough operators, (c) a
 WIDER population band RAISES the joint worst-case FAR (the same grok-audited math), and (d) the new
 SOFT_TOO_FAST verdict routes a fast human below the band to "retry", not "SUSPECTED_BOT". Synthetic only.
@@ -31,16 +31,16 @@ def _write_dumps(tmp_path, onset_ms, n):
 # --- the population-safe sub-floor (F5) ---------------------------------------------------------
 
 def test_population_safe_sub_floor_is_anticipation_not_band_edge():
-    # The sub-floor MUST be the anticipation boundary (~120ms), NOT the single-operator 320ms band edge.
+    # The sub-floor MUST be the anticipation boundary (~120ms), NOT a band edge like the old single-op 320ms.
     assert population_safe_sub_floor_ms() == ANTICIPATION_FLOOR_MS == 120.0
-    assert population_safe_sub_floor_ms() < GO_LO_MS  # strictly below the single-operator band floor
+    assert population_safe_sub_floor_ms() < GO_LO_MS  # strictly below the measured band floor
 
 
 def test_f5_single_operator_floor_false_positives_a_fast_operator():
-    # F5 DEMO: a fast ~200ms operator is 100% rejected as sub-floor by the single-operator 320ms floor...
+    # F5 DEMO: a fast ~200ms operator is 100% rejected as sub-floor by the OLD single-operator 320ms floor...
     fast = [random.Random(1).gauss(200, 15) for _ in range(50)]
-    assert single_operator_floor_false_positive_rate(fast, single_op_floor_ms=GO_LO_MS) == 1.0
-    # ...but 0% rejected by the population-safe anticipation floor (all are > 120ms).
+    assert single_operator_floor_false_positive_rate(fast, single_op_floor_ms=320.0) == 1.0
+    # ...but 0% rejected by the population-safe anticipation floor (all are > 120ms) — the fix, now the default.
     assert single_operator_floor_false_positive_rate(fast, single_op_floor_ms=ANTICIPATION_FLOOR_MS) == 0.0
 
 
@@ -134,37 +134,37 @@ def test_far_understatement_invariant_cannot_be_violated_by_degenerate_band():
 
 # --- SOFT_TOO_FAST routing (per-fire + session) -------------------------------------------------
 
-def test_fast_human_is_soft_not_bot_under_population_band():
-    # onset 200ms: single-op floor -> REJECT_TOO_FAST (F5 false-positive); population band -> SOFT_TOO_FAST.
-    rec = _synth_rec(200.0)
-    assert detect_voluntary_go(rec)["verdict"] == "REJECT_TOO_FAST"                    # single-op (bug)
-    pop = detect_voluntary_go(rec, go_lo_ms=GO_LO_MS, go_hi_ms=GO_HI_MS, sub_floor_ms=ANTICIPATION_FLOOR_MS)
-    assert pop["verdict"] == "SOFT_TOO_FAST"                                           # population (fixed)
+def test_fast_human_below_band_is_soft_by_default():
+    # A reaction in (sub_floor 120, go_lo 195) is SOFT_TOO_FAST BY DEFAULT (F5 fixed by default); the OLD
+    # strict single-op config (sub_floor=320) would wrongly REJECT_TOO_FAST it.
+    rec = _synth_rec(150.0)                                             # 120 < 150 < 195
+    assert detect_voluntary_go(rec)["verdict"] == "SOFT_TOO_FAST"       # default = population (fixed)
+    strict = detect_voluntary_go(rec, sub_floor_ms=320.0)              # old strict floor
+    assert strict["verdict"] == "REJECT_TOO_FAST"                       # single-op would flag it a bot
 
 
-def test_true_subhuman_still_rejected_under_population_band():
-    # onset 80ms is below the anticipation floor -> REJECT_TOO_FAST even with the population sub-floor.
-    rec = _synth_rec(80.0)
-    pop = detect_voluntary_go(rec, go_lo_ms=GO_LO_MS, go_hi_ms=GO_HI_MS, sub_floor_ms=ANTICIPATION_FLOOR_MS)
-    assert pop["verdict"] == "REJECT_TOO_FAST"
+def test_true_subhuman_still_rejected_by_default():
+    # onset 80ms is below the 120ms anticipation floor -> REJECT_TOO_FAST even on the default population config.
+    assert detect_voluntary_go(_synth_rec(80.0))["verdict"] == "REJECT_TOO_FAST"
 
 
 def test_detect_session_counts_soft_too_fast_as_soft_not_bot():
-    # A session of fast (200ms) humans under the population band -> all SOFT, ZERO sub-floor, so NOT bot.
-    recs = [_synth_rec(200.0) for _ in range(6)]
-    r = detect_session(recs, go_lo_ms=GO_LO_MS, go_hi_ms=GO_HI_MS, sub_floor_ms=ANTICIPATION_FLOOR_MS)
+    # A session of fast (150ms, below-band) humans on the DEFAULT config -> all SOFT, ZERO sub-floor, NOT bot.
+    recs = [_synth_rec(150.0) for _ in range(6)]
+    r = detect_session(recs)          # default = population (sub_floor 120)
     assert r["n_soft"] == 6            # all counted as soft (fast-retry), not rejected
     assert r["n_sub_floor"] == 0      # none hit the sub-floor bot rail
     assert r["verdict"] != "SUSPECTED_BOT"
 
 
-def test_detect_session_default_path_byte_identical_flags_fast_as_bot():
-    # Default (single-op) path: the SAME fast session hits the 320ms sub-floor -> SUSPECTED_BOT (F5, unfixed
-    # on the default path by design — the population band is the fix, opt-in). Pins the default is unchanged.
-    recs = [_synth_rec(200.0) for _ in range(6)]
-    r = detect_session(recs)          # defaults: sub_floor = go_lo = 320
-    assert r["n_sub_floor"] == 6
-    assert r["verdict"] == "SUSPECTED_BOT"
+def test_default_is_population_config_strict_is_opt_in():
+    # The DEFAULT is now the measured population config: a fast (150ms) below-band session is SOFT, NOT a bot.
+    # The OLD strict single-operator behavior is opt-in via sub_floor=320 (then the SAME session is bot-flagged).
+    recs = [_synth_rec(150.0) for _ in range(6)]
+    default = detect_session(recs)                          # population by default
+    assert default["n_sub_floor"] == 0 and default["verdict"] != "SUSPECTED_BOT"
+    strict = detect_session(recs, sub_floor_ms=320.0)      # explicit old strict floor
+    assert strict["n_sub_floor"] == 6 and strict["verdict"] == "SUSPECTED_BOT"
 
 
 def test_gate_note_disclaims_flag_flip():
@@ -182,70 +182,59 @@ def test_detect_session_return_uses_n_soft_not_the_old_key():
 
 
 def test_detect_session_threads_sub_floor_into_far():
-    # grok r05 F8: the SAME in-band session must report a HIGHER blind_bot_far under a population sub-floor
-    # (smaller fatal zone -> bigger soft escape) than under the default (sub==go_lo). Verdict is HUMAN_PRESENT
-    # in both (in-band GOs); only the reported FAR changes.
+    # grok r05 F8: the SAME in-band session reports a HIGHER blind_bot_far on the DEFAULT population config
+    # (sub 120, smaller fatal zone -> bigger soft escape) than on the explicit strict config (sub=go_lo).
+    # Verdict is HUMAN_PRESENT in both (in-band GOs); only the reported FAR changes.
     recs = [_synth_rec(345.0) for _ in range(8)]
-    default = detect_session(recs)                                              # sub == go_lo == 320
-    pop = detect_session(recs, sub_floor_ms=ANTICIPATION_FLOOR_MS)              # sub == 120
-    assert default["verdict"] == pop["verdict"] == "HUMAN_PRESENT"
-    assert pop["blind_bot_far"] > default["blind_bot_far"]                      # population FAR is higher (F8)
+    default_pop = detect_session(recs)                                          # sub == 120 (population)
+    strict = detect_session(recs, sub_floor_ms=GO_LO_MS)                        # sub == go_lo (single-op)
+    assert default_pop["verdict"] == strict["verdict"] == "HUMAN_PRESENT"
+    assert default_pop["blind_bot_far"] > strict["blind_bot_far"]              # population FAR is higher (F8)
 
 
 def test_detect_session_far_note_is_config_conditional():
-    # grok r05 F9: the far_note must NOT assert the single-op 3.2e-4 envelope for a population config.
+    # grok r05 F9 + F12: the DEFAULT far_note is the POPULATION one (does NOT apply the single-op analytic);
+    # an explicit strict sub_floor (>= go_lo) gets the single-op note.
     recs = [_synth_rec(345.0) for _ in range(6)]
-    default = detect_session(recs)
-    pop = detect_session(recs, sub_floor_ms=ANTICIPATION_FLOOR_MS)
-    # default: 3.2e-4 IS presented as the envelope. population: 3.2e-4 is EXPLICITLY disclaimed ("does NOT
-    # apply") and the note points at worst_case_true_far to compute the real (higher) population envelope.
-    assert "3.2e-4" in default["far_note"] and "does NOT apply" not in default["far_note"]
-    assert "does NOT apply" in pop["far_note"] and "worst_case_true_far" in pop["far_note"]
-
-
-def test_far_note_edge_explicit_sub_equal_go_lo_uses_single_op_prose():
-    # grok r07 F12: an EXPLICIT sub_floor == go_lo (or >= go_lo) is effectively single-op -> single-op note,
-    # NOT the population "does NOT apply" prose (the branch keys on effective sub >= go_lo, not on `is None`).
-    recs = [_synth_rec(345.0) for _ in range(6)]
-    r = detect_session(recs, sub_floor_ms=GO_LO_MS)          # explicit sub == go_lo == 320
-    assert "3.2e-4" in r["far_note"] and "does NOT apply" not in r["far_note"]
+    default_pop = detect_session(recs)
+    strict = detect_session(recs, sub_floor_ms=GO_LO_MS)
+    assert "does NOT apply" in default_pop["far_note"] and "worst_case_true_far" in default_pop["far_note"]
+    assert "(band/GO_HI)^K" in strict["far_note"] and "does NOT apply" not in strict["far_note"]
 
 
 # --- runner CLI: --sub-floor / --population knobs (grok r07 F14) ---------------------------------
 
-def test_runner_default_path_flags_fast_session_as_bot(tmp_path, monkeypatch, capsys):
-    # No band knobs -> single-operator config: a fast (200ms) session hits the 320ms sub-floor -> SUSPECTED_BOT.
+def test_runner_default_is_population_fast_session_not_bot(tmp_path, monkeypatch, capsys):
+    # DEFAULT (no band knobs) is now the POPULATION config: a fast below-band (150ms) session is SOFT, NOT bot.
     import qortroller_anticheat_report as rpt
-    d = _write_dumps(tmp_path, 200.0, 6)
+    d = _write_dumps(tmp_path, 150.0, 6)
     monkeypatch.setattr(sys, "argv", ["report", "--dir", d, "--isi-ms", "3000"])
     rc = rpt.main()
     out = capsys.readouterr().out
     assert rc == 0
-    assert "single-operator" in out and "SUSPECTED_BOT" in out and "3.2e-4" in out
+    assert "POPULATION" in out and "SOFT=6" in out and "sub_floor=0" in out and "SUSPECTED_BOT" not in out
 
 
-def test_runner_sub_floor_knob_makes_fast_session_soft_not_bot(tmp_path, monkeypatch, capsys):
-    # grok r07 F14: --sub-floor 120 -> POPULATION config: the SAME fast session is SOFT (retry), not a bot,
-    # and the FAR note is the population one (3.2e-4 explicitly disclaimed).
+def test_runner_strict_sub_floor_flags_fast_session_as_bot(tmp_path, monkeypatch, capsys):
+    # The OLD strict behavior is opt-in: --sub-floor 320 makes the SAME fast (150ms) session SUSPECTED_BOT.
     import qortroller_anticheat_report as rpt
-    d = _write_dumps(tmp_path, 200.0, 6)
-    monkeypatch.setattr(sys, "argv", ["report", "--dir", d, "--isi-ms", "3000", "--sub-floor", "120"])
+    d = _write_dumps(tmp_path, 150.0, 6)
+    monkeypatch.setattr(sys, "argv", ["report", "--dir", d, "--isi-ms", "3000", "--sub-floor", "320"])
     rc = rpt.main()
     out = capsys.readouterr().out
     assert rc == 0
-    assert "POPULATION" in out and "SOFT=6" in out and "sub_floor=0" in out
-    assert "SUSPECTED_BOT" not in out and "does NOT apply" in out
+    assert "single-operator (strict)" in out and "SUSPECTED_BOT" in out and "sub_floor=6" in out
 
 
 def test_runner_population_flag_uses_anticipation_floor(tmp_path, monkeypatch, capsys):
-    # --population (no explicit --sub-floor) uses the ~120ms anticipation floor with the honest "uncited" note.
+    # --population pins the ~120ms anticipation floor (same as the default now); a 150ms session -> SOFT.
     import qortroller_anticheat_report as rpt
-    d = _write_dumps(tmp_path, 200.0, 6)
+    d = _write_dumps(tmp_path, 150.0, 6)
     monkeypatch.setattr(sys, "argv", ["report", "--dir", d, "--isi-ms", "3000", "--population"])
     rc = rpt.main()
     out = capsys.readouterr().out
     assert rc == 0
-    assert "sub-floor 120ms" in out and "uncited anticipation prior" in out and "SOFT=6" in out
+    assert "sub-floor 120ms" in out and "POPULATION" in out and "SOFT=6" in out
 
 
 # --- population-band pooling runner (poep_population_band.py) ------------------------------------

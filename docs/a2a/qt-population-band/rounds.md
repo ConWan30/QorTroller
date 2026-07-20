@@ -60,3 +60,23 @@ framework; re-scope the sub-floor (F5: fast humans <320ms would false-positive t
   (operator + 1), a MINIMAL population sample, not a robust one; the band stays advisory + honestly-labeled.
   Promote PROVISIONAL -> measured needs >=2 operators x >=20 samples (was >=5). Tests key off the constant.
 commit: operator (sole committer).
+
+--- DETECTOR-DEFAULT FLIP sub-loop (2026-07-20) ---
+- scope: wire the MEASURED N=5 band (195,416] + 120ms anticipation sub-floor as the DETECTOR DEFAULT
+  (was single-op (320,400]/sub=320, which flagged all 5 real players as bots). Advisory/gates nothing.
+- r03 audit (grok): HOLD — F1 BLOCK (CLI help still "single-operator") + F2-F7 WARN (stale docstrings; audit
+  still N=3; Roy narrative; far_note doesn't print 0.069; worst_case_true_far() footgun 0.042 vs 0.069;
+  "compensated" softening).
+- r04 fix: F6 blind_bot_probs default -> SUB_FLOOR_MS (worst_case_true_far() now = 0.069 detector envelope,
+  single-op via explicit sub=go_lo=0.042); CLI help; docstrings; audit -> N=5 (195,416] 139 samples Roy/Pookie;
+  +F9 test pins 5 real medians. 57 green.
+- r05 audit: HOLD — all named resolved; residual prose (F8 top-doc "default sub=go_lo"; F7 "buy back"; F3
+  "N=2 MINIMUM"/"Not done yet"; F11 "5 people held-out" overclaim).
+- r06 fix: prose scrub across all named surfaces. r07 audit: HOLD — F14/F15/F16/F17 same held-out-overclaim
+  class on 4 more surfaces (audit "BOTH PASSED"; test comment; runbook; ConHeldout "N=3"->N=2).
+- r08 fix: those 4. r09 audit: HOLD — F18 (fit-history "held-out PASS" vs Roy partial miss) + F19 (Pookie
+  "fifth"->4th). r10 fix: those 2 + INFO cleanups (single-shot label, provenance cmd).
+- r11 re-verify: **PASS** (grok: 57 pass, PV-CI 184, worst_case_true_far 0.0692/0.0423, 0 banned-phrase
+  matches, held-out claims coherent end-to-end). Honest ceiling: N=5 fast-to-moderate; no slow reactor; 200x
+  FAR posture change disclosed at CLI+docstrings+audit; acceptable ONLY because it gates nothing.
+commit: PENDING operator (sole committer).

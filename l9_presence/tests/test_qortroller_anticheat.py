@@ -40,8 +40,17 @@ def test_blind_bot_random_timing_not_present():
 
 
 def test_sub_floor_presses_are_suspected_bot():
-    r = detect_session([attack_fixed_delay_bot(150.0) for _ in range(20)])   # below the human floor
+    r = detect_session([attack_fixed_delay_bot(80.0) for _ in range(20)])    # below the 120ms anticipation floor
     assert r["verdict"] == "SUSPECTED_BOT"
+
+
+def test_real_player_medians_are_human_on_default_but_bot_under_old_strict():
+    # The load-bearing reason for the population default: the 5 real in-sample players' measured medians
+    # are HUMAN on the DEFAULT config, but the OLD single-operator strict floor (sub=320) flags them all as bots.
+    for name, median in (("Con", 295), ("Fari", 263), ("Khamari", 254), ("Roy", 288), ("Pookie", 272)):
+        recs = [_synth_rec(float(median)) for _ in range(8)]
+        assert detect_session(recs)["verdict"] == "HUMAN_PRESENT", name          # default (population)
+        assert detect_session(recs, sub_floor_ms=320.0)["verdict"] == "SUSPECTED_BOT", name  # old strict
 
 
 def test_all_dead_feed_is_dead_not_human():
@@ -114,14 +123,22 @@ def test_blind_bot_probs_clamped_for_isi_below_band():
         assert 0.0 <= p_go and 0.0 <= p_fast and (p_go + p_fast) <= 1.0 + 1e-12
 
 
-def test_joint_worst_case_true_far_is_the_analytic_max_not_understated():
-    # F19: the JOINT worst-case TRUE FAR over (N,ISI) is code-derived and == (band/GO_HI)^K at N=K, ISI=GO_HI.
-    # Pins ~3.2e-4 so it can NEVER be silently understated (the r06 1.4e-4 slice failed this).
-    n, isi, far = worst_case_true_far()
-    analytic = ((GO_HI_MS - GO_LO_MS) / GO_HI_MS) ** K_REQUIRED_DEFAULT   # 0.20^5 = 3.2e-4
-    assert far >= 3.0e-4                                   # NOT the understated 1.4e-4
-    assert abs(far - analytic) < 5e-6                      # grid finds the analytic joint max
+def test_joint_worst_case_true_far_single_op_is_the_analytic_max():
+    # F19: the SINGLE-OP joint worst case (explicit sub=go_lo) is == (band/GO_HI)^K at N=K, ISI=GO_HI.
+    # Computed from the constants so it tracks the measured band (N=5 (195,416] -> ~0.042).
+    n, isi, far = worst_case_true_far(sub_floor_ms=GO_LO_MS)
+    analytic = ((GO_HI_MS - GO_LO_MS) / GO_HI_MS) ** K_REQUIRED_DEFAULT
+    assert abs(far - analytic) < 5e-6                      # grid finds the analytic single-op joint max
     assert n == K_REQUIRED_DEFAULT and abs(isi - GO_HI_MS) < 6.0   # at N=K, ISI~=GO_HI
+
+
+def test_default_worst_case_far_is_the_population_envelope_not_understated():
+    # grok r03 F6: the DEFAULT worst_case_true_far() (no sub arg) returns the DETECTOR-DEFAULT population
+    # envelope (sub=anticipation), which is STRICTLY HIGHER than the single-op reference — never understated.
+    pop = worst_case_true_far()[2]                                 # default sub = anticipation floor
+    single_op = worst_case_true_far(sub_floor_ms=GO_LO_MS)[2]      # explicit strict sub
+    assert pop > single_op                                        # population default is the higher, honest number
+    assert pop > 0.05                                             # ~0.069 for the measured (195,416] band
 
 
 def test_binom_tail_matches_direct_sum():

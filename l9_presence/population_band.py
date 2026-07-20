@@ -1,12 +1,14 @@
 """Population reaction-time band for the QorTroller anti-cheat detector — CANDIDATE, ADVISORY (ASM-Loop r02).
 
-The shipped detector's GO band (320, 400] ms is a SINGLE-OPERATOR provisional band. grok F5 flagged that a
-population human who reacts faster than 320 ms would false-positive as SUSPECTED_BOT. This module (a) sets a
+The OLD single-operator default GO band (320, 400] ms false-positived fast humans: grok F5 flagged that a
+population human who reacts faster than 320 ms would be SUSPECTED_BOT. The detector default is now the MEASURED
+N=5 population band (195, 416] + a 120ms anticipation sub-floor (this module's output). This module (a) sets a
 population-SAFE hard sub-floor at the human anticipation boundary, (b) provides a data-driven estimator that
 pools per-operator reaction samples into a population band + per-operator FRR, honestly PROVISIONAL until
 enough operators are measured, and (c) recomputes the joint worst-case FAR for a (wider) population band
-using the SAME grok-audited math (a wider band RAISES the single-shot FAR; the multi-challenge compounding
-and a higher K compensate).
+using the SAME grok-audited math (a wider band RAISES the single-shot FAR; multi-challenge compounding + more
+challenges LOWER the per-session FAR below the single-shot worst case, but the residual stays well ABOVE the
+strict single-op FAR — the honest cost of not false-rejecting fast humans).
 
 HONESTY: with N=1 operator this is a FRAMEWORK + a CONSERVATIVE PRIOR, not a measured population band. The
 anticipation floor (~120 ms) is established general psychophysics — voluntary reactions below ~100-120 ms to
@@ -36,8 +38,8 @@ MIN_SAMPLES_PER_OPERATOR = 20
 
 
 def population_safe_sub_floor_ms() -> float:
-    """The population-safe anti-cheat sub-floor = the anticipation boundary, NOT the single-operator 320 ms.
-    Using 320 ms as the sub-floor (as the shipped detector does) false-positives fast humans (F5)."""
+    """The population-safe anti-cheat sub-floor = the anticipation boundary, NOT a band edge like the old 320 ms.
+    Using the band floor as the sub-floor (as the OLD single-operator default did) false-positives fast humans (F5)."""
     return ANTICIPATION_FLOOR_MS
 
 
@@ -93,22 +95,25 @@ def estimate_population_band(operator_samples: dict[str, list[float]],
                    or any(len(s) < min_samples_per_op for s in ops.values()))
 
     if degenerate:
-        # No coherent band -> FAR is UNDEFINED (do not emit 0.0). Report both bounds honestly-flagged.
+        # No coherent band -> FAR is UNDEFINED (do not emit 0.0). single-op reference = the detector default
+        # band with a strict sub=go_lo (worst_case_true_far now defaults to the population sub-floor, grok F6).
         pop_far = None
-        default_far = worst_case_true_far(k_required=k_required)[2]
+        default_far = worst_case_true_far(k_required=k_required, sub_floor_ms=GO_LO_MS)[2]
         far_note = ("DEGENERATE band (floor >= ceiling): the pooled samples are (almost) all below the "
                     "anticipation floor, so no coherent human band exists. FAR is UNDEFINED (not 0.0); this "
                     "pool is itself a red flag, not a safe low-FAR band. Recapture real human reactions.")
     else:
         # joint worst-case FAR for the ACTUAL population three-zone config: band (floor, ceiling] + the
-        # anticipation floor as the FATAL sub-floor (soft zone in between). A wider band AND a lower sub-floor
-        # both RAISE the FAR (F4) — surfaced, not hidden. Compared to the single-operator default (sub==go_lo).
+        # anticipation floor as the FATAL sub-floor (soft zone in between). Compared APPLES-TO-APPLES to the
+        # SAME band with a STRICT sub=floor (single-op) — the lower anticipation sub-floor is what RAISES it.
         pop_far = worst_case_true_far(k_required=k_required, go_lo_ms=floor, go_hi_ms=ceiling,
                                       sub_floor_ms=anticipation_floor_ms)[2]
-        default_far = worst_case_true_far(k_required=k_required)[2]
-        far_note = ("a WIDER population band AND a lower (anticipation) sub-floor BOTH RAISE the joint "
-                    "worst-case TRUE FAR (F4); raise K and/or rely on multi-challenge compounding to "
-                    "compensate. FAR computed with sub_floor=anticipation at k_required=%d" % k_required)
+        default_far = worst_case_true_far(k_required=k_required, go_lo_ms=floor, go_hi_ms=ceiling,
+                                          sub_floor_ms=floor)[2]   # same band, strict sub=go_lo (single-op)
+        far_note = ("a WIDER band AND a lower (anticipation) sub-floor BOTH RAISE the joint worst-case TRUE "
+                    "FAR (F4). K-compounding + more challenges LOWER the per-session FAR below this single-shot "
+                    "worst case, but the residual stays well ABOVE the strict single-op FAR — the honest cost "
+                    "of not false-rejecting fast humans. FAR at sub_floor=anticipation, k_required=%d" % k_required)
 
     base.update(
         band_lo_ms=round(floor, 1), band_hi_ms=round(ceiling, 1),
@@ -135,8 +140,9 @@ _GATE_NOTE = ("candidate/advisory; the anti-cheat sub-floor should be the antici
 
 def single_operator_floor_false_positive_rate(fast_operator_samples: list[float],
                                               single_op_floor_ms: float = GO_LO_MS) -> float:
-    """F5 DEMONSTRATION: fraction of a FAST operator's reactions that the single-operator 320 ms floor would
-    wrongly reject as sub-floor (SUSPECTED_BOT). A population-safe floor at the anticipation boundary fixes it."""
+    """F5 DEMONSTRATION: fraction of a FAST operator's reactions that a high single-operator floor
+    (single_op_floor_ms, e.g. the old 320 ms) would wrongly reject as sub-floor (SUSPECTED_BOT). A
+    population-safe floor at the anticipation boundary fixes it. (Default is the measured band floor GO_LO_MS.)"""
     if not fast_operator_samples:
         return 0.0
     return round(sum(1 for x in fast_operator_samples if x <= single_op_floor_ms) / len(fast_operator_samples), 3)
