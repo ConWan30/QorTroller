@@ -104,5 +104,6 @@ python scripts/qortroller_anticheat_report.py --dir audits/poep_ring_dump --popu
 ## Known limits (unchanged)
 - A **reactive bot** watching the HID force-output command and reacting in-band (A-REACTIVE) is uncloseable for
   any host-timed proof — out of scope until controller-firmware force-timestamps + Stage-A land.
-- N=2 minimal; the 120 ms floor is an uncited prior; the band widens the FAR (it fixes a false-*reject*, not a
-  false-*accept*). All advisory; gates nothing.
+- N=5 (small sample), **scoped to competitive players** (fast-to-moderate reactors, by operator decision;
+  slow reactors out of scope, handled gracefully as `SOFT_TOO_SLOW`/retry); the 120 ms floor is an uncited
+  prior; the band widens the FAR (it fixes a false-*reject*, not a false-*accept*). All advisory; gates nothing.
