@@ -149,13 +149,41 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   shows `precursor_t_mono` and `crossing_t_mono` **13 microseconds apart** (`reflex_gap_ms=0.013`) — the
   "reflex" is detected essentially AT THE FIRST SAMPLE of the post-fire buffer, not found deep within a
   long search window. The entire measured `true_latency_ms=1488.9` is the gap between `probe_ts` (when the
-  fire happened) and `crossing_t_mono` (when the post-fire buffer's first samples were collected) — i.e.
-  **the ~1.5s "latency" looks like a delay before the bridge's session loop resumes collecting samples
-  after firing, not time spent identifying the reflex within a promptly-collected buffer.** This is a more
-  specific and more actionable lead than either "RP lag" or "slow human reaction": something in the
-  session-loop's own scheduling around the fire moment (independent of RP, independent of the device vs.
-  wall clock question) may be the real cause. Needs code review of the fire→post-buffer-collection path,
-  not more live fires — that's the next real step for a future session.
+  fire happened) and `crossing_t_mono` (when the post-fire buffer's first samples were collected).
+
+  **RETRACTED 2026-07-20 (ASM-Loop external audit, grok, verdict HOLD — `docs/a2a/poep/rounds.md`):** the
+  paragraph above (as originally written) framed this as a **"session-loop batch-boundary wait" mechanism,
+  distinct from F-RIG27-8** — that framing did not survive audit and is retracted. Grok's findings against
+  the same evidence, checked directly against the live tree and the diagnostic rows (probe_log_id 1557,
+  1585):
+  - **F1 (BLOCK):** the crossing lands EARLY in the post-fire buffer (`crossing_index=0` or `3`, not deep
+    in a long search) — this REFUTES "waited for a later batch to find the peak." The real mechanism is
+    that `_build_l6b_report` (`dualshock_integration.py:236-249`) stamps `t_mono` at classification/
+    process time, not capture time — nearly every frame in a returned batch gets close to the same wall
+    stamp. That inflates `true_latency_ms` independent of when within the batch the crossing sits.
+  - **F2 (BLOCK):** this is the SAME mechanism `round-rplatency-01-claude-open.md` (F-RIG27-8) already
+    named — "`t_mono` stamped when the session loop builds each entry, not device sensor time." Tonight's
+    ~1s `_poll_frames` batching is a contributing lag source on top of that, not a second, independent root
+    cause. The "NEW root cause" claim is retracted.
+  - **F3 (BLOCK):** the device-clock-agreement claim doesn't hold in code as described — the live
+    `_rp_device_latency_ms` (`dualshock_integration.py:205-233`) fail-closes above 500ms and falls back to
+    the (already-inflated) mono path; a multi-second "device span" as described can't reach the comparison
+    this doc drew from it. That comparison is retracted as unverified/likely a separate stale-timestamp
+    artifact, not evidence of a second independent clock agreeing.
+  - **F4/F5 (WARN, retained as open leads):** `frames_remaining=350` at `_poll_frames`'s ~8ms/frame cadence
+    is actually a multi-second post-capture window, not the ~1s single-boundary residual implied above —
+    the doc's "0-1s uniform residual" model understates the completion path. Mid-batch arming can also
+    route pre-fire frames into the post buffer (no per-frame `t_mono >= probe_ts` gate at buffer-append
+    time), a contamination surface not previously named.
+
+  **What survives, corrected:** the mechanism is `_build_l6b_report`'s process-time `t_mono` stamping
+  (F-RIG27-8, confirmed and refined — not superseded), with the session loop's ~1s batched poll interval
+  as one concrete contributor to how large that process-time lag can grow. The fix direction is still
+  code-side and still untried: stamp `t_mono` at frame **collection** time (inside `_poll_frames`, per
+  frame) rather than at classification time, and/or thread the existing device-clock fix's intent through
+  correctly instead of falling back silently past its 500ms rail. Needs code review of the
+  fire→post-buffer-collection timestamp path, not more live fires — that's the next real step for a future
+  session.
   **Left open. No further live-ring fires attempted this session.**
 - **INC-4 — corpus + honesty spine.** Grow a corpus of SYNCHRONIZED-under-real-play sessions (N target TBD by
   the operator). The honesty spine (inherited): `effective_live = mode==live AND all(GO.live_hardware)`;

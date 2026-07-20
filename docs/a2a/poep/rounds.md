@@ -49,3 +49,50 @@ only; poep_enabled/L6B_ENABLED stay False; canonical latency_ms/classification b
   ticks hoisted into locals + passed as params → log == exact `_rp_device_latency_ms` inputs). 38 tests +
   PV-CI 184. Envelope `round-rplatency-8b-envelope.md`; grok raw `scratchpad/grok-rplatency-8b-verify.txt`.
   **STAGED — operator commits.**
+
+## ASM-Loop continuation — batch-boundary claim, 2026-07-20
+
+r01 scope: investigate why live-ring reflex latencies (900-4600ms, both t_mono and a
+companion device-clock span) never fall in the sealed GO band (195,416]ms across tonight's
+7 real fires, given F-RIG27-8 already named process-time `t_mono` inflation and a no-RP
+retest tonight showed the same magnitude | ceiling: static code-investigation only, no
+live fires this round, no fix implemented/tested.
+
+r02 build: `dualshock_integration.py` session-loop batching read (`_session_loop`/
+`_poll_frames`/`request_poep_nonce_probe`) + `logs/l6b_probe_diagnostic.jsonl` evidence |
+claims C1..C10: session-loop batches HID in ~1s blocking windows via `_poll_frames`, fire
+path unsynchronized to batch boundary, framed as a NEW root cause distinct from F-RIG27-8,
+"directly explained" by diagnostic rows 1557/1585 plus a claimed device-clock agreement.
+
+r03 audit: grok, invoked directly via CLI terminal bus (`grok --prompt-file`, no manual
+copy-paste this round) →
+- F1 (BLOCK): crossing lands early in post-fire buffer (`crossing_index=0`/`3`) — refutes
+  "waited for a later batch to find the peak"; real mechanism is `_build_l6b_report`
+  stamping `t_mono` at classification time, not capture time
+- F2 (BLOCK): not a new root cause — same mechanism F-RIG27-8 already named; ~1s batching
+  is a contributing lag source, not an independent second cause
+- F3 (BLOCK): device-clock-agreement claim doesn't hold in code — `_rp_device_latency_ms`
+  fail-closes above 500ms and falls back to the already-inflated mono path
+- F4/F5 (WARN): `frames_remaining=350` at ~8ms/frame is multi-second, not a ~1s residual;
+  mid-batch arming can route pre-fire frames into the post buffer (contamination surface,
+  no per-frame `t_mono >= probe_ts` gate at buffer-append time)
+- F6/F7 (WARN): "consistently 900-4600ms" may be a selected subset (a 279ms HUMAN row
+  exists same night); RP-independence claim not re-verifiable from cited artifacts
+- F8/F9/F10 (INFO): control-flow facts (C1-C3, C8-C9) check out; fix options honestly
+  design-only; GO band (195,416]ms uncontested
+→ verdict **HOLD**
+
+r04 fix: retracted C4/C5/C7's "new, dual-clock-confirmed root cause" framing in
+`docs/poep-live-play-ring-arc-spec.md` INC-3; corrected to "F-RIG27-8 confirmed and
+refined, not superseded" — `_build_l6b_report`'s process-time `t_mono` stamping is the
+mechanism, ~1s `_poll_frames` batching is a contributing lag source, the device-clock-
+agreement comparison removed as unverified against the live code path. F4/F5 retained as
+open leads for a future build round (stamp `t_mono` at collection time inside
+`_poll_frames`, not at classification time; gate post-buffer append on `t_mono >=
+probe_ts` to prevent pre-fire contamination). No code fix attempted this round — matches
+the r01 ceiling.
+
+r05 re-verify: not run this round — this is a documentation retraction against an
+already-issued HOLD, not a new build; no further live fires attempted per the r01 ceiling.
+
+commit: staged by builder, operator commits.
