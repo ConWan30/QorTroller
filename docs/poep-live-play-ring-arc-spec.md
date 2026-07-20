@@ -91,9 +91,30 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   active play to react rather than sitting ready for it. Single fire, banked as sufficient by operator call
   — not repeated for a larger in-play sample. `presence_candidate`/`SYNCHRONIZED_CONTROLLER` composition
   (INC-3) not yet separately verified against this fire.
-- **INC-3 — SYNCHRONIZED_CONTROLLER under play.** `identity_bound` (ioID/VMDR) + `presence_candidate` (live
-  ring fire) → verdict **SYNCHRONIZED_CONTROLLER** while a real match is in progress. This is the artifact the
-  whole arc targets. Verify: the fused verdict, device-match, no `real_hardware=False` path reaching it.
+- **INC-3 — SYNCHRONIZED_CONTROLLER under play. ATTEMPTED 2026-07-20 — HONEST GAP FOUND, NOT YET CLOSED.**
+  `identity_bound` (ioID/VMDR) + `presence_candidate` (live ring fire) → verdict **SYNCHRONIZED_CONTROLLER**
+  while a real match is in progress. Ran the pre-built one-command orchestrator
+  (`scripts/poep_session_identity_attach.py --live`, already wired with the real ioID ceremony constants —
+  tokenId 498, owner DID, TBA, VMDR pubkey hash, controller NFT) mid-match, twice (2 GO challenges each,
+  4 real fires total). Both runs: `identity_bound=True` (full two-hop birth-cert→NFT→TBA chain verified),
+  `live_hardware=True`, `activity_trusted=True`, `effective_live=True` — every mechanical/honesty-spine gate
+  passed — but `n_go_verify_pass=0/2` both times → `gates.go_ok=False` → verdict **IDENTITY_ONLY**, not
+  SYNCHRONIZED_CONTROLLER. Root cause, not a bug: the sealed verify's GO band (195,416]ms was calibrated on
+  the population-band captures — **trained, anticipated R2-press onsets at a quiet desk**. Every live-ring
+  fire tonight (INC-1/INC-2/both INC-3 attempts, 7 fires total) has instead measured an **unprompted
+  accelerometer-detected startle jolt during active gameplay**, landing consistently at **1102-1844ms** —
+  3-4x the band ceiling, every single time. Retried with the operator explicitly anticipating the second
+  attempt (knowing a challenge was coming) → measurably faster (1145-1189ms vs. 1505-1844ms first attempt)
+  but still nowhere near the band. Consistent pattern across 7 fires, not one bad attempt — this reads as a
+  structural mismatch between the measurement modality (whole-hand/wrist accelerometer jolt, mid-gameplay,
+  divided attention) and what the band was calibrated against (finger-onset R2 press, quiet desk, full
+  attention), not something one more anticipated reaction will close. **Left open by operator call** — banking
+  the honest finding rather than continuing to fire chasing a result this data says is unlikely tonight.
+  Two real closing paths for a future session: (a) grow a SEPARATE population band specifically for the
+  accelerometer-jolt-during-gameplay modality (the current band was never validated against this signal
+  type), or (b) accept that this ring's natural response is slower and reconsider whether GO-band matching
+  is the right closure criterion for SYNCHRONIZED_CONTROLLER vs. some other honest signal of the same
+  measured reflex. Both are operator-scope decisions, not something to resolve unilaterally.
 - **INC-4 — corpus + honesty spine.** Grow a corpus of SYNCHRONIZED-under-real-play sessions (N target TBD by
   the operator). The honesty spine (inherited): `effective_live = mode==live AND all(GO.live_hardware)`;
   `live_hardware = fire.real_hardware`; a dry/injected fire can NEVER reach SYNCHRONIZED (round-04 F-GP-4
