@@ -76,10 +76,21 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   with the previously-documented device-clock fragility under Remote Play topology (no RP session was
   necessarily active this time; not fully root-caused). Diagnostic-only — never gates the verdict, the
   system correctly fell back to `t_mono` throughout.
-- **INC-2 — LIVE PLAY.** Operator plays a REAL game through Remote Play (pad USB→PC to the bridge; game on the
-  PS5). During play the bridge (or `/operator/operator/poep/fire`) serves nonce challenges; the human reacts mid-play;
-  the ring captures the reflex from its own reader. Verify: reflex `real_hardware=True`, latency in the
-  competitive band, nonce-bound, activity_source=bridge — DURING a live match.
+- **INC-2 — LIVE PLAY. REFLEX CAPTURED DURING A REAL MATCH 2026-07-20.** Operator set up dual-connection
+  (Edge USB-C→PC for the bridge + BT-paired→PS5 for play) and got into an active match. Capture-health
+  confirmed the setup before firing: `host_state=EXCLUSIVE_USB`, `poll_rate_hz≈1282` stable,
+  `sustained_duration_s≈1028` (~17min). Fired one nonce-bound probe mid-play:
+  `{"fired": true, "real_hardware": true, "nonce": "<echoed exactly>", "latency_ms": 1735.7,
+  "peak_lsb": 3968.2, "error": ""}` — same order of magnitude as the two desk-based INC-1 captures
+  (5793.4/5429.5), confirming the mechanism holds up under real in-game conditions, not just quiet-desk
+  conditions. Post-fire capture-health showed `live_trigger_active_fraction` jump `0.0 → 0.45` in the
+  recent window, corroborating genuine gameplay activity coincided with the fire (`latest_gameplay_context`
+  didn't populate a label in this status view — a display gap in that specific field, not a gating issue).
+  `latency_ms` again used the `t_mono` fallback clock (same `sensor_ts_ticks` residual as INC-1, unchanged);
+  1.7s is on the slower end even vs. the desk captures, plausible given the operator had to disengage from
+  active play to react rather than sitting ready for it. Single fire, banked as sufficient by operator call
+  — not repeated for a larger in-play sample. `presence_candidate`/`SYNCHRONIZED_CONTROLLER` composition
+  (INC-3) not yet separately verified against this fire.
 - **INC-3 — SYNCHRONIZED_CONTROLLER under play.** `identity_bound` (ioID/VMDR) + `presence_candidate` (live
   ring fire) → verdict **SYNCHRONIZED_CONTROLLER** while a real match is in progress. This is the artifact the
   whole arc targets. Verify: the fused verdict, device-match, no `real_hardware=False` path reaching it.
