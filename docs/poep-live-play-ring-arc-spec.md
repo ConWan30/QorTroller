@@ -91,7 +91,8 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   active play to react rather than sitting ready for it. Single fire, banked as sufficient by operator call
   — not repeated for a larger in-play sample. `presence_candidate`/`SYNCHRONIZED_CONTROLLER` composition
   (INC-3) not yet separately verified against this fire.
-- **INC-3 — SYNCHRONIZED_CONTROLLER under play. ATTEMPTED 2026-07-20 — HONEST GAP FOUND, NOT YET CLOSED.**
+- **INC-3 — SYNCHRONIZED_CONTROLLER under play. ATTEMPTED 2026-07-20 — HONEST GAP FOUND, NOT YET CLOSED.
+  CORRECTED 2026-07-20 (same session): the first write-up of this finding was WRONG — see below.**
   `identity_bound` (ioID/VMDR) + `presence_candidate` (live ring fire) → verdict **SYNCHRONIZED_CONTROLLER**
   while a real match is in progress. Ran the pre-built one-command orchestrator
   (`scripts/poep_session_identity_attach.py --live`, already wired with the real ioID ceremony constants —
@@ -99,22 +100,35 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   4 real fires total). Both runs: `identity_bound=True` (full two-hop birth-cert→NFT→TBA chain verified),
   `live_hardware=True`, `activity_trusted=True`, `effective_live=True` — every mechanical/honesty-spine gate
   passed — but `n_go_verify_pass=0/2` both times → `gates.go_ok=False` → verdict **IDENTITY_ONLY**, not
-  SYNCHRONIZED_CONTROLLER. Root cause, not a bug: the sealed verify's GO band (195,416]ms was calibrated on
-  the population-band captures — **trained, anticipated R2-press onsets at a quiet desk**. Every live-ring
-  fire tonight (INC-1/INC-2/both INC-3 attempts, 7 fires total) has instead measured an **unprompted
-  accelerometer-detected startle jolt during active gameplay**, landing consistently at **1102-1844ms** —
-  3-4x the band ceiling, every single time. Retried with the operator explicitly anticipating the second
-  attempt (knowing a challenge was coming) → measurably faster (1145-1189ms vs. 1505-1844ms first attempt)
-  but still nowhere near the band. Consistent pattern across 7 fires, not one bad attempt — this reads as a
-  structural mismatch between the measurement modality (whole-hand/wrist accelerometer jolt, mid-gameplay,
-  divided attention) and what the band was calibrated against (finger-onset R2 press, quiet desk, full
-  attention), not something one more anticipated reaction will close. **Left open by operator call** — banking
-  the honest finding rather than continuing to fire chasing a result this data says is unlikely tonight.
-  Two real closing paths for a future session: (a) grow a SEPARATE population band specifically for the
-  accelerometer-jolt-during-gameplay modality (the current band was never validated against this signal
-  type), or (b) accept that this ring's natural response is slower and reconsider whether GO-band matching
-  is the right closure criterion for SYNCHRONIZED_CONTROLLER vs. some other honest signal of the same
-  measured reflex. Both are operator-scope decisions, not something to resolve unilaterally.
+  SYNCHRONIZED_CONTROLLER, at latencies 1102-1844ms across all 7 live-ring fires tonight (INC-1/INC-2/both
+  INC-3 attempts) — 3-4x the sealed verify's GO band (195,416]ms.
+  **This is NOT a new finding — it is the SAME problem as `docs/a2a/poep/round-rplatency-01-claude-open.md`
+  (2026-07-18, F-RIG27-8): "8 fires ... real reflexes peaks up to 6597 ... every measured latency was
+  594-4600ms, NEVER in the 80-280ms human band." That round diagnosed the root cause as Remote Play's
+  bridge-side frame-processing lag inflating the bridge-wall-clock (`t_mono`) latency measurement, and
+  built a companion device-clock latency (`dev_lat`, from the controller's own 3MHz onboard sensor
+  timestamp — immune to bridge processing lag) as the fix.** The original write-up of INC-3 here framed
+  the gap as a "reaction-speed / measurement-modality mismatch" WITHOUT checking for this prior finding
+  first — that framing was wrong and has been removed. Correction, checked the same session: every one of
+  tonight's fires shows `dev_lat=-1.0` (the device-clock fix never activated, rejected by its own
+  `max_ms=500` plausibility rail) — computing the RAW device-clock span directly from the logged
+  `cross_ts`/`probe_ts` ticks for 4 fires gives **1228-4608ms**, closely matching the corrupted `t_mono`
+  values rather than showing a short "true" reaction that RP delayed in software. Since the device clock
+  is stamped by the controller's own firmware at report-generation time — independent of when the bridge
+  gets around to processing that report — this means **the inflation is NOT fully explained by bridge-side
+  RP processing lag alone** (that theory predicts the device clock should show a short, undelayed span; it
+  doesn't). Two live possibilities, genuinely unresolved without independent ground truth: (a) the physical
+  reactions really did take 1.1-4.6s (plausible for an unprompted jolt with divided attention, less
+  plausible for the 4.6s outlier), or (b) the analyzer's crossing-detection logic is identifying a frame
+  well after the true accelerometer peak, in which case BOTH clocks would show the same inflated span
+  because both are timestamping the same (mis-identified) frame, not the real reflex moment. **This is
+  exactly the ambiguity a capture card resolves and neither software clock can** — an independent,
+  hardware-level reference for when the physical reaction actually happened, uncoupled from the bridge's
+  frame processing, the device's own HID timestamp, and the analyzer's crossing-detection logic, all three
+  of which are now in question. RP-4 (`cross-lobe latency — BLOCKED (needs capture card + controlled
+  stimulus)`) was scoped for exactly this measurement, before tonight's session existed — continuing to
+  fire more RP-topology probes will not resolve which of (a)/(b) is correct; only an outside reference can.
+  **Left open, no further live-ring fires attempted this session pending a capture-card session.**
 - **INC-4 — corpus + honesty spine.** Grow a corpus of SYNCHRONIZED-under-real-play sessions (N target TBD by
   the operator). The honesty spine (inherited): `effective_live = mode==live AND all(GO.live_hardware)`;
   `live_hardware = fire.real_hardware`; a dry/injected fire can NEVER reach SYNCHRONIZED (round-04 F-GP-4
