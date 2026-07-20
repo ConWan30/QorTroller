@@ -878,6 +878,14 @@ async def vapi_privacy_compliance(data_operation: str, data_type: str, **_):
     }
 )
 async def vapi_session_start_protocol(domain: str = "general", **_):
+    # 2026-07-20 fix (found via a fresh-session /vapi + /vapi-knowledge smoke test):
+    # this function used to be a hand-written static dict frozen around Phase 149
+    # (bridge_tests=1808, agents=18, "phase": "149 COMPLETE") that never touched
+    # the CLAUDE.md parser at all — the single most stale surface found in the
+    # whole MCP audit, since its own tool description says "Call this FIRST in
+    # every VAPI Claude Code session." Now sourced from the live parser like
+    # everything else this server returns.
+    s = _parse_claude_md()
     ratio_rows = db_query(
         "SELECT pooled_ratio FROM separation_ratio_snapshots ORDER BY created_at DESC LIMIT 1"
     )
@@ -890,41 +898,66 @@ async def vapi_session_start_protocol(domain: str = "general", **_):
 
     return {
         "session_start_timestamp": datetime.utcnow().isoformat(),
-        "phase": "149 COMPLETE",
+        "phase": s.get("phase", "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"),
         "domain": domain,
         "live_state": {
             "separation_ratio_pooled_stale": current_ratio,
-            "separation_ratio_touchpad_corners_phase143": 1.261,
-            "separation_ratio_pairs": {"P1vP2": 2.868, "P1vP3": 3.276, "P2vP3": 2.243},
-            "separation_ratio_balanced": 1.611,
-            "ratio_status": "ABOVE 1.0 (touchpad_corners N=11); pooled stale",
-            "p4_status": "ELIMINATED (Phase 138) — confirmed=P3; 3-player clean corpus",
+            # AIT (Phase 229-231) is the CURRENT primary tournament-gate metric —
+            # superseded touchpad_corners/tremor_resting per the 2026-05-09 policy
+            # adjustment. Legacy probes kept below for history, clearly labeled.
+            "ait_ratio": s.get("ait_ratio"),
+            "ait_n": s.get("ait_n"),
+            "ait_all_pairs_above_1": s.get("ait_all_pairs_above_1"),
+            "ait_defensibility_ok": s.get("ait_defensibility_ok"),
+            "separation_ratio_legacy_touchpad_corners": s.get("touchpad_corners_ratio", 0.728),
+            "separation_ratio_legacy_touchpad_corners_n": s.get("touchpad_corners_n", 35),
+            "separation_ratio_legacy_tremor_resting": s.get("tremor_resting_ratio", 1.177),
+            "separation_ratio_legacy_tremor_resting_n": s.get("tremor_resting_n", 27),
+            "ratio_status": (
+                "AIT CLEARED (sufficient for testnet/non-tournament demonstration); "
+                "touchpad_corners still BLOCKS full tournament BLOCK enforcement — "
+                "two separate gates, do not conflate"
+            ),
             "dry_run": True,
             "l4_stale": True,
             "ioswarm": "emulator_only",
-            "bridge_tests": 1808,
-            "sdk_tests": 237,
-            "hardhat_tests": 462,
-            "agents": 18,
+            "bridge_tests": s.get("bridge"),
+            "sdk_tests": s.get("sdk"),
+            "hardhat_tests": s.get("hardhat"),
+            "contracts_live": s.get("contracts_live"),
+            "pv_ci_invariant_count": s.get("pv_ci_count"),
+            "agents": s.get("agents"),
             "epistemic_threshold": "0.65 (Phase 147 hardened)",
+            "wallet_balance_iotx": s.get("wallet_balance_iotx"),
+            "wallet_balance_as_of": s.get("wallet_balance_as_of"),
+            "latest_note_headline": s.get("latest_note"),
         },
         "protocol_checklist": [
-            "1. touchpad_corners ratio=1.261 (Phase 143 proper LOO, N=11) — ABOVE 1.0 but thin",
-            "2. Need >=10 touchpad_corners/player (P1=3, P2=4, P3=4) for tournament defense",
-            "3. P4 ELIMINATED (Phase 138) — confirmed=P3; 3-player corpus clean",
-            "4. L4 thresholds STALE (12-feat calib, 13-feat live — N=127 candidates: 6.613/5.143)",
+            f"1. AIT ratio={s.get('ait_ratio')} (N={s.get('ait_n')}, "
+            f"all_pairs_above_1={s.get('ait_all_pairs_above_1')}) — current primary "
+            "tournament-gate metric, CLEARED for testnet/non-tournament demo",
+            f"2. touchpad_corners={s.get('touchpad_corners_ratio', 0.728)} "
+            f"(N={s.get('touchpad_corners_n', 35)}) — still BLOCKS full tournament "
+            "BLOCK enforcement",
+            "3. tremor_resting P1vP3=0.032 CAST OUT as a dev-progress blocker per "
+            "2026-05-09 operator policy adjustment — NOT currently gating anything",
+            "4. L4 thresholds STALE (12-feat calib, 13-feat live — N=127 candidates: "
+            "6.613/5.143)",
             "5. dry_run=True — enforcement not live",
             "6. ioSwarm = emulator only — no live nodes",
-            "7. Epistemic threshold hardened to 0.65 (Phase 147); triage_prereq_required=True",
-            "8. ACIM agent #18 self-tests every 15min (mcp_server_enabled=False)",
+            "7. Epistemic threshold hardened to 0.65 (Phase 147); "
+            "triage_prereq_required=True",
+            f"8. PV-CI invariant baseline: {s.get('pv_ci_count')} — see "
+            ".github/INVARIANTS_ALLOWLIST.json",
         ],
         "what_if_auto_run": {
             "domain": domain,
             "relevant_w1_w2": domain_whats,
             "phase143_note": (
-                "ratio=1.261 is honest (diagonal+proper LOO). All 3 pairs > 1.0: "
-                "P1vP2=2.868, P1vP3=3.276, P2vP3=2.243. "
-                "N=11 thin — need >=10/player before tournament announcement."
+                "SUPERSEDED as the headline gate by AIT (Phase 229-231, see "
+                "live_state.ait_ratio above). touchpad_corners=1.261 (Phase 143, "
+                "N=11, thin) was the prior best on the legacy probe — historical "
+                "context only, always prefer live_state for current numbers."
             ),
         },
         "knowledge_graph_status": {
