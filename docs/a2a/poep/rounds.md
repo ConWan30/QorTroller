@@ -95,4 +95,50 @@ the r01 ceiling.
 r05 re-verify: not run this round — this is a documentation retraction against an
 already-issued HOLD, not a new build; no further live fires attempted per the r01 ceiling.
 
+commit: feed4495 (operator-fired)
+
+## ASM-Loop continuation — build the two open leads, 2026-07-20
+
+r01 scope: build the two leads the prior HOLD left open: (a) stamp `t_mono` at frame-
+collection time inside `_poll_frames`, not at classification time; (b) gate post-buffer
+append on the frame's actual collection time vs `probe_ts` (pre-fire contamination gate).
+Operator instruction: run through ASM-Loop before touching the rig again.
+
+r02 build: `_poll_frames` now captures `time.monotonic()` immediately after each
+`poll()` returns, stored 1:1-aligned as `self._frame_collect_t_mono`; session-loop L6b
+entry-build passes that stamp into `_build_l6b_report(t_mono=...)`; new branch routes a
+frame to `_l6b_pre_buffer` even when `_l6b_pending` is armed if its own collection stamp
+predates `probe_ts`; `frames_remaining` decrements by post-appended count, not
+`len(frames)`. Claims C1-C10 (stamp wiring, contamination gate, defensive length-mismatch
+fallback, decrement correction, additive-on-common-path, regression scope, explicit
+non-claims: 350ms magnitude bug not touched, no live-rig confirmation).
+
+r03 audit: grok, direct CLI → **HOLD**, all WARN-tier (no BLOCK): F2/F8 the new stamp
+wiring and contamination gate shipped as call-site glue with ZERO dedicated tests; F3 the
+length-mismatch fallback degrades silently (no log); F7 "ADDITIVE/behavior-preserving"
+claim over-reads — t_mono VALUES do change on the common path, that's the actual fix, not
+a no-op; F1/F5/F6/F9/F10 INFO, hold clean.
+
+r04 fix: extracted the session-loop's inline classification into a new pure module-level
+function `_classify_l6b_batch(frames, collect_t_mono, accel_scale, pending)` (same
+extraction rationale as `_build_l6b_report`'s own precedent) — closes F2/F8 by making the
+new logic directly unit-testable without session-loop/asyncio scaffolding. Added
+`log.warning` on the length-mismatch fallback path before degrading (closes F3). Rewrote
+the call-site comment to state plainly that t_mono values change on the common path even
+though routing/decrement don't (closes F7's wording precision). 7 new tests in
+`test_rp_device_latency.py`: all-pre-unarmed, all-post-armed-before-batch, the
+contamination-gate split itself, collection-stamp carry-through, length-mismatch
+fallback+log assertion, None-stamp-never-gates-into-pre, and a `_poll_frames`-level
+alignment test (unbound-method pattern, matching `test_poep_hidring_fire.py`
+convention). 49/49 relevant tests green, PV-CI 184 held. F4(c) (pre_reports snapshot
+staleness), F9 (350ms magnitude bug), F10 (live-rig confirmation) explicitly NOT
+touched — named as deferred, not claimed fixed.
+
+r05 re-verify: grok, direct CLI, re-read the live tree + re-ran all tests independently
+→ **PASS**. F2/F3/F7/F8 disposition FIXED (verified against actual code+tests, not
+builder's claims); F4/F9/F10 disposition STILL-OPEN, correctly left as accepted residuals
+never claimed closed. No new regressions, no FROZEN/PV-CI drift, no letter-vs-spirit gaps
+found (checked: no leftover inline classification path, tests call production code not
+reimplementations, boundary `t_mono == probe_ts` routes post/conservative).
+
 commit: staged by builder, operator commits.

@@ -258,6 +258,54 @@ def _build_l6b_report(frame, accel_scale: float, t_mono: float | None = None) ->
     }
 
 
+def _classify_l6b_batch(
+    frames: list,
+    collect_t_mono: list,
+    accel_scale: float,
+    pending: dict | None,
+) -> tuple[list, list]:
+    """F-RIG27-8 continuation (ASM-Loop 2026-07-20, grok HOLD r03/r05): classify one
+    `_poll_frames()` batch into (pre_entries, post_entries) for the L6b pre/post buffers.
+
+    Pure extraction of the session-loop's L6b entry-build + pre/post routing (same
+    production-coverage rationale as `_build_l6b_report`'s extraction: a re-implemented
+    inline version in a test is not the same code path as production).
+
+    Two fixes over the pre-2026-07-20 behavior (which routed on `pending is None` alone):
+    1. Each entry's `t_mono` is the frame's actual HID-COLLECTION time (`collect_t_mono[i]`),
+       not the time this function happens to run — `_poll_frames` returns only after its full
+       ~1s window, so classification-time stamping inflated every measured latency by up to
+       that window (grok r03 F1/F2).
+    2. Pre-fire contamination gate: when `pending` is armed, a frame is still routed to
+       `pre_entries` if its OWN collection time predates `pending["probe_ts"]` — a fire that
+       arms mid-batch (concurrent with an in-flight `_poll_frames()` call) must not
+       retroactively reclassify already-collected pre-fire frames as post-fire.
+
+    `collect_t_mono` must be 1:1 index-aligned with `frames` (as `_poll_frames` produces it).
+    A length mismatch degrades PER-FRAME to the classification-time fallback (both the stamp
+    fix and the contamination gate are no-ops for that frame) and is logged — this must never
+    silently disable the gate without a trace, per grok r03 F3.
+    """
+    if len(collect_t_mono) != len(frames):
+        log.warning(
+            "L6B: frame_collect_t_mono length mismatch (%d stamps for %d frames) — "
+            "falling back to classification-time stamps for this batch (gate degraded)",
+            len(collect_t_mono), len(frames),
+        )
+        collect_t_mono = [None] * len(frames)
+    pre_entries: list = []
+    post_entries: list = []
+    for _f, _t_mono in zip(frames, collect_t_mono):
+        _entry = _build_l6b_report(_f, accel_scale, t_mono=_t_mono)
+        if pending is None:
+            pre_entries.append(_entry)
+        elif _t_mono is not None and _entry["t_mono"] < pending["probe_ts"]:
+            pre_entries.append(_entry)
+        else:
+            post_entries.append(_entry)
+    return pre_entries, post_entries
+
+
 class PoepFireRefused(RuntimeError):
     """POEP-HID-RING: a nonce-bound fire request was refused (gate closed / busy / bad input).
 
@@ -698,6 +746,12 @@ class DualShockTransport:
         self._bt_presence_verifier = None   # BluetoothPresenceVerifier or None
         self._bt_presence_score: float = 0.5  # last overall_score; 0.5 = neutral/USB
         self._bt_seq_bytes_batch: list = []   # BT sequence counter bytes from last _poll_frames()
+        # F-RIG27-8 continuation (ASM-Loop 2026-07-20, grok HOLD r03): per-frame COLLECTION-time
+        # monotonic stamps from the last _poll_frames() batch, 1:1 aligned with the returned frames
+        # list. Consumers that need "when was this frame actually read off HID" (not "when was it
+        # classified") pass the matching entry into _build_l6b_report(t_mono=...) instead of letting
+        # it default to time.monotonic() at classification time — the bug the audit surfaced.
+        self._frame_collect_t_mono: list = []
 
         # --- Phase 51: Game-Aware Profiling ---
         self._game_profile = None           # GameProfile | None, set in _init_hardware
@@ -2835,17 +2889,23 @@ class DualShockTransport:
                 _l6b_accel_scale = float(
                     getattr(self._reader, "_accel_scale", None) or 8192.0
                 )
-                for _f in frames:
-                    # F-RIG27-8: entry build extracted to _build_l6b_report (module-level) so the exact
-                    # device-clock wiring (sensor_ts_ticks -> device_ts raw ticks) is production-covered.
-                    _l6b_entry = _build_l6b_report(_f, _l6b_accel_scale)
-                    if self._l6b_pending is None:
-                        self._l6b_pre_buffer.append(_l6b_entry)
-                    else:
-                        self._l6b_post_buffer.append(_l6b_entry)
+                # F-RIG27-8 continuation (ASM-Loop 2026-07-20, grok HOLD r03/r05): classification
+                # extracted to _classify_l6b_batch (module-level, production-covered by tests) —
+                # collection-time t_mono stamping + pre-fire contamination gate. NOTE (grok r05 F7):
+                # on the common "already armed before this batch" path, routing and the
+                # frames_remaining decrement are numerically unchanged from the old behavior, but
+                # every entry's t_mono value now reflects collection time, not classification time —
+                # that VALUE change is the actual fix, not a no-op.
+                _pre_entries, _post_entries = _classify_l6b_batch(
+                    frames, self._frame_collect_t_mono, _l6b_accel_scale, self._l6b_pending,
+                )
+                self._l6b_pre_buffer.extend(_pre_entries)
+                self._l6b_post_buffer.extend(_post_entries)
                 # Check if capture window has closed
                 if self._l6b_pending is not None and self._l6b_analyzer is not None:
-                    self._l6b_pending["frames_remaining"] -= len(frames)
+                    # Decrement by frames actually routed to post this batch (not len(frames)) — a
+                    # contamination-gated pre-fire frame must not count toward the post-capture window.
+                    self._l6b_pending["frames_remaining"] -= len(_post_entries)
                     if self._l6b_pending["frames_remaining"] <= 0:
                         try:
                             _l6b_result = self._l6b_analyzer.analyze(
@@ -3465,12 +3525,15 @@ class DualShockTransport:
         if not self._reader:
             return []
         frames = []
+        collect_t_mono: list[float] = []  # F-RIG27-8 continuation: per-frame collection-time stamp
         bt_seq_bytes: list[int] = []  # BT sequence counter bytes; empty on USB (bt_seq_byte == -1)
         t_end = time.monotonic() + duration_s
         dt_ms = 8.0   # target ~120 Hz
         while time.monotonic() < t_end:
             snap = self._reader.poll()
+            _collected_at = time.monotonic()  # stamped the instant the HID read returns, not later
             frames.append(snap)
+            collect_t_mono.append(_collected_at)
             # BT sequence counter — exposed via snap.bt_seq_byte (-1 = USB/unavailable)
             if snap.bt_seq_byte >= 0:
                 bt_seq_bytes.append(snap.bt_seq_byte)
@@ -3480,6 +3543,8 @@ class DualShockTransport:
             time.sleep(dt_ms / 1000.0)
         # Store for consumption by the BT presence verifier in the async loop
         self._bt_seq_bytes_batch = bt_seq_bytes
+        # F-RIG27-8 continuation: 1:1 aligned with `frames` (unlike bt_seq_bytes, which is filtered)
+        self._frame_collect_t_mono = collect_t_mono
         return frames
 
     def _classify(self, frames: list) -> tuple[int, int]:

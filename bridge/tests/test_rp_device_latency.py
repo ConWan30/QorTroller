@@ -233,3 +233,101 @@ def test_build_l6b_report_carries_r2_channel_for_onset_study():
     assert entry["r2"] == 200 and entry["l2"] == 64 and entry["r2_mode"] == 2   # new instrument keys
     assert {"ax", "ay", "az", "t_mono", "device_ts"}.issubset(entry)            # analyzer keys intact
     assert entry["device_ts"] == 123456 and entry["t_mono"] == 50.0             # unchanged behavior
+
+
+# ── F-RIG27-8 continuation (ASM-Loop 2026-07-20, grok HOLD r03/r05): _classify_l6b_batch ──
+# The prior round's fix (collection-time t_mono + pre-fire contamination gate) landed as call-site
+# code with zero dedicated tests (grok r05 F2/F8: "untested production path presented as the fix").
+# This extracts the classification to a pure module-level function (same rationale as
+# _build_l6b_report's own earlier extraction) and tests it directly, unmocked, production-covered.
+def _batch_snap(ax=0.0):
+    return InputSnapshot(accel_x=ax, accel_y=0.0, accel_z=0.0)
+
+
+def test_classify_batch_all_pre_when_no_pending():
+    from bridge.vapi_bridge.dualshock_integration import _classify_l6b_batch
+
+    frames = [_batch_snap(), _batch_snap()]
+    pre, post = _classify_l6b_batch(frames, [10.0, 10.1], 8192.0, None)
+    assert len(pre) == 2 and len(post) == 0
+
+
+def test_classify_batch_all_post_when_pending_predates_batch():
+    # pending armed BEFORE this batch was collected -> every collection stamp is >= probe_ts -> all post.
+    from bridge.vapi_bridge.dualshock_integration import _classify_l6b_batch
+
+    frames = [_batch_snap(), _batch_snap(), _batch_snap()]
+    stamps = [10.0, 10.1, 10.2]
+    pending = {"probe_ts": 9.5}
+    pre, post = _classify_l6b_batch(frames, stamps, 8192.0, pending)
+    assert len(pre) == 0 and len(post) == 3   # frames_remaining decrement == len(frames) on this path
+
+
+def test_classify_batch_pre_fire_contamination_gate():
+    # THE fix: a fire arms mid-batch (probe_ts falls strictly between two frames' collection stamps).
+    # Frames collected BEFORE probe_ts must land in pre_entries even though pending is now armed —
+    # the pre-2026-07-20 behavior routed ALL frames in this call to post once pending was armed.
+    from bridge.vapi_bridge.dualshock_integration import _classify_l6b_batch
+
+    frames = [_batch_snap(), _batch_snap(), _batch_snap(), _batch_snap()]
+    stamps = [10.0, 10.1, 10.2, 10.3]     # collected in this order
+    pending = {"probe_ts": 10.15}          # fire happened between frame[1] and frame[2]
+    pre, post = _classify_l6b_batch(frames, stamps, 8192.0, pending)
+    assert len(pre) == 2 and len(post) == 2
+    assert all(e["t_mono"] < 10.15 for e in pre)
+    assert all(e["t_mono"] >= 10.15 for e in post)
+
+
+def test_classify_batch_entries_carry_collection_time_not_call_time():
+    # THE core fix: entry["t_mono"] must equal the injected collection stamp, not time.monotonic()
+    # called at classification time (which would differ from the injected stamps by definition).
+    from bridge.vapi_bridge.dualshock_integration import _classify_l6b_batch
+
+    frames = [_batch_snap()]
+    pre, _ = _classify_l6b_batch(frames, [42.123], 8192.0, None)
+    assert pre[0]["t_mono"] == 42.123
+
+
+def test_classify_batch_length_mismatch_falls_back_and_logs(caplog):
+    # grok r03 F3 / r05 F3: a misaligned collect_t_mono must degrade PER-FRAME to the
+    # classification-time fallback (never crash, never silently disable the gate without a trace).
+    import logging
+    from bridge.vapi_bridge.dualshock_integration import _classify_l6b_batch
+
+    frames = [_batch_snap(), _batch_snap()]
+    with caplog.at_level(logging.WARNING, logger="bridge.vapi_bridge.dualshock_integration"):
+        pre, post = _classify_l6b_batch(frames, [10.0], 8192.0, None)   # length 1 vs 2 frames
+    assert len(pre) == 2 and len(post) == 0          # no pending -> still all pre, no crash
+    assert pre[0]["t_mono"] != 10.0                  # fell back to a real time.monotonic() stamp
+    assert any("length mismatch" in r.message for r in caplog.records)   # the degradation is logged
+
+
+def test_classify_batch_missing_collect_ts_never_gates_into_pre():
+    # a per-frame None stamp (from the length-mismatch fallback) must not satisfy the contamination
+    # gate's "_t_mono is not None" check -> falls through to the armed-state post routing, matching
+    # the pre-2026-07-20 behavior for that frame (safe degradation, not spurious pre-classification).
+    from bridge.vapi_bridge.dualshock_integration import _classify_l6b_batch
+
+    frames = [_batch_snap()]
+    pending = {"probe_ts": 999999.0}   # deliberately far in the future — would gate to pre if t_mono were used
+    pre, post = _classify_l6b_batch(frames, [], 8192.0, pending)   # empty stamps -> length mismatch -> [None]
+    assert len(pre) == 0 and len(post) == 1
+
+
+def test_poll_frames_populates_frame_collect_t_mono_aligned():
+    # F-RIG27-8 continuation C1: _poll_frames must stamp collection time immediately after poll()
+    # returns, 1:1 aligned with the frames list it returns (unlike the filtered bt_seq_bytes_batch).
+    from types import SimpleNamespace
+    from bridge.vapi_bridge.dualshock_integration import DualShockTransport
+
+    class _FakeReader:
+        def poll(self):
+            return SimpleNamespace(bt_seq_byte=-1)
+
+    ns = SimpleNamespace(
+        _reader=_FakeReader(), _hid_oracle=None, _bt_seq_bytes_batch=[], _frame_collect_t_mono=[],
+    )
+    frames = DualShockTransport._poll_frames(ns, 0.03)   # ~3-4 frames at dt_ms=8
+    assert len(frames) >= 1
+    assert len(ns._frame_collect_t_mono) == len(frames)
+    assert ns._frame_collect_t_mono == sorted(ns._frame_collect_t_mono)   # non-decreasing collection order
