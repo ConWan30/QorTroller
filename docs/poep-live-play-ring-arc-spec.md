@@ -184,7 +184,21 @@ The ring requires `l6b_enabled=True`. That was gated on N≥50-on-the-Edge, whic
   correctly instead of falling back silently past its 500ms rail. Needs code review of the
   fire→post-buffer-collection timestamp path, not more live fires — that's the next real step for a future
   session.
-  **Left open. No further live-ring fires attempted this session.**
+
+  **BUILT + AUDIT-PASSED 2026-07-20 (ASM-Loop, grok verdict PASS — `docs/a2a/poep/rounds.md`):** both
+  open leads are now shipped code. `_poll_frames` stamps `time.monotonic()` immediately after each HID
+  `poll()` returns (collection time, not classification time), 1:1-aligned as
+  `self._frame_collect_t_mono`. The session loop's classification was extracted to a pure
+  `_classify_l6b_batch()` function that passes the real collection stamp into `_build_l6b_report`, and
+  gates a frame into the pre-buffer even when a probe is armed if its own collection time predates
+  `probe_ts` (the pre-fire contamination fix). A silent-fallback path is now logged (`log.warning`) so a
+  length mismatch never silently disables the gate without a trace. 7 new unit tests cover the function
+  directly (unmocked); 49/49 relevant tests + PV-CI 184 green; grok re-verified against the live tree and
+  the actual test run, not the builder's claims. **Still open, honestly**: the `frames_remaining=350`
+  window-magnitude bug (real but separately scoped) and — the load-bearing one — **no live-rig fire has
+  confirmed this actually moves measured latency into the (195,416]ms GO band.** This is a code fix
+  verified by tests, not yet by hardware. Next real step: a rig session.
+  **Left open pending rig confirmation. No live-ring fires attempted this session.**
 - **INC-4 — corpus + honesty spine.** Grow a corpus of SYNCHRONIZED-under-real-play sessions (N target TBD by
   the operator). The honesty spine (inherited): `effective_live = mode==live AND all(GO.live_hardware)`;
   `live_hardware = fire.real_hardware`; a dry/injected fire can NEVER reach SYNCHRONIZED (round-04 F-GP-4
