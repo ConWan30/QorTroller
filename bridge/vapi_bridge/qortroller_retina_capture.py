@@ -674,7 +674,11 @@ class WgcFrameSource:
 def _uvc_backend_order(backend_env: str, cv2mod) -> list:
     """Ordered cv2 capture backends to try for a UVC/virtual-camera source (testable, no I/O).
 
-    auto  -> [MSMF, DSHOW, default]  (MSMF first: OBS 28+ virtual camera + broken-DSHOW-by-index boxes)
+    auto  -> [DSHOW, MSMF, default]  (DSHOW+MJPG first: the intended physical direct-capture path —
+             it delivers a CLEAN 1080p frame; MSMF on the same physical card mis-decodes the raw
+             format into RGB-speckle noise. MSMF is the fallback for MF-only virtual cameras / boxes
+             where DSHOW can't open a free device. NOTE: DSHOW-by-index "can't capture" only when the
+             device is held exclusively by another app, e.g. OBS — close OBS and DSHOW index-0 works.)
     msmf  -> [MSMF]
     dshow -> [DSHOW]
     any   -> [default]  (0 = let OpenCV choose)
@@ -686,7 +690,7 @@ def _uvc_backend_order(backend_env: str, cv2mod) -> list:
         "msmf": [msmf],
         "dshow": [dshow],
         "any": [0],
-        "auto": [msmf, dshow, 0],
+        "auto": [dshow, msmf, 0],
     }
     return table.get((backend_env or "auto").lower(), table["auto"])
 

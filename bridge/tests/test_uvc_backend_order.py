@@ -16,10 +16,12 @@ class _FakeCv2:
     CAP_DSHOW = 700
 
 
-def test_auto_tries_msmf_first_then_dshow_then_default():
+def test_auto_tries_dshow_first_then_msmf_then_default():
+    # DSHOW+MJPG first = the clean physical direct-capture path; MSMF mis-decodes the physical card
+    # into RGB-speckle noise, so it's the fallback (for MF-only virtual cameras), not the default.
     order = _uvc_backend_order("auto", _FakeCv2)
-    assert order == [1400, 700, 0]              # MSMF, DSHOW, default
-    assert order[0] == _FakeCv2.CAP_MSMF        # the fix: MSMF FIRST
+    assert order == [700, 1400, 0]              # DSHOW, MSMF, default
+    assert order[0] == _FakeCv2.CAP_DSHOW       # DSHOW FIRST (clean 1080p on the physical card)
 
 
 def test_explicit_msmf_only():
@@ -35,12 +37,12 @@ def test_any_is_default_backend():
 
 
 def test_unknown_and_empty_fall_back_to_auto():
-    assert _uvc_backend_order("nonsense", _FakeCv2) == [1400, 700, 0]
-    assert _uvc_backend_order("", _FakeCv2) == [1400, 700, 0]
-    assert _uvc_backend_order(None, _FakeCv2) == [1400, 700, 0]
+    assert _uvc_backend_order("nonsense", _FakeCv2) == [700, 1400, 0]
+    assert _uvc_backend_order("", _FakeCv2) == [700, 1400, 0]
+    assert _uvc_backend_order(None, _FakeCv2) == [700, 1400, 0]
 
 
 def test_missing_cv2_attrs_use_numeric_fallbacks():
     class _Bare: pass
     order = _uvc_backend_order("auto", _Bare)
-    assert order == [1400, 700, 0]              # getattr fallbacks match cv2's real enum values
+    assert order == [700, 1400, 0]              # getattr fallbacks match cv2's real enum values
