@@ -205,3 +205,90 @@ def test_extract_window_features_tremor_now_wired_through():
     f = extract_window_features(rows, 0, 3000)
     assert f.tremor_peak_hz is not None
     assert 8.0 <= f.tremor_peak_hz <= 12.0
+
+
+# ---- G4 causal binding (l2b_coupled_fraction) — real IMU precursor reuse of tested L2B module ----
+
+def _l2b_row(t_ms, r2=0, gx=0.0, gy=0.0, gz=0.0):
+    return {"t_ms": t_ms, "r2": r2, "l2": 0, "lx": 128, "ly": 128, "rx": 128, "ry": 128,
+           "gyro_x": gx, "gyro_y": gy, "gyro_z": gz}
+
+def _l2b_coupled_session(n_presses=20, press_gap_ms=1000.0, precursor_lag_ms=30.0,
+                         spike=0.05, baseline=0.005):
+    """Synthetic session: n_presses R2 rising edges, each with a genuine gyro spike
+    precursor_lag_ms before the edge (a real human press pattern)."""
+    rows = []
+    t = 0.0
+    for i in range(n_presses):
+        press_t = t + press_gap_ms
+        # quiet baseline gyro leading up to the precursor
+        rows.append(_l2b_row(press_t - 200, gx=baseline))
+        # the precursor spike
+        rows.append(_l2b_row(press_t - precursor_lag_ms, gx=spike))
+        # the press itself (rising edge: r2 0 -> 255)
+        rows.append(_l2b_row(press_t - 1, r2=0))
+        rows.append(_l2b_row(press_t, r2=255))
+        rows.append(_l2b_row(press_t + 40, r2=0))   # release (falls below 30 thr)
+        t = press_t
+    return rows, t + press_gap_ms
+
+def _l2b_decoupled_session(n_presses=20, press_gap_ms=1000.0, baseline=0.005):
+    """Synthetic session: presses with NO gyro precursor at all (bot-like injection)."""
+    rows = []
+    t = 0.0
+    for i in range(n_presses):
+        press_t = t + press_gap_ms
+        rows.append(_l2b_row(press_t - 200, gx=baseline))
+        rows.append(_l2b_row(press_t - 30, gx=baseline))   # no spike -- stays at baseline
+        rows.append(_l2b_row(press_t - 1, r2=0))
+        rows.append(_l2b_row(press_t, r2=255))
+        rows.append(_l2b_row(press_t + 40, r2=0))
+        t = press_t
+    return rows, t + press_gap_ms
+
+def test_l2b_no_gyro_is_none():
+    from l9_presence.realplay_feature_adapter import l2b_coupled_fraction
+    rows = [{"t_ms": 0, "r2": 255}, {"t_ms": 10, "r2": 0}]
+    assert l2b_coupled_fraction(rows, 0, 100) is None
+
+def test_l2b_too_few_presses_is_none():
+    from l9_presence.realplay_feature_adapter import l2b_coupled_fraction
+    rows, span = _l2b_coupled_session(n_presses=5)   # < min_press_events=15
+    assert l2b_coupled_fraction(rows, 0, span) is None
+
+def test_l2b_coupled_session_high_fraction():
+    from l9_presence.realplay_feature_adapter import l2b_coupled_fraction
+    rows, span = _l2b_coupled_session(n_presses=20)
+    f = l2b_coupled_fraction(rows, 0, span)
+    assert f is not None
+    assert f > 0.8   # genuine precursor on every press -> high coupled fraction
+
+def test_l2b_decoupled_session_low_fraction():
+    from l9_presence.realplay_feature_adapter import l2b_coupled_fraction
+    rows, span = _l2b_decoupled_session(n_presses=20)
+    f = l2b_coupled_fraction(rows, 0, span)
+    assert f is not None
+    assert f < 0.55   # matches L2B_COUPLED_FRACTION_THR -- bot-like decoupling
+
+def test_l2b_unit_scale_regression_pin():
+    """Pins the real bug found on run3: the threshold must be in the SAME scale as this adapter's
+    gyro units (/1000.0), or a real coupled session is misread as fully decoupled (0.0).
+
+    Stronger than a bare `<1.0` bound: pin exact SoT derivation AND prove the raw-LSB thresh
+    (30.0) fails on scaled gyro while the scaled default succeeds.
+    """
+    from l9_presence.realplay_feature_adapter import (
+        l2b_coupled_fraction, L2B_IMU_SPIKE_THRESH,
+        L2B_RAW_IMU_SPIKE_THRESH, GYRO_SCALE_DIVISOR,
+    )
+    assert GYRO_SCALE_DIVISOR == 1000.0
+    assert L2B_RAW_IMU_SPIKE_THRESH == 30.0
+    assert abs(L2B_IMU_SPIKE_THRESH - (L2B_RAW_IMU_SPIKE_THRESH / GYRO_SCALE_DIVISOR)) < 1e-12
+    assert abs(L2B_IMU_SPIKE_THRESH - 0.03) < 1e-12
+    # Scaled-unit synthetic session (spike=0.05, baseline=0.005 ~ real U3 scale)
+    rows, span = _l2b_coupled_session(n_presses=20, spike=0.05, baseline=0.005)
+    f_default = l2b_coupled_fraction(rows, 0, span)  # uses the module default threshold
+    assert f_default is not None and f_default > 0.8
+    # The exact bug class: raw-LSB threshold on scaled data -> no precursors fire
+    f_raw_thresh = l2b_coupled_fraction(rows, 0, span, spike_thresh=30.0)
+    assert f_raw_thresh is not None and f_raw_thresh < 0.1
