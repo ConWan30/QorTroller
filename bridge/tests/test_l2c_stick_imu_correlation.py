@@ -386,5 +386,104 @@ class TestEdgeCases(unittest.TestCase):
         self.assertFalse(np.isnan(feats.max_causal_corr))
 
 
+# ---------------------------------------------------------------------------
+# Group 6: Gyro-scale invariance (2026-07-22 live-L2B-unit-scale investigation
+# spillover check — grok's round-02 open-question #3: "L2C unit coupling?")
+#
+# L2B (controller/l2b_imu_press_correlation.py) was found to have a real live-production
+# bug: it compares gyro_mag against a fixed ABSOLUTE threshold (_IMU_SPIKE_THRESH=30.0,
+# calibrated for raw int16 LSB) while the live hardware path (dualshock_emulator.py)
+# feeds gyro pre-scaled by /1000.0 -- the threshold is structurally unreachable in
+# production. L2C is architecturally different: it never compares gyro_z to a fixed
+# absolute constant. It only ever computes Pearson correlation between stick velocity
+# and gyro_z (np.corrcoef). Correlation is invariant to ANY positive linear rescaling of
+# either input: corr(a, k*b) == corr(a, b) for k > 0, and |corr(a, k*b)| == |corr(a, b)|
+# even for k < 0 (sign flips, magnitude doesn't). This pins that invariance down with
+# real captured data so a future refactor can't silently reintroduce an absolute-magnitude
+# comparison against gyro_z without this test catching it.
+# ---------------------------------------------------------------------------
+
+class TestGyroScaleInvariance(unittest.TestCase):
+
+    def _classify_at_scale(self, snaps, scale: float):
+        """Re-run the oracle with gyro_z multiplied by `scale`, otherwise identical snaps."""
+        oracle = StickImuCorrelationOracle()
+        for s in snaps:
+            scaled = _snap(s.timestamp_ms, rx=s.right_stick_x, gz=s.gyro_z * scale)
+            oracle.push_snapshot(scaled)
+        return oracle
+
+    def test_classification_identical_raw_vs_1000_scaled_synthetic(self):
+        """Synthetic causally-coupled human signal: raw-scale vs /1000-scale gyro_z must
+        produce byte-identical max_causal_corr, anomaly flag, classify() verdict, and
+        humanity_score() -- exactly the property that broke for L2B's absolute threshold."""
+        rng = np.random.default_rng(2026)
+        vx_signal = rng.normal(0, 1000, size=_MIN_FRAMES + 30)
+        LAG = 12
+        snaps_raw, snaps_live = [], []
+        for i in range(len(vx_signal)):
+            rx = int(np.cumsum(vx_signal)[i] % 32768)
+            gz_raw = vx_signal[max(0, i - LAG)] * 0.6 + rng.normal(0, 15)
+            snaps_raw.append(_snap(float(i), rx=rx, gz=gz_raw))
+            snaps_live.append(_snap(float(i), rx=rx, gz=gz_raw / 1000.0))
+
+        o_raw = _make_oracle_with_snaps(snaps_raw)
+        o_live = _make_oracle_with_snaps(snaps_live)
+        f_raw, f_live = o_raw.extract_features(), o_live.extract_features()
+        self.assertIsNotNone(f_raw)
+        self.assertIsNotNone(f_live)
+
+        self.assertAlmostEqual(f_raw.max_causal_corr, f_live.max_causal_corr, places=9)
+        self.assertEqual(f_raw.lag_at_max, f_live.lag_at_max)
+        self.assertEqual(f_raw.anomaly, f_live.anomaly)
+        self.assertEqual(o_raw.classify(), o_live.classify())
+        self.assertAlmostEqual(o_raw.humanity_score(), o_live.humanity_score(), places=9)
+
+    def test_classification_identical_across_scale_on_real_session(self):
+        """Real hw_005 session replayed at raw scale vs /1000.0 scale (simulating the live
+        DualSenseReader gyro convention) -- L2C's verdict must not move at all. This is the
+        exact replay methodology grok used to CONFIRM the L2B bug (round-02, Ask 1); running
+        it here PROVES L2C has no analogous defect rather than merely arguing it algebraically."""
+        snaps = _load_session_snaps("hw_005.json", max_reports=5000)
+        if not snaps:
+            self.skipTest("hw_005.json not present")
+
+        o_raw = self._classify_at_scale(snaps, scale=1.0)
+        o_live = self._classify_at_scale(snaps, scale=1.0 / 1000.0)
+        f_raw, f_live = o_raw.extract_features(), o_live.extract_features()
+
+        # Either both None (static-stick guard, unrelated to gyro scale) or both present
+        # and numerically identical -- never "raw fires, live-scaled doesn't" or vice versa.
+        self.assertEqual(f_raw is None, f_live is None)
+        if f_raw is not None:
+            self.assertAlmostEqual(f_raw.max_causal_corr, f_live.max_causal_corr, places=6)
+            self.assertEqual(f_raw.anomaly, f_live.anomaly)
+        self.assertEqual(o_raw.classify(), o_live.classify())
+
+    def test_negative_scale_flips_sign_not_anomaly_verdict(self):
+        """Even a sign-flipping rescale (k<0) must not change the anomaly/classify verdict,
+        since the oracle already takes abs(max_causal_corr) -- only the raw stored
+        max_causal_corr sign flips."""
+        rng = np.random.default_rng(55)
+        base = rng.normal(0, 100, size=_MIN_FRAMES + 20)
+        LAG = 15
+        snaps_pos, snaps_neg = [], []
+        for i in range(len(base)):
+            rx = int(base[: i + 1].sum() % 32768)
+            gz = base[max(0, i - LAG)] * 0.7
+            snaps_pos.append(_snap(float(i), rx=rx, gz=gz))
+            snaps_neg.append(_snap(float(i), rx=rx, gz=-gz))
+
+        o_pos = _make_oracle_with_snaps(snaps_pos)
+        o_neg = _make_oracle_with_snaps(snaps_neg)
+        f_pos, f_neg = o_pos.extract_features(), o_neg.extract_features()
+        self.assertIsNotNone(f_pos)
+        self.assertIsNotNone(f_neg)
+
+        self.assertAlmostEqual(f_pos.max_causal_corr, -f_neg.max_causal_corr, places=9)
+        self.assertEqual(f_pos.anomaly, f_neg.anomaly)
+        self.assertEqual(o_pos.classify() is None, o_neg.classify() is None)
+
+
 if __name__ == "__main__":
     unittest.main()
