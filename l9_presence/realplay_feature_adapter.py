@@ -45,6 +45,28 @@ TREMOR_SEARCH_HZ: tuple[float, float] = (8.0, 12.0)  # G3-facing peak MUST be ba
                                     # energy, not the 8-12Hz physiological band G3 actually gates on)
 FFT_MIN_NFFT: int = 1024           # zero-pad floor, matches tinyml's tested FFT resolution
 
+# G4 causal-binding constants — reused directly from the TESTED controller/l2b_imu_press_correlation.py
+# (Layer 2B). Unlike tremor, this is a timestamp-windowed lookback check, not a frequency-domain
+# method, so it does NOT need the segment/gap-void redesign: grounded empirically on run3 (median 14.5
+# gyro samples in the 75ms lookback window per real press, 0/58 presses with zero samples) -- the
+# change-dedup logging is dense exactly where it matters, because a real press moves stick/trigger/
+# accel/gyro together, which is precisely what triggers a new dedup row.
+L2B_PRECURSOR_WINDOW_MS: float = 80.0   # look-back window for IMU spike before button rising edge
+L2B_PRECURSOR_MIN_MS: float = 5.0       # exclude same-frame coincidences
+# controller/l2b_imu_press_correlation.py's _IMU_SPIKE_THRESH=30.0 is calibrated for RAW gyro
+# LSB units (hw_* session corpus + L2B unit tests use raw int16; docstring: baseline ~20-40 LSB,
+# micro-impulse 50-200 LSB). scripts/u3_raw_capture.py::parse_imu() applies GYRO_SCALE_DIVISOR
+# (/1000.0) to match controller/dualshock_emulator.py — so THIS adapter's threshold must be the
+# same raw constant divided by the same scale, or it can NEVER fire (empirically: run3 gyro_mag
+# max ~18.5 in scaled units; raw thresh 30 is unreachable → false coupled_fraction=0.0).
+# Single source of truth for the scale factor + raw thresh (prevents magic 30.0/1000.0 drift):
+L2B_RAW_IMU_SPIKE_THRESH: float = 30.0   # mirrors controller/l2b _IMU_SPIKE_THRESH default
+GYRO_SCALE_DIVISOR: float = 1000.0       # mirrors parse_imu / dualshock_emulator gyro scale
+L2B_IMU_SPIKE_THRESH: float = L2B_RAW_IMU_SPIKE_THRESH / GYRO_SCALE_DIVISOR  # = 0.03 scaled
+L2B_COUPLED_FRACTION_THR: float = 0.55  # matches controller/l2b_imu_press_correlation.py default
+L2B_BASELINE_WINDOW_N: int = 200        # rolling median baseline window (samples, not ms — matches
+                                        # the tested module's sample-count-based ring, not time-based)
+
 
 def _stick_mag(row: dict, center: int = 128) -> int:
     return max(abs(row.get("lx", center) - center), abs(row.get("ly", center) - center),
@@ -247,6 +269,69 @@ def tremor_from_accel(
     return tremor_peak_hz, tremor_band_power
 
 
+def l2b_coupled_fraction(
+    rows: Sequence[dict], t_lo_ms: float, t_hi_ms: float,
+    *,
+    precursor_window_ms: float = L2B_PRECURSOR_WINDOW_MS,
+    precursor_min_ms: float = L2B_PRECURSOR_MIN_MS,
+    spike_thresh: float = L2B_IMU_SPIKE_THRESH,
+    min_press_events: int = 15,
+    baseline_window_n: int = L2B_BASELINE_WINDOW_N,
+    trigger_thr: int = 20,
+) -> Optional[float]:
+    """G4 causal binding (real, not stubbed). Direct reuse of the TESTED methodology in
+    controller/l2b_imu_press_correlation.py::_record_press -- a physical button press causes a
+    wrist/hand micro-impulse the IMU records 5-80ms BEFORE the digital edge closes; software
+    injection has zero precursor. For each R2 press (rising edge) in-window, look back
+    [precursor_window_ms, precursor_min_ms] before it for a gyro_mag sample exceeding an adaptive
+    threshold (median of prior gyro_mag + spike_thresh). coupled_fraction = fraction of presses
+    with a precursor found. None if fewer than min_press_events presses, or no gyro data at all
+    (honest unavailable, same discipline as tremor_from_accel -- never fabricate a fraction from
+    nothing).
+
+    Adaptation note (differs from the live continuous-ring module): baseline is computed from the
+    most recent `baseline_window_n` gyro samples strictly BEFORE each press, not a fixed-duration
+    time window -- the reference module's ring is sample-count-based (maxlen=200 @ ~1kHz assumed
+    continuous poll), which is the same primitive this reuses, just without assuming a specific
+    sample rate (this capture is change-dedup, not continuous)."""
+    imu_rows = [r for r in rows
+               if "gyro_x" in r and "gyro_y" in r and "gyro_z" in r
+               and t_lo_ms <= _row_t_ms(r) <= t_hi_ms]
+    if not imu_rows:
+        return None
+    imu_rows.sort(key=_row_t_ms)
+    imu_history = [
+        (_row_t_ms(r), (r["gyro_x"] ** 2 + r["gyro_y"] ** 2 + r["gyro_z"] ** 2) ** 0.5)
+        for r in imu_rows
+    ]
+
+    press_rows = sorted(
+        (r for r in rows if t_lo_ms <= _row_t_ms(r) <= t_hi_ms), key=_row_t_ms,
+    )
+    presses: list[float] = []
+    above = False
+    for r in press_rows:
+        r2 = r.get("r2", 0)
+        if not above and r2 >= trigger_thr * 3.2:   # ~64/255 rising, matches L2B _R2_PRESS_THRESH
+            above = True
+            presses.append(_row_t_ms(r))
+        elif above and r2 < trigger_thr * 1.5:       # ~30/255 falling (hysteresis release)
+            above = False
+    if len(presses) < min_press_events:
+        return None
+
+    coupled = 0
+    for pt in presses:
+        lo_t, hi_t = pt - precursor_window_ms, pt - precursor_min_ms
+        prior = [mag for t, mag in imu_history if t < pt - precursor_min_ms]
+        baseline = float(np.median(prior[-baseline_window_n:])) if prior else 0.0
+        thresh = baseline + spike_thresh
+        has_precursor = any(lo_t <= t <= hi_t and mag > thresh for t, mag in imu_history)
+        if has_precursor:
+            coupled += 1
+    return coupled / len(presses)
+
+
 def extract_window_features(
     rows: Sequence[dict],
     window_start_ms: float,
@@ -268,6 +353,7 @@ def extract_window_features(
     quantized = rhythm_is_macro_quantized(rows, window_start_ms, window_end_ms)
     ticks, wall_ms = device_ts_span(rows, window_start_ms, window_end_ms)
     tremor_hz, tremor_power = tremor_from_accel(rows, window_start_ms, window_end_ms)
+    l2b_coupled = l2b_coupled_fraction(rows, window_start_ms, window_end_ms)
 
     return WindowFeatures(
         capture_nominal=capture_nominal,
@@ -276,7 +362,7 @@ def extract_window_features(
         menu_detected=menu_detected,
         tremor_peak_hz=tremor_hz,
         tremor_band_power=tremor_power,
-        l2b_coupled_fraction=None,   # requires real IMU precursor correlation — not computed here
+        l2b_coupled_fraction=l2b_coupled,   # real (grok-pending): reuses controller/l2b_imu_press_correlation.py methodology
         press_events=presses,
         l5_macro_quantized=quantized,
         device_ts_span_ticks=ticks,
