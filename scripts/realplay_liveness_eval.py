@@ -22,6 +22,43 @@ from l9_presence.realplay_liveness import evaluate_realplay_liveness
 WINDOW_MS = 30_000.0
 STEP_MS = 15_000.0
 
+
+def _honest_note(has_accel: bool, has_ticks: bool, verdict_counts: dict) -> str:
+    """Dynamic, not a hardcoded description of one specific capture (2026-07-22 finding: the
+    original version of this note was frozen text about run1's missing-IMU limitation and stayed
+    silently stale/wrong once run3 actually had accel+ticks and produced real PARTIAL_PRESENT
+    verdicts -- a stale report claim, caught before commit)."""
+    if not has_accel or not has_ticks:
+        return (
+            "This capture predates the IMU/device-clock recorder fix (scripts/u3_raw_capture.py) "
+            "-- G3 (tremor) and/or the anti-replay rail layer-1 (device clock) are structurally "
+            "unavailable from its HID rows. Fail-closed UNVERIFIABLE output here confirms the "
+            "evaluator's existing design correctly refuses to invent a verdict from incomplete "
+            "data; it does NOT validate the evaluator end-to-end."
+        )
+    n_partial = verdict_counts.get("PARTIAL_PRESENT", 0)
+    n_continuous = verdict_counts.get("CONTINUOUS_PRESENT", 0)
+    if n_partial == 0 and n_continuous == 0:
+        return (
+            "IMU/device-clock data is present, but no window reached PARTIAL_PRESENT or better -- "
+            "check individual window gate_bitmaps for which gate is failing (commonly G3 tremor: no "
+            "clean >=2s/256-sample accel segment in that window, or gameplay-fraction/rhythm gates)."
+        )
+    note = (
+        f"IMU/device-clock data present. {n_partial} window(s) reached PARTIAL_PRESENT "
+        f"(human-shape + device-clock lock confirmed on real data, explicitly replayable/advisory -- "
+        f"optical_consistent is not wired into this offline path, so CONTINUOUS_PRESENT is "
+        f"structurally unreachable here regardless of how strong the other gates are)."
+    )
+    if n_continuous:
+        note += (
+            f" {n_continuous} window(s) reported CONTINUOUS_PRESENT -- verify this is NOT a bug: "
+            f"the offline runner does not compute real optical co-presence, so this should not "
+            f"normally happen; investigate before trusting it."
+        )
+    return note
+
+
 def run(capture_dir: str) -> dict:
     rows = [json.loads(l) for l in open(os.path.join(capture_dir, "hid_events.jsonl"))]
     t0 = rows[0]["t_ns"]
@@ -51,14 +88,7 @@ def run(capture_dir: str) -> dict:
         "has_accel_data": has_accel, "has_sensor_ts_ticks": has_ticks,
         "n_windows": len(windows), "verdict_counts": verdict_counts,
         "windows": windows,
-        "honest_note": (
-            "run1_cfb27 predates the IMU/device-clock recorder fix (u3_raw_capture.py, 2026-07-22) -- "
-            "G3 (tremor) and the anti-replay rail layer-1 (device clock) are structurally unavailable "
-            "from this capture's HID rows. UNVERIFIABLE-heavy output here confirms the evaluator's "
-            "existing fail-closed design correctly refuses to invent a verdict from incomplete data; "
-            "it does NOT validate the evaluator end-to-end (that needs a capture from the fixed "
-            "recorder with real accel/gyro/sensor_ts_ticks present)."
-        ),
+        "honest_note": _honest_note(has_accel, has_ticks, verdict_counts),
     }
     out = os.path.join(capture_dir, "realplay_liveness_report.json")
     json.dump(report, open(out, "w"), indent=2)
