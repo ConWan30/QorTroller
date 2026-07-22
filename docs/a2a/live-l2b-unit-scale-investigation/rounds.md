@@ -52,3 +52,14 @@ recommended-next-step writeup for the operator to decide on.
 `bridge/vapi_bridge/dualshock_integration.py` in this round. No flag flips, no chain, no
 FROZEN/PoAC edit. Does not claim this affects tournament HARD eligibility (0x31 is advisory-only,
 confirmed against CLAUDE.md's own documented hard-cheat-code range).
+
+## r04 grok audit — Step C scope APPROVE WITH MODIFICATIONS
+
+Envelope `ca53b55559a872f0` / `round-03-claude-open.md` (sha MATCH). C1-C4 held
+under attack with named mods: HTTP_PORT=**8080** (not 8000); WS 60s keep-alive;
+no watchdog; process-scoped thr=0.03 + belt CHAIN pause / GRIND false. Live
+`.env` preflight this audit: GRIND=false, CHAIN_SUBMISSION_PAUSED=true, L6B off;
+IOSWARM=true (emulator OK under pause). Success bar: coupled_fraction >=0.55 +
+p_human >0.5 after warmup. Does **not** authorize execution — operator-fired only.
+Artifact: `round-04-grok-audit.md`. Bus: handoff/claim (Claude-safe).
+Envelope out: `b46ffa0b7e5ec29e` grok->claude.

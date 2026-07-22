@@ -14,6 +14,13 @@ script pile.**
 > under `docs/a2a/pkg/mailbox/` and can fire `claude`/`grok` CLI autonomously when the operator
 > authorizes (`--autonomous`). Unlike A2A-CDM (ideation-only), **this loop ships code**: Claude
 > builds increments between rounds; the rounds steer the build. Operator remains sole committer.
+>
+> **Claude → Grok delivery (2026-07-22):** Claude Code auto-mode blocks
+> `deliver --fire grok --permission-mode acceptEdits` as *Create Unsafe Agents*. Claude MUST use
+> the handoff path only (no peer spawn):
+> `python scripts/a2a_pkg_relay.py deliver --envelope <id> --handoff`
+> then Grok/operator claims with `claim --for grok`. Direct `fire=grok` defaults to
+> `permission-mode=default`; `acceptEdits` requires explicit `--force-unsafe-fire` (operator only).
 
 ## Agents + roles
 
