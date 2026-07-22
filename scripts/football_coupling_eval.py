@@ -48,22 +48,33 @@ def run(capture_dir: str) -> dict:
     r2_only = extract_r2_onsets(samples)
     multi = extract_multi_input_onsets(samples)
 
-    gt_rows = [json.loads(l) for l in open(os.path.join(capture_dir, "ground_truth_transitions.jsonl"))]
-    gt_events = events_from_ts_s([r["ts_s"] for r in gt_rows if r["kind"] == "downdist_text_change"], "gt_downdist")
+    # A_GT_downdist needs manually-eyeballed ground_truth_transitions.jsonl (only exists for
+    # run1_cfb27, built by filmstrip review in the cfb-snap-extractor C1-tightening arc). It is
+    # NOT required for B/C/D (the steered PRIMARY design, D, uses the detector's own field-motion
+    # events, no manual labels needed) -- skip A gracefully rather than block the whole eval when
+    # a capture (like run3) has no manual GT yet.
+    gt_path = os.path.join(capture_dir, "ground_truth_transitions.jsonl")
+    has_gt = os.path.isfile(gt_path)
+    gt_events = []
+    if has_gt:
+        gt_rows = [json.loads(l) for l in open(gt_path)]
+        gt_events = events_from_ts_s([r["ts_s"] for r in gt_rows if r["kind"] == "downdist_text_change"], "gt_downdist")
     snap_rows = [json.loads(l) for l in open(os.path.join(capture_dir, "snap_events.jsonl"))]
     snap_events = events_from_ts_s([r["ts_s"] for r in snap_rows], "detector_downdist")
 
     windows = [(0.0, 8000.0), (500.0, 8000.0), (100.0, 1500.0), (150.0, 600.0), (200.0, 2000.0)]
     baselines = {
-        "A_GT_downdist + R2only": (gt_events, r2_only),
         "B_detector_downdist + R2only": (snap_events, r2_only),
         "C_field_motion + R2only": (field_events, r2_only),
         "D_field_motion + multi_input": (field_events, multi),
     }
+    if has_gt:
+        baselines = {"A_GT_downdist + R2only": (gt_events, r2_only), **baselines}
     report = {"n_motion_samples": len(motion), "held_out_thr": round(thr, 2),
              "n_field_events": len(field_events), "n_gt_events": len(gt_events),
              "n_detector_events": len(snap_events), "n_r2_onsets": len(r2_only),
-             "n_multi_onsets": len(multi), "fixed_window_table": {}}
+             "n_multi_onsets": len(multi), "has_manual_ground_truth": has_gt,
+             "fixed_window_table": {}}
     for name, (ev, rp) in baselines.items():
         row = {}
         for lo, hi in windows:
