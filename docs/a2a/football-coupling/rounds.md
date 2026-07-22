@@ -96,3 +96,33 @@ grade," stop thrashing this design, fall back to Thesis B passive continuity.
 
 **LOOP CONVERGED at PASS.** Definition-of-done met via option (b): honest primary negative + residual
 + concrete next-capture plan. No forced win. Nothing calibrated, no flags, no chain, no FROZEN/PoAC.
+
+## Post-loop replication check on run3_cfb27_20260722 (2026-07-22, off-rig)
+
+The steered PRIMARY design (D1 field-motion-onset + D3 multi-input, the same audited machinery
+from this arc's PASS) was run against a SECOND, independent, longer real capture
+(run3_cfb27_20260722: 300s, 66 field-motion events, 189 multi-input onsets — vs run1's 240s/42/112)
+that didn't exist when this loop closed. This is an informal replication (not the exact frozen-
+crop/pre-registered-3-window NC1-NC4 protocol grok specified — thresholds were not frozen from
+run1, and the eval swept the same 5 windows as before rather than 3 pre-registered ones), but it
+answers the same question grok's own NC7 decision rule anticipated.
+
+**Result: the steered primary is at-null on ALL 5 windows again** (same as run1), and the matched-
+adaptive D2 fallback ties exactly at the null threshold (real_peak=0.3788 vs null_q95=0.3788 — not
+exceeding it, correctly still `event_coupled=False`).
+
+**This is a genuine second negative on independent data — the earlier finding replicates.** Per
+grok's own NC7 rule ("primary FALSE again -> adopt residual channel-negative... fall back Thesis B
+passive continuity"), the honest conclusion stands: optical field-motion+input coupling for CFB at
+this measurement grade does not beat chance across two independent sessions. This does NOT retract
+anything — it strengthens the earlier honest negative from N=1 to N=2, and correctly redirects
+confidence toward the passive-continuity design (Thesis B / Composite-B G1-G6), which — separately,
+in the tremor-fft-real-data arc — just produced its first real PARTIAL_PRESENT verdicts on this
+exact run3 capture. The two results are consistent: passive continuity works: optical coupling
+(as designed so far) does not, on two real sessions.
+
+**Script fix (committed):** `scripts/football_coupling_eval.py` required a manually-eyeballed
+`ground_truth_transitions.jsonl` (baseline A only) unconditionally, which run3 doesn't have —
+blocked the whole eval. Fixed to skip baseline A gracefully when that file is absent, still running
+B/C/D (including the steered primary D, which needs no manual labels). Regression-verified against
+run1 (baseline A still runs there, unchanged).
