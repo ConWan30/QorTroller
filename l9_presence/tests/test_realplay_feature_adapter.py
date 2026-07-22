@@ -109,3 +109,99 @@ def test_f_compb_tns1_absolute_t_ns_plus_relative_t_ms_prefers_t_ms():
     feat = extract_window_features(rows, 0, 900)
     assert feat.gameplay_active_fraction is not None
     assert feat.press_events == 5
+
+
+# ---- tremor FFT (grok-steered A2A tremor-fft-real-data r02: segment-first, gap-void, band-limited) ----
+
+def _sine_accel_rows(freq_hz, duration_s, sample_hz=300.0, amp=0.05, t0_ms=0.0, gap_at_s=None, gap_ms=0.0):
+    """Synthetic accel rows: a sine on accel_x at `freq_hz`, sampled at `sample_hz`, with gravity on Z.
+    If gap_at_s given, skip samples in [gap_at_s, gap_at_s + gap_ms/1000] to inject a real gap."""
+    import math
+    rows = []
+    dt = 1.0 / sample_hz
+    t = 0.0
+    while t < duration_s:
+        if gap_at_s is not None and gap_at_s <= t < gap_at_s + gap_ms / 1000.0:
+            t += dt
+            continue
+        ax = amp * math.sin(2 * math.pi * freq_hz * t)
+        rows.append({"t_ms": t0_ms + t * 1000.0, "accel_x": ax, "accel_y": 0.0, "accel_z": 1.0})
+        t += dt
+    return rows
+
+def test_inter_sample_gaps_ms_basic():
+    from l9_presence.realplay_feature_adapter import inter_sample_gaps_ms
+    assert inter_sample_gaps_ms([]) == []
+    assert inter_sample_gaps_ms([100.0]) == []
+    gaps = inter_sample_gaps_ms([0.0, 10.0, 25.0])
+    assert gaps == [10.0, 15.0]
+
+def test_longest_clean_segment_splits_on_void_gap():
+    from l9_presence.realplay_feature_adapter import longest_clean_segment
+    rows = [{"t_ms": 0}, {"t_ms": 10}, {"t_ms": 20},       # clean run of 3, gap to next = 2000ms
+            {"t_ms": 2020}, {"t_ms": 2030}, {"t_ms": 2040}, {"t_ms": 2050}]  # clean run of 4
+    seg = longest_clean_segment(rows, gap_void_ms=50.0)
+    assert len(seg) == 4
+    assert seg[0]["t_ms"] == 2020
+
+def test_longest_clean_segment_empty_input():
+    from l9_presence.realplay_feature_adapter import longest_clean_segment
+    assert longest_clean_segment([]) == []
+
+def test_tremor_absent_accel_is_none():
+    from l9_presence.realplay_feature_adapter import tremor_from_accel
+    rows = [{"t_ms": 0}, {"t_ms": 100}]
+    assert tremor_from_accel(rows, 0, 100) == (None, None)
+
+def test_tremor_uniform_10hz_sine_finds_peak_in_band():
+    from l9_presence.realplay_feature_adapter import tremor_from_accel
+    rows = _sine_accel_rows(freq_hz=10.0, duration_s=3.0, sample_hz=300.0)
+    hz, power = tremor_from_accel(rows, 0, 3000)
+    assert hz is not None
+    assert 8.0 <= hz <= 12.0
+    assert power is not None and power > 1e-6
+
+def test_tremor_out_of_band_signal_reports_in_band_peak_not_global():
+    """A strong 3Hz signal (postural, out of the 8-12 band) must NOT make tremor_peak_hz report 3Hz
+    -- the search must stay band-limited even when in-band power is comparatively weak."""
+    from l9_presence.realplay_feature_adapter import tremor_from_accel
+    rows = _sine_accel_rows(freq_hz=3.0, duration_s=3.0, sample_hz=300.0, amp=0.5)
+    hz, power = tremor_from_accel(rows, 0, 3000)
+    assert hz is not None
+    assert 8.0 <= hz <= 12.0   # band-limited search always returns a value inside the band
+
+def test_tremor_big_gap_forces_segment_not_whole_window():
+    """A single 1.8s gap splits the window; only the longer clean side should be used, not an
+    interpolation across the void (which would still often produce band-limited noise as a
+    false positive -- the real regression this protects is USING BOTH SIDES naively)."""
+    from l9_presence.realplay_feature_adapter import tremor_from_accel, longest_clean_segment
+    rows = _sine_accel_rows(freq_hz=10.0, duration_s=1.0, sample_hz=300.0, amp=0.05) + \
+           _sine_accel_rows(freq_hz=10.0, duration_s=2.5, sample_hz=300.0, amp=0.05, t0_ms=2800.0)
+    seg = longest_clean_segment(rows, gap_void_ms=50.0)
+    # the longer segment (2.5s @ 300Hz) must win, not the 1.0s one, and the gap must have split them
+    assert len(seg) < len(rows)
+    hz, power = tremor_from_accel(rows, 0, 5000)
+    assert hz is not None and 8.0 <= hz <= 12.0
+
+def test_tremor_segment_too_short_is_none():
+    from l9_presence.realplay_feature_adapter import tremor_from_accel
+    rows = _sine_accel_rows(freq_hz=10.0, duration_s=0.5, sample_hz=300.0)  # 0.5s < 2.0s floor
+    hz, power = tremor_from_accel(rows, 0, 500)
+    assert (hz, power) == (None, None)
+
+def test_tremor_too_few_samples_is_none_even_if_duration_ok():
+    from l9_presence.realplay_feature_adapter import tremor_from_accel
+    # 2.5s duration but very sparse (20Hz -> 50 samples), below MIN_CLEAN_SEG_SAMPLES=256
+    rows = _sine_accel_rows(freq_hz=10.0, duration_s=2.5, sample_hz=20.0)
+    hz, power = tremor_from_accel(rows, 0, 2500)
+    assert (hz, power) == (None, None)
+
+def test_extract_window_features_tremor_now_wired_through():
+    """extract_window_features must actually call the real tremor_from_accel, not a hardcoded None."""
+    from l9_presence.realplay_feature_adapter import extract_window_features
+    accel_rows = _sine_accel_rows(freq_hz=10.0, duration_s=3.0, sample_hz=300.0)
+    r2_rows = [_row(i * 10, r2=(255 if i % 20 == 0 else 0)) for i in range(300)]
+    rows = accel_rows + r2_rows
+    f = extract_window_features(rows, 0, 3000)
+    assert f.tremor_peak_hz is not None
+    assert 8.0 <= f.tremor_peak_hz <= 12.0

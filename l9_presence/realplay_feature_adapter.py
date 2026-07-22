@@ -21,9 +21,29 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+import numpy as np
+
 from l9_presence.realplay_liveness import WindowFeatures
 
 TREMOR_BAND_HZ: tuple[float, float] = (8.0, 12.0)
+
+# Tremor FFT constants (A2A tremor-fft-real-data r02, grok-steered, CANDIDATE not FROZEN).
+# Change-dedup capture (scripts/u3_raw_capture.py) is NOT continuous ~1kHz polling like the tested
+# tinyml_biometric_fusion.py path assumes -- it has heavy-tailed gaps (run3_cfb27 measured: median
+# gap 3.0ms, mean 8.8ms, p90 16.9ms, MAX 1824ms in one window). A naive fs=1/median(dt) + whole-window
+# rfft would interpolate across multi-cycle silent gaps and fabricate spectral content. The fix is
+# segment-first: split on any gap > GAP_VOID_MS, resample only the LONGEST contiguous clean segment,
+# and refuse (None, None) if no segment clears the floor -- never invent a peak from a window that
+# doesn't have one.
+GAP_VOID_MS: float = 50.0          # never interpolate across a gap longer than this (~0.5x the
+                                    # 10Hz tremor period of 100ms; derivation in grok r02 doc)
+MIN_CLEAN_SEG_MS: float = 2000.0   # need >=2.0s of clean data (~16-24 cycles at 8-12Hz)
+MIN_CLEAN_SEG_SAMPLES: int = 256   # raw samples in that segment (fail-closed floor)
+RESAMPLE_HZ: float = 200.0         # uniform grid after segment accept (Nyquist 100Hz >> 12Hz)
+TREMOR_SEARCH_HZ: tuple[float, float] = (8.0, 12.0)  # G3-facing peak MUST be band-limited to this
+                                    # (grok r02: unconstrained global argmax finds low-freq postural
+                                    # energy, not the 8-12Hz physiological band G3 actually gates on)
+FFT_MIN_NFFT: int = 1024           # zero-pad floor, matches tinyml's tested FFT resolution
 
 
 def _stick_mag(row: dict, center: int = 128) -> int:
@@ -122,19 +142,109 @@ def device_ts_span(rows: Sequence[dict], t_lo_ms: float, t_hi_ms: float) -> tupl
     return span_ticks, wall_span_ms
 
 
-def tremor_from_accel(rows: Sequence[dict], t_lo_ms: float, t_hi_ms: float) -> tuple[Optional[float], Optional[float]]:
-    """(tremor_peak_hz, tremor_band_power) placeholder over accel magnitude in-window. Requires
-    'accel_x'/'accel_y'/'accel_z' keys (absent on run1 — returns (None, None) honestly, no FFT
-    fabricated from nothing). A real implementation needs a proper FFT (>=1024 samples per the
-    existing tinyml_biometric_fusion.py discipline) — deferred until a capture has enough
-    real accel samples to make that meaningful; this stub exists so the adapter's shape is complete
-    and future work has an obvious single place to land the real computation."""
-    accel_rows = [r for r in rows if "accel_x" in r]
+def inter_sample_gaps_ms(sorted_ts_ms: Sequence[float]) -> list[float]:
+    """PURE: consecutive gaps (ms) in an already-time-sorted sequence. Empty/single -> []."""
+    ts = list(sorted_ts_ms)
+    if len(ts) < 2:
+        return []
+    return [ts[i + 1] - ts[i] for i in range(len(ts) - 1)]
+
+
+def longest_clean_segment(
+    rows: Sequence[dict], gap_void_ms: float = GAP_VOID_MS,
+) -> list[dict]:
+    """PURE: split `rows` (must already be time-sorted, each needs a time via _row_t_ms) on any
+    inter-sample gap > gap_void_ms, and return the LONGEST contiguous run. This is the anti-
+    fabrication rail (grok r02 A2A tremor-fft-real-data): never interpolate across a hole big
+    enough to swallow multiple tremor cycles. Empty input -> [].
+
+    "Longest" is by DURATION (ms), not sample count (grok r04 open-question #2 — matches the
+    ">=2.0s clean data" floor's own semantics; a short but densely-sampled run should not beat a
+    longer sparser one when both clear the floor, since the floor is a time-coverage requirement)."""
+    if not rows:
+        return []
+    segments: list[list[dict]] = [[rows[0]]]
+    for prev, cur in zip(rows, rows[1:]):
+        gap = _row_t_ms(cur) - _row_t_ms(prev)
+        if gap > gap_void_ms:
+            segments.append([cur])
+        else:
+            segments[-1].append(cur)
+    def _seg_duration_ms(seg: list[dict]) -> float:
+        return _row_t_ms(seg[-1]) - _row_t_ms(seg[0]) if len(seg) > 1 else 0.0
+    return max(segments, key=_seg_duration_ms)
+
+
+def tremor_from_accel(
+    rows: Sequence[dict], t_lo_ms: float, t_hi_ms: float,
+    *,
+    gap_void_ms: float = GAP_VOID_MS,
+    min_clean_seg_ms: float = MIN_CLEAN_SEG_MS,
+    min_clean_seg_samples: int = MIN_CLEAN_SEG_SAMPLES,
+    resample_hz: float = RESAMPLE_HZ,
+    search_hz: tuple[float, float] = TREMOR_SEARCH_HZ,
+) -> tuple[Optional[float], Optional[float]]:
+    """(tremor_peak_hz, tremor_band_power) from real accel data (grok-steered A2A
+    tremor-fft-real-data r02 design; segment-first, NOT the naive whole-window FFT that
+    controller/tinyml_biometric_fusion.py's continuous-poll assumption would require).
+
+    Change-dedup capture data is NOT uniformly sampled -- it has heavy-tailed gaps (measured on a
+    real capture: p90 gap 17ms but max gap 1824ms in one window). Procedure, honest at every step:
+      1. Filter to accel rows in [t_lo_ms, t_hi_ms], sorted by time.
+      2. Split on any gap > gap_void_ms; take the LONGEST clean segment only (never interpolate
+         across a void -- that would fabricate spectral content in a hole the device never measured).
+      3. If that segment doesn't clear min_clean_seg_ms AND min_clean_seg_samples -> (None, None).
+         This is the fail-closed floor: a thin clean run isn't enough evidence, full stop.
+      4. Compute accel magnitude ||a|| over the segment, resample onto a uniform `resample_hz` grid
+         (linear interpolation -- valid now because gaps inside the segment are all <= gap_void_ms),
+         DC-remove, zero-pad to >= FFT_MIN_NFFT, rfft.
+      5. Peak + band power are BAND-LIMITED to `search_hz` (default 8-12Hz, matching G3's own gate)
+         -- an unconstrained global argmax finds low-frequency postural/gravity-residual energy, not
+         the physiological tremor band, and would make G3 fail even when real 8-12Hz content exists.
+    """
+    # grok r04 finding: filtering on "accel_x" alone risks KeyError if a row somehow has accel_x
+    # but not accel_y/accel_z (run3 is 100% full-triple, but this must not crash on malformed data).
+    accel_rows = [r for r in rows
+                 if "accel_x" in r and "accel_y" in r and "accel_z" in r
+                 and t_lo_ms <= _row_t_ms(r) <= t_hi_ms]
     if not accel_rows:
         return None, None
-    # Deliberately NOT implemented further here — see docstring. Real accel present but FFT
-    # deferred to a follow-up once a real-IMU capture exists to validate against.
-    return None, None
+    accel_rows.sort(key=_row_t_ms)
+
+    seg = longest_clean_segment(accel_rows, gap_void_ms)
+    if not seg:
+        return None, None
+    seg_ms = _row_t_ms(seg[-1]) - _row_t_ms(seg[0])
+    if seg_ms < min_clean_seg_ms or len(seg) < min_clean_seg_samples:
+        return None, None
+
+    t = np.array([_row_t_ms(r) / 1000.0 for r in seg], dtype=np.float64)   # seconds
+    mag = np.array([
+        (r["accel_x"] ** 2 + r["accel_y"] ** 2 + r["accel_z"] ** 2) ** 0.5 for r in seg
+    ], dtype=np.float64)
+
+    grid_dt = 1.0 / resample_hz
+    grid = np.arange(t[0], t[-1], grid_dt)
+    if len(grid) < 128:
+        return None, None
+    resampled = np.interp(grid, t, mag)
+
+    dc = resampled - float(np.mean(resampled))
+    nfft = max(FFT_MIN_NFFT, len(dc))
+    fft_mag = np.abs(np.fft.rfft(dc, n=nfft))
+    freqs = np.fft.rfftfreq(nfft, d=grid_dt)
+    total_power = float(np.sum(fft_mag ** 2)) or 1e-9
+
+    lo, hi = search_hz
+    band_mask = (freqs >= lo) & (freqs <= hi)
+    if not band_mask.any():
+        return None, None
+    band_indices = np.where(band_mask)[0]
+    peak_in_band = int(np.argmax(fft_mag[band_mask]))
+    peak_idx = int(band_indices[peak_in_band])
+    tremor_peak_hz = float(freqs[peak_idx])
+    tremor_band_power = float(np.sum(fft_mag[band_mask] ** 2) / total_power)
+    return tremor_peak_hz, tremor_band_power
 
 
 def extract_window_features(
