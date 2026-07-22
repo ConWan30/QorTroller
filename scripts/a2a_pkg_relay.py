@@ -18,7 +18,17 @@ Usage:
       --expect docs/a2a/pkg/round-05-claude-ground-build.md \\
       --subject "Round 04 design → ground+build"
 
+  # Claude → Grok SAFE path (no peer spawn; avoids Claude Code auto-mode
+  # "Create Unsafe Agents" block on acceptEdits/unsandboxed fire):
+  python scripts/a2a_pkg_relay.py deliver --envelope <id> --handoff
+  python scripts/a2a_pkg_relay.py pending --for grok
+
+  # Operator / live Grok session claims + acts on the staged prompt:
+  python scripts/a2a_pkg_relay.py claim --for grok
+
+  # Direct fire (operator machine only; grok defaults permission-mode=default):
   python scripts/a2a_pkg_relay.py deliver --envelope <id> --fire claude
+  python scripts/a2a_pkg_relay.py deliver --envelope <id> --fire grok
   python scripts/a2a_pkg_relay.py status
   python scripts/a2a_pkg_relay.py render-prompt --envelope <id>
 """
@@ -166,6 +176,15 @@ def cmd_post(args: argparse.Namespace) -> int:
     print(f"  body:   {env['body_path']}  sha256={body_sha[:16]}...")
     if expect_rel:
         print(f"  expect: {expect_rel}")
+    # Claude → Grok: never instruct acceptEdits fire (auto-mode classifier tripwire).
+    if str(env.get("to_agent", "")).lower() in ("grok", "grok-build"):
+        print("  next (Claude-safe, no peer spawn):")
+        print(f"    python scripts/a2a_pkg_relay.py deliver --envelope {eid} --handoff")
+        print("  then Grok/operator claims:")
+        print("    python scripts/a2a_pkg_relay.py claim --for grok")
+    elif str(env.get("to_agent", "")).lower() in ("claude", "claude-code"):
+        print("  next (operator/Grok may fire Claude):")
+        print(f"    python scripts/a2a_pkg_relay.py deliver --envelope {eid} --fire claude --background")
     return 0
 
 
@@ -206,11 +225,110 @@ def _bootstrap_prompt(env: dict[str, Any]) -> str:
             f"1. Audit claim ⊆ reality; tag BUILD-NOW / GATED / REFUTED.",
             f"2. BUILD BUILD-NOW (tests green). Stage only — do NOT commit/push.",
             f"3. Write `{expect}` with ## verdicts + ## build-results + ## open-questions.",
-            "4. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default.",
+            "4. Rails: 228B PoAC, FROZEN-v1, PV-CI 184, no secrets, CHAIN_SUBMISSION_PAUSED default.",
             "",
             "Begin. Ground, tag, build, write the expected reply.",
         ]
     )
+
+
+def _default_permission_mode(fire: str) -> str:
+    """Peer-spawn defaults. Grok must NOT default to acceptEdits — Claude Code's auto-mode
+    classifier blocks Claude from launching that pattern as 'Create Unsafe Agents'.
+    Claude build loops keep acceptEdits (historical); operator may override either explicitly."""
+    f = (fire or "").lower()
+    if f in ("grok", "grok-build"):
+        return "default"
+    return "acceptEdits"
+
+
+def _resolve_permission_mode(args: argparse.Namespace, fire: str) -> str:
+    explicit = getattr(args, "permission_mode", None)
+    if explicit:
+        return str(explicit)
+    return _default_permission_mode(fire)
+
+
+def _stage_handoff(env: dict[str, Any], prompt_path: Path, src: Path) -> Path:
+    """Write handoff marker + bootstrap. No peer process. Claude-auto-mode safe."""
+    eid = env["envelope_id"]
+    boot_path = MAILBOX / f"bootstrap_{eid}.md"
+    boot_path.write_text(_bootstrap_prompt(env), encoding="utf-8")
+    handoff_path = MAILBOX / f"handoff_{eid}.md"
+    to_agent = env.get("to_agent", "peer")
+    body = "\n".join(
+        [
+            f"# A2A-PKG HANDOFF (no peer spawn) · envelope `{eid}`",
+            "",
+            f"**From:** {env.get('from_agent')} → **To:** {to_agent}",
+            f"**Subject:** {env.get('subject')}",
+            f"**Status:** staged for {to_agent} — peer CLI was NOT launched.",
+            "",
+            "## Why handoff (not fire)",
+            "Claude Code auto-mode blocks `deliver --fire grok --permission-mode acceptEdits`",
+            "as Create-Unsafe-Agents. Handoff only writes mailbox files (safe for Claude to run).",
+            "A live Grok session / operator claims the work with `claim --for grok` or fires with",
+            "`deliver --envelope <id> --fire grok` (defaults to permission-mode=default).",
+            "",
+            "## Integrity paths",
+            f"- envelope: `docs/a2a/pkg/mailbox/outbox/{eid}.json`",
+            f"- full prompt: `{_rel(prompt_path)}`",
+            f"- bootstrap: `{_rel(boot_path)}`",
+            f"- body: `{env.get('body_path')}` sha256={env.get('body_sha256')}",
+            f"- prior: `{env.get('prior_round_path')}`",
+            f"- expect: `{env.get('expected_reply_path')}`",
+            "",
+            "## Mandate (truncated)",
+            (env.get("mandate") or "")[:800],
+            "",
+            f"## For {to_agent} (act now if you are the live session)",
+            f"1. Read `{_rel(prompt_path)}` (or bootstrap `{_rel(boot_path)}`).",
+            "2. Verify body_sha256 against the body path.",
+            "3. Produce the expected reply; stage only; do not commit/push.",
+            "4. Post the reply envelope back on this bus.",
+            "",
+        ]
+    )
+    handoff_path.write_text(body, encoding="utf-8")
+    delivered_path = DELIVERED / f"{eid}.json"
+    shutil.copy2(src, delivered_path)
+    _append_ledger(
+        {
+            "event": "handoff_ready",
+            "envelope_id": eid,
+            "to_agent": to_agent,
+            "prompt_path": _rel(prompt_path),
+            "handoff_path": _rel(handoff_path),
+            "bootstrap": _rel(boot_path),
+        }
+    )
+    return handoff_path
+
+
+def _iter_envelopes_for(agent: str) -> list[dict[str, Any]]:
+    """Outbox/inbox envelopes addressed to agent (newest first by ts_ns)."""
+    agent = agent.lower()
+    found: list[dict[str, Any]] = []
+    for d in (OUTBOX, INBOX):
+        for f in d.glob("*.json"):
+            try:
+                e = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if str(e.get("to_agent", "")).lower() != agent:
+                continue
+            e["_mailbox_path"] = _rel(f)
+            found.append(e)
+    # de-dupe by envelope_id, prefer outbox entry
+    by_id: dict[str, dict[str, Any]] = {}
+    for e in found:
+        eid = e.get("envelope_id")
+        if not eid:
+            continue
+        prev = by_id.get(eid)
+        if prev is None or "outbox" in str(e.get("_mailbox_path", "")):
+            by_id[eid] = e
+    return sorted(by_id.values(), key=lambda x: int(x.get("ts_ns") or 0), reverse=True)
 
 
 def render_prompt(env: dict[str, Any]) -> str:
@@ -258,11 +376,12 @@ def render_prompt(env: dict[str, Any]) -> str:
         f"1. Write `{expect}` with `## verdicts` + `## build-results` + `## open-questions`.",
         "2. Implement BUILD-NOW items (tests green). Stage only — do not git commit/push.",
         "3. Touch rails only additively; no secrets; no PoAC wire edits; no FROZEN formula edits.",
-        "4. When done, optionally run:",
-        f"   `python scripts/a2a_pkg_relay.py post --from claude --to grok "
-        f"--round {expect} --prior {env['body_path']} "
-        f"--expect docs/a2a/pkg/round-06-grok-design.md "
-        f"--subject \"Round reply → next design\" --autonomous`",
+        "4. When done, post the reply on this bus. If you are Claude sending to Grok, "
+        "ALWAYS handoff (never fire grok with acceptEdits — Claude auto-mode blocks it):",
+        f"   `python scripts/a2a_pkg_relay.py post --from {env.get('to_agent')} "
+        f"--to {env.get('from_agent')} --round {expect} --prior {env['body_path']} "
+        f"--subject \"Round reply\"`",
+        f"   `python scripts/a2a_pkg_relay.py deliver --envelope <new_id> --handoff`",
         "",
         "## Prior round (snippet)",
         "```markdown",
@@ -303,7 +422,7 @@ def cmd_deliver(args: argparse.Namespace) -> int:
     env, src = _load_envelope(args.envelope)
     eid = env["envelope_id"]
 
-    # Re-verify body integrity before fire
+    # Re-verify body integrity before fire / handoff
     try:
         prompt = render_prompt(env)
     except RuntimeError as e:
@@ -314,12 +433,27 @@ def cmd_deliver(args: argparse.Namespace) -> int:
     prompt_path.write_text(prompt, encoding="utf-8")
 
     fire = (args.fire or env["to_agent"]).lower()
+    handoff = bool(getattr(args, "handoff", False))
+
+    # HANDOFF: stage only — Claude Code auto-mode safe (no peer spawn, no acceptEdits).
+    if handoff:
+        handoff_path = _stage_handoff(env, prompt_path, src)
+        print(f"HANDOFF envelope_id={eid} → to={env.get('to_agent')} (no peer spawn)")
+        print(f"  prompt:  {_rel(prompt_path)} ({len(prompt)} chars)")
+        print(f"  handoff: {_rel(handoff_path)}")
+        print(f"  claim:   python scripts/a2a_pkg_relay.py claim --for {env.get('to_agent')}")
+        return 0
+
     delivered_path = DELIVERED / f"{eid}.json"
     shutil.copy2(src, delivered_path)
     inbox_copy = INBOX / f"{eid}.json"
     if inbox_copy.is_file() and inbox_copy.resolve() != delivered_path.resolve():
         # leave inbox stamp but mark delivered
         pass
+
+    perm = _resolve_permission_mode(args, fire)
+    # Stash resolved mode so fire helpers use it even when argparse default was None
+    args.permission_mode = perm
 
     _append_ledger(
         {
@@ -328,17 +462,50 @@ def cmd_deliver(args: argparse.Namespace) -> int:
             "fire_target": fire,
             "prompt_path": _rel(prompt_path),
             "prompt_sha256": _sha256_file(prompt_path),
+            "permission_mode": perm,
             "dry_run": bool(args.dry_run),
         }
     )
 
-    print(f"DELIVER envelope_id={eid} → fire={fire}")
+    print(f"DELIVER envelope_id={eid} → fire={fire} permission-mode={perm}")
     print(f"  prompt: {_rel(prompt_path)} ({len(prompt)} chars)")
 
     if args.dry_run:
         print("  dry-run: not spawning peer CLI")
         _append_ledger({"event": "deliver_dry_run", "envelope_id": eid})
         return 0
+
+    # Safety rail: refuse acceptEdits fire to grok unless --force-unsafe-fire.
+    # Prevents the exact Claude auto-mode classifier tripwire.
+    if (
+        fire in ("grok", "grok-build")
+        and perm == "acceptEdits"
+        and not getattr(args, "force_unsafe_fire", False)
+    ):
+        print(
+            "REFUSE: fire=grok + permission-mode=acceptEdits is blocked by default "
+            "(Claude Code auto-mode: Create Unsafe Agents).\n"
+            "  Safe options:\n"
+            f"    python scripts/a2a_pkg_relay.py deliver --envelope {eid} --handoff\n"
+            f"    python scripts/a2a_pkg_relay.py deliver --envelope {eid} --fire grok\n"
+            "      (defaults to permission-mode=default)\n"
+            "  Operator override only:\n"
+            f"    python scripts/a2a_pkg_relay.py deliver --envelope {eid} "
+            "--fire grok --permission-mode acceptEdits --force-unsafe-fire",
+            file=sys.stderr,
+        )
+        _append_ledger(
+            {
+                "event": "fire_refused_unsafe",
+                "envelope_id": eid,
+                "fire_target": fire,
+                "permission_mode": perm,
+            }
+        )
+        # Auto-stage handoff so the message is not lost
+        handoff_path = _stage_handoff(env, prompt_path, src)
+        print(f"  auto-staged handoff: {_rel(handoff_path)}", file=sys.stderr)
+        return 6
 
     if fire in ("claude", "claude-code"):
         return _fire_claude(env, prompt_path, args)
@@ -358,8 +525,7 @@ def _fire_claude(env: dict[str, Any], prompt_path: Path, args: argparse.Namespac
 
     prompt_text = prompt_path.read_text(encoding="utf-8")
     name = args.session_name or f"a2a-pkg-{env['envelope_id']}"
-    # permission: acceptEdits for build loop; never skip unless explicit
-    perm = args.permission_mode or "acceptEdits"
+    perm = _resolve_permission_mode(args, "claude")
 
     # NOTE: Claude Code has no --cwd flag on the root CLI; cwd is process working dir.
     # Windows CreateProcess argv limit ~8191 chars — never pass full sealed prompts as
@@ -483,19 +649,28 @@ def _fire_claude(env: dict[str, Any], prompt_path: Path, args: argparse.Namespac
 
 
 def _fire_grok(env: dict[str, Any], prompt_path: Path, args: argparse.Namespace) -> int:
+    """Spawn grok single-turn. Defaults permission-mode=default (not acceptEdits).
+
+    Uses --prompt-file (not argv body) for Windows CreateProcess argv limits and to
+    avoid embedding multi-KB sealed prompts on the command line.
+    """
     grok = shutil.which("grok") or str(Path.home() / ".grok" / "bin" / "grok.exe")
+    if not Path(grok).exists() and not shutil.which("grok"):
+        print("FAIL: grok CLI not found on PATH", file=sys.stderr)
+        return 4
     name = args.session_name or f"a2a-pkg-{env['envelope_id']}"
-    prompt_text = prompt_path.read_text(encoding="utf-8")
+    perm = _resolve_permission_mode(args, "grok")
     log_path = MAILBOX / f"fire_{env['envelope_id']}.log"
+    # Prefer --prompt-file over stuffing prompt into argv
     cmd = [
         grok,
-        "--single",
-        prompt_text,
+        "--prompt-file",
+        str(prompt_path.resolve()),
         f"--cwd={REPO_ROOT}",
         "--permission-mode",
-        args.permission_mode or "acceptEdits",
+        perm,
     ]
-    print(f"  spawning grok single-turn…")
+    print(f"  spawning grok single-turn (permission-mode={perm}, prompt-file)…")
     with log_path.open("w", encoding="utf-8") as logf:
         proc = subprocess.run(
             cmd,
@@ -510,12 +685,91 @@ def _fire_grok(env: dict[str, Any], prompt_path: Path, args: argparse.Namespace)
             "envelope_id": env["envelope_id"],
             "returncode": proc.returncode,
             "mode": "grok-single",
+            "permission_mode": perm,
             "log": _rel(log_path),
             "session_name": name,
         }
     )
     print(f"  COMPLETED returncode={proc.returncode} log={_rel(log_path)}")
     return int(proc.returncode)
+
+
+def cmd_pending(args: argparse.Namespace) -> int:
+    """List envelopes / handoffs addressed to an agent (default: grok)."""
+    _ensure_dirs()
+    agent = (args.for_agent or "grok").lower()
+    envs = _iter_envelopes_for(agent)
+    print(f"PENDING for {agent}: {len(envs)} envelope(s)")
+    for e in envs[:20]:
+        eid = e.get("envelope_id")
+        handoff = MAILBOX / f"handoff_{eid}.md"
+        prompt = MAILBOX / f"prompt_{eid}.md"
+        flags = []
+        if handoff.is_file():
+            flags.append("HANDOFF")
+        if prompt.is_file():
+            flags.append("PROMPT")
+        if (DELIVERED / f"{eid}.json").is_file():
+            flags.append("DELIVERED")
+        print(
+            f"  {eid}  {e.get('from_agent')}→{e.get('to_agent')}  "
+            f"{e.get('body_path')}  [{','.join(flags) or 'posted'}]"
+        )
+        print(f"    subject: {e.get('subject')}")
+    return 0
+
+
+def cmd_claim(args: argparse.Namespace) -> int:
+    """Print the newest handoff/prompt for agent so a live session can act (no spawn)."""
+    _ensure_dirs()
+    agent = (args.for_agent or "grok").lower()
+    envs = _iter_envelopes_for(agent)
+    if not envs:
+        print(f"No envelopes for {agent}")
+        return 1
+    # Prefer ones with handoff_ or prompt_ present
+    chosen = None
+    for e in envs:
+        eid = e.get("envelope_id")
+        if (MAILBOX / f"handoff_{eid}.md").is_file() or (MAILBOX / f"prompt_{eid}.md").is_file():
+            chosen = e
+            break
+    if chosen is None:
+        chosen = envs[0]
+    eid = chosen["envelope_id"]
+    prompt_path = MAILBOX / f"prompt_{eid}.md"
+    handoff_path = MAILBOX / f"handoff_{eid}.md"
+    boot_path = MAILBOX / f"bootstrap_{eid}.md"
+    # Ensure prompt exists
+    if not prompt_path.is_file():
+        try:
+            prompt_path.write_text(render_prompt(chosen), encoding="utf-8")
+        except RuntimeError as err:
+            print(f"FAIL integrity: {err}", file=sys.stderr)
+            return 3
+    if not handoff_path.is_file():
+        src = OUTBOX / f"{eid}.json"
+        if not src.is_file():
+            src = INBOX / f"{eid}.json"
+        if src.is_file():
+            _stage_handoff(chosen, prompt_path, src)
+    _append_ledger({"event": "claimed", "envelope_id": eid, "by_agent": agent})
+    print(f"CLAIMED envelope_id={eid} for {agent}")
+    print(f"  subject: {chosen.get('subject')}")
+    print(f"  body:    {chosen.get('body_path')}")
+    print(f"  prompt:  {_rel(prompt_path)}")
+    if handoff_path.is_file():
+        print(f"  handoff: {_rel(handoff_path)}")
+    if boot_path.is_file():
+        print(f"  boot:    {_rel(boot_path)}")
+    print(f"  expect:  {chosen.get('expected_reply_path')}")
+    print("")
+    print("--- bootstrap / act-now ---")
+    if boot_path.is_file():
+        print(boot_path.read_text(encoding="utf-8"))
+    else:
+        print(_bootstrap_prompt(chosen))
+    return 0
 
 
 def cmd_status(_args: argparse.Namespace) -> int:
@@ -598,12 +852,29 @@ def main() -> int:
     )
     p_post.set_defaults(func=cmd_post)
 
-    p_del = sub.add_parser("deliver", help="Render + fire peer CLI with sealed prompt")
+    p_del = sub.add_parser(
+        "deliver",
+        help="Render + (handoff | fire) sealed prompt. Prefer --handoff for Claude→Grok.",
+    )
     p_del.add_argument("--envelope", required=True, help="envelope_id or path")
     p_del.add_argument("--fire", default=None, help="claude|grok (default: to_agent)")
+    p_del.add_argument(
+        "--handoff",
+        action="store_true",
+        help="Stage prompt for peer WITHOUT spawning peer CLI (Claude auto-mode safe)",
+    )
     p_del.add_argument("--background", action="store_true")
     p_del.add_argument("--dry-run", action="store_true")
-    p_del.add_argument("--permission-mode", default="acceptEdits")
+    p_del.add_argument(
+        "--permission-mode",
+        default=None,
+        help="default|acceptEdits|… (default: grok→default, claude→acceptEdits)",
+    )
+    p_del.add_argument(
+        "--force-unsafe-fire",
+        action="store_true",
+        help="Allow fire=grok + permission-mode=acceptEdits (operator only; refused by default)",
+    )
     p_del.add_argument("--session-name", default=None)
     p_del.add_argument("--timeout-s", type=int, default=0, help="0=no timeout (print mode)")
     p_del.add_argument(
@@ -620,6 +891,17 @@ def main() -> int:
 
     p_st = sub.add_parser("status", help="Mailbox + ledger status")
     p_st.set_defaults(func=cmd_status)
+
+    p_pend = sub.add_parser("pending", help="List envelopes for an agent")
+    p_pend.add_argument("--for", dest="for_agent", default="grok")
+    p_pend.set_defaults(func=cmd_pending)
+
+    p_claim = sub.add_parser(
+        "claim",
+        help="Claim newest handoff for an agent and print act-now bootstrap (no spawn)",
+    )
+    p_claim.add_argument("--for", dest="for_agent", default="grok")
+    p_claim.set_defaults(func=cmd_claim)
 
     p_ack = sub.add_parser("ack", help="Ack that expected reply exists")
     p_ack.add_argument("--envelope", required=True)
