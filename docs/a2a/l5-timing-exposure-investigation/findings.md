@@ -1,11 +1,12 @@
-# L5 (temporal_rhythm_oracle.py) timing exposure — investigation findings
+# L5 (temporal_rhythm_oracle.py) timing exposure — investigation findings + fix
 
-**Scope:** read-only investigation only, per operator instruction. No fix
-scoped, built, or authorized. No production code touched. Grok credits were
-already exhausted before this investigation began (last confirmed state:
-`docs/a2a/live-l2b-unit-scale-investigation/`), so this proceeds solo —
-disclosed here, same as throughout the L2B investigation, rather than
-presented as adversarially reviewed.
+**Status: FIXED (2026-07-22, same session).** Original scope was read-only
+investigation only; operator subsequently authorized scoping and building a
+fix once the exposure was confirmed. Grok credits were already exhausted
+before this investigation began (last confirmed state: `docs/a2a/
+live-l2b-unit-scale-investigation/`), so both the investigation and the fix
+proceeded solo — disclosed here, same as throughout the L2B investigation,
+rather than presented as adversarially reviewed.
 
 ## Question
 
@@ -135,21 +136,41 @@ cadences.
 Neither of these is scoped or investigated further here — flagged for a
 future, separately-scoped decision.
 
+## Fix (same session, operator-authorized after this investigation)
+
+`controller/temporal_rhythm_oracle.py`'s `push_snapshot()` now mirrors
+L2B/L2C's own pattern exactly: `getattr(snap, "timestamp_ms", None)`,
+falling back to `monotonic()` only when absent. Since the C-fail-4 fix
+already stamps that attribute on every live snap
+(`dualshock_integration.py::_stamp_frame_collection_times`), L5 now benefits
+from the existing wiring with zero changes needed outside this one file —
+exactly as anticipated below.
+
+**Regression risk confirmed low before building**: the one production call
+site (`dualshock_integration.py:2312`) and the existing test suite's `_Snap`
+factory (which never sets `timestamp_ms`) were checked — since the fallback
+path is what those tests already exercise, the fix is behavior-identical for
+all of them. Confirmed: all 32 pre-existing L5 tests pass unchanged.
+
+**New tests** (`bridge/tests/test_temporal_rhythm_oracle.py`,
+`TestL5TimingExposureFix`) pin the mechanism directly rather than
+re-deriving the full statistical divergence already demonstrated above:
+`timestamp_ms` wins over a mocked, collapsed `monotonic()` when present
+(proves the fix); the `monotonic()` fallback is unchanged when
+`timestamp_ms` is absent (proves backward compatibility with the existing
+test suite's own snap factory, which never sets it).
+
+135 tests green across every L5/L2B/L2C/dualshock_integration file touched
+by either investigation; PV-CI 184 unchanged. Live verification was
+considered and explicitly declined (operator choice) in favor of the
+directly-proven mechanism — L5's live verification would need several
+minutes of realistic, batch-boundary-straddling play to be meaningful,
+unlike L2B's quick-burst probe.
+
 ## Status
 
-**L5 exposure: CONFIRMED present and empirically demonstrated to distort
-classification-relevant statistics in the bot-like direction, including one
-clean single-signal-threshold crossing directly attributable to batch
-processing vs. identical realtime processing of the same press schedule.**
-Not yet demonstrated to flip `classify()`'s actual 2-signal firing threshold
-in the trials run. Unlike L2B, the C-fail-4 fix already shipped does nothing
-for this — it remains fully unaddressed in production. No fix scoped, built,
-or authorized — this is investigation only, per the explicit request.
-
-If a fix is wanted, the natural shape (not scoped here, just noted for a
-future decision) would mirror L2B/L2C's own pattern: check
-`getattr(snap, "timestamp_ms", None)` first in `push_snapshot()`, falling
-back to `monotonic()` only when absent — since the C-fail-4 fix already
-stamps that attribute on every live snap, this would make L5 benefit from
-the existing wiring for free, the same way L2C did. That would need its own
-scoping/build/verification pass, same discipline as L2B's.
+**L5 exposure: CONFIRMED and FIXED.** Same fix shape as L2B/L2C, same
+C-fail-4 wiring already in place, zero additional bridge-side changes
+needed. Not adversarially reviewed (grok credits exhausted) — disclosed, not
+hidden. Not live-verified against the real bridge (operator choice,
+tests-only confidence accepted for this one).
