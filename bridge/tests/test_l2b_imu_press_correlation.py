@@ -19,6 +19,7 @@ import numpy as np
 # Add controller/ to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "controller"))
 
+import l2b_imu_press_correlation as _l2b_mod
 from l2b_imu_press_correlation import (
     CROSS_BIT,
     INFER_IMU_BUTTON_DECOUPLED,
@@ -253,18 +254,30 @@ class TestMechanics(unittest.TestCase):
         """
         Oracle uses median of _imu_baseline + _IMU_SPIKE_THRESH.
         With high baseline, spikes must be proportionally higher.
+
+        This scenario (baseline=200, spike=+20) is explicitly RAW-LSB scale —
+        the 2026-07-22 unit-scale fix changed the module DEFAULT to 0.03
+        (live-scaled units); raw-LSB scenarios must now explicitly request the
+        raw threshold (30.0) rather than relying on the default, per the
+        module's own documented convention (l2b_imu_press_correlation.py
+        _IMU_SPIKE_THRESH docstring, "RAW-LSB CALLERS" section).
         """
-        oracle = ImuPressCorrelationOracle()
-        # Set a high baseline (noise floor = 200 LSB)
-        for _ in range(200):
-            oracle._imu_baseline.append(200.0)
-        ts = 1000.0
-        # Small spike that would exceed 30 LSB above 0 baseline but NOT 30 above 200
-        for i in range(100):
-            oracle._imu_history.append((ts - 100.0 + i, 220.0))  # only +20 above 200
-        oracle._record_press(ts)
-        # +20 LSB above baseline=200: below _IMU_SPIKE_THRESH=30 → no precursor
-        self.assertFalse(oracle._press_events[0]["has_precursor"])
+        original_thresh = _l2b_mod._IMU_SPIKE_THRESH
+        _l2b_mod._IMU_SPIKE_THRESH = 30.0
+        try:
+            oracle = ImuPressCorrelationOracle()
+            # Set a high baseline (noise floor = 200 LSB)
+            for _ in range(200):
+                oracle._imu_baseline.append(200.0)
+            ts = 1000.0
+            # Small spike that would exceed 30 LSB above 0 baseline but NOT 30 above 200
+            for i in range(100):
+                oracle._imu_history.append((ts - 100.0 + i, 220.0))  # only +20 above 200
+            oracle._record_press(ts)
+            # +20 LSB above baseline=200: below _IMU_SPIKE_THRESH=30 → no precursor
+            self.assertFalse(oracle._press_events[0]["has_precursor"])
+        finally:
+            _l2b_mod._IMU_SPIKE_THRESH = original_thresh
 
     def test_humanity_score_neutral_before_warmup(self):
         """humanity_score() returns 0.5 before _MIN_PRESS_EVENTS."""

@@ -57,13 +57,25 @@ def _load_session_snaps(filename: str, gyro_scale: float = 1.0, max_reports: int
     return snaps
 
 
-def _run_oracle(snaps) -> dict:
-    oracle = ImuPressCorrelationOracle()
-    for s in snaps:
-        oracle.push_snapshot(s)
-    feats = oracle.extract_features()
-    result = oracle.classify()
-    n_press_events = len(oracle._press_events)
+def _run_oracle(snaps, thresh: float) -> dict:
+    """2026-07-22: takes an EXPLICIT threshold rather than relying on whatever
+    the module's current default happens to be. l2b._IMU_SPIKE_THRESH's own
+    default flipped from 30.0 (raw-LSB) to 0.03 (live-scaled) once this
+    investigation's fix shipped -- this script's three-pass narrative (raw vs
+    raw-calibrated / live-scaled vs raw-calibrated / live-scaled vs
+    live-calibrated) only makes sense if each pass pins its OWN threshold,
+    independent of the module default at the time it happens to be run."""
+    original_thresh = l2b._IMU_SPIKE_THRESH
+    l2b._IMU_SPIKE_THRESH = thresh
+    try:
+        oracle = ImuPressCorrelationOracle()
+        for s in snaps:
+            oracle.push_snapshot(s)
+        feats = oracle.extract_features()
+        result = oracle.classify()
+        n_press_events = len(oracle._press_events)
+    finally:
+        l2b._IMU_SPIKE_THRESH = original_thresh
     if feats is None:
         return {"n_press_events": n_press_events, "coupled_fraction": None,
                 "anomaly": None, "fires_0x31": None,
@@ -83,18 +95,18 @@ def replay_session(filename: str) -> dict:
         return {"session": filename, "skipped": "file not found"}
     live_snaps = _load_session_snaps(filename, gyro_scale=1.0 / 1000.0)
 
-    pass1_raw = _run_oracle(raw_snaps)
+    # Pass 1: raw-scale data against the raw-LSB-calibrated threshold (should recover).
+    pass1_raw = _run_oracle(raw_snaps, RAW_THRESH)
 
-    pass2_live_sim = _run_oracle(live_snaps)
+    # Pass 2: live-scaled data against the raw-LSB-calibrated threshold -- reproduces
+    # the ORIGINAL bug this investigation found (should fail), regardless of what the
+    # module's current default is.
+    pass2_live_sim = _run_oracle(live_snaps, RAW_THRESH)
 
-    # Pass 3: patch the module's threshold attribute in-process only (no file edit),
-    # matching grok's Ask 5 Step A instruction not to edit the module constant.
-    original_thresh = l2b._IMU_SPIKE_THRESH
-    l2b._IMU_SPIKE_THRESH = LIVE_THRESH
-    try:
-        pass3_recovery = _run_oracle(live_snaps)
-    finally:
-        l2b._IMU_SPIKE_THRESH = original_thresh
+    # Pass 3: live-scaled data against the live-calibrated threshold (should recover) --
+    # this is what shipped as the module default; pinned explicitly here too so this
+    # script stays self-contained and correct independent of the module's default.
+    pass3_recovery = _run_oracle(live_snaps, LIVE_THRESH)
 
     return {
         "session": filename,
