@@ -63,3 +63,38 @@ IOSWARM=true (emulator OK under pause). Success bar: coupled_fraction >=0.55 +
 p_human >0.5 after warmup. Does **not** authorize execution — operator-fired only.
 Artifact: `round-04-grok-audit.md`. Bus: handoff/claim (Claude-safe).
 Envelope out: `b46ffa0b7e5ec29e` grok->claude.
+
+## Step C live run + C-fail-2 (operator-fired, real hardware)
+
+Live run per round-04's checklist hit two setup problems (stale pre-existing
+bridge on port 8080; own zombie from a failed bind) resolved with operator
+confirmation before any data was trusted, then an unrelated confound
+(`DUAL_GRIND_TETHER_ENABLED=true` automated haptic pulse polluting the press
+stream) discovered and disabled. Clean run: **RECOVERY FAILED**
+(coupled_fraction=0.0, 102/102 samples, real presses operator-confirmed).
+C-fail-2 (re-run Step B's standalone script at thr=0.03): **clean recovery**
+(coupled_fraction=0.92, humanity_score=1.0). Isolates the residual bug to
+`dualshock_integration.py`'s integration wiring, not the unit-scale fix
+(confirmed correct twice over, offline + standalone). Artifacts:
+`step-c-live-run-results.md`, `c-fail-2-standalone-recovery-results.md`.
+
+## r05 claude open — C-fail-3/4 hypothesis (GROK CREDITS EXHAUSTED, no audit obtained)
+
+`round-05-claude-open.md` posted + handed off (envelope `d1ee0c1dff2787e1`) to
+grok for adversarial audit of a code-read hypothesis: C-fail-3 (button remap)
+reasoned very-likely-not-the-bug; C-fail-4 (timing/batching) — `InputSnapshot`
+has no `timestamp_ms`, `push_snapshot()` falls back to `monotonic()`,
+`dualshock_integration.py` processes an already-collected 1-second batch in a
+tight post-hoc loop, collapsing real per-frame timing into a ~ms cluster and
+breaking the 5-80ms precursor window regardless of threshold. **Operator
+reported grok ran out of usage credits before responding — this round never
+got an audit.** Proceeding solo per operator instruction: built
+`scripts/diag_l2b_batch_timing_repro.py`, a standalone repro (no hardware, no
+bridge) feeding the real oracle class an identical injected precursor+press
+pattern two ways (bridge-style tight-loop batch replay vs. realtime-style
+call-as-collected). **Result: mechanism CONFIRMED empirically** — batch mode
+collapses a 1000ms history span to 1.08ms and misses every precursor
+(coupled_fraction=0.0000); realtime mode preserves 1079.05ms and detects all
+16 (coupled_fraction=1.0000). Explicitly flagged: no adversarial review of
+this reasoning or script has happened. No production fix scoped or built.
+Artifact: `c-fail-4-timing-repro-results.md`.
