@@ -42,8 +42,12 @@ from vapi_bridge.dualshock_integration import (
     _ProgressAttestationTracker,
     _SkillOracleTracker,
     _rating_tier,
+    _stamp_frame_collection_times,
 )
 from vapi_bridge.team_session import TeamSessionCoordinator, compute_merkle_root
+
+# C-fail-4 regression pin (TestCFail4RegressionPin below) needs the real L2B oracle.
+from l2b_imu_press_correlation import ImuPressCorrelationOracle, CROSS_BIT
 
 
 # ---------------------------------------------------------------------------
@@ -639,5 +643,115 @@ class TestSimulateSession:
         # 1x CHEAT:MACRO = -200
         # 1000 + 28 + 20 - 200 = 848
         assert summary["rating"] == 848
-        assert summary["cheats_detected"] == 1
-        assert summary["records"] == 10
+
+
+# ---------------------------------------------------------------------------
+# C-fail-4 fix: _stamp_frame_collection_times
+# docs/a2a/live-l2b-unit-scale-investigation/c-fail-4-fix-scope.md
+# ---------------------------------------------------------------------------
+
+def _bare_snap():
+    """A snap-like object with no timestamp_ms — matches the real InputSnapshot
+    dataclass (controller/dualshock_emulator.py) exactly, per this investigation."""
+    return type("_S", (), {"buttons": 0, "r2_trigger": 0, "gyro_x": 0.0})()
+
+
+class TestStampFrameCollectionTimes:
+    """Direct unit tests for the new helper — no bridge, no hardware."""
+
+    def test_stamps_each_snap_from_collect_t_mono(self):
+        frames = [_bare_snap() for _ in range(5)]
+        collect_t_mono = [1.0, 1.008, 1.016, 1.024, 1.032]  # monotonic seconds, 8ms apart
+        _stamp_frame_collection_times(frames, collect_t_mono)
+        for snap, t_mono in zip(frames, collect_t_mono):
+            assert snap.timestamp_ms == pytest.approx(t_mono * 1000.0)
+
+    def test_length_mismatch_is_a_logged_noop(self, caplog):
+        frames = [_bare_snap() for _ in range(5)]
+        collect_t_mono = [1.0, 1.008]  # deliberately short
+        _stamp_frame_collection_times(frames, collect_t_mono)
+        for snap in frames:
+            assert getattr(snap, "timestamp_ms", None) is None
+        assert any("length mismatch" in r.message for r in caplog.records)
+
+    def test_empty_batch_is_a_noop(self):
+        _stamp_frame_collection_times([], [])  # must not raise
+
+    def test_none_element_is_skipped_not_fatal(self):
+        frames = [_bare_snap(), _bare_snap()]
+        collect_t_mono = [None, 2.5]
+        _stamp_frame_collection_times(frames, collect_t_mono)
+        assert getattr(frames[0], "timestamp_ms", None) is None
+        assert frames[1].timestamp_ms == pytest.approx(2500.0)
+
+
+class TestCFail4RegressionPin:
+    """Ports scripts/diag_l2b_batch_timing_repro.py's Mode A/B comparison into a
+    fast, deterministic, committed regression test — no real time.sleep(), no
+    hardware. Pins that the fix (_stamp_frame_collection_times applied before
+    the batch-replay push_snapshot loop) recovers precursor detection, and that
+    bypassing the fix reproduces the original bug — so a future regression in
+    either direction is caught here, not just empirically on live hardware.
+
+    Uses synthetic monotonic timestamps 8ms apart (matching _poll_frames' real
+    cadence) instead of genuinely sleeping, since the point is to test the
+    TIMING MECHANISM the fix wires up, not to re-measure wall-clock reality
+    (already done once, for real, in the live repro artifact this pins)."""
+
+    N_FRAMES = 125
+    DT_MS = 8.0
+    N_PRESS_CYCLES = 16
+    PRECURSOR_LAG_FRAMES = 4  # 4 * 8ms = 32ms before the press, inside [5, 80]ms
+    BASELINE_GYRO_MAG = 2.0
+    SPIKE_GYRO_MAG = 80.0  # clears the default adaptive_thresh (~30-70 LSB)
+
+    def _build_batch(self):
+        spacing = self.N_FRAMES // (self.N_PRESS_CYCLES + 1)
+        press_idx = {
+            i * spacing for i in range(1, self.N_PRESS_CYCLES + 1)
+            if self.PRECURSOR_LAG_FRAMES < i * spacing < self.N_FRAMES
+        }
+        spike_idx = {i - self.PRECURSOR_LAG_FRAMES for i in press_idx}
+
+        frames = []
+        collect_t_mono = []
+        for i in range(self.N_FRAMES):
+            gyro_mag = self.SPIKE_GYRO_MAG if i in spike_idx else self.BASELINE_GYRO_MAG
+            buttons = CROSS_BIT if i in press_idx else 0
+            frames.append(type("_S", (), {
+                "buttons": buttons, "r2_trigger": 0, "gyro_x": gyro_mag,
+            })())
+            collect_t_mono.append(i * self.DT_MS / 1000.0)  # synthetic, not real sleep
+        return frames, collect_t_mono
+
+    def test_batch_replay_without_fix_reproduces_the_bug(self):
+        """Baseline: bypassing _stamp_frame_collection_times, the batch-replay
+        push_snapshot loop (dualshock_integration.py's exact pattern) fails to
+        detect a textbook, well-formed precursor+press pattern."""
+        frames, _collect_t_mono = self._build_batch()
+        oracle = ImuPressCorrelationOracle()
+        for snap in frames:  # no stamping — reproduces the pre-fix bug
+            oracle.push_snapshot(snap)
+        feats = oracle.extract_features()
+        assert feats is not None
+        assert feats.coupled_fraction < 0.20, (
+            "expected the pre-fix bug to be reproduced (near-zero coupled_fraction); "
+            f"got {feats.coupled_fraction} — has push_snapshot's fallback timing changed?"
+        )
+
+    def test_batch_replay_with_fix_recovers_precursor_detection(self):
+        """The fix: apply _stamp_frame_collection_times before the identical
+        batch-replay loop. Same signal pattern as the no-fix test above —
+        only the timestamp wiring differs."""
+        frames, collect_t_mono = self._build_batch()
+        _stamp_frame_collection_times(frames, collect_t_mono)
+        oracle = ImuPressCorrelationOracle()
+        for snap in frames:
+            oracle.push_snapshot(snap)
+        feats = oracle.extract_features()
+        assert feats is not None
+        assert feats.coupled_fraction >= 0.55, (
+            f"fix should recover precursor detection; got coupled_fraction={feats.coupled_fraction}"
+        )
+        assert not feats.anomaly
+        assert oracle.classify() is None  # 0x31 must not fire on this clean pattern

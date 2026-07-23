@@ -1,0 +1,10 @@
+{
+  "duration_s": 90.0,
+  "n_non_null_samples": 74,
+  "fires_0x31_total": 0,
+  "fires_0x31_in_last5": 0,
+  "median_coupled_fraction_last5": 0.751412429378531,
+  "median_p_human_last5": 1.0,
+  "verdict": "RECOVERY CONFIRMED",
+  "notes": "First live run with the C-fail-4 code fix applied (dualshock_integration.py: _stamp_frame_collection_times wired into _session_loop). Real DualSense Edge connected (not simulation mode -- an earlier attempt in this same verification pass accidentally ran against a stale sim_mode=True bridge process that started before the controller was connected; caught before trusting it, bridge restarted, this is the clean re-run). coupled_fraction climbed from ~0.65 to ~0.75 over the 90s window and 0x31 never fired once across 74 non-null samples."
+}
