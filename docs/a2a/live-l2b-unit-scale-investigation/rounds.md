@@ -98,3 +98,46 @@ collapses a 1000ms history span to 1.08ms and misses every precursor
 16 (coupled_fraction=1.0000). Explicitly flagged: no adversarial review of
 this reasoning or script has happened. No production fix scoped or built.
 Artifact: `c-fail-4-timing-repro-results.md`.
+
+## C-fail-4 fix built, live-verified, and shipped as default — investigation CLOSED
+
+Scoped (`c-fail-4-fix-scope.md`), built (`_stamp_frame_collection_times` wired
+into `_session_loop`, dynamic-attribute approach, operator-selected), and
+live-verified against the real bridge + real controller
+(`c-fail-4-fix-live-verification-results.md`): 90s run, 74/74 non-null
+samples, `coupled_fraction` climbing 0.65→0.75, zero `0x31` fires. Caught and
+corrected a real near-miss mid-verification — a first bridge launch silently
+fell into simulation mode (started before the controller's USB was
+reconnected) and was caught by reading the startup log before trusting the
+data, not assumed clean from a working HTTP bind alone.
+
+`L2B_IMU_SPIKE_THRESH` then shipped as `0.03` **by default** in
+`controller/l2b_imu_press_correlation.py` (was `30.0`, raw-LSB-calibrated;
+live production needs live-scaled units) — closing the loop from a
+process-scoped override to a permanent fix. This surfaced a real,
+foreseeable-but-unaddressed regression: the module constant serves TWO unit
+systems (raw-LSB historical corpus vs. live-scaled production), and one
+existing test (`test_adaptive_threshold_tracks_baseline`) implicitly assumed
+the old raw-LSB default — fixed by making it explicitly patch to `30.0` for
+its raw-LSB scenario, matching the new default's own documented convention
+for raw-LSB callers. `scripts/diag_l2b_unit_scale_replay.py` (Step A) had the
+same latent issue in the opposite direction (its 3-pass narrative implicitly
+depended on the OLD default for passes 1-2) — fixed to pin an explicit
+threshold per pass, independent of whatever the module default currently is;
+re-ran on the original qualifying session and reproduced byte-identical
+results to the original historical artifact, confirming the fix didn't
+change behavior, only removed an implicit dependency. C-fail-4's own
+regression pin and the offline adapter's independent pin were checked and
+confirmed unaffected (different failure mechanism / independently-defined
+constants, respectively) rather than assumed safe.
+
+125 tests green across every L2B/L2C/dualshock_integration/offline-adapter
+file touched by this investigation; PV-CI 184 unchanged throughout.
+
+**Investigation status: CLOSED.** L2B works correctly end-to-end in
+production. Remaining honest residuals, explicitly not closed by this: no
+grok adversarial audit ever happened on C-fail-3/4 or either fix (credits
+exhausted mid-investigation); L5's possible shared timing exposure (it never
+checks `timestamp_ms` at all, a different and *more* exposed pattern than
+L2B/L2C's try-then-fallback) remains untouched and unstarted, its own future
+investigation.

@@ -52,11 +52,34 @@ _PRECURSOR_WINDOW_MS: float = float(_os.getenv("L2B_PRECURSOR_WINDOW_MS", "80.0"
 _PRECURSOR_MIN_MS: float = float(_os.getenv("L2B_PRECURSOR_MIN_MS", "5.0"))
 """Minimum precursor lag (ms) — same-frame coincidences excluded."""
 
-_IMU_SPIKE_THRESH: float = float(_os.getenv("L2B_IMU_SPIKE_THRESH", "30.0"))
+_IMU_SPIKE_THRESH: float = float(_os.getenv("L2B_IMU_SPIKE_THRESH", "0.03"))
 """
-gyro_mag (LSB) delta above rolling baseline to count as an IMU micro-impulse.
-Hardware-calibrated: human hand micro-impulse at 1000Hz = 50-200 LSB peak.
-Baseline (resting gyro_mag) ~20-40 LSB. Threshold set conservatively at +30 LSB.
+gyro_mag delta above rolling baseline to count as an IMU micro-impulse, in
+LIVE-scaled units (raw int16 gyro / 1000.0 — the convention the real
+DualSense Edge hardware path uses, controller/dualshock_emulator.py's
+DualSenseReader.poll(), both real-hardware population branches).
+
+2026-07-22 unit-scale investigation (docs/a2a/live-l2b-unit-scale-investigation/):
+this default was 30.0 (raw int16 LSB units — human micro-impulse at 1000Hz =
+50-200 LSB peak, baseline ~20-40 LSB) from Phase 17 through the discovery of
+a live-production bug: the oracle's threshold was calibrated in raw LSB while
+the live hardware path fed it /1000.0-scaled gyro (~0.05-0.2 scaled units for
+the same real micro-impulse), making the threshold structurally unreachable
+in production — confirmed via code trace, offline replay, and a live probe
+with a real controller (round-01 through Step C). 0.03 = 30.0/1000.0 is the
+SAME physical sensitivity, expressed in the units live data actually arrives
+in. Live-verified end to end after the companion C-fail-4 timing fix:
+coupled_fraction recovered from a flat 0.0 (100% of samples, every session)
+to 0.65-0.75 on real presses with zero false 0x31 fires
+(c-fail-4-fix-live-verification-results.md).
+
+RAW-LSB CALLERS (historical session corpus sessions/human/hw_*.json, the
+Phase 17 validation set, and any code replaying that data) must explicitly
+set L2B_IMU_SPIKE_THRESH=30.0 (or patch this module's _IMU_SPIKE_THRESH
+attribute directly) — this module-level constant cannot serve both unit
+systems at once, and the default now matches live production, not the
+historical raw-LSB corpus. scripts/diag_l2b_unit_scale_replay.py's raw pass
+does this explicitly rather than relying on the module default.
 """
 
 _MIN_PRESS_EVENTS: int = 15
