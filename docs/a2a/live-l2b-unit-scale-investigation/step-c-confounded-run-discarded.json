@@ -1,0 +1,8 @@
+{
+  "duration_s": 180.0,
+  "n_non_null_samples": 136,
+  "fires_0x31_total": 0,
+  "median_coupled_fraction_last5": 0.0,
+  "verdict": "DISCARDED -- confounded by DUAL_GRIND_TETHER_ENABLED=true (bridge/.env default), not a real Step C measurement",
+  "discovery": "inference=0x32 (L2C) firing on every sample at a suspiciously regular ~1.2-1.3s cadence matching the Cycle25 tether duty cycle; grep of dualshock_integration.py confirmed an automated adaptive-trigger haptic pulse fires on that schedule to keep the Edge wireless-anchored to the PS5 during dual-connection play -- an unrelated confound neither round-03 nor round-04 anticipated."
+}
