@@ -306,6 +306,56 @@ def _classify_l6b_batch(
     return pre_entries, post_entries
 
 
+def _stamp_frame_collection_times(frames: list, collect_t_mono: list) -> None:
+    """C-fail-4 fix (docs/a2a/live-l2b-unit-scale-investigation/c-fail-4-fix-scope.md):
+    stamp each snap's timestamp_ms from its REAL HID-collection time, before the
+    L2B/L2C oracle-feeding loops run.
+
+    InputSnapshot has no timestamp_ms field. ImuPressCorrelationOracle.push_snapshot()
+    and StickImuCorrelationOracle.push_snapshot() both fall back to
+    time.monotonic()*1000.0 when the attribute is absent — fine for a real-time
+    caller (one push_snapshot() per actual poll), but `_session_loop` feeds an
+    ALREADY-COLLECTED ~1s batch through both oracles in a tight, synchronous loop
+    that completes in low-single-digit milliseconds. Every fallback timestamp in
+    that loop then clusters within a few ms of each other instead of spanning the
+    true ~1s the frames were actually collected over, which deterministically
+    breaks L2B's 5-80ms precursor window (empirically confirmed,
+    c-fail-4-timing-repro-results.md: batch-style processing collapses a 1000ms
+    real span to 1.08ms and misses every precursor; realtime-style processing,
+    with real per-frame timing, spans 1079ms and detects all of them).
+
+    `_poll_frames()` already computes the correct per-frame collection time
+    (`collect_t_mono`, "stamped the instant the HID read returns" — the same
+    source `_classify_l6b_batch` already trusts for the L6B path) but never
+    wired it into L2B/L2C until now.
+
+    Mutates `frames` in place (InputSnapshot is a plain, non-frozen, non-slotted
+    dataclass — setting an attribute it doesn't formally declare works and is
+    immediately visible to `getattr(snap, "timestamp_ms", None)` in both
+    oracles). No effect on the 228B PoAC wire or any FROZEN commitment:
+    `serialize()`, `_make_record()`, `_build_ewc_session_vec()`, and
+    `AntiCheatClassifier.extract_features()` were all checked and none of them
+    read `snap.timestamp_ms`.
+
+    `collect_t_mono` must be 1:1 index-aligned with `frames` (as `_poll_frames`
+    produces it). A length mismatch is a no-op (frames keep whatever default/
+    absent timestamp_ms they had) and is logged — must never silently degrade
+    without a trace, matching `_classify_l6b_batch`'s discipline for the same
+    `collect_t_mono` source.
+    """
+    if len(collect_t_mono) != len(frames):
+        log.warning(
+            "L2B/L2C: frame_collect_t_mono length mismatch (%d stamps for %d frames) — "
+            "skipping timestamp stamping for this batch (oracles fall back to "
+            "call-time monotonic(), same as before this fix)",
+            len(collect_t_mono), len(frames),
+        )
+        return
+    for _snap, _t_mono in zip(frames, collect_t_mono):
+        if _t_mono is not None:
+            _snap.timestamp_ms = _t_mono * 1000.0
+
+
 class PoepFireRefused(RuntimeError):
     """POEP-HID-RING: a nonce-bound fire request was refused (gate closed / busy / bad input).
 
@@ -1829,6 +1879,10 @@ class DualShockTransport:
                 self._refresh_retina_policy()
                 await self._handle_poll_failure("poll_error")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
+
+            # C-fail-4 fix: stamp real per-frame collection time onto each snap BEFORE the
+            # L2B/L2C oracle-feeding loops run below — see _stamp_frame_collection_times().
+            _stamp_frame_collection_times(frames, getattr(self, "_frame_collect_t_mono", []))
 
             # Phase 235-PCC-SPC: read previous-cycle game-context for SPC haptic-tolerance binding.
             # The previous cycle's haptic event temporally precedes the current rate observation,
