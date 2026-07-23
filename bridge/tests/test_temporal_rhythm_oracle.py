@@ -19,6 +19,7 @@ import numpy as np
 # Pattern C: insert controller/ so temporal_rhythm_oracle can be imported directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "controller"))
 
+import temporal_rhythm_oracle as _l5_mod
 from temporal_rhythm_oracle import (
     CROSS_BIT,
     INFER_TEMPORAL_ANOMALY,
@@ -509,6 +510,80 @@ class TestMultiButtonPhase39(unittest.TestCase):
         code, conf = result
         self.assertEqual(code, INFER_TEMPORAL_ANOMALY)
         self.assertGreaterEqual(conf, 205)
+
+
+# ---------------------------------------------------------------------------
+# Group 7: L5 timing-exposure fix
+# docs/a2a/l5-timing-exposure-investigation/findings.md
+#
+# push_snapshot() now prefers snap.timestamp_ms (the real per-frame HID
+# collection time C-fail-4 stamps onto every live snap) over call-time
+# monotonic(), mirroring L2B/L2C's own getattr-then-fallback pattern. These
+# tests pin the MECHANISM directly (does timestamp_ms win when present; does
+# the monotonic() fallback still work identically when absent) rather than
+# re-deriving the full CV/entropy/quantization divergence already
+# empirically demonstrated in scripts/diag_l5_batch_timing_repro.py.
+# ---------------------------------------------------------------------------
+
+def _snap_cross_ts(pressed: bool, timestamp_ms: float | None = None):
+    """Cross-button snap, optionally carrying an explicit timestamp_ms."""
+    attrs = {"buttons": CROSS_BIT if pressed else 0, "r2_trigger": 0, "l2_trigger": 0}
+    if timestamp_ms is not None:
+        attrs["timestamp_ms"] = timestamp_ms
+    return type("_S", (), attrs)()
+
+
+class TestL5TimingExposureFix(unittest.TestCase):
+
+    def test_timestamp_ms_wins_over_collapsed_monotonic(self):
+        """The core mechanism: two presses with a TRUE 400ms gap, but pushed
+        while monotonic() is mocked to return nearly-identical collapsed
+        values (simulating dualshock_integration.py's tight batch-replay
+        loop) -- with timestamp_ms provided, the recorded interval must
+        reflect the TRUE 400ms gap, not the collapsed monotonic() one."""
+        original_monotonic = _l5_mod._time.monotonic
+        try:
+            # Both calls return essentially the same instant, as a tight
+            # processing loop would -- this is exactly what caused the bug
+            # when timestamp_ms was ignored.
+            _l5_mod._time.monotonic = lambda: 1000.000123
+            oracle = TemporalRhythmOracle()
+            oracle.push_snapshot(_snap_cross_ts(False, timestamp_ms=1000.0))
+            oracle.push_snapshot(_snap_cross_ts(True, timestamp_ms=1000.0))   # arm state
+            oracle.push_snapshot(_snap_cross_ts(False, timestamp_ms=1400.0))
+            oracle.push_snapshot(_snap_cross_ts(True, timestamp_ms=1400.0))   # true gap = 400ms
+        finally:
+            _l5_mod._time.monotonic = original_monotonic
+
+        self.assertEqual(len(oracle._cross_intervals), 1)
+        self.assertAlmostEqual(oracle._cross_intervals[0], 400.0, places=3)
+
+    def test_monotonic_fallback_unchanged_when_timestamp_ms_absent(self):
+        """Backward compatibility: snaps without timestamp_ms (matching the
+        existing _Snap test factory in this file, and any caller that
+        doesn't provide it) must still fall back to monotonic() exactly as
+        before this fix -- proves the fix is additive, not a behavior
+        change for the existing test suite's own snap factory."""
+        original_monotonic = _l5_mod._time.monotonic
+        try:
+            calls = iter([2000.0, 2000.0, 2000.35, 2000.35])  # seconds; ms = *1000
+            _l5_mod._time.monotonic = lambda: next(calls)
+            oracle = TemporalRhythmOracle()
+            oracle.push_snapshot(_snap_cross_ts(False))
+            oracle.push_snapshot(_snap_cross_ts(True))
+            oracle.push_snapshot(_snap_cross_ts(False))
+            oracle.push_snapshot(_snap_cross_ts(True))
+        finally:
+            _l5_mod._time.monotonic = original_monotonic
+
+        self.assertEqual(len(oracle._cross_intervals), 1)
+        self.assertAlmostEqual(oracle._cross_intervals[0], 350.0, places=3)
+
+    def test_existing_snap_factory_still_exercises_the_fallback_path(self):
+        """Sanity check: _snap_cross (this file's pre-existing factory, used
+        by every other TestPushSnapshot test) never sets timestamp_ms, so
+        this fix must not change its behavior at all."""
+        self.assertFalse(hasattr(_snap_cross(True), "timestamp_ms"))
 
 
 if __name__ == "__main__":
