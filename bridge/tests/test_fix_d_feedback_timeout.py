@@ -159,6 +159,13 @@ def test_4_renewal_publish_sync_has_source():
     cfg.agent_dry_run_mode = True   # dry_run → no real chain call
     cfg.vhp_renewal_warning_days = 7
     cfg.ioswarm_renewal_enabled = False  # Phase 109B guard — prevents MagicMock truthy from routing to coordinator
+    # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): same MagicMock-truthiness
+    # trap as the ioswarm guard above, just for the newer Phase B ③ enforcement gate --
+    # a bare MagicMock() auto-vivifies ANY attribute as truthy, so without this explicit
+    # False, `_enforce = getattr(cfg, "ipact_renewal_enforcement_enabled", False)` reads
+    # as True, _obtain_reattest_proof() (unmocked, returns None) makes the loop `continue`
+    # before ever reaching publish_sync("vhp_renewed", ...).
+    cfg.ipact_renewal_enforcement_enabled = False
 
     agent = VHPRenewalAgent(cfg=cfg, store=store, chain=chain, bus=bus)
 
