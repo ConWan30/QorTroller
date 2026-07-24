@@ -29,7 +29,7 @@ from .poep_derisk import _fire, _stop, _test_write, in_human_band
 from .poep_force import capture_force_trial, summarize_force_auth
 
 _DOMAIN = b"QORTROLLER-POEP-v0"
-_trapz = getattr(np, "trapezoid", getattr(np, "trapz"))  # np.trapz deprecated -> trapezoid
+_trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz  # np.trapz deprecated -> trapezoid
 _STICK_DELTA = 40
 _TRIG_PRESS = 64
 _FEATURE_KEYS = ("reaction_latency_ms", "peak_stick_deflection", "peak_r2",

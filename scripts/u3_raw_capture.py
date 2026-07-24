@@ -21,8 +21,11 @@ import sys
 import threading
 import time
 
-import cv2
-import hid
+# cv2/hid are hardware/capture-only deps, deliberately NOT imported at module level:
+# parse_imu() and the OFF_* offset constants below are pure (no hardware I/O) and are
+# unit-tested directly (bridge/tests/test_u3_raw_capture_imu.py) without a capture card
+# or controller attached, and without cv2/hidapi installed. Deferred into run()'s nested
+# hid_reader()/frame_reader() closures, the only places that actually touch hardware.
 
 DS_VID = 0x054C
 DS_EDGE_PID = 0x0DF2
@@ -64,6 +67,7 @@ def run(out_dir: str, duration_s: float, vid: int = DS_VID, pid: int = DS_EDGE_P
 
     def hid_reader() -> None:
         try:
+            import hid
             h = hid.device()
             h.open(vid, pid)
             h.set_nonblocking(True)
@@ -99,6 +103,7 @@ def run(out_dir: str, duration_s: float, vid: int = DS_VID, pid: int = DS_EDGE_P
         h.close()
 
     def frame_reader() -> None:
+        import cv2
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
@@ -146,9 +151,25 @@ def main() -> None:
     ap.add_argument("duration_s", type=float, nargs="?", default=240.0)
     ap.add_argument("--vid", type=lambda x: int(x, 0), default=DS_VID)
     ap.add_argument("--pid", type=lambda x: int(x, 0), default=DS_EDGE_PID)
+    ap.add_argument("--force", action="store_true",
+                    help="allow overwriting an out_dir that already has a real capture in it")
     args = ap.parse_args()
-    run(args.out_dir, args.duration_s, args.vid, args.pid)
-    os._exit(0)  # hard-exit: non-daemon-safe cleanup of hid/cv2 handles across threads
+
+    # Guard against silently clobbering a real capture (2026-07-22 incident: a diagnostic re-run
+    # into the same out_dir truncated hid_events.jsonl from 45170 real rows down to a 5s test,
+    # destroying the only copy of that session's HID data). hid_events.jsonl is opened in "w" mode
+    # every run, so ANY existing non-trivial one here would be silently destroyed without this check.
+    hid_path = os.path.join(args.out_dir, "hid_events.jsonl")
+    if not args.force and os.path.isfile(hid_path) and os.path.getsize(hid_path) > 1024:
+        print(f"REFUSING to overwrite existing capture: {hid_path} "
+              f"({os.path.getsize(hid_path)} bytes already there). "
+              f"Use a new out_dir, or pass --force if you really mean to clobber it.")
+        sys.exit(2)
+
+    manifest = run(args.out_dir, args.duration_s, args.vid, args.pid)
+    sys.stdout.flush()          # both reader threads are daemon=True; a clean return is enough to
+    sys.stderr.flush()          # exit, but stdout/stderr must be flushed BEFORE returning or a
+    print(json.dumps(manifest, indent=2))  # host wrapper reading captured output sees nothing.
 
 
 if __name__ == "__main__":
