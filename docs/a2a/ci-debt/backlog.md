@@ -33,6 +33,39 @@ be the already-documented CLAUDE.md flake F-DECON2-5, marked
 `test_chain_reconciler.py` was investigated and is recorded below as a real,
 deeper finding — not fixed, not guessed at.
 
+**Update, third pass (`fix/ci-debt-backlog`, same branch, continued
+operator-directed close-out):** closed 8 more items — a one-test gap in the
+touchpad_filter skip-marker rollout (1, `test_phase140_probe_comparison.py`
+was the only sibling of 24 similarly-marked tests across 9 files that never
+got the marker), a Phase 195 protocol-maturity-scoring rebalance the tests
+never caught up to (2, `test_phase191_tsp.py`), a missing `sys.path` insert
+plus an uninitialized test-double attribute (2, `test_retina_adaptive_lag.py`),
+a MagicMock-truthiness trap on a newer config flag mirroring an existing
+guard two lines above it (1, `test_fix_d_feedback_timeout.py`), the same
+`CONTRADICTION_RULES` count drift as the second pass's coherence-rule fix
+but independently pinned in a second file (1, `test_cfss_drift_sweeper_integration.py`),
+and a test that predates a later, deliberate dry-run-aware guard in
+`Config.validate()` (1, `test_chain_keystore.py` — not previously in this
+backlog at all, surfaced only by a full-suite re-run). `test_qortroller_cli.py`
+and `test_qortroller_retina_capture.py` were investigated, found to pass
+both standalone and under a real full-suite run, and are removed from the
+list below with no code change (order-dependence suspected, apparently
+already resolved as a side effect of an earlier fix in this pass; not
+chased further since there was nothing left to reproduce). `test_uvc_source.py`
+was investigated — no fragile/version-sensitive assertions found on
+inspection, still not reproducible locally — and is left as-is alongside
+`test_dag_r07_forge.py` in the same "genuinely can't verify without the CI
+environment" category. `test_vsd_harness.py` was investigated in depth and
+is recorded in its own new section below as a real, unresolved cryptographic-
+provenance finding — not a test bug, not fixed.
+
+**The ioID cluster (previously "not confirmed... consistent with a
+mock-setup gap") required two rounds to actually close, and the first round's
+own verification claim was wrong** — see the rewritten section below for the
+full account, kept deliberately un-sanitized because the failure mode (a
+commit message claiming "full-suite collection clean" without having actually
+run the full suite) is exactly the kind of thing this backlog exists to catch.
+
 ## Named separately, not part of this backlog (operator instruction)
 
 **`bridge/tests/test_verify_provenance_dag.py::test_real_m17_index_verifies_cold`**
@@ -96,6 +129,37 @@ marked skip -- an assertion that a security-relevant firmware rewrite
 landed, when it apparently didn't, is exactly the kind of gap that
 shouldn't get quietly suppressed by loosening the test.
 
+**`bridge/tests/test_vsd_harness.py::test_seeded_vault_passes_if_present`**
+(found during the third pass, 2026-07-24) — a genuine cryptographic-provenance
+finding in the VSD (Verified Synthesis Discipline) content vault, not a code
+bug. The harness reports a HIGH-severity `VSD-2` finding on
+`vsd-vault/notes/claim/c-cert-scope-is-regime-label.md`: "note bytes changed
+since signing (canonical hash mismatch)". Traced to root cause via direct
+execution of `vsd_provenance.verify_note()`, not just the test's own error
+string: `note_canonical_hash()` is `SHA-256(Path(note_path).read_bytes())` —
+raw bytes, no line-ending normalization by design (`vsd-vault/.vsd/vsd_provenance.py:45-47`).
+A repo-root `.gitattributes` rule (`vsd-vault/notes/**/*.md text eol=crlf`)
+exists specifically to make this deterministic across platforms — its own
+comment names an identical prior incident ("this is what stranded cycle
+49 before 2026-06-28"). Scanned every tracked note against its manifest
+(73 notes checked): **12 fail, all and only the cycle-57 batch** (commit
+`c212708f`, "land cycle 57 — dev-cert investigation synthesis" — 9 claim +
+2 ingredient + 1 synthesis, exactly matching that commit's own stated
+composition); the other 61 notes verify cleanly. This means the `.gitattributes`
+mitigation did not fully protect cycle 57's signing pass specifically —
+its 12 manifests were apparently signed against bytes that don't match any
+reproducible checkout of the current git blobs under the documented policy.
+**Not fixed, not fixable by this pass:** VSD-2 exists specifically to detect
+this class of drift via Ed25519 signature over the architect key
+(`vsd-vault/manifests/notes/*/*.manifest.json`), and the project's own stated
+discipline is that "the loop never forges the architect signature" — I have
+no access to that key and would not use it here even if I did. The correct
+remediation is almost certainly re-running the VSD synthesizer's signing
+step for these 12 notes specifically (an architect/operator action), not a
+test change. Left honestly red rather than loosened, skipped, or worked
+around — same posture as `test_chain_reconciler.py` and
+`test_daemon_health_monitor.py` above.
+
 ## Reclassified during D-OPS-2 (was going to be marked "missing artifact",
 ## turned out to need real investigation instead)
 
@@ -128,15 +192,72 @@ Grouped by apparent shared cause where the failure text suggests one,
 without confirming any of these by direct investigation:
 
 **ioID ceremony test cluster (14 tests, `test_controller_ioid_registration.py`)
-+ 1 related (`test_controller_ceremony.py::test_transfer_topic0_is_canonical_erc721`):**
-all fail with `MagicMock`-shaped errors (`TypeError: fromhex() argument must
-be str, not MagicMock`, `TypeError: Object of type MagicMock is not JSON
-serializable`, etc.) — consistent with a mock-setup gap specific to a fresh
-CI environment rather than a logic bug in the ceremony code itself (this
++ 2 related (`test_controller_ceremony.py::test_transfer_topic0_is_canonical_erc721`,
+`test_operator_session_register_agents.py` x2) — RESOLVED, but took two
+rounds; round 1's own verification claim was wrong, recorded here rather
+than quietly corrected:**
+
+All 17 failed with `MagicMock`-shaped errors (`TypeError: fromhex() argument
+must be str, not MagicMock`, `TypeError: Object of type MagicMock is not
+JSON serializable`) — not a logic bug in the ceremony code (this
 functionality is live and working on-chain per CLAUDE.md's ioID ceremony
-NOTE), but not confirmed. These are also the tests that don't exist at all
-on `main` (18 net-new test functions added on this branch) — new-feature
-coverage, not a regression, but currently red in CI.
+NOTE), but a test-isolation leak: dozens of other files in this suite stub
+`web3`/`eth_account` for their own speed/isolation with no cleanup, and
+whichever gets collected first poisons every later import in the same
+pytest process.
+
+Round 1 (commit `2f8bb8c7`) added a guard —
+`if isinstance(sys.modules.get(name), MagicMock): del sys.modules[name]`
+for `"web3"`/`"eth_account"` — verified against one specific known-poisoning
+file and claimed in its own commit message "Full-suite collection clean
+(6352 tests)." **That claim was false.** A subsequent real full-suite run
+(same session) showed all 15 originally-targeted tests still failing with
+identical signatures, plus the 2 in `test_operator_session_register_agents.py`
+(same error class, never even targeted by that commit).
+
+Root cause of why round 1 was too narrow, confirmed by direct reproduction
+of both mechanisms rather than guessed:
+1. At least 17 files stub the web3 tree with a genuine `types.ModuleType("web3")`
+   instance plus a hand-rolled stub class bolted onto its `.Web3` attribute
+   (`test_phase224.py:31-42` is one) — not a `MagicMock` instance, so
+   `isinstance(..., MagicMock)` never catches it.
+2. At least 38 files poison individual dotted submodules directly
+   (`web3.exceptions`, `web3.middleware`, `eth_account.messages`, ...).
+   Deleting only the two bare top-level keys doesn't touch these —
+   `web3/__init__.py`'s own `from web3.main import Web3` finds the stale
+   cached submodule and reuses it instead of re-executing fresh.
+3. The production modules themselves (`vapi_bridge.controller_ioid_registration`,
+   `bridge.scripts.operator_session_register_agents`) do `from web3 import
+   Web3` / `from eth_account import Account` at their own module level. If
+   already imported by an earlier-collected file while poisoned, their
+   cached bindings stay poisoned regardless of how clean `sys.modules["web3"]`
+   is by the time a later test file's guard runs.
+
+Round 2 (commit `2545a1f8`) purges every `sys.modules` key that *is or
+starts with* `"web3."`/`"eth_account."` (the whole namespace tree, not two
+exact keys) plus force-refreshes the specific production modules each test
+file depends on. Verified by reproducing the exact round-1-defeating
+mechanism directly (confirmed the old guard fails against it, confirmed the
+new one fixes it), then running all three files standalone (62+47 passed)
+and in combination after five different known-poisoning files collected
+first (129 passed).
+
+**Full-suite confirmation, done properly this time (learning applied from
+round 1's mistake):** a fresh, isolated-worktree full-suite run (submodule
+initialized, Hardhat artifacts compiled — the two environment gaps that
+produced 5 misleading results in an earlier pass of this same
+verification, all traced to worktree setup and none to the code, see the
+submodule-masking pattern section below) confirmed **all 17 targeted tests
+pass** with **zero regressions** (nothing that was passing is now failing)
+and **zero new failures** beyond the already-documented pre-existing set.
+A second, fully-clean pass (both environment gaps closed from the start)
+was launched to produce a single authoritative tally rather than the
+reconciled-from-two-partial-runs arithmetic above — **run in progress as
+of this commit; this paragraph will be updated with the final numbers and
+a link to the run artifacts once it completes.** Not blocking this PR's
+open — the per-test evidence above is already solid confirmation of the
+fix itself; this last run is about getting one clean authoritative number
+for the record, not about doubting the fix.
 
 **Endpoint 500-vs-200 pair:** `test_phase129_separation_breakthrough.py::test_7_endpoint_5_keys`,
 `test_phase134_separation_ratio_strategies.py::test_8_auto_snapshot_status_5_keys`
@@ -147,14 +268,20 @@ possibly same root cause across both tests; not investigated further.
 counts assert 0 where 1/5 expected — looks like a wiring/subscription setup
 issue, not investigated.
 
-**Coherence rule count drift (3 tests, `test_coherence_rule_loader.py`):**
-asserts specific rule counts (18, 28 contradiction rules, etc.) against a
-live-loaded rule set that has apparently grown — likely the same *class* of
-staleness as the Cat 2 fixes in this PR (a hardcoded count that moved), but
-the correct new numbers weren't verified, so left alone rather than guessed.
-CLAUDE.md's own "green-main gate reconcile" note already documents
-`FSCA CONTRADICTION_RULES==28` as a separately pre-existing flake — this may
-be the same one resurfacing, or may be a different assertion; not confirmed.
+**Coherence rule count drift — RESOLVED (2nd + 3rd pass):**
+`test_coherence_rule_loader.py` (3 tests: 41→43, 28→30, 42→44, second pass)
+and, independently, `test_cfss_drift_sweeper_integration.py::test_t_cfss_int_10_total_rule_count`
+(28→30, third pass — a second, separate file pinning the same
+`CONTRADICTION_RULES` count, found only by a full-suite re-run since it
+wasn't part of the original per-file breakdown). Both are exactly the
+`FSCA CONTRADICTION_RULES==28` flake CLAUDE.md's "green-main gate reconcile"
+note already named as pre-existing — confirmed the same one, not a
+different assertion. Live count checked directly against production
+(`len(fleet_signal_coherence_agent.CONTRADICTION_RULES)`) before bumping
+either file, and cross-checked against the other three files that already
+correctly assert 30 (`test_phase204_ioswarm_contradiction.py`,
+`test_phase_238_curator_fsca_rules.py`, `test_retina_fsca_cross_oracle.py`) —
+no fourth stale copy found.
 
 **Named individually per LANE OPS r-next priority, confirmed pre-existing on
 both `main` and branch (not investigated further in this PR):**
@@ -186,23 +313,26 @@ guessing. Likely correct fix direction: inject an explicit no-op/mock
 governor into these tests rather than relying on the lazy-construction
 fallback path -- not attempted, would need its own verification pass.
 
-**Remaining individual items, no shared pattern identified:**
+**Remaining individual items, no shared pattern identified — everything
+else in this list was resolved across the second and third passes (see
+above) or moved to its own dedicated section (`test_vsd_harness.py`, above).
+What's left, genuinely unresolved:**
 `test_dag_r07_forge.py` (3 — investigated: passes standalone and in every
 locally-reproducible broad-context combination tried, including running
 after files known to leave process-global side effects; could not
 reproduce the CI failure on this Windows dev machine, plausibly a genuine
 Windows-vs-Linux difference, same caveat class as the HID/XInput cluster
-but not confirmed with the same certainty), `test_fix_d_feedback_timeout.py`
-(1), `test_operator_session_register_agents.py` (2),
-`test_phase140_probe_comparison.py::test_2_probe_comparison_conflicts_with_session_type`
-(1), `test_phase191_tsp.py` (2), `test_qortroller_cli.py` (2),
-`test_qortroller_retina_capture.py::test_save_capture_crops_enabled_writes`
-(1), `test_retina_adaptive_lag.py` (2 — `AttributeError:
-'RetinaGameCapture' object has no attribute '_capture_enabled'`, looks like
-a real rename/refactor gap, not confirmed), `test_uvc_source.py` (2 —
-synthetic-frame optical-flow processing test, ambiguous between a real bug
-and cv2-version/platform-sensitive behavior, not confirmed either way),
-`test_vsd_harness.py::test_seeded_vault_passes_if_present` (1).
+but not confirmed with the same certainty; third pass additionally traced
+this to the same CRLF-checkout-vs-committed-blob mechanism found
+independently in the VSD vault finding above and in
+`test_vbdip_0006_conformance_generator.py` — a Windows-local-only artifact,
+not a real Linux-CI regression, but still not something to silently
+"fix" by changing hash comparisons without operator sign-off), `test_uvc_source.py`
+(2 — synthetic-frame optical-flow processing test; third pass checked for
+fragile/version-sensitive numeric assertions specifically and found none
+(no `pytest.approx`, no float-magnitude comparisons — only type/count/shape
+checks), which argues somewhat against the cv2-version-drift theory without
+disproving it; still not reproducible locally, still ambiguous, left as-is).
 
 ## Methodology note
 
@@ -251,3 +381,70 @@ dedicated test-isolation sweep at some point — grep for `sys.path.insert`,
 `os.chdir`, and other process-global mutations across `bridge/tests/` and
 check each one is scoped/restored — rather than waiting for a fourth
 instance to surface the hard way.
+
+**The fourth instance did surface, the hard way, in the third pass** (the
+ioID cluster's `sys.modules["web3"/"eth_account"]` leak, full account
+above) — and it adds a second lesson on top of the first: a narrow fix
+verified against one reproduction of a many-shaped bug can look correct and
+still be wrong. Round 1 tested against exactly one poisoning file
+(`test_phase157_fleet_consensus.py`) out of dozens that poison the same
+namespace through at least two other mechanisms the guard's own condition
+(`isinstance(..., MagicMock)` on two exact key names) structurally couldn't
+see. The commit message's "full-suite collection clean" claim was true of
+*collection* (imports didn't error) and false of *execution* (17 tests
+still failed on assertions) — a distinction worth being explicit about in
+any future fix's verification claim. The general shape: when a fix targets
+"a test-isolation leak," verifying it against the *specific* file that
+happened to reproduce the bug in your first repro is necessary but not
+sufficient — the fix needs to be checked against the actual *class* of
+poisoning (every mechanism, not just the first one found), or run against
+real full-suite scale before the verification claim goes in a commit
+message.
+
+## Pattern worth naming, separately: empty/unpopulated submodule masking a
+## real check (not a test-isolation leak — a different failure shape)
+
+Surfaced during the round-2 ioID-fix full-suite re-verification (third
+pass), flagged by LANE RWM r13 (claude-ai) as worth its own category rather
+than folding into the pattern above, because the mechanism is genuinely
+different: the four instances above are all *pollution surviving between
+tests in one process*; this one is *absence silently reading as a pass*.
+
+`bridge/firmware/joypad-os` is a git submodule. `git worktree add` — used
+throughout this pass to isolate verification runs from concurrent edits in
+the live tree — does not initialize submodules by default, so any freshly
+created worktree starts with that directory empty (0 files) unless
+`git submodule update --init` is run explicitly. `test_daemon_health_monitor.py::test_detect_firmware_drift_on_live_repo`
+calls `detect_device_id_firmware_drift(REPO_ROOT)`, which reads
+`bridge/firmware/joypad-os/src/qortroller/atca_signer.c`'s actual content
+to check whether it still computes the superseded `SHA-256(pubkey||serial)`
+device-id formula. Against an empty submodule directory, the detector has
+no file to read and no drift to find — it reported `False` (no drift),
+which looked identical to the check genuinely passing. Three other tests
+in the same isolated-worktree run failed the *opposite* way on the same
+root cause (`INV-FIRMWARE-001`/`002 FILE_NOT_FOUND` against the same
+missing submodule files) — those failed loudly; this one passed silently,
+which is the more dangerous half of the same gap. Confirmed by re-running
+with the submodule properly initialized: the test goes back to failing
+(correctly — the real firmware finding, documented in its own section
+above, is genuinely still open, unrelated to this session's fixes), and
+direct inspection of `atca_signer.c` at the submodule's pinned commit
+confirms the old formula is unambiguously still there (`atcab_sha(sizeof(preimage), preimage, _device_id)`
+over a `pubkey[64B] || serial[9B]` preimage — no partial/transitional
+state, no `keccak`/`SEC1` reference anywhere in the file).
+
+The general shape, worth grepping for specifically in a future audit: any
+check whose pass/fail depends on reading real content from a path that
+could be a submodule, a `.gitignore`'d generated artifact (the
+`AgentRegistry.json` case earlier in this same verification pass — compiled
+by a separate CI step, absent in a bare worktree, causing loud collection
+failures rather than a silent pass, but the same underlying "verification
+environment isn't fully populated" root cause), or any other conditionally-
+present directory is at risk of *absence reading as success* rather than
+*absence reading as an environment error*. The fix isn't code — it's
+verification discipline: any full-suite or isolated-worktree run intended
+to produce a trustworthy pass/fail tally needs `git submodule update --init
+--recursive` and whatever compile/build steps CI runs before pytest (see
+the Hardhat-ordering fix earlier in this pass) as a precondition, not an
+afterthought — otherwise a clean-looking run can be quietly wrong in the
+one direction (false pass) that's hardest to notice.
