@@ -66,6 +66,20 @@ full account, kept deliberately un-sanitized because the failure mode (a
 commit message claiming "full-suite collection clean" without having actually
 run the full suite) is exactly the kind of thing this backlog exists to catch.
 
+**Update, fourth pass (independent code-review of this branch's own PR
+#96, not self-triage):** the review found 2 more items neither the
+original triage nor the third pass caught — a third instance of the
+`agent_calibration.py` copy-paste bug class (`biometric_renewal_entries`
+silently returning a dict's key-count instead of `total_renewals`, real
+but quiet — doesn't crash, just reports the wrong number) and a live,
+100%-reproducible `NameError`→500 in a completely different file
+(`agent_misc.py`'s `GET /agent/usb-stability-status`, broken since
+authoring, never caught because no test exercised the HTTP route). Both
+fixed, commit `3823d8f9`. The review also surfaced a real, unfixed,
+larger-scope exposure (19 other modules sharing the ioID fix's underlying
+web3-import vulnerability class) — recorded in its own section below
+rather than rushed into this pass.
+
 ## Named separately, not part of this backlog (operator instruction)
 
 **`bridge/tests/test_verify_provenance_dag.py::test_real_m17_index_verifies_cold`**
@@ -159,6 +173,48 @@ step for these 12 notes specifically (an architect/operator action), not a
 test change. Left honestly red rather than loosened, skipped, or worked
 around — same posture as `test_chain_reconciler.py` and
 `test_daemon_health_monitor.py` above.
+
+**`bridge/vapi_bridge/operator_api/agent_misc.py::get_usb_stability_status_endpoint`
+(`GET /agent/usb-stability-status`) — found during independent PR review
+of this branch's own PR (#96), fixed (fourth pass):** not a backlog item in
+the original 55 (no test failed on it — see why, below) but a real, live
+production bug of the exact same class as the two already-fixed
+`agent_calibration.py` endpoints: 100% `NameError` → HTTP 500 on every
+real call, since the 2026-06-19 `agent_misc` DECON-2 file-split. The
+return block referenced `_nodes_configured`/`_nodes_healthy`/
+`_emulator_mode`/`_latencies`/`_health_log`/`_t132` — none defined
+anywhere in the function; an orphaned tail from a different,
+ioSwarm-node-shaped endpoint left behind during extraction. `summary =
+store.get_usb_stability_status(...)` was already being computed correctly
+and silently discarded. **Why this one never showed up as a CI failure
+the way the `agent_calibration.py` pair did:** no test exercises the HTTP
+route at all — `test_phase131b_usb_stability.py`'s 6 tests only call
+`store.get_usb_stability_status()` directly, never `TestClient(...).get(...)`
+against the actual endpoint, so the NameError has been unconditionally
+live and undetected by CI since authoring. Fixed to mirror the sibling
+`epoch_window_analytics_status` endpoint's shape immediately above it in
+the same file; added the missing HTTP-level regression test. Commit
+`3823d8f9`.
+
+**Related, NOT fixed — real exposure, bigger scope than a targeted bug
+fix:** the same independent review that found the bug above also found
+that this branch's ioID `web3`/`eth_account` guard fix (`2545a1f8`) is
+narrowly scoped to the 2 production modules whose tests happened to be
+failing (`vapi_bridge.controller_ioid_registration`,
+`bridge.scripts.operator_session_register_agents`). At least **19 other
+production modules** do the identical unguarded `from web3 import
+...`/`from eth_account import ...` at module scope, with no
+purge-and-reimport guard anywhere — most notably `bridge/vapi_bridge/chain.py`
+(the single most widely-imported chain module in the whole bridge) and
+`bridge/vapi_bridge/curator_attestation.py`. Whether any of these are
+exposed today is purely a function of pytest collection order relative to
+the ~55 files that stub `web3`/`eth_account` — the exact same fragile
+non-guarantee that produced the `controller_ioid_registration.py` bug in
+the first place, just currently unexercised (by luck of collection order,
+not by design) for the other 19. Not attempted in this pass — auditing and
+fixing 19 modules' import robustness is a distinct, larger piece of work
+than a targeted bug-fix backlog item, and deserves its own scoped pass
+rather than being rushed in alongside everything else here.
 
 ## Reclassified during D-OPS-2 (was going to be marked "missing artifact",
 ## turned out to need real investigation instead)
