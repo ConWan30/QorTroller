@@ -11,7 +11,7 @@ methodology this branch used throughout).
 
 This file tracks what's left after D-OPS-2's fix/mark/skip pass: 8 fixed in
 the PR (stale invariant counts, one unregistered crypto tag family, two
-`operator_api.py` path references), 44+9+4+2+3+1 = 63 marked
+`operator_api.py` path references), 44+9+4+2+3+1+1 = 64 marked
 `skip`/`skipif` with a stated reason, 5 marked `xfail(strict=False)`. What
 remains untouched, listed here by name — no bulk "investigate everything"
 task, just a record of what's known and what isn't.
@@ -133,3 +133,37 @@ specifically: `ctypes` has no `windll` attribute on Linux at all, so that
 cluster's Windows-only skip in this PR is evidence-backed, not guessed) —
 that class of doubt does not apply to this backlog file, since everything
 listed here already failed in real Linux CI on the branch itself.
+
+## Pattern worth naming: recurring test-isolation hygiene gap
+
+Three independent instances of the same bug *class* surfaced during this
+D-OPS-2 pass, found only because CI collection was broken for long enough
+that someone had to actually look at the full suite instead of trusting a
+green check:
+
+1. **`sys.modules` leak** — seven `test_phase7{3,5,6,8,9}*`/`test_phase8{0,1}*.py`
+   files install a fake `sdk` module into the process-global `sys.modules`
+   via `setdefault()` with no cleanup, permanently shadowing the real `sdk`
+   namespace package for every test collected afterward in the same pytest
+   run. Fixed in this PR (commit `8be81278`).
+2. **CWD-sensitivity** — `test_phase_o1_c2_shadow_runtime.py`'s Cedar bundle
+   tests construct a bare relative path (`Path(cfg.cedar_bundle_dir) / "..."`,
+   not anchored via `Path(__file__).parents[...]`); working hypothesis is an
+   earlier-collected test changes the process's CWD without restoring it.
+   Not fixed — reclassified into this backlog rather than mis-labeled
+   "missing artifact."
+3. **Suspected env/process state** — a ~51-test cluster centered on
+   `test_mcp_audit_tool_wrappers.py` and a wide spread of "endpoint returns
+   correct keys" tests fails only when the full 6338-test suite runs in one
+   local process; each one passes individually or in a small combined
+   sample. Windows-local-only — real CI's own full-suite run doesn't
+   reproduce any of these 51. Not chased down; mechanism unconfirmed.
+
+Three different mechanisms (`sys.modules`, CWD, something else entirely),
+one shared shape: an earlier-collected test's side effect survives into a
+later test's collection or execution because pytest runs the whole suite in
+a single process and nothing resets the polluted state in between. Worth a
+dedicated test-isolation sweep at some point — grep for `sys.path.insert`,
+`os.chdir`, and other process-global mutations across `bridge/tests/` and
+check each one is scoped/restored — rather than waiting for a fourth
+instance to surface the hard way.
