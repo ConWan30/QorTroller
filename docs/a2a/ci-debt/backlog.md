@@ -49,6 +49,26 @@ sealed artifacts). Does not get bundled into the general backlog below —
 the operator sees it here, by name, and decides when/how it gets
 investigated.
 
+**`bridge/tests/test_mythos_full_variants.py::test_t_mythos_methodology_1_healthy_repo_zero_findings`**
+(found during the second pass, 2026-07-24) — the Mythos methodology-drift
+scanner correctly reports `wiki/assessments/VAPI Bluetooth Calibration_
+Architectural Prerequisites and Threat Model Analysis.pdf` as MISSING. This
+is not a test bug or CI artifact: that file is named `[CANONICAL]` in
+CLAUDE.md's own "BT Calibration: Canonical Prerequisite Anchor" section —
+"Any BT-related design work in VAPI must read [this file]... before
+producing architectural proposals" — and it does not exist anywhere in this
+repository, tracked or otherwise (confirmed via `git ls-files` and a direct
+filesystem check in a fresh worktree; genuinely absent, not just
+uncommitted-locally like `touchpad_filter.py` or `cli_chat.py`). Its sibling
+canonical document (`DualSense Edge Sensor-Stack Characterization for VAPI
+Track-1...pdf`) IS present and tracked, so this looks like an isolated gap,
+not a systemic one. Not marked skip/xfail -- the scanner is correctly
+detecting a real gap between a stated hard rule and repo contents; masking
+that would hide the finding rather than resolve it. Same disposition as the
+DAG test above: named here, not bundled into the general backlog, operator
+decides whether the document gets sourced and committed or the CLAUDE.md
+anchor claim gets amended.
+
 ## Reclassified during D-OPS-2 (was going to be marked "missing artifact",
 ## turned out to need real investigation instead)
 
@@ -140,14 +160,11 @@ governor into these tests rather than relying on the lazy-construction
 fallback path -- not attempted, would need its own verification pass.
 
 **Remaining individual items, no shared pattern identified:**
-`test_agent_registration.py` (2, contract-call-shaped error),
 `test_daemon_health_monitor.py::test_detect_firmware_drift_on_live_repo`
 (1 — this repo's local `bridge/firmware/joypad-os` submodule is in a
 modified state per `git status`; plausibly local-state-sensitive, not
 confirmed), `test_dag_r07_forge.py` (3), `test_fix_d_feedback_timeout.py`
-(1), `test_local_host_tools_endpoint.py` (1), `test_mythos_full_variants.py`
-(1 — flags a missing methodology-assessment file reference),
-`test_operator_session_register_agents.py` (2),
+(1), `test_operator_session_register_agents.py` (2),
 `test_phase140_probe_comparison.py::test_2_probe_comparison_conflicts_with_session_type`
 (1), `test_phase191_tsp.py` (2), `test_qortroller_cli.py` (2),
 `test_qortroller_retina_capture.py::test_save_capture_crops_enabled_writes`
