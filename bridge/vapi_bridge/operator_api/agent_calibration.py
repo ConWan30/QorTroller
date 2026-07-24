@@ -508,14 +508,20 @@ def register_agent_calibration_routes(
                     "error":                 None,
                     "timestamp":             _t129.time(),
                 }
-            total_validations = len(all_rows)
+            # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): this branch previously
+            # referenced all_rows/gate_addr/last_valid/last_node_count/_t130 -- none of
+            # which exist in this function's scope (copy-paste from a different endpoint,
+            # apparently Phase 130's swarm-gate status). Every call with no breakthrough
+            # rows yet raised NameError, caught below, returned as a 500 -- honest fix is
+            # the same 5-key shape the success branch returns, just with "not yet" values,
+            # matching this endpoint's own test contract (test_7_endpoint_5_keys).
             return {
-                "swarm_gate_address":  gate_addr,
-                "gate_configured":     bool(gate_addr),
-                "total_validations":   total_validations,
-                "last_valid":          last_valid,
-                "last_node_count":     last_node_count,
-                "timestamp":           _t130.time(),
+                "breakthrough_detected": False,
+                "breakthrough_ratio":    0.0,
+                "breakthrough_ts":       0.0,
+                "n_players":             0,
+                "error":                 None,
+                "timestamp":             _t129.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -612,18 +618,26 @@ def register_agent_calibration_routes(
         check_rate(api_key)
         import time as _t134c
         try:
+            # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): the return statement
+            # here previously referenced active_rows/emulator_mode/node_urls_raw/
+            # node_timeout_s/registry_rows/last_quorum_ts/_t131 -- none of which exist in
+            # this function's scope (copy-paste from a different endpoint, apparently a
+            # Phase 131 node/registry/quorum-status one). Every call raised NameError,
+            # caught below, returned as a 500. The correctly-computed local variables
+            # right above (_enabled/_snaps/_count/_last_ts) were already the right ones,
+            # just never used -- wiring them into the response, matching this endpoint's
+            # own test contract (test_8_auto_snapshot_status_5_keys).
             _enabled = bool(getattr(cfg, "auto_separation_snapshot_enabled", False))
             _snaps = store.get_separation_ratio_status(limit=10)
             _count = len(_snaps)
             _last_ts = _snaps[0].get("created_at", 0.0) if _snaps else 0.0
+            _last_ratio = _snaps[0].get("pooled_ratio", 0.0) if _snaps else 0.0
             return {
-                "live_nodes":     len(active_rows),
-                "emulator_mode":  emulator_mode,
-                "node_urls":      node_urls_raw,
-                "node_timeout_s": node_timeout_s,
-                "registry_count": len(registry_rows),
-                "last_quorum_ts": last_quorum_ts,
-                "timestamp":      _t131.time(),
+                "auto_separation_snapshot_enabled": _enabled,
+                "snapshot_count":                   _count,
+                "last_snapshot_ts":                 _last_ts,
+                "last_snapshot_ratio":              _last_ratio,
+                "timestamp":                        _t134c.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
