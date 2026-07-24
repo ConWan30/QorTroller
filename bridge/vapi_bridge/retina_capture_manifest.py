@@ -139,6 +139,16 @@ def verify_session_chain(
     """
     try:
         recomputed = build_session_chain(session_id, device_id_hex, genesis_ts_ns, frames)
-    except (ValueError, TypeError):
+    # F-RWM-8 (LANE RWM r13): ValueError/TypeError alone don't cover every
+    # exception build_session_chain's call graph can raise on malformed input --
+    # struct.pack(">Q", ts_ns) raises struct.error for ts_ns outside [0, 2**64),
+    # and session_id.encode() raises AttributeError when session_id isn't a str.
+    # This function's whole purpose is letting a third party re-verify a footage
+    # manifest with unvalidated input, so the fail-closed contract has to actually
+    # hold here. If you add a new call inside build_session_chain/genesis_manifest_hash/
+    # compute_manifest_entry that can raise a different exception type, audit
+    # whether it belongs in this tuple too -- this catch is not exhaustive by
+    # accident, it's enumerated from the actual call graph as of this fix.
+    except (ValueError, TypeError, struct.error, AttributeError):
         return False
     return recomputed == claimed_chain
