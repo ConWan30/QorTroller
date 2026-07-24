@@ -1,7 +1,15 @@
 import unittest
 import tempfile
 import os
+import sys
 from pathlib import Path
+
+# CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): this file was missing the
+# sys.path.insert every other test file in this suite has, so it only worked when
+# collected after some other file had already put bridge/ on sys.path (order-dependent,
+# fails standalone or under a different collection order).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from fastapi.testclient import TestClient
 from vapi_bridge.store import Store
 from vapi_bridge.operator_api import create_operator_app

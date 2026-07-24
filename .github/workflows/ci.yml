@@ -68,6 +68,18 @@ jobs:
           cd w3bstream/applet
           cargo build --target wasm32-unknown-unknown --release
 
+      # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): moved ahead of the pytest
+      # steps. CLAUDE.md's own "green-main gate reconcile" note already named this exact
+      # ordering bug ("pytest runs before npx hardhat compile -> AgentRegistry ABI not
+      # found") as a tracked "fix-next", never applied until now. test_agent_registration.py
+      # calls the real AgentRegistry contract wrapper, which reads the compiled ABI JSON
+      # from contracts/artifacts/ -- that file doesn't exist until this step runs, so any
+      # test exercising it fails whenever pytest runs first.
+      - name: Compile Hardhat Contracts
+        working-directory: contracts
+        run: |
+          npx hardhat compile
+
       - name: Run Pytest Bridge Suite
         run: |
           python -m pytest bridge/tests/ --ignore=bridge/tests/test_e2e_simulation.py -m "not hardware" -q
@@ -79,11 +91,6 @@ jobs:
       - name: Run W3bstream Ingestion Invariant Test
         run: |
           python scripts/test_w3bstream_ingestion.py
-
-      - name: Compile Hardhat Contracts
-        working-directory: contracts
-        run: |
-          npx hardhat compile
 
       - name: Run Hardhat Contract Tests
         working-directory: contracts
