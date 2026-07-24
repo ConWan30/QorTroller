@@ -106,12 +106,15 @@ def test_T_LENS_V2_CHAIN_4_session_status_shape_carries_path_a_keys():
     the literal field name in the response-dict construction site).
     """
     from pathlib import Path
-    src = Path(__file__).parents[1] / "vapi_bridge" / "operator_api.py"
+    # operator_api.py was split into a package during the DECON-1 arc
+    # (bridge/vapi_bridge/operator_api/_app.py + register_* modules); the
+    # /player/session-status handler lives in _app.py.
+    src = Path(__file__).parents[1] / "vapi_bridge" / "operator_api" / "_app.py"
     text = src.read_text(encoding="utf-8")
     # Locate the player_session_status return dict by anchor
     pss_marker = '"signing_path":'
     assert pss_marker in text, \
-        "operator_api.py missing 'signing_path' key in /player/session-status response"
+        "operator_api/_app.py missing 'signing_path' key in /player/session-status response"
     for key in ("signing_path", "proof_tier", "controller_model", "path_a_eligible"):
         assert f'"{key}":' in text, \
-            f"operator_api.py missing '{key}' key in /player/session-status response (Path A C4 contract)"
+            f"operator_api/_app.py missing '{key}' key in /player/session-status response (Path A C4 contract)"
