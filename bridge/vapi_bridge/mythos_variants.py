@@ -933,6 +933,20 @@ _QORTROLLER_KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
     b"QORTROLLER-IPACT-CHALLENGE-v1",  # ipact_challenge.py — dedicated challenge
                                        # domain tag (W-5); capability, not a
                                        # commitment family
+    b"QORTROLLER-MFG-CA-READINESS-CANARY-v0",  # mfg_ca_readiness.py — fixed canary
+                                       # payload signed during the Ceremony B
+                                       # no-spend HSM CA readiness preflight; a
+                                       # smoke-test constant, not a commitment
+                                       # family or governance seal
+    b"QORTROLLER-NODE-LEDGER-GENESIS-v0",  # node_contribution_ledger.py — A2A-DEPIN-1
+                                       # node contribution ledger genesis; module's own
+                                       # docstring: "Candidate domain tag (PoSP-style
+                                       # REFERENCE-AND-BIND -- NOT a new FROZEN-v1 family)"
+    b"QORTROLLER-NODE-LEDGER-v0",      # node_contribution_ledger.py — same ledger,
+                                       # per-entry domain tag; same candidate status
+    b"QORTROLLER-SCORECARD-ROOT-v0",   # node_contribution_ledger.py — scorecard dict
+                                       # commitment root; same module, same candidate
+                                       # status per the docstring above
 })
 
 

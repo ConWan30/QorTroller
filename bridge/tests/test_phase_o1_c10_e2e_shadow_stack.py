@@ -305,9 +305,12 @@ class TestPhaseO1C10EndToEndShadowStack(unittest.TestCase):
         production.
         """
         import re
-        operator_api_text = (BRIDGE_DIR / "vapi_bridge" / "operator_api.py").read_text(
-            encoding="utf-8"
-        )
+        # operator_api.py was split into a package during the DECON-1 arc; the
+        # operator-agent-*-log routes live in the agent_operator_initiative.py
+        # register module now, not the (now much smaller) _app.py shell.
+        operator_api_text = (
+            BRIDGE_DIR / "vapi_bridge" / "operator_api" / "agent_operator_initiative.py"
+        ).read_text(encoding="utf-8")
         # All operator-agent-* routes must include the inner /operator/ prefix
         # to match codebase convention (see feedback_operator_route_doubled_prefix).
         pattern = r'@app\.(get|post)\("/operator/operator-agent-(activation|shadow|drift)-log"'
