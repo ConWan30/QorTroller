@@ -299,21 +299,46 @@ and in combination after five different known-poisoning files collected
 first (129 passed).
 
 **Full-suite confirmation, done properly this time (learning applied from
-round 1's mistake):** a fresh, isolated-worktree full-suite run (submodule
-initialized, Hardhat artifacts compiled — the two environment gaps that
-produced 5 misleading results in an earlier pass of this same
-verification, all traced to worktree setup and none to the code, see the
-submodule-masking pattern section below) confirmed **all 17 targeted tests
-pass** with **zero regressions** (nothing that was passing is now failing)
-and **zero new failures** beyond the already-documented pre-existing set.
-A second, fully-clean pass (both environment gaps closed from the start)
-was launched to produce a single authoritative tally rather than the
-reconciled-from-two-partial-runs arithmetic above — **run in progress as
-of this commit; this paragraph will be updated with the final numbers and
-a link to the run artifacts once it completes.** Not blocking this PR's
-open — the per-test evidence above is already solid confirmation of the
-fix itself; this last run is about getting one clean authoritative number
-for the record, not about doubting the fix.
+round 1's mistake): CONFIRMED CLEAN, twice.** A fresh, isolated-worktree
+full-suite run (submodule initialized, Hardhat artifacts compiled — the
+two environment gaps that produced 5 misleading results in an earlier
+pass of this same verification, all traced to worktree setup and none to
+the code, see the submodule-masking pattern section below) confirmed
+**all 17 targeted tests pass** with **zero regressions** and **zero new
+failures**. A second, fully-clean pass (isolated worktree pinned to this
+same commit `2545a1f8`, both environment gaps closed from the start)
+completed the full 6352-test collection in 24:48 with **10 failed / 6214
+passed / 105 skipped / 7 xfailed / 16 errors** — the ioID cluster does
+not appear anywhere in either failure list, in either run, at real
+full-suite scale. This is the direct fix for round 1's actual mistake:
+round 1 verified against one reproduction and claimed full-suite clean
+without checking; round 2 was checked against the real thing, twice,
+before either the commit or this document claimed it worked.
+
+Cross-referencing that run's 10 failures against the *current* branch tip
+(the isolated worktree was pinned to `2545a1f8`, one commit before the
+`test_cfss_drift_sweeper_integration.py`/`test_chain_keystore.py` fixes
+above landed in `c0063c0e`): 2 of the 10 are those two, already fixed and
+individually re-verified green + PV-CI-clean after that commit — a fresh
+full run wasn't re-dispatched just to confirm two already-verified
+single-file fixes. **The other 8 are exactly the already-named,
+already-documented items**: `test_chain_reconciler.py` (2, real
+async/Windows finding, not fixed), `test_daemon_health_monitor.py` (1,
+real firmware finding, confirmed genuinely still broken — not a
+submodule-masking false result this time), `test_mythos_full_variants.py`
+(1, missing BT-calibration PDF), `test_phase54_hardening.py` +
+`test_phase67_ceremony_hardening.py` (2, named separately per operator
+instruction, out of this backlog's scope), `test_vbdip_0006_conformance_generator.py`
+(1, Windows CRLF checkout artifact, not a real Linux-CI regression),
+`test_vsd_harness.py` (1, real VSD-2 cryptographic finding, not fixed).
+The 16 errors are `test_w3bstream_poseidon_as.py`'s already-known missing
+`scripts/w3bstream` npm dependency (a separate CI step this pytest-only
+invocation doesn't run), not a regression. **True current-tip accounting:
+8 known/documented/named failures + 16 known/documented environment-gap
+errors, zero unexplained, zero unaccounted for.**
+
+Run artifacts: `gate-verify-2545a1f8-v2-{console.log,junit.xml,exitcode.txt}`
+(this session's scratchpad — available on request).
 
 **Endpoint 500-vs-200 pair:** `test_phase129_separation_breakthrough.py::test_7_endpoint_5_keys`,
 `test_phase134_separation_ratio_strategies.py::test_8_auto_snapshot_status_5_keys`
