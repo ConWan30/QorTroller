@@ -60,10 +60,14 @@ class TestLocalToolsEndpoint(unittest.TestCase):
 
     def test_local_tools_read_file(self):
         """POST /agent/local-host/execute read_file reads valid files inside repo."""
+        # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): cli_chat.py is untracked
+        # local scratch content (never committed -- confirmed via `git ls-files`), so it
+        # doesn't exist in a fresh checkout and this test could never have passed in real
+        # CI. qortroller_daemon.py is tracked and genuinely contains "QorTrollerAI".
         resp = self.client.post(
             "/agent/local-host/execute",
             params={"api_key": "testkey_tools"},
-            json={"tool": "read_file", "arguments": {"path": "cli_chat.py"}}
+            json={"tool": "read_file", "arguments": {"path": "qortroller_daemon.py"}}
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
