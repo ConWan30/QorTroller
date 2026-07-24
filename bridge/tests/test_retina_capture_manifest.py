@@ -139,6 +139,24 @@ def test_verify_never_raises_on_malformed_input():
     assert verify_session_chain(SESSION_ID, "not-hex", GENESIS_TS, [], [b"\x00" * 32]) is False
 
 
+def test_verify_never_raises_on_out_of_range_ts_ns():
+    """F-RWM-8 (LANE RWM r13): genesis_ts_ns outside struct.pack('>Q', ...)'s
+    [0, 2**64) range used to raise struct.error, uncaught by the original
+    except (ValueError, TypeError) -- confirmed empirically before the fix.
+    Fail-closed must hold for this input too."""
+    assert verify_session_chain(SESSION_ID, DEVICE_ID_HEX, -1, [], [b"\x00" * 32]) is False
+    assert verify_session_chain(SESSION_ID, DEVICE_ID_HEX, 2**64, [], [b"\x00" * 32]) is False
+
+
+def test_verify_never_raises_on_non_str_session_id():
+    """F-RWM-8 (LANE RWM r13): a non-str session_id used to raise AttributeError
+    from session_id.encode(), uncaught by the original except (ValueError, TypeError)
+    -- confirmed empirically before the fix (verify_session_chain is meant for
+    third parties re-verifying with unvalidated input, so this must fail closed)."""
+    assert verify_session_chain(None, DEVICE_ID_HEX, GENESIS_TS, [], [b"\x00" * 32]) is False
+    assert verify_session_chain(12345, DEVICE_ID_HEX, GENESIS_TS, [], [b"\x00" * 32]) is False
+
+
 def test_domain_tag_distinct_from_sibling_pattern_017_families():
     """Domain separation from VAPI-RETINA-STATE-v1/v2/v3 / VAPI-VAME-v1 / WEC / GIC --
     per the L0 plan's test-plan item 1."""
