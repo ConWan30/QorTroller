@@ -46,12 +46,29 @@ guard two lines above it (1, `test_fix_d_feedback_timeout.py`), the same
 but independently pinned in a second file (1, `test_cfss_drift_sweeper_integration.py`),
 and a test that predates a later, deliberate dry-run-aware guard in
 `Config.validate()` (1, `test_chain_keystore.py` — not previously in this
-backlog at all, surfaced only by a full-suite re-run). `test_qortroller_cli.py`
-and `test_qortroller_retina_capture.py` were investigated, found to pass
-both standalone and under a real full-suite run, and are removed from the
-list below with no code change (order-dependence suspected, apparently
-already resolved as a side effect of an earlier fix in this pass; not
-chased further since there was nothing left to reproduce). `test_uvc_source.py`
+backlog at all, surfaced only by a full-suite re-run).
+
+**`test_qortroller_cli.py` and `test_qortroller_retina_capture.py` — CLOSED
+WRONGLY in the third pass, REOPENED here.** The third pass claimed both
+"pass both standalone and under a real full-suite run" and removed them
+from the backlog with no code change. That claim was based entirely on
+Windows-local full-suite runs (this session's own + a background
+verification agent's). It was wrong: real GitHub Actions Linux CI, checked
+directly against all 6 CI Matrix jobs on this PR, shows
+`test_qortroller_retina_capture.py::test_save_capture_crops_enabled_writes`
+failing consistently on **all 6** jobs (`assert (None is not None)`), and
+`test_qortroller_cli.py::test_read_node_config_failclosed_on_secret` +
+`::test_node_state_first_proof_pending_path_b` failing consistently on
+**both Python 3.10 jobs** (Node 18 and Node 20), passing on 3.11/3.12 —
+a genuine Python-version-specific difference, not order-dependence. The
+third pass never checked against real CI before writing "resolved, no code
+change" — the same category of mistake as the ioID cluster's round-1
+overclaim, just smaller in scope and self-caught one CI Matrix run later
+instead of caught by an independent full-suite re-run. Both files are
+reopened as unresolved findings; real diagnosis in progress, not fixed as
+of this entry. **Not merging this PR until they have one.**
+
+`test_uvc_source.py`
 was investigated — no fragile/version-sensitive assertions found on
 inspection, still not reproducible locally — and is left as-is alongside
 `test_dag_r07_forge.py` in the same "genuinely can't verify without the CI
@@ -398,22 +415,30 @@ fallback path -- not attempted, would need its own verification pass.
 else in this list was resolved across the second and third passes (see
 above) or moved to its own dedicated section (`test_vsd_harness.py`, above).
 What's left, genuinely unresolved:**
-`test_dag_r07_forge.py` (3 — investigated: passes standalone and in every
-locally-reproducible broad-context combination tried, including running
-after files known to leave process-global side effects; could not
-reproduce the CI failure on this Windows dev machine, plausibly a genuine
-Windows-vs-Linux difference, same caveat class as the HID/XInput cluster
-but not confirmed with the same certainty; third pass additionally traced
-this to the same CRLF-checkout-vs-committed-blob mechanism found
-independently in the VSD vault finding above and in
-`test_vbdip_0006_conformance_generator.py` — a Windows-local-only artifact,
-not a real Linux-CI regression, but still not something to silently
-"fix" by changing hash comparisons without operator sign-off), `test_uvc_source.py`
-(2 — synthetic-frame optical-flow processing test; third pass checked for
-fragile/version-sensitive numeric assertions specifically and found none
-(no `pytest.approx`, no float-magnitude comparisons — only type/count/shape
-checks), which argues somewhat against the cv2-version-drift theory without
-disproving it; still not reproducible locally, still ambiguous, left as-is).
+
+`test_dag_r07_forge.py` (3) and `test_uvc_source.py` (2) — **CONFIRMED
+real Linux-CI failures**, not just "plausibly" anymore: checked directly
+against all 6 CI Matrix jobs on PR #96 (the actual GitHub Actions run, not
+a local reconstruction), both fail consistently across every Python
+version. `test_dag_r07_forge.py`'s 3 failures trace to the same
+CRLF-checkout-vs-committed-blob mechanism found independently in the VSD
+vault finding above and in `test_vbdip_0006_conformance_generator.py` —
+except unlike `vbdip_0006` (which correctly passes on real Linux CI, since
+Linux checkout doesn't apply Windows' CRLF conversion — confirming that
+theory), `test_dag_r07_forge.py` fails on a DIFFERENT, still
+uninvestigated mechanism on Linux specifically (not yet root-caused; the
+CRLF angle only explains why it was hard to reproduce on Windows, not
+why it fails on Linux). `test_uvc_source.py`'s 2 failures
+(`frames_seen == 0` where `>= 1` expected) are consistent with genuine
+cv2/OpenCV Linux-vs-Windows behavior on the synthetic-frame pipeline —
+still not root-caused to a specific cause, but no longer just a theory;
+confirmed real and CI-blocking.
+
+`test_qortroller_cli.py` (2) and
+`test_qortroller_retina_capture.py` (1) — **REOPENED** (see the
+correction earlier in this file — wrongly marked resolved in the third
+pass on Windows-only evidence; real diagnosis in progress, tracked as its
+own task, not fixed as of this entry).
 
 ## Methodology note
 
