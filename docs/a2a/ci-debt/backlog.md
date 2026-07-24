@@ -16,6 +16,23 @@ the PR (stale invariant counts, one unregistered crypto tag family, two
 remains untouched, listed here by name — no bulk "investigate everything"
 task, just a record of what's known and what isn't.
 
+**Update, second pass (`fix/ci-debt-backlog`, post-merge, operator-directed
+"close backlog items rather than open new PRs on top of it"):** closed 6
+more items with real, individually-verified root causes rather than guessed
+dispositions — coherence rule count drift (3, same class as the original
+Cat 2 fixes), the Cedar bundle CWD-sensitivity leak (3, root-caused to 5
+files' unrestored `os.chdir()`; first fix attempt was wrong and is recorded
+as such below the fix commit, not silently corrected), the ioID
+web3/eth_account MagicMock-poisoning cluster (15, same leak class, second
+instance), two genuine production copy-paste bugs on real operator API
+endpoints (2, not test artifacts — see the dedicated section below), and
+the MQTT transport topic-shape mismatch (3, also took two rounds to
+diagnose correctly). `test_batcher_recovery.py`'s 2 failures turned out to
+be the already-documented CLAUDE.md flake F-DECON2-5, marked
+`xfail(strict=False)` with that citation rather than re-litigated.
+`test_chain_reconciler.py` was investigated and is recorded below as a real,
+deeper finding — not fixed, not guessed at.
+
 ## Named separately, not part of this backlog (operator instruction)
 
 **`bridge/tests/test_verify_provenance_dag.py::test_real_m17_index_verifies_cold`**
@@ -100,9 +117,30 @@ higher-priority than the rest of this list by the reviewing party),
 `test_phase54_hardening.py::TestSendRawTxNonceReset::test_send_raw_tx_resets_nonce_on_send_failure`
 (nonce-reset-on-failure not firing).
 
+**`test_chain_reconciler.py` (2) — investigated, not fixed, real finding:**
+`test_last_block_advances_after_cycle` and `test_reconcile_marks_matched_tx_confirmed`
+both show `RuntimeWarning: coroutine '_make_chain_mock.<locals>._bn' was never
+awaited`. Traced past the obvious suspect: `ChainReconciler._reconcile_cycle()`
+does correctly `await self._chain._w3.eth.block_number` at the direct-call
+site (chain_reconciler.py:171) -- but `_get_governor()` (chain_reconciler.py:46)
+lazily constructs a REAL `ChainReadGovernor` (TTL cache + semaphore +
+`asyncio.wait_for` timeout, with Windows-ProactorEventLoop-specific
+cancellation workarounds from the STAGE-9/11/12 hardening arc) whenever no
+governor is explicitly injected -- which is exactly what these tests do,
+since `ChainReconciler(self.store, chain, poll_interval=999.0)` never passes
+one. The test's mock (`chain._w3.eth.block_number = _bn()`, a one-shot
+coroutine object -- its own comment already flags this as fragile) only
+covers the direct-call fallback path, not the governor's internals, which
+are the more likely place a coroutine gets abandoned mid-`wait_for`. Not
+fixed here: this is real, carefully-hardened async/Windows-event-loop
+production code (three prior hardening stages, per the file's own history),
+not a quick copy-paste bug, and does not belong under merge-pressure
+guessing. Likely correct fix direction: inject an explicit no-op/mock
+governor into these tests rather than relying on the lazy-construction
+fallback path -- not attempted, would need its own verification pass.
+
 **Remaining individual items, no shared pattern identified:**
 `test_agent_registration.py` (2, contract-call-shaped error),
-`test_batcher_recovery.py` (2), `test_chain_reconciler.py` (2),
 `test_daemon_health_monitor.py::test_detect_firmware_drift_on_live_repo`
 (1 — this repo's local `bridge/firmware/joypad-os` submodule is in a
 modified state per `git status`; plausibly local-state-sensitive, not
