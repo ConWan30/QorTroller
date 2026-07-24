@@ -97,8 +97,22 @@ inferred from reading): `verify_session_chain(None, ...)` raises
 `struct.error`. This matters specifically because the module frames this
 function as meant for **third parties independently re-verifying a footage
 manifest's chain** — exactly the case where inputs aren't pre-validated by
-a trusted caller. Fix is small (broaden the except clause, or validate
-inputs before the try), not yet applied.
+a trusted caller.
+
+**Update: fixed.** LANE RWM r13 (claude-ai) independently re-verified this
+bug empirically before dispositioning it — direct execution, not inference —
+confirmed both exact failure modes, dispositioned as **F-RWM-8 (WARN,
+confirmed)**, and specified the fix: broaden the except clause to
+`(ValueError, TypeError, struct.error, AttributeError)` rather than
+pre-validate inputs before the try, since pre-validation would duplicate
+logic that already lives correctly inside `genesis_manifest_hash`/
+`compute_manifest_entry`. Applied exactly as specified, plus an inline
+comment on the except clause stating why those four exceptions (so a future
+extension of the call graph gets audited against this catch rather than
+assumed exhaustive by accident), plus 2 new regression tests covering the
+two previously-uncaught paths. Commit `cc2fc4fc`, pushed to
+`feat/rwm-l0-manifest`. PV-CI clean (184/184); both RWM test files green
+(33/33, was 31/31).
 
 Full review comment on the PR:
 `https://github.com/ConWan30/QorTroller/pull/95#issuecomment-5070704081`
@@ -113,10 +127,7 @@ this at L0; naming it so it's not forgotten at daemon-wiring time.
 
 ## 4. What's NOT done yet
 
-- The `verify_session_chain` except-clause fix above — not applied. Small,
-  mechanical, but touches the manifest module's fail-closed contract, so
-  flagging for either your review or an explicit go-ahead before a
-  claude-code pass applies it, rather than just doing it unilaterally.
+- ~~The `verify_session_chain` except-clause fix~~ — done, see F-RWM-8 above.
 - PR #95 not merged. CI Matrix will keep showing red from the inherited
   backlog until `fix/ci-debt-backlog` lands separately (unrelated to RWM
   correctness, tracked on its own branch).
@@ -127,9 +138,8 @@ this at L0; naming it so it's not forgotten at daemon-wiring time.
 
 ## 5. Suggested next step
 
-Smallest useful next move: confirm the `verify_session_chain` fix approach
-(broaden the except clause vs. pre-validate) and whether it's a
-claude-code follow-up commit on the same branch or something you want to
-weigh in on design-wise first, given it's a fail-closed-contract change on
-a primitive that's meant to be independently re-derivable by third parties.
-Everything else above is status, not a question.
+F-RWM-8 closed the only open finding from the independent review. Smallest
+useful next move now: your call on whether L0 is ready to merge as-is
+(CI Matrix red is inherited/tracked separately, not a merge blocker on
+correctness grounds) or whether there's anything else you want checked
+first. Everything else above is status, not a question.
