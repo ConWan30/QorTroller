@@ -19,6 +19,18 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "bridge"))
 
+# CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): many other test files in this
+# suite blanket-stub sys.modules["web3"]/["eth_account"] = MagicMock() for their own
+# isolation/speed and never clean it up. Whichever gets collected first poisons every
+# later import -- this file's tests need the REAL web3 (Web3.to_checksum_address /
+# .keccak for genuine cryptographic values, not a MagicMock that silently satisfies any
+# attribute access) AND real eth_account (web3 itself imports eth_account.datastructures
+# internally, so a poisoned eth_account breaks web3's own import even after web3 itself
+# is un-poisoned). Force fresh, real imports of both regardless of collection order.
+for _mod_name in ("web3", "eth_account"):
+    if isinstance(sys.modules.get(_mod_name), MagicMock):
+        del sys.modules[_mod_name]
+
 from eth_account import Account
 from web3 import Web3
 
