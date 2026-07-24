@@ -20,7 +20,21 @@ for _m in ["anthropic", "web3", "web3.exceptions", "eth_account",
     if _m not in sys.modules:
         sys.modules[_m] = MagicMock()
 
+# CI-debt fix 2026-07-24: restored in tearDownModule below -- this chdir used to leak
+# into every test collected afterward in the same pytest run (found via the Cedar bundle
+# CWD-sensitivity investigation, docs/a2a/ci-debt/backlog.md). Restoring to a DETERMINISTIC
+# repo-root path, not a captured os.getcwd() -- ALL of these os.chdir() calls fire during
+# pytest's collection phase (before any teardown runs), so whichever of these files is
+# collected first gets the true original CWD, but every subsequent one's os.getcwd() is
+# already contaminated by an earlier sibling's collection-time chdir. parents[2] from
+# bridge/tests/thisfile.py is the repo root regardless of collection order.
+from pathlib import Path as _Path
+_REPO_ROOT = _Path(__file__).resolve().parents[2]
 os.chdir(tempfile.mkdtemp())
+
+
+def tearDownModule():
+    os.chdir(_REPO_ROOT)
 
 from bridge.vapi_bridge.store import Store
 from bridge.vapi_bridge.biometric_privacy_compliance_agent import (
