@@ -384,7 +384,14 @@ def register_agent_calibration_routes(
             "cert_ok": cert_ok,
             "audit_ok": audit_ok,
             "biometric_ttl_expired": _ttl_expired,
-            "biometric_renewal_entries": len(_renewal_ch),
+            # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): len(_renewal_ch) counts
+            # the status dict's own keys (a roughly-constant shape, ~7), not the actual
+            # renewal count. Same class of copy-paste bug as the 2 endpoint fixes elsewhere
+            # in this file (PR #18's Copilot review flagged this exact line at the time);
+            # this branch's audit of the same file caught the other 2 but missed this one
+            # until an independent PR review cross-referenced the prior review comments.
+            # total_renewals is the same field _renewal_has_entry already reads at line 338.
+            "biometric_renewal_entries": int(_renewal_ch.get("total_renewals", 0)),
             "biometric_ttl_ok": biometric_ttl_ok,
             "all_pairs_p0_ok": all_pairs_p0_ok,
             "ait_defensibility_ok": ait_defensibility_ok,

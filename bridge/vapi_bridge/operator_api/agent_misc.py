@@ -1169,15 +1169,20 @@ def register_agent_misc_routes(
         check_rate(api_key)
         import time as _t131b
         try:
+            # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): this endpoint's
+            # return block referenced nodes_configured/_nodes_healthy/_emulator_mode/
+            # _latencies/_health_log/_t132 -- none defined anywhere in this function.
+            # 100% NameError -> 500 on every real call, since 2026-06-19 (the DECON-2
+            # agent_misc split). Those names belong to a different, ioSwarm-node-shaped
+            # endpoint; they're not this one's data. summary was already being computed
+            # correctly and then silently discarded. Fixed to mirror the sibling
+            # epoch_window_analytics_status endpoint's shape immediately above (spread
+            # the real store data + a cfg-derived flag the docstring says operators need).
             summary = store.get_usb_stability_status(limit=100)
-            _avg_latency = (sum(_latencies) / len(_latencies)) if _latencies else -1.0
             return {
-                "nodes_configured":  _nodes_configured,
-                "nodes_healthy":     _nodes_healthy,
-                "emulator_mode":     _emulator_mode,
-                "avg_latency_ms":    round(_avg_latency, 2),
-                "health_log_count":  len(_health_log),
-                "timestamp":         _t132.time(),
+                "ps5_compat_mode": bool(getattr(cfg, "ps5_compat_mode", False)),
+                **summary,
+                "timestamp": _t131b.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc

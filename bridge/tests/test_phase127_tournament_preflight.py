@@ -131,6 +131,13 @@ class TestRunPreflightEndpointKeys(unittest.TestCase):
         # With no gate sessions and separation_ratio < 1.0, overall_pass must be False
         self.assertFalse(body["overall_pass"])
         self.assertFalse(body["separation_ok"])
+        # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): biometric_renewal_entries
+        # used to be len(_renewal_ch) -- the status dict's own key count (7 on an empty
+        # store, confirmed via store.get_biometric_renewal_chain_status() directly), not
+        # the actual total_renewals value (0 on an empty store). This assertion would have
+        # failed against the pre-fix code (7 != 0); it's the regression check the original
+        # copy-paste bug shipped without.
+        self.assertEqual(body["conditions"]["biometric_renewal_entries"], 0)
 
 
 class TestPreflightStatusFoundFalseOnEmpty(unittest.TestCase):
