@@ -19,16 +19,27 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "bridge"))
 
-# CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): many other test files in this
-# suite blanket-stub sys.modules["web3"]/["eth_account"] = MagicMock() for their own
-# isolation/speed and never clean it up. Whichever gets collected first poisons every
-# later import -- this file's tests need the REAL web3 (Web3.to_checksum_address /
-# .keccak for genuine cryptographic values, not a MagicMock that silently satisfies any
-# attribute access) AND real eth_account (web3 itself imports eth_account.datastructures
-# internally, so a poisoned eth_account breaks web3's own import even after web3 itself
-# is un-poisoned). Force fresh, real imports of both regardless of collection order.
-for _mod_name in ("web3", "eth_account"):
-    if isinstance(sys.modules.get(_mod_name), MagicMock):
+# CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md), round 2: the first version of
+# this guard (isinstance(..., MagicMock) on just the two top-level keys "web3"/
+# "eth_account") was too narrow on two axes, found by re-running under real full-suite
+# collection: (1) at least 17 other test files stub the web3 tree with a genuine
+# types.ModuleType(...) + a hand-rolled stub class bolted onto its .Web3 attribute, not
+# a MagicMock -- isinstance(..., MagicMock) never catches that. (2) at least 38 other
+# test files poison individual dotted submodules (web3.exceptions, web3.middleware,
+# web3.gas_strategies.time_based, eth_account.messages, ...) directly, which survive a
+# del of just the two bare top-level keys: web3/__init__.py's own `from web3.main import
+# Web3` finds the stale cached submodule and reuses it instead of re-executing fresh.
+# Fix: unconditionally purge every sys.modules key that IS or STARTS WITH "web3."/
+# "eth_account." (the whole namespace tree, not just the two top-level names), and also
+# purge vapi_bridge.controller_ioid_registration itself -- it does `from web3 import
+# Web3` at ITS OWN module level, so if some earlier-collected file already imported it
+# while web3 was poisoned, its cached Web3 binding stays poisoned regardless of how
+# clean sys.modules["web3"] is by the time THIS file's guard runs; only a forced
+# re-import of the production module (after web3 is already clean) picks up the real one.
+for _mod_name in list(sys.modules):
+    if (_mod_name == "web3" or _mod_name.startswith("web3.")
+            or _mod_name == "eth_account" or _mod_name.startswith("eth_account.")
+            or _mod_name == "vapi_bridge.controller_ioid_registration"):
         del sys.modules[_mod_name]
 
 from eth_account import Account
