@@ -1,0 +1,10 @@
+{
+  "duration_s": 120.0,
+  "n_non_null_samples": 102,
+  "fires_0x31_total": 102,
+  "fires_0x31_in_last5": 5,
+  "median_coupled_fraction_last5": 0.0,
+  "median_p_human_last5": 0.0,
+  "verdict": "RECOVERY FAILED",
+  "notes": "Real continuous presses operator-confirmed throughout. DUAL_GRIND_TETHER_ENABLED=false confirmed via absent Cycle25 tether startup log line. L2B_IMU_SPIKE_THRESH=0.03 process-scoped (import-time read per round-04 C1, not independently re-verified via a runtime dump this run)."
+}

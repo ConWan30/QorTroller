@@ -1,0 +1,187 @@
+I'll ground this in the SEL attestation you just shipped, the dual-key flag, and the existing external-key-sign patterns before answering the six design calls.# Operator co-sign v1 — design call (forward, not verify)
+
+**Verdict: ship it.** `operator_id = address` + recover-check is the right non-repudiation upgrade. Scope (module + CLI + tests, no O3 rewire) is correct. Two design choices need hard pins; one is a mild pushback on migration, not on the idea.
+
+---
+
+## 1. Threat model — does it hold?
+
+**Yes, under the claim you should actually make:**
+
+> `fully_authorized` proves: Guardian’s HSM recorded package P, **and** the secp256k1 key controlling `operator_id` authorized the **same** package P. The bridge (which holds AWS creds) cannot forge the operator half.
+
+| Adversary | Blocked? |
+|-----------|----------|
+| Compromised bridge / Guardian KMS only | Yes — no operator key |
+| SQL/file rewrite of `operator_id` after dual-sign | Yes — both sigs break or recover≠id |
+| Declarative spoof (`operator_id="con"`) | Yes — only if dual path requires address shape + recover match |
+| Operator key == bridge wallet | **Only if you refuse it** (must pin) |
+| Operator key theft | No — classic key-compromise (honest residual) |
+| “Human Con intended” without reading the JSON | No — crypto non-repudiation ≠ cognitive intent (name it in the honest note) |
+
+**Residual gaps (name them, don’t fix this pass):**
+- Compelled/blind CLI sign (operator signs whatever file is staged).
+- Bearer-replay of an old dual-signed record as if it authorized a *new* action — fine because SEL still never auto-applies; consumers must treat the record as **evidence of a past decision**, not a capability token.
+- Social key sharing (two people, one laptop key) — out of scope.
+
+**Honest note upgrade:** dual-signed record attests *keyholder of address A authorized package P alongside Guardian*, not “a named human irrevocably intended.” That is real non-repudiation in the protocol sense.
+
+---
+
+## 2. Bind to Guardian signature? **NO for v0.**
+
+**Call: independent co-sign of the same preimage digest. Do not bind.**
+
+Why binding is over-engineering here:
+- Single notary (Guardian), single digest, single decision package.
+- Mix-and-match of operator-sig(A) onto Guardian-record(B): **fails** because digests differ. Preimage includes decision + `ts_ns` + SEL chain-head + scores/thresholds — uniqueness is already load-bearing.
+- Swapping Guardian’s DER while keeping operator sig: `guardian_ok` fails.
+- Binding to `(preimage || guardian_sig)` only buys “I authorized *this notarization instance*, not just the package” — useful under multi-notary / Guardian key rotation. You have neither yet.
+
+**When to add binding:** Guardian key rotation ceremony or multi-notary. Not now.
+
+Pin in tests: cross-package operator-sig reuse fails; same-package dual verify passes.
+
+---
+
+## 3. Raw hash vs EIP-191/712 — **RAW, same digest as Guardian.**
+
+Guardian KMS is already `MessageType=DIGEST` over `SHA256(preimage)`. Operator must sign **that exact 32B digest**.
+
+| Scheme | Verdict |
+|--------|---------|
+| Raw `sign_msg_hash(digest)` | **YES** — matches Guardian, domain tag is the separator |
+| EIP-191 `encode_defunct` | **NO** — different signed message; breaks “both signed P”; VSD used it for a different envelope, don’t cargo-cult |
+| EIP-712 | **NO** for v0 CLI — wallet UX later, not this loop |
+
+Domain `VAPI-SEL-GRAD-ATTEST-v0` + structured preimage is enough to keep this out of tx-hash / personal_sign collision space. Record field:
+
+```text
+operator_signing_method: "raw-sha256-digest-secp256k1"
+```
+
+If a future MetaMask path appears, that’s a **new** method flag + separate verify branch — never silent dual-accept of EIP-191 *or* raw.
+
+---
+
+## 4. Stable API — **use `eth_keys`, not `Account.unsafe_sign_hash`.**
+
+Repo already does this (`controller_ioid_registration.sign_permit`, `agent_registration`):
+
+```python
+from eth_keys import keys
+pk = keys.PrivateKey(bytes.fromhex(key.removeprefix("0x")))
+sig = pk.sign_msg_hash(digest)          # stable
+# recover:
+pub = keys.Signature(sig_bytes).recover_public_key_from_msg_hash(digest)
+addr = pub.to_checksum_address()        # or .to_address()
+```
+
+Avoid:
+- `Account.unsafe_sign_hash` / `_recover_hash` (name says fragile; underscore APIs move)
+- Mixing EIP-191 recover with raw sigs
+
+Normalize `v` 0/1 → 27/28 if you store 65B compact; or store compact 65B and let eth_keys own the format. Prefer **one** wire format (65B r‖s‖v or eth_keys Signature bytes) and pin it in tests.
+
+---
+
+## 5. `operator_dual_key_present` — **leave the bool alone this pass.**
+
+Right cut (mirrors SEL-attest / PCRA / MFG-CA):
+
+| Ship now | Defer |
+|----------|--------|
+| `steward_sel_cosign.py` | O3 ACT watcher rewire |
+| CLI `operator_cosign_attestation.py` | Endpoint that gates on dual-sig |
+| Tests | Superseding the env bool |
+
+**Do** export a pure helper consumers will call later:
+
+```text
+cryptographic_dual_key_satisfied(record) -> bool
+  # == fully_authorized
+```
+
+Do **not** make the bool auto-read dual-sig state. The bool is “operator asserts dual-key infra exists”; crypto is the teeth. Collapsing them without a deliberate O3 ceremony is scope creep and can lie if no dual-signed record is present yet.
+
+---
+
+## 6. Scope + key type
+
+**Cut: pure module + operator CLI + tests. Correct.**
+
+**secp256k1 is the right operator key** (not Ed25519 / VSD pattern):
+- Matches Guardian `ECC_SECG_P256K1`
+- Makes `operator_id = address` recover-native
+- Aligns with consent CLI / eth_keys house style  
+VSD Ed25519 is a different trust domain (synthesis notes). Don’t invent a second operator identity just for purity.
+
+Operator KMS later: inject `operator_sign: digest -> sig` the same way Guardian injects `sign_digest`. Software CLI key is the honest v0 path.
+
+---
+
+## Pushback: `operator_id == address`
+
+Idea is sound. **One migration footgun:**
+
+Existing Guardian v0 records may have declarative `operator_id` (`"operator"`, `"con"`). You cannot co-sign those into `fully_authorized` without **Guardian re-attesting** with the address already in the preimage (operator_id is inside the signed bytes).
+
+**Rules for the cosign module:**
+1. Before co-sign: `operator_id` MUST parse as 20-byte address (reject free text).
+2. Recovered address MUST equal `operator_id` (case-fold: compare lowercase; store checksummed if you want display niceness).
+3. Co-sign **refuses** if signer address ≠ `record.operator_id` (operator can’t “override” the field by signing).
+4. Sequence: Guardian attests with address-as-id **first** → operator co-signs. CLI never rewrites `operator_id`.
+
+Optional later (not this pass): pack address as 20 raw bytes in preimage (breaks v0 domain — would be v1 FROZEN discussion). Keep length-prefixed string of the address for candidate compatibility.
+
+---
+
+## Top 2 footguns to pin in tests
+
+**T1 — Bridge-wallet refuse (trust collapse)**  
+`OPERATOR_ATTEST_PRIVATE_KEY` derives `0x0Cf36dB5…` → hard fail. No silent dual-role. Separate allow-flag from gamer’s `VAPI_ALLOW_BRIDGE_WALLET_AS_GAMER` if you ever need single-dev tests; default OFF; never in bridge/.env.
+
+**T2 — Cross-package / wrong-digest / half-auth**  
+(a) Operator sig for package A fails `verify_dual` on package B.  
+(b) Guardian-only record → `guardian_ok=True`, `fully_authorized=False`.  
+(c) Operator signs EIP-191-wrapped digest instead of raw → recover fails / not authenticated.  
+(d) Mutate `operator_id` after dual-sign → both fail closed.
+
+(Bonus if cheap: recovered ≠ claimed address; empty/malformed sig; refuse non-address `operator_id`.)
+
+---
+
+## Module shape (approve as proposed, with pins)
+
+```
+steward_sel_cosign.py  (composes; base stays single-sign-capable)
+  add_operator_cosignature(record, *, operator_sign) 
+    -> +operator_signature_hex + operator_address + operator_signing_method
+  verify_dual_signed_attestation(...)
+    -> guardian_ok, operator_sig_ok, operator_id_authenticated, fully_authorized
+  cryptographic_dual_key_satisfied(record) -> fully_authorized
+
+scripts/operator_cosign_attestation.py
+  OPERATOR_ATTEST_PRIVATE_KEY env only
+  refuse bridge wallet
+  never load bridge/.env for this key
+  re-derive digest via build_graduation_attestation_preimage ONLY
+```
+
+**fully_authorized** = `guardian_ok ∧ operator_sig_ok ∧ operator_id_authenticated`  
+where `operator_id_authenticated` = valid address ∧ `recover(raw_digest, op_sig) == operator_id`.
+
+---
+
+## One-line decisions
+
+| Q | Call |
+|---|------|
+| Non-repudiation real? | **Yes** (keyholder-of-address; residual = key theft + blind sign) |
+| Bind to Guardian sig? | **No** (independent same-digest) |
+| Raw vs EIP-191 | **Raw SHA-256 digest** (match KMS DIGEST) |
+| eth_account API | **`eth_keys` sign_msg_hash / recover** |
+| dual_key flag | **Leave bool; ship `cryptographic_dual_key_satisfied`; no O3 rewire** |
+| Scope / key type | **Module+CLI+tests; secp256k1; not Ed25519** |
+
+Build it. Don’t soften the bridge-wallet refuse. Don’t EIP-191 “for wallet safety” on a CLI that must match Guardian’s digest mode.

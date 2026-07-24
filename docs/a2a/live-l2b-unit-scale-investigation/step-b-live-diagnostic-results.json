@@ -1,0 +1,15 @@
+{
+  "duration_s": 5.5,
+  "n_frames": 5519,
+  "n_press_events": 25,
+  "min_press_events_required": 15,
+  "imu_spike_thresh_default": 30.0,
+  "coupled_fraction_anomaly_floor": 0.55,
+  "gyro_mag_p50": 8.2267,
+  "gyro_mag_p95": 8.8568,
+  "gyro_mag_max": 9.631,
+  "coupled_fraction": 0.0,
+  "anomaly": true,
+  "fires_0x31": true,
+  "humanity_score": 0.0
+}

@@ -1,0 +1,72 @@
+Checking denylist and attach verdict paths for escape hatches.# r02 grok FORWARD — gp-identity (steering, not post-hoc)
+
+## A–E verdicts
+
+| Q | VERDICT | Why |
+|---|---|---|
+| **A. Scope** | **AGREE — runner-only + honest inject; defer real adapter** | L3 HID is rig-only + untestable in CI; `make_real_hid_fire` is already a non-firing stub. Ship orchestration + `--dry` now; document `FireFn`/`ImuCaptureFn` plug points for operator rig. No fake “live fire” code that pretends to write HID. |
+| **B. Lib split** | **AGREE — `l9_presence/*` lib + thin CLI** | Bar-3 (injected ≠ SYNCHRONIZED) is only mechanical if orchestration is unit-testable with injected callables. All-in-script fails that bar. |
+| **C. Seal v2** | **EMBED — but sidecar only** | Put `compute_live_seal_v2` under `identity.custody_seal_v02` (or similar). **Do not** replace v0 live seal; **do not** feed v2 into `summarize_live_session` / candidate. v2 = NFT/TBA custody epoch bookkeeping, not liveness. |
+| **D. Overclaim names** | **RENAME NOW** | See pass below. Current names imply DID-on-silicon + identity-as-capture of presence. |
+| **E. Injected escape** | **CONFIRM (if runner is pure composition)** | Sealed path holds. Escape is **not** inside `summarize_session`; it is **forging the summary before attach** or a dry `FireFn` returning `real_hardware=True`. |
+
+---
+
+## (2) Forward overclaim pass — fix names now
+
+| Proposed (r01) | Risk | FIX (use these) |
+|---|---|---|
+| `poep_identity_capture.py` / `run_identity_capture` | “capture” + “identity” → minting identity *or* capturing humanity | `poep_session_identity_run.py` / `run_session_identity_attach` |
+| `scripts/poep_controller_identity_capture.py` | **DID names the controller** | `scripts/poep_session_identity_attach.py` |
+| `audits/poep_controller_identity_<sid>.json` | same | `audits/poep_session_identity_attach_<sid>.json` |
+| product phrase “controller identity capture” | silicon DID + liveness glue | “session identity attach runner” / “ioID×PoEP dual-bit orchestration” |
+| any top-level `identity_ok` / `authenticated` / `sovereign_*` | denylist + bar-1 | ban; reuse attach schema fields only |
+
+**Keep (already correct):** `attach_session_identity`, `did_subject=gamer_wallet`, `did_names_silicon=false`, `device_to_owner_link`, `advances_*: false`, `identity_lane=identity-provenance`, dual-bit `controller_presence.verdict`.
+
+**Denylist extension (new source + emitted JSON):** existing tokens + `controller_identity`, `device_did`, `identity_capture` as value claims, `stronger liveness`, any implication that attach upgrades candidate.
+
+---
+
+## (3) Load-bearing rail — CONFIRM (with one real escape class)
+
+**Sealed model (no path around *inside* composition):**
+
+```
+GO.live_hardware = fire.real_hardware   # challenge_live only
+effective_live   = (mode=="live") AND all(GO.live_hardware) AND bool(GOs)
+candidate        = dry_plumbing_ok AND effective_live AND activity_source=="bridge"
+SYNCHRONIZED     = identity_bound AND presence_candidate   # presence bit = candidate is True
+```
+
+Injected dry fire with `real_hardware=False` → every GO `live_hardware=False` → `effective_live=False` → `presence_session_candidate_ok=False` → attach → **`IDENTITY_ONLY`**. NO_GO does not help. Mode `live` alone is insufficient (F-GP-4). Seal invalid demotes candidate further in `summarize_live_session`.
+
+**CONFIRM:** no sealed API path turns `real_hardware=False` into SYNCHRONIZED.
+
+**BREAK class (orchestration, not summarize):**  
+`attach_session_identity` **trusts** `presence_summary.presence_session_candidate_ok` — it does **not** re-walk challenges. If the runner (or a test) builds/mutates a summary with `candidate=True` and skips `summarize_live_session`, attach will emit SYNCHRONIZED without any fire. That is the only realistic fabrication path for this increment.
+
+**Not a rail break (document only):** a test double `FireFn(real_hardware=True)` *can* mint candidate — that is the intentional live-path simulator. Dry CLI must never install that double.
+
+---
+
+## (4) r03-bound FIX list — Claude builds these first
+
+1. **Names:** use rename table above; schema/claim language = attach/orchestration, not “controller identity capture.”
+2. **Pipeline purity (hard):**  
+   `start_live_session` → only `poll_bridge_activity` + `challenge_live` → only `summarize_live_session` → only `attach_session_identity(presence_summary=that_return)`.  
+   **Never** set `presence_session_candidate_ok` / `effective_live` / `live_hardware` in the runner.
+3. **Dry fire_fn:** fixed `FireResult(fired=True, real_hardware=False, ...)`. Unit test: dry run → `verdict==IDENTITY_ONLY` and nested `presence_session_candidate_ok is False`.
+4. **`--live`:** require `POEP_LIVE_FIRE_ENABLED=1`; refuse otherwise. Do not synthesize `real_hardware=True` in the runner. Adapter is operator-supplied / deferred stub that may still return False until L3 exists (honest).
+5. **Seal v2:** optional field under `identity`; never gates candidate; docstring: custody epoch, not presence.
+6. **Device guard:** pass ceremony constants as args; inherit attach mismatch `ValueError`; default Edge id is fixture, not silent overwrite of session device.
+7. **CLI success semantics:** dry success = IDENTITY_ONLY expected (exit 0); do **not** treat SYNCHRONIZED as the only success; live path may still be IDENTITY_ONLY if fire stub is non-real.
+8. **Tests (mechanical):** denylist on new module + artifact; sealed files bit-identical (diff); flags false; dry≠SYNCHRONIZED; mismatch refuse; no HID import on dry path.
+9. **Claim ceiling:** ship r01 gp-identity ceiling (or nested attach ceiling) in artifact; do not overwrite presence `claim` FLIP-A string.
+10. **Rails hold:** zero spend, no chain, `poep_enabled`/L6B/L6_CHALLENGES false, sealed four modules + PV-CI 184 untouched.
+
+---
+
+### One-line build charter for Claude
+
+**Composition-only attach runner under honest names; dry path is mechanically IDENTITY_ONLY via sealed `summarize_*` + honest `real_hardware=False`; never hand-build the candidate bit; seal v2 is identity-side custody, not liveness.**

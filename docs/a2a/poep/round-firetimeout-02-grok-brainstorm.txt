@@ -1,0 +1,111 @@
+I'll read the open, the rig session audit, and the named seams first, then answer A–E as a decisive build spec.Checking analyze physics, resolve helper, CLI challenge count, and config knobs so the A–E verdicts stay grounded.# A2A FIRE-TIMEOUT r02 — GROK FORWARD (build spec for F-RIG27-6)
+
+**Charter (a).** Grounded on rig-2 + the named seams. **Spend 0 · no flag flips · PV-CI 184 · sealed poep + classify_activity + pcc_allows_challenge + session-loop buffer/analyze math byte-untouched.**
+
+---
+
+## A — FIRST FIX
+
+**VERDICT: coordinated-timeout-bump-first (+ instrumentation same ship). DEFER wall-time capture window.**
+
+**Why:** Client `IDENTITY_ONLY` / `n_go_issued=0` is definitively the timeout chain (`client 6s` / `endpoint 5s` < RP drain **5–11s**). A longer wait is the minimal honest fix: handler waits longer for a **real** Future resolve; session-loop frame math stays frozen.
+
+**RP sparsity & analyze:** Possible second-order risk (350-frame window stretched in wall-time → sparser samples in the 80–280 ms band), but **not proven yet**. Zero `l6b_probe_log` rows are **ambiguous** (analyze-fail vs store skip vs late complete after cancel) — they do **not** authorize a window redesign now. Ship timeout + resolve INFO; if next rig completes HTTP but shows `error=` / zero peak / no rows → **then** wall-time window (r04). Do not touch `frames_remaining=350` in r01 build.
+
+---
+
+## B — VALUES + ORDERING + N
+
+**VERDICT: endpoint default 20s · client default 25s · pin `client > endpoint > max_observed_drain` · sequential only · default N=2 fine · do not parallelize.**
+
+| Knob | Value | Role |
+|------|-------|------|
+| `POEP_FIRE_TIMEOUT_S` (endpoint `wait_for`) | **20.0** default | Covers observed drain ≤11s with ~2× headroom |
+| Client urllib `timeout_s` | **25.0** default (= endpoint + 5s) | Must outlast endpoint (HTTP layer sits on endpoint) |
+| Ordering pin | `client_timeout > endpoint_timeout > 11.0` | Test-assert or module constant comment |
+
+**CLI session length:** default `--challenges=2` → worst-case ~50 s fire-wait + activity/PCC — **acceptable** for a rig run. No hard N cap required; optional note in CLI help that N≫5 under RP is multi-minute. **Do not parallelize** — single-slot `409 busy` is load-bearing (`_l6b_pending` / `_poep_fire_inflight`). Cap is the slot, not a new knobs race.
+
+**Wire:**
+1. `_app.py`: `timeout=float(os.environ.get("POEP_FIRE_TIMEOUT_S", "20") or 20)` (clamp sensible floor ≥5, ceiling ≤60).
+2. `make_bridge_fire_adapter(..., timeout_s=25.0)` default bump; CLI `--fire-timeout` (or derive `endpoint+5` if only one knob) passed into factory at `poep_session_identity_attach.py:157`.
+
+---
+
+## C — RESOLVE INFO SCOPE
+
+**VERDICT: YES — nonce-bound only, one INFO site inside `_resolve_poep_fire`, analyze-success = empty `error` — enough for late-vs-analyze-fail.**
+
+**Why:** Both resolve callers (success ~2781, fail ~2876) already funnel here. Auto-tick has no `poep_future` / no `poep_nonce` → stay DEBUG elsewhere.
+
+**One line shape (build this):**
+```text
+POEP-HID-RING: resolve nonce={16}… lat={latency_ms} peak={peak_lsb} error={error or "ok"}
+```
+- `error=="ok"` (or empty) ⇒ analyze success path  
+- non-empty `error` ⇒ honest-null branch  
+- Log appears + client still 504 ⇒ **late-completion was the story** (timeout still short)  
+- Log appears + client 200 + `lat=None/0` + error set ⇒ **analyze-fail**  
+- Log never appears + 504 ⇒ **drain never finished** (worse than rig-2 bound)
+
+**Optional same-line freebies (if already in scope, not new logic):** `post_n=len(_l6b_post_buffer)` — helps sparsity without window change. Skip if it forces buffer-touching outside `_resolve`. Prefer pure resolve-payload fields only if cleaner.
+
+---
+
+## D — FABRICATION / RAILS
+
+**VERDICT: NO new false-positive path. Longer wait only waits longer for a REAL confirmed fire.**
+
+| Rail | Status after bump |
+|------|-------------------|
+| Adapter: `fired + real_hardware + nonce` | Untouched — still required for `FireResult(fired=True)` |
+| `challenge_live`: seal / ACTIVE_GAMEPLAY / `pcc_allows_challenge` | Untouched — DEGRADED still refuses **before** fire |
+| `_resolve_poep_fire`: fired/real_hardware True by construction only after real write | Untouched |
+| No band-fill latency | Untouched — `latency_ms=None` → client maps 0 → verify fails honestly |
+| 504 on true stall | Still honest fail-closed |
+
+A 20 s wait that never resolves still 504s → client `fired=False` → `n_go_issued` stays 0. A resolve with measure-fail still can return 200 with features that **fail** `verify_live_response` (may raise `n_go_issued` but not `n_go_verify_pass`) — that is honest measurement, not fabrication. **SYNCHRONIZED still requires MIN_GO_VERIFY_PASS.**
+
+---
+
+## E — BLAST RADIUS + TESTS + r03 BARS
+
+### Blast radius (allowed touch list)
+| File | Change |
+|------|--------|
+| `bridge/vapi_bridge/operator_api/_app.py` | `wait_for` 5→ env `POEP_FIRE_TIMEOUT_S` default **20** |
+| `l9_presence/poep_bridge_fire_adapter.py` | default `timeout_s` **6→25** |
+| `scripts/poep_session_identity_attach.py` | pass `timeout_s` / `--fire-timeout` into factory |
+| `bridge/vapi_bridge/dualshock_integration.py` | **only** one INFO in `_resolve_poep_fire` when `poep_nonce` set |
+| tests | endpoint timeout + adapter default + ordering pin |
+
+**Forbidden:** session-loop drain math · `frames_remaining` · analyze · `classify_activity` · `pcc_allows_challenge` · sealed challenge/presence modules · flag defaults · chain/spend.
+
+### Test shape (fakes, no HID)
+1. **Endpoint timeout config:** monkeypatch env → `wait_for` uses 20 (or injected); Future that never completes → **504** with existing message.
+2. **Slow-resolving Future:** Future resolves at T=0.05s under test timeout 0.2s → **200** body with `fired/real_hardware/nonce` (fake dict) — proves wait-not-fabricate.
+3. **Timeout still honest:** Future unresolved past short timeout → 504, not a synthetic success body.
+4. **Adapter default:** `make_bridge_fire_adapter` default `timeout_s >= 25` (or `> endpoint` constant).
+5. **Ordering pin unit:** `CLIENT_DEFAULT > ENDPOINT_DEFAULT > 11.0`.
+6. **Regression:** existing adapter weak-seam tests (no confirm → not a fire) still pass.
+
+### Pre-registered r03 bars (SHIP only if all hold)
+1. Diff confined to allowed list above (session-loop buffer/analyze byte-identical except optional resolve INFO).
+2. Defaults: endpoint **20**, client **25**, pin `client > endpoint > 11`.
+3. 504 path still pure fail-closed (no fired=True on timeout).
+4. `_resolve_poep_fire` INFO only when `poep_nonce` present (auto-tick quiet).
+5. Adapter weakest-seam suite green; no `real_hardware` synthesis on errors.
+6. PV-CI **184**; zero spend; no `L6B_ENABLED` / `poep_enabled` / kill-switch edits.
+7. Next-rig readiness: with bump, either GO issues with measured features **or** INFO log proves analyze/drain class for r04.
+
+---
+
+## BUILD ORDER (for Claude)
+
+1. Endpoint `POEP_FIRE_TIMEOUT_S` default 20 + 504 preserved.  
+2. Client default 25 + CLI wire.  
+3. One nonce-bound resolve INFO in `_resolve_poep_fire`.  
+4. Tests (slow Future / timeout 504 / ordering / adapter default).  
+5. Hold for r03 — **then** operator commit → Shell B rig-3.
+
+**r04 trigger (do not build now):** HTTP completes + resolve INFO shows analyze fail **or** post sparsity → wall-time capture window only then.

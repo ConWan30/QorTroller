@@ -1,0 +1,154 @@
+# A2A SYNC-GO r02 — GROK FORWARD (build spec for Cursor)
+
+**Charter (a).** Operator GO on r01 2026-07-18. **Spend 0 · no flag flips · PV-CI 184 ·
+do not weaken refused_activity / PCC into free-fire · sealed challenge_live / classify_activity
+byte-stable on fail-closed semantics.**
+
+---
+
+## A — FIRST FIX (option rank)
+
+| Opt | Verdict | Why |
+|-----|---------|-----|
+| **(b) Attach CLI preflight + wait** | **BUILD THIS** | Last attach failed with n_go=0 / fraction=0.0: challenges issued once each with a single poll; no wait for ACTIVE_GAMEPLAY or warm window. Hardware fire proven (operator felt amp=80). Gap is **operator timing + CLI UX**, not dead ring. |
+| (a) Runbook only | **ALSO ship** (same PR or tiny follow) | Checklist is necessary but insufficient alone — operator already ran attach cold. |
+| (c) Bridge field mapping | **NO code unless test fails** | Fetcher already uses `/operator/bridge/capture-health` + `live_trigger_active_fraction` + `live_activity_window_n>=3` (attestfeeds). Mapping is correct; cold window / zero fraction is the live failure mode. |
+| (d) Longer hold_ms / feel | **DEFER** | Operator felt amp=80 manual fire. Default 60 may be quiet; expose `--amplitude` clamp≤80 instead of changing global hold. |
+
+**Root mechanism (grounded):**
+
+```text
+run_session_identity_attach:
+  for each GO:
+    poll_bridge_activity(once)   # may return {} if window_n < 3 OR no sample
+    challenge_live(...)          # refuses if not ACTIVE_GAMEPLAY / PCC bad
+```
+
+Activity fetcher (scripts/poep_session_identity_attach.py ~104–108):
+- needs `live_activity_window_n >= 3` AND numeric `live_trigger_active_fraction`
+- fraction **0** with filled window → MENU → **refused_activity** (no buzz)
+- empty {} → UNKNOWN → refused
+
+So: **wait until (n>=3 AND fraction>0) AND PCC NOMINAL+EXCLUSIVE_USB**, then challenge; print clear status; timeout fail-closed to IDENTITY_ONLY (honest), never invent activity.
+
+---
+
+## B — BUILD SPEC (Cursor)
+
+### B1 — CLI preflight (primary)
+
+**File:** `scripts/poep_session_identity_attach.py` (orchestration shell only; prefer **not** editing sealed `challenge_live` / `classify_activity`).
+
+Add something equivalent to:
+
+```text
+--wait-active-s FLOAT   default 45 (0 = no wait, current behavior)
+--amplitude INT         default 60, clamp 1..80 (LOW_AMPLITUDE_FORCE_MAX)
+--poll-s FLOAT          default 1.0 between preflight samples
+```
+
+**Preflight loop (live only, before `run_session_identity_attach` or as wrapper that only starts challenges when ready):**
+
+1. GET capture-health (same URL as fetcher).
+2. Ready when ALL of:
+   - `capture_state` in {NOMINAL} (match pcc_allows_challenge / existing PCC set)
+   - `host_state` in {EXCLUSIVE_USB, UNKNOWN} if that is what `pcc_allows_challenge` already allows — **read the sealed helper; do not invent a looser set**
+   - `live_activity_window_n >= 3`
+   - `live_trigger_active_fraction > 0`  → ACTIVE_GAMEPLAY under sealed grammar
+3. Else sleep `poll-s`, print one stderr line:
+   `waiting active play: frac=… window_n=… capture=… host=… (…s left)`
+4. On timeout: print `PREFLIGHT TIMEOUT: no ACTIVE_GAMEPLAY within Ns — attach will still run and honestly refuse GOs` OR exit 3 with clear message — **pick one and document**; prefer **exit 3** so operator does not get a silent IDENTITY_ONLY with n_go=0 thinking fires ran.
+5. On ready: proceed into existing `run_session_identity_attach`.
+
+**Amplitude:** pass through to `challenge_live(..., amplitude=args.amplitude)` if the runner currently hardcodes default — thread amp from CLI → `run_session_identity_attach` → each `challenge_live` call. **Do not** change sealed default constant unless necessary; CLI override is enough.
+
+**Preferred architecture:** keep purity of `poep_session_identity_run.py` (no candidate forge). Either:
+- preflight only in the **script** then call runner, or
+- add optional `wait_active_s` / `amplitude` kwargs to the runner that only loop `poll_bridge_activity` until ACTIVE or timeout **before** the challenge for-loop — still never sets candidate bits.
+
+### B2 — Operator card (required same ship)
+
+**File:** `docs/a2a/poep/syncgo-operator-card.md` (short) + 5-line pointer in `docs/poep-campaign-runbook.md`.
+
+Contents:
+1. Topology: USB→PC active host + RP; hold R2 lightly.
+2. Shell A LEAN+campaign env (pointer to runbook; `POEP_CAMPAIGN_MODE=true`, `POEP_LIVE_FIRE_ENABLED=1` on **bridge process**).
+3. Shell B: set `POEP_LIVE_FIRE_ENABLED=1`; optional preflight curl of capture-health.
+4. Command:
+   `python scripts/poep_session_identity_attach.py --live --api-key … --fire-timeout 25 --wait-active-s 45 --amplitude 80 --challenges 2`
+5. Success: feel tugs; artifact `n_go_issued>=2`; aim `SYNCHRONIZED_CONTROLLER` or honest GOs + next gap.
+
+### B3 — Tests (fakes, no HID)
+
+| Test | Assert |
+|------|--------|
+| T1 | Preflight: mocked health cold window_n&lt;3 → not ready |
+| T2 | Preflight: window_n≥3 frac=0 → not ready (MENU) |
+| T3 | Preflight: window_n≥3 frac&gt;0 + PCC ok → ready |
+| T4 | Timeout path: no ready within wait → exit 3 or documented refuse (no fabricated GO) |
+| T5 | amplitude CLI clamps to ≤80 |
+| T6 | Regression: existing dry attach still IDENTITY_ONLY; sealed refuse_activity still holds |
+
+### B4 — Forbidden
+
+- Changing `classify_activity` so UNKNOWN/MENU becomes ACTIVE
+- Skipping PCC
+- Synthesizing `real_hardware=True`
+- Flipping env flags in bridge/.env permanently
+- Claiming SYNCHRONIZED without a rig artifact
+
+---
+
+## C — r03 BARS (SHIP only if all hold)
+
+1. **Diff confined** to attach script (+ thin runner kwargs if needed) + docs + tests; sealed fail-closed of `challenge_live` / `classify_activity` **unchanged**.
+2. **Preflight wait** is live-only; dry path byte-behavior for dry fire still IDENTITY_ONLY.
+3. **Ready condition** uses same fields as production fetcher (`live_activity_window_n`, `live_trigger_active_fraction`) + PCC set equal to `pcc_allows_challenge`.
+4. **Timeout is honest** — no GO issued without ACTIVE; exit code or banner makes n_go=0 non-silent.
+5. **`--amplitude`** default 60, max 80, wired into GO fire path.
+6. **Tests green** for T1–T6 (or equivalent); PV-CI **184**; zero spend; no L6B/poep_enabled edits.
+7. **Operator card** present; command copy-pasteable.
+8. **Next-rig readiness:** with preflight, either GOs issue under play **or** timeout explains why — not a mystery IDENTITY_ONLY.
+
+---
+
+## D — FABRICATION / RAILS
+
+| Attack | Defense |
+|--------|---------|
+| Wait loop invents frac&gt;0 | Only reads bridge JSON; empty/error → not ready |
+| Timeout still fires | Must not call fire_fn without ACTIVE (exit 3 or refuse all challenges) |
+| Amp 255 | Clamp ≤80 at CLI + existing clamp_amplitude |
+| Free fire on MENU | Preflight + sealed challenge_live both refuse |
+
+---
+
+## E — SEQUENCING FOR CURSOR
+
+1. Read r01 open + this r02.  
+2. Implement B1+B2+B3.  
+3. Emit **claims C1..Cn** (file:line) + auditor packet.  
+4. Write `docs/a2a/poep/round-syncgo-03-cursor-build.md` (what changed + how to test).  
+5. HOLD for grok r03 verify — **do not commit** until PASS + operator go.
+
+---
+
+## Operator paste into Cursor
+
+```
+A2A charter (a): you are BUILDER only. Grok r02 FORWARD is authoritative.
+
+Read:
+  docs/a2a/poep/round-syncgo-01-cursor-open.md
+  docs/a2a/poep/round-syncgo-02-grok-brainstorm.txt
+
+Build B1 (CLI --wait-active-s + --amplitude) + B2 operator card + B3 tests.
+Do NOT weaken refused_activity/PCC. Do NOT flip L6B_ENABLED/poep_enabled.
+Do NOT mark PASS yourself.
+
+When done: claims C1..Cn + auditor packet; write
+  docs/a2a/poep/round-syncgo-03-cursor-build.md
+Then operator ferries to Grok for r03 VERIFY.
+```
+
+**One-liner:** Wait for real ACTIVE_GAMEPLAY (window warm + frac&gt;0 + PCC), then fire amp≤80 — no free-fire, no silent n_go=0.

@@ -1,0 +1,136 @@
+I'll ground this in the live UC-5/UC-3 surfaces first — wasm applet, sandbox config, and the buyer ZK prover/verifier artifacts — then give the numbered design.## Design consult — UC-5 + UC-3 (adversary-grounded)
+
+Rails acknowledged: stage only; no chain/deploy/FROZEN/PoAC/seal; kill-switch on; consented-exports-only.
+
+---
+
+### 1. UC-5 — first aggregates, consent, triple, test
+
+**Right first fns (pure, deterministic, rail-safe):**
+
+| # | Op | Why first | Rail note |
+|---|-----|-----------|-----------|
+| A | **`count`** | trivial; proves commitment-set + version plumbing | only rows that pass consent gate |
+| B | **`verdict_histogram`** | discrete enum → no float; provenance-meaningful | labels from **export metadata** only (ruling/strata class already on UC-2/UC-10), never L4/L5/PoEP |
+| C | **`sum` + `mean` of one allowlisted integer field** | e.g. `session_tick_count`, `match_span_s`, `authored_kill_count` | field ID in a **frozen allowlist** in applet; reject unknown field |
+| D | **integer `p50` (sort + mid)** only after A–C | still pure; avoid float | **defer continuous quantile / APM** until allowlist proves non-biometric derivation |
+
+**Drop from v1:** free-form mean of arbitrary JSON keys; multi-field regressions; any IMU/tremor/humanity/APM-if-from-biometric; cross-gamer pool without every row’s cross-aggregate consent.
+
+**Consent inside sandbox (honest model):**
+
+1. Applet has **no RPC** and does not re-read ConsentManifestRegistry.
+2. Each input row is a **pre-bound export ref**, not raw HID:
+   ```
+   row = { field_id, value_i64, consent_bits_u32, cross_aggregate_ok: bool,
+           gamer_export_commitment: 64-hex }
+   ```
+3. Gate (fail-closed, exit ≠0):
+   - `consent_bits & bit_for(requested_export_category) != 0`
+   - if `|unique gamer_export_commitment| > 1` → every row must have `cross_aggregate_ok == true`
+   - `field_id ∈ ALLOWLIST` and not in a biometric deny-set
+4. **Provenance bind:** `row_commit = SHA-256(b"WMP-ANALYTICS-ROW-v0" || field_id || be64(value) || be32(consent_bits) || cross_u8 || gamer_export_commitment)`. Applet only aggregates rows it hashed itself; buyer re-hashes the same preimage set and checks the set root. Host-forged `consent_bits=1` without matching published export commitment is out-of-band fraud (same class as DEPIN-1 “format only, not truth oracle”) — **document that ceiling**.
+
+**Output triple shape (exact):**
+
+```json
+{
+  "statistic": {
+    "op": "count|sum|mean|p50|hist",
+    "field_id": "session_tick_count",
+    "payload": { "n": 12, "value": "…", "bins": null }
+  },
+  "input_commitment_set": {
+    "algo": "sha256-sorted-leaf-merkle-v0",
+    "root": "<64-hex>",
+    "n": 12,
+    "leaves": ["…"]   // or omit leaves in SHARE mode; keep root always
+  },
+  "applet_version": {
+    "crate": "w3bstream_applet",
+    "semver": "…",
+    "wasm_sha256": "<64-hex of built .wasm>"
+  }
+}
+```
+
+`mean` payload: fixed-point as decimal string of `sum/n` with explicit `scale` (e.g. milli) — no IEEE in the attested surface.
+
+**Smallest honest CI test:**
+
+1. `cargo build --release --target wasm32-unknown-unknown` (already CI-shaped).
+2. **Rust unit tests** on pure `aggregate_*` (no host) + consent fail cases.
+3. **Python mirror** of the same pure fns (pattern of `resolve_node_session` / `test_w3bstream_ingestion.py`) — parity vectors, not full wasmtime unless already in CI.
+4. Extend `test_w3bstream_ingestion.py` only for new exit codes / payload schema smoke; **do not pretend** it executes the wasm binary today (it is Python mechanical validation).
+
+Product “buyer verifies live marketplace stats” is **not** required for the first artifact.
+
+---
+
+### 2. UC-3 — buildable-now scope + acceptance + footguns
+
+**Honest NOW scope (code-only):**
+
+1. `compute_inputs_buyer_category.js` (circomlibjs Poseidon) — same pattern as `bridge/zk_artifacts/compute_inputs*.js` / replay helpers.
+2. Inputs: private `(buyerDID, credentialNonce, categoryId, issuedAt, expiresAt)` + public `(claimedCategory, currentTimestamp, credentialCommitment, nullifierHash)` matching `VAPIBuyerCategoryVerifier.circom`.
+3. `snarkjs groth16 fullProve` against committed:
+   - `VAPIBuyerCategoryVerifier_js/VAPIBuyerCategoryVerifier.wasm`
+   - `VAPIBuyerCategoryVerifier_final.zkey`
+4. Local `snarkjs groth16 verify` vs `VAPIBuyerCategoryVerifier_verification_key.json`.
+5. Optional encode → 320-byte wire (`zk_buyer_verifier.py` layout) + decode round-trip unit test.
+6. Golden: regenerate Hardhat fixture inputs (buyerDID=123…, cat=3, ts=1750000000, …) and assert prove+verify **or** byte-match known `pA/pB/pC/pubSignals` in `VAPIBuyerCategoryVerifier.test.js`.
+
+**Acceptance test:**
+
+| Layer | Role |
+|-------|------|
+| **Local verify vs `_verification_key.json`** | **Primary** acceptance for the prover ship. Same class as Hardhat’s real-proof fixture. |
+| Bridge `verify_buyer_category_proof` | **Secondary / optional** — needs RPC + non-empty `buyer_category_verifier_address`; module is fail-open False when empty. Not required to call the ship “prover done.” |
+| On-chain staticcall | Explicitly **out of scope** under hard rails (no chain writes; even view RPC optional). |
+
+`catMin`/`catMax` in-circuit are **constants 1 and 4** (INV-BUY-001), not public signals. Public layout (output-first, already documented in bridge + Hardhat):
+
+`pubSignals = [valid=1, claimedCategory, currentTimestamp, credentialCommitment, nullifierHash]`
+
+**Footguns (hammer these):**
+
+1. **Poseidon arity/order** — C3 = Poseidon(5)(DID, cat, issued, expires, nonce); C4 = Poseidon(2)(DID, nonce). Wrong order → proof that never verifies, or (if someone hand-edits publics) false confidence.
+2. **Decimal string field encoding** for snarkjs; no hex in input.json.
+3. **pubSignals order** — `valid` first; bridge packs `[1, cat, ts, commitment, nullifier]`.
+4. **pB coordinate order** when packing for Solidity/wire (snarkjs vs on-chain) if you touch the 320-byte encoder.
+5. **Witness determinism** — same private JSON → same proof *only if* fullProve is deterministic for this snarkjs version; prefer “verify OK + public.json match” over bitwise proof equality across machines.
+6. **Expiry** — `currentTimestamp < expiresAt` is hard; fixture times already satisfy it.
+7. **No new ceremony** — `_final.zkey` + vkey already committed; do not re-contribute.
+
+---
+
+### 3. Order / loops / secret gates
+
+| | UC-3 | UC-5 |
+|--|------|------|
+| Toolchain | Node + snarkjs (existing) | Rust → wasm32 (existing) |
+| Missing half clarity | Explicit (prover absent) | Additive surface on mechanical applet |
+| Input readiness | Synthetic credential preimage is enough | Needs a **row schema + fixtures**; no live multi-export feed required for v1 |
+
+**Build UC-3 first** — smaller acceptance surface, artifacts already proven by Hardhat T-BCV-1..6, closes portfolio “missing half.”
+
+**Two loops, not one** — different languages, different verify scripts, different regression risk; charter (a) wants independent verify per ship.
+
+**Secret gates?**
+
+- **UC-3:** **No.** Ceremony done; wasm/zkey/vkey present; snarkjs in `contracts/circuits/node_modules`; bridge verify is optional. Live Curator-issued credentials are a **product** gate, not a prover-code gate.
+- **UC-5:** **No for pure-agg artifact.** **Yes for product analytics** if interpreted as live multi-gamer W3bstream jobs over real marketplace bundles — that needs consented-export ingestion binding (not in applet today). Honest first ship = pure fns + fixture rows + triple.
+
+---
+
+### 4. Highest-risk VERIFY hammers
+
+1. **UC-5:** Consent is **host-asserted** unless row preimage is binding. I will reject any design where `consent_bits=1` is trusted without `gamer_export_commitment` in the leaf preimage, or where cross-gamer hist runs with a single global consent flag. Also reject biometric/APM field creep and any `frame_grabbing`/`optical_capture` flip.
+2. **UC-3:** **pubSignals / Poseidon mismatch** that “verifies” only because tests hardcode the wrong public vector, or wire encoding that diverges from `zk_buyer_verifier.py` (valid-first, 320B words 8–9 = commitment/nullifier). I will require fixture-parity or fullProve→vkey verify on known circuit inputs.
+
+---
+
+### One-liners
+
+- **UC-5: BUILD-NOW** (working artifact = pure-wasm aggregates + consent-gated fixtures + attested triple; **not** live marketplace analytics until export-row binding exists).
+- **UC-3: BUILD-NOW** (working artifact = snarkjs fullProve + local vkey verify + optional 320B wire; gate for *live buyer mint* only, not for the prover itself).

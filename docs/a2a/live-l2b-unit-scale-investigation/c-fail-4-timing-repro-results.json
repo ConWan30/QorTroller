@@ -1,0 +1,23 @@
+{
+  "n_frames": 125,
+  "dt_ms": 8.0,
+  "n_press_cycles": 16,
+  "precursor_lag_ms": 32.0,
+  "mode_a_bridge_style": {
+    "description": "tight loop over already-collected batch, no delay -- matches dualshock_integration.py",
+    "processing_time_ms": 1.16,
+    "history_span_ms": 1.08,
+    "n_press_events": 16,
+    "coupled_fraction": 0.0,
+    "anomaly": true
+  },
+  "mode_b_realtime_style": {
+    "description": "push_snapshot called as each frame arrives, real 8ms delay between calls -- matches scripts/diag_l2b_live_probe.py",
+    "processing_time_s": 1.087,
+    "history_span_ms": 1079.05,
+    "n_press_events": 16,
+    "coupled_fraction": 1.0,
+    "anomaly": false
+  },
+  "verdict": "C-FAIL-4 CONFIRMED: batch-timestamp collapse deterministically destroys precursor-window detection, independent of threshold, hardware, or bridge -- pure logic/timing mechanism."
+}

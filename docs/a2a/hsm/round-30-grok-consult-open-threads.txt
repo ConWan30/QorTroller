@@ -1,0 +1,225 @@
+Strategic consult — I'll ground T1–T4 against the live tree (OA hardcodes, DR runbook, ioID registry, governance-event path) and challenge each proposal before sequencing.Confirming one more distinction: agent-registration ioID address vs controller VAPIioIDRegistry — a known footgun.# A2A Round-30 — Strategic Synchronized Consult
+
+Grounded against current tree on `feat/l9-consistency-adversarial-harness` (HEAD chain: `b558bdec` → `74c864c8` → `816b4d81` → `bb11a0bb`). Dual OA hardcodes confirmed byte-identical at Sensor C ~L438–442 and Sensor B ~L243–246; private runbook exists (existence-only); `VAPIioIDRegistry` still `0xF7885B58…`; gate POST path still fail-open with live `ts_ns` in provenance hash.
+
+---
+
+## Findings by thread
+
+### T1 — OPERATOR-ACTION box (proposal largely right; refine, don’t kill)
+
+**Verdict on your novel proposal: SHIP with three amendments.**
+
+| Claim | Challenge |
+|-------|-----------|
+| Kill dual hardcode via `audits/operator_actions.json` | **Correct.** This is the same dual-site failure mode as Cycle 9. Single source is the structural fix; “edit once in two files” is how OA text went stale after root fix. |
+| Loop never writes statuses | **Keep absolute.** Encode in schema + tests: sensors **read-only**; no auto-`done` from evidence. Cycle-8 `[when true]` discipline stays. |
+| machine_evidence optional | **Keep, but demote to advisory only.** Name it `machine_hint` (or `evidence_hint`) so it cannot be read as a second status. Sensors may append e.g. `(hint: private companion path exists)` — never flip status. |
+| Fallback = hardcoded v1 box | **Partial challenge.** Byte-compat for *missing file* is good for tests/CI on clones without the seed. But **shipping v1 forever as fallback freezes the lie** (OA-1 “highest-leverage 5-min”, OA-4 open) whenever someone forgets the JSON. Prefer: missing file → short honest banner + compact v1 *or* empty box with `source=MISSING`; seeded file is canonical in this repo. |
+| Sensor B needs full box? | **Prefer shared renderer, not dual prose and not pure “point to C”.** Sensor B is supply/standards; OA is operational posture (Sensor C’s chassis). Best shape: one pure function `render_operator_actions(path) → markdown` used by both `to_markdown`s. That preserves dual-site *presence* (nags still appear in both cycle artifacts) without dual-site *content*. A “see Sensor C ledger” one-liner alone loses the nag-in-B cycle artifacts. |
+
+**Schema (recommended):**
+
+```json
+{
+  "schema": "vapi-operator-actions-v1",
+  "note": "Statuses are OPERATOR attestations. Sensors render only; never write.",
+  "items": [
+    {
+      "id": "OA-1",
+      "text": "…public-safe prose only…",
+      "status": "moot",
+      "attested_date": "2026-07-16",
+      "attested_by": "operator",
+      "attested_note": "Root fix landed; secrecy lost to F-CYCLE9-1; file cold-forensic only.",
+      "machine_hint": {
+        "kind": "none"
+      }
+    }
+  ]
+}
+```
+
+- **status enum:** `open | done | superseded | moot` (yours is right). Checkbox render: open → `[ ]`; done/moot/superseded → `[x]` + status tag.
+- **No `proposed` in the public artifact.** Proposed is a *loop workflow state*, not a published attestation. Draft offline / in PR body; committed file only carries attested statuses.
+- **machine_hint kinds (allowlist, fail-open):** `none` | `path_exists` (relative path under repo, e.g. private companion *path string only* — already public in DR stub) | `gate_evidence` (e.g. “same two-part check as G1.6” as prose pointer, not re-implementation that could diverge). Do **not** implement a live G1.6 re-check inside OA render — G1.6 already owns that; OA-4 `machine_hint` can be `{"kind":"doc_pointer","ref":"G1.6"}`.
+- **Sanitization rail:** regression tests (mirror T12): rendered markdown MUST NOT contain CA filename tokens, raw ARNs, or `~/.vapi/` absolute paths beyond the already-public private-runbook *path name*.
+
+**Initial seed (operator-attested content you can dictate; builder only transcribes):**
+
+| ID | Status | Note gist |
+|----|--------|-----------|
+| OA-1 | **moot** | Interim backup nag retired: secrecy lost (F-CYCLE9-1) + root fix landed; software CA cold-forensic only |
+| OA-2 | **done** | Private companion exists locally (existence attested; content never scanned by loop) |
+| OA-3 | **open** (or **partial** if you add that enum — otherwise open with honest note) | THREE keys now (Sentry secp256k1 + Guardian secp256k1 + MFG P-256 alias); bridge IAM can Sign CA (ceremony proved) but CreateKey DENIED; full policy = operator AWS attestation; CA isolation is **alias-map** (`kms_client` has no mfg agent id — MFG uses `ManufacturerRootCA` + `VAPI_KMS_MFG_CA_ALIAS`), not IAM principal split |
+| OA-4 | **done** | HSM flip + re-anchor + INV-MFG-003 + G1.6 LIVE |
+
+Optional: introduce **OA-5** only if useful (e.g. “historical git exposure of pre-sanitized OA / CA path — force-push never without explicit request / F-CYCLE9-1 banked”). Don’t invent work just to fill a slot.
+
+**Attestation workflow in this loop (clean):**  
+Operator states statuses in chat (or edits JSON in the PR). Builder writes `audits/operator_actions.json` with `attested_by=operator` + date + note quoting the decision. **No `status=proposed` in the commit.** Your “proposed then flip” idea is fine as a *local draft*, not as a committed intermediate that sensors would render as open.
+
+---
+
+### T2 — Software CA cold-retention
+
+**Verdict: doc-only + OA reflection is enough. No new fail-closed preflight.**
+
+| Your lean | Challenge |
+|-----------|-----------|
+| Public retention-status section + OA data | **Ship.** Migration runbook still says “do NOT destroy until every device is KMS-VALID or written-off” — condition is now **met** for the only device (`581a836c` VALID under HSM). Graduate language to: *cold-retain as forensic archive; never a second live signer; destroy only under explicit written write-off policy.* |
+| Code assert `MFG_CA_BACKEND=kms` ⇒ software path never invoked | **Overreach for this loop.** `ManufacturerRootCA` already fails loud on unknown backend; software path is intentional **rollback** (`MFG_CA_BACKEND=software`). A hard ban would break documented rollback and emergency re-sign. Optional *later* (not now): log WARNING when software backend loads while `MFG_CA_BACKEND` was last kms in env history — still not a hard assert. |
+| Anything more? | **Yes, one small public doc fix outside migration runbook:** `docs/disaster-recovery-runbook.md` §Security findings still says highest-leverage action is “backup CA + migrate to HSM” — **stale after this arc**. Refresh that paragraph in the same T2 increment (sanitized; no filename). |
+
+Also update retention bullet in `docs/path-a-mfg-ca-hsm-migration.md` so the runbook that *defined* the rule doesn’t contradict the graduated state.
+
+---
+
+### T3 — ioID CLI registry wire
+
+**Verdict: wire Phase 55 `VAPIioIDRegistry` — review-bars do **not** supersede it.**
+
+Evidence:
+- `docs/ioid-ceremony-review-bars-2026-07-11.md` still names `0xF7885B588718b891B2234477D031607da4a7ACfe` as the on-chain target.
+- `deployed-addresses.json` matches; witness readiness scripts already treat it as READY.
+- Ceremony docs raised **bars** (DID fields, MFG binding, dry-run honesty), not a new registry address.
+
+**Resolution order (yours is right; fail-loud is mandatory):**
+
+1. `IOID_REGISTRY_ADDRESS` env (if set and non-zero)  
+2. else `contracts/deployed-addresses.json` → `VAPIioIDRegistry`  
+3. else **exit non-zero** with explicit message — **never** call `0x000…0`
+
+Thread into `register_controller_ioid(ioid_registry_address=…)`. CLI currently never passes it → zero default → `nonces()` dead-end. Confirmed.
+
+**Smoke scope (honest deliverable):**
+
+| Step | Spend? | Expect |
+|------|--------|--------|
+| Resolve address | 0 | `0xF788…` |
+| eth_call `nonces(gamer)` | 0 | integer (proves live contract) |
+| Binding via VMDR (if `MANUFACTURER_DEVICE_REGISTRY_ADDRESS` set) | 0 | CHAIN for `581a836c` |
+| DID pin stub + digest + calldata | 0 | completes; `tx=None` |
+
+**Challenges / honesty limits:**
+
+1. **Do include live nonce eth_call** in dry-run when registry resolves. That’s the difference between “we assembled bytes against a constant” and “the address is a live contract.” 0 spend.
+2. **Do not claim registration readiness.** Prerequisites still unmet: ProjectRegistry project, `VAPIGamerControllerNFT`, `ioIDStore.setDeviceContract`, gamer-signed permit (D-IOID-P256 Option A). Dry-run completion ≠ ceremony.
+3. **Placeholder readbacks stay placeholders** (`ioid_token_id=42`, fake TBA in dry-run path). Either leave clearly labeled, or return `null`/omit for dry-run so JSON can’t be pasted as “registered.” Prefer **null/omit for dry-run** if you touch that surface (small honesty win).
+4. **Critical footgun — two different “ioID registries” in-tree:**  
+   - Controller path: `VAPIioIDRegistry` `0xF7885B58…` (Phase 55)  
+   - Agent path: `agent_registration.IOID_REGISTRY_ADDR = 0x0A7e595C…` (different contract, agent fleet ceremony)  
+   Wiring must **not** silently reuse the agent constant for controllers. Document in CLI help + module comment.
+
+---
+
+### T4 — Seal governance-event replay
+
+**Verdict: lean (b) + bank (c) inside it. Do not claim (a) restores the original seal event.**
+
+| Option | Honesty |
+|--------|---------|
+| (a) Start bridge + POST now with “the” payload | **Partially reconstructable, not identical.** Reconstructable: `previous_hash` / `new_hash` (parent vs post-seal allowlist via `compute_allowlist_hash`), `reason_category=invariant_change`, reason text from seal script/commit body. **Not reconstructable:** original `governance_provenance_hash` (includes `time.time_ns()` at POST time). A late POST is a **new** provenance link that *references the same allowlist transition*. Honest label: `offline_seal_late_record` / reason_text that says “late record of INV-MFG-003 seal 816b4d81…”. |
+| (b) `scripts/replay_governance_event.py` | **Durable fix.** Reusable for every offline `--generate`. Inputs: prev/new hashes (or git paths), category, text; fetches latest provenance; POSTs with **new** ts_ns; prints payload for audit. |
+| (c) Bank gap only | Honest but leaves the next offline seal in the same hole. |
+
+**Recommended product shape of (b):**
+
+- Default **dry-run** prints payload + would-POST URL; `--execute` requires bridge up + operator key if endpoint auth requires it (check current allowlist-governance-event auth — don’t invent).
+- Docstring: “This creates a *new* chain entry documenting an offline seal; it does not backdate the original event.”
+- One-shot operator action later (out of build loop if bridge is painful): run with INV-MFG-003 hashes + seal reason — **optional this arc**; the *tool* is the deliverable.
+
+Gate already says: *“allowlist write is the seal”* (`816b4d81` message). Bridge provenance is **secondary audit**, not the PV-CI source of truth. Don’t over-weight the gap.
+
+---
+
+## D1 — Sequence
+
+**One commit per increment** (house pattern). Grouping T1+T2 is tempting (OA text + runbook) but **split**: T1 is sensor code + tests + JSON; T2 is pure docs. Cleaner review + adversarial verify boundaries.
+
+**Dependency graph:**
+
+```text
+T1 (OA JSON + shared render) ──► T2 (runbook + migration retention language)
+T3 (ioID wire)                 ── independent
+T4 (replay script + bank gap)  ── independent
+```
+
+**Recommended order for synchronized workflow:**
+
+1. **Inc-1 T1** — structural (kills dual hardcode; everything else can cite OA data)  
+2. **Inc-2 T2** — doc graduate + public DR stale paragraph (consumes T1 statuses)  
+3. **Inc-3 T3** or **Inc-3 T4** — either; prefer **T3** next if you want a live read-only smoke the operator can fire same session; **T4** if bridge-up is convenient  
+4. Remaining independent thread  
+
+Do **not** interleave FROZEN/governance/chain.
+
+---
+
+## D2 — Rule on T1 novel proposal
+
+| Question | Ruling |
+|----------|--------|
+| Schema | `vapi-operator-actions-v1` as above; statuses operator-only |
+| machine_evidence | Yes as **hints only**; no status override; limited kinds; sanitize |
+| Sensor B | Shared pure renderer in both sensors (not delete B box; not B-only pointer) |
+| Fallback | Missing file → honest MISSING banner (+ optional compact legacy for tests); this repo **must** ship the JSON |
+| Operator seeding | Operator dictates in chat / edits file; builder commits **attested** only |
+
+---
+
+## D3 — Backlog misses (dangling from this arc)
+
+| Surface | Gap | Action this loop? |
+|---------|-----|-------------------|
+| Public `disaster-recovery-runbook.md` L45–48 | Still nags CA backup + HSM migration as #1 | **Yes — fold into T2** |
+| `path-a-mfg-ca-hsm-migration.md` retention | Pre-graduation “MUST retain until…” | **Yes — T2** |
+| Ceremony audit Part 3 | Fired; G1.6/INV-MFG-003 live — optional Part 4 pointer to Cycle 18 + seal commit | Nice-to-have, not blocking; can be one paragraph in T2 or skip |
+| `kms_client` alias map | No MFG agent id — **by design** | Document in OA-3 note only; do not add `mfg` to agent map (would collapse principal isolation story) |
+| `verify_device_cert` | Ceremony-proven; dual `.env` root vs bridge wiring already banked | No code unless smoke doc |
+| `DEVICE_ID_CANON` §8 | Resolved in `b558bdec`; review-bars updated | No reopen |
+| Agent vs controller ioID addresses | Easy silent wrong-wire | **Call out in T3** (comment + CLI) |
+| Partner-facing docs (e.g. open-source interoperability report OA-4 open) | Stale narrative | **Out of scope** unless you want a hygiene pass later |
+| F-CYCLE9-1 git history | CA path still in old commits | **Never this loop** (explicit force-push rail) |
+| Placeholder dry-run tokenId=42 | Overclaims | Fold honesty into T3 if touching return shape |
+
+Nothing else from mint/verify → ceremony → seal → G1.6 is load-bearing and unlisted.
+
+---
+
+## D4 — Top 2 footguns for the whole loop
+
+1. **Sanitization + dual-site drift reborn** — Any OA text that reintroduces CA filename / private ARNs / absolute key paths into public cycle artifacts fails F-CYCLE8-1/9-1. Dual hardcode was the disease; dual *write paths* to JSON (or tests that assert old OA-1 strings) are the relapse.
+
+2. **Honesty collapse on “success” surfaces** — (a) ioID dry-run with resolved registry + live nonce is still **not** registration (prereqs + gamer sign + real send path); (b) late governance POST is a **new** provenance event, not the original seal; (c) agent `0x0A7e…` ≠ controller `0xF788…`. Over-claim language in commit messages or smoke output is the highest-cost error this loop can make without spending IOTX.
+
+Honorable mention: treating software-backend ban as safety when rollback still requires it.
+
+---
+
+## Increment plan table
+
+| Inc | Thread | Deliverable | Touch | Tests / verify | Operator | Rails |
+|-----|--------|-------------|-------|----------------|----------|-------|
+| **1** | T1 | `audits/operator_actions.json` (attested seed) + pure `render_operator_actions()` + both sensors consume it; drop dual hardcode | `sensor_c_rung_ledger.py`, `sensor_b_supply_watch.py`, small shared helper (new module or both import from one), tests T9/T8-style + sanitization negatives | Regenerated sample markdown snippets in tests; optional one-shot cycle render proof artifact **without** private tokens | Dictates OA-1..4 statuses in chat; commits Inc-1 | No chain/spend/seal/FROZEN |
+| **2** | T2 | Public retention-status § in DR stub; graduate retention in `path-a-mfg-ca-hsm-migration.md`; kill stale “backup CA + HSM” as top action | `docs/disaster-recovery-runbook.md`, `docs/path-a-mfg-ca-hsm-migration.md` only | Grep public docs for CA filename / “highest-leverage 5-min” | Commit Inc-2 | Sanitized public prose only |
+| **3** | T3 | Resolve registry env → deployed-addresses → fail-loud; CLI passes address; dry-run smoke includes eth_call `nonces` | `controller_ioid_registration.py`, `register_controller_ioid.py`, tests | Unit: zero addr refused; resolution order; mock nonce. Optional live dry-run for 581a836c (0 spend) | May run live smoke; does **not** `--confirm` | No broadcast |
+| **4** | T4 | `scripts/replay_governance_event.py` dry-run default + doc of offline-seal limitation; optional bank line in ceremony audit | new script + short doc note | Unit: payload shape; no network in CI | Later: optional `--execute` when bridge up for INV-MFG-003 late record | No seal, no allowlist rewrite |
+
+**Adversarial verify checklist (you, each inc before stage):**
+
+- Inc-1: both sensors produce identical OA block from same file; missing-file path doesn’t crash; sanitization negatives green; statuses not auto-mutated.  
+- Inc-2: zero private tokens; retention language consistent with OA-1 moot / OA-4 done.  
+- Inc-3: never zero-address call; agent registry constant unused; dry-run JSON cannot be mistaken for live reg.  
+- Inc-4: script never rewrites allowlist; never claims backdated provenance; fail-open documented.
+
+---
+
+## What I want from you (operator) before Inc-1 build
+
+1. **Confirm OA statuses** (table above) or edit.  
+2. **Confirm Inc order** 1→2→3→4 (or swap 3/4).  
+3. **Confirm T4 = tool only this arc** (no mandatory bridge start for INV-MFG-003 late POST).  
+4. **Confirm T3 dry-run honesty:** null/omit fake tokenId vs keep 42 with explicit `placeholder: true`.
+
+I am ready to **challenge the first built increment** as soon as you land it; I will not implement in this consult turn.

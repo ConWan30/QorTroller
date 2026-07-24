@@ -1,0 +1,113 @@
+I'll verify Inc-3 against the V1–V7 hammer: inspect the shipped code, docs, and consumers, then give findings-first SHIP/FIX.Reading the core implementation, tests, docs, and consumers next.Updating todos and writing the findings-first verdict.# A2A Round-34 — VERIFY Inc-3 (T3 ioID CLI registry wire)
+
+**Branch:** `feat/l9-consistency-adversarial-harness`  
+**Tree:** unstaged Inc-3 diffs on the 5 claimed surfaces (+ unrelated dirt elsewhere — stage only the Inc-3 set)  
+**Gates I ran:** `test_controller_ioid_registration.py` **12/12 PASS**; PV-CI **184/184 PASS**
+
+---
+
+## Findings (severity order)
+
+### F-R34-1 — MEDIUM residual (docs, in-scope file) — D-IOID-CER-5 still claims fabrication
+`docs/ioid-ceremony-review-bars-2026-07-11.md` header + CODE-TRUTH index are corrected to `ioIDRegistry` `0x0A7e595C…`, but **§5 D-IOID-CER-5 still says**:
+
+> live send/readback path is placeholder (`ioid_token_id = 42`, `controller_ioid_registration.py` ~L293)
+
+That is **false after Inc-3**. Code now returns `None` / raises `NotImplementedError`; the old skeleton is gone. Same-commit one-line corrigendum recommended (HOLD reason → prereqs + NotImplemented, not `=42`).
+
+### F-R34-2 — MEDIUM residual (docs, out-of-primary-surface) — r33-flagged docs still wrong
+Still name **`VAPIioIDRegistry` `0xF7885B58…` as the ioID mint/permit path** for controller-class flows:
+
+| Doc | Problem |
+|-----|---------|
+| `docs/witness-node-ioid-readiness-2026-07-11.md` L28, L48 | “Mint ioID via VAPIioIDRegistry” + reuses agent flow — conflates DID book with permit registry |
+| `docs/depin-interop-vision-2026-07-11.md` L31 | “ioID registry” row anchors permit/DID path at F788 while citing `controller_ioid_registration.py` |
+| `docs/trio-readiness-loop-trl1-2026-07-11.md` L69 | readiness check cites F788 as READY identity target |
+
+Primary ceremony doc + `deployed-addresses.json` notes are fixed. These three still re-seed F-T3-1. **Not code blockers**; should not be “forgotten” next doc pass.
+
+### F-R34-3 — LOW residual — `chain.py` wrapper incomplete, not dishonest
+`chain.register_controller_ioid`:
+- Does **not** pass `ioid_registry_address` → hits zero-sentinel → `resolve_ioid_registry_address()` (correct)
+- Returns dict with `ioid_token_id`/`tba_address` as `None` on dry-run (honest)
+- Coerces `tx_hash: res.tx_hash or ""` (empty string, not a fake hash) — mild shape leak
+- Drops new fields: `ioid_registry_address`, `device_nonce`, `pending_prereqs`
+- `dry_run=False` → `NotImplementedError` propagates (no fabricate)
+- **Behavior change:** dry-run now **always** RPC-reads `nonces()` after resolve. Callers with dead/mock web3 fail closed. No silent DID-book path.
+
+No residual token/TBA/tx fabrication in the wrapper.
+
+### F-R34-4 — LOW residual — dedicated env soft-skips DID book
+`IOID_PERMIT_REGISTRY_ADDRESS` set to F788 is **skipped** (same as shared env), then fall-through. Explicit `ioid_registry_address=DID_BOOK` **hard-raises**. Soft-skip is consistent with F3 shared-env hardening; for a *dedicated* permit env, hard-fail would be slightly sharper. Not silent permit-to-DID targeting.
+
+### F-R34-5 — INFO — `assemble_register_calldata` = ABI args only (no selector)
+Encodes the 8 params correctly; does **not** prepend `0x39a4a241`. Calldata is **not returned** in `ControllerRegistrationResult` or CLI JSON → callers cannot mistake it for a ready-to-broadcast payload. Placeholders `deviceContract=0x0`, `tokenId=0` make a real register revert anyway. Fine for Inc-3 dry-run.
+
+### F-R34-6 — INFO — pre-existing T-BIND-11 import path
+`test_device_binding_split.py::test_T_BIND_11` fails with `ModuleNotFoundError: vapi_bridge` when collected without `bridge/` on `sys.path` (`from bridge.vapi_bridge...` then absolute `vapi_bridge.*`). **Pre-existing**, not introduced by Inc-3; Inc-3 suite path-inserts correctly and is green.
+
+### F-R34-7 — INFO — Sensor A contract count
+`ioIDRegistry` adds one addr-shaped key → **71** non-meta addresses (CLAUDE.md anchor still 70). Ops residual for a later Sensor A / prose bump; not Inc-3 code.
+
+---
+
+## Hammer answers
+
+### V1 — Resolution correctness: **PASS (go-shape F3 held)**
+Split is right:
+- **Resolve chain:** skip zero + skip DID book → next candidate; raise only if nothing valid remains
+- **Explicit pass of DID book:** hard `ValueError` in `register_controller_ioid`
+- **No path silently targets F788** for permit assembly when any permit candidate exists (incl. `deployed-addresses` / agent constant)
+- Wrong *non*-DID / *non*-permit address can resolve; live `nonces()` is the interface probe — acceptable defense-in-depth (CLI warns then `get_device_nonce` fails closed)
+
+### V2 — Honesty: **PASS**
+| Path | Behavior |
+|------|----------|
+| dry-run | `ioid_token_id=None`, `tba_address=None`, `tx_hash=None`, `pending_prereqs` listed, registry + nonce surfaced |
+| non-dry-run | `NotImplementedError` — no fake `0xcc` / tokenId=1 / TBA |
+| chain wrapper | maps `None` through; empty-string tx only; no fake success |
+
+No residual fabrication of token/TBA/tx.
+
+### V3 — Canonical calldata: **PASS**
+Matches live `IOID_REGISTRY_ABI` + `ioIDRegistry_canonical.sol`:
+
+`(deviceContract, tokenId, device, hash, uri, v, r, s)` selector `0x39a4a241`
+
+`projectId` is **not** a register arg — looked up via `ioIDStore.deviceContractProject(deviceContract)` (L99). Dropping `project_id` from calldata is correct. Unused `project_id=` kwarg on the Python API is a mild residual footgun only.
+
+### V4 — F6 placeholders: **PASS**
+`deviceContract=0x0`, `tokenId=0` documented as prereqs; `pending_prereqs` lists NFT/project/store/mint/sig. Calldata not exported. CLI post-success text: *“Not a registration.”* Risk of mistaking dry-run for real is low.
+
+### V5 — Docs: **PARTIAL**
+- Corrigendum + `_wiring_notes` for `ioIDRegistry` / `VAPIioIDRegistry`: **accurate and sufficient for the ceremony surface**
+- **Missed (as you flagged):** witness readiness + depin-interop (+ trio TRL line)
+- **In-file stale:** D-IOID-CER-5 still claims `ioid_token_id=42`
+
+### V6 — Scope/regression: **PASS (Inc-3 suite)**
+- Sole consumer of `assemble_register_calldata` reorder: controller module + its tests
+- `ControllerRegistrationResult` Optional fields: only this path + CLI + chain dict map
+- `DEFAULT_IOID_REGISTRY` zero sentinel → resolve: correct
+- 12 controller tests green; PV-CI 184 green
+
+### V7 — Env footgun: **PASS for Inc-3**
+`IOID_PERMIT_REGISTRY_ADDRESS` documented in `resolve_ioid_registry_address` docstring; live smoke proved ambient `IOID_REGISTRY_ADDRESS=F788` is skipped → `0x0A7e595C`. **Env + deployed-addresses is enough for Inc-3.** `--registry` CLI flag is nice-to-have, not required.
+
+---
+
+## Verdict: **SHIP**
+
+Inc-3 code meets the r33 go-shape: permit registry wire, F788 refuse/skip split, canonical 8-param order, honest dry-run / non-dry raise, addresses key + notes, CLI live `nonces` proof. No code FIX required before staging the Inc-3 surfaces.
+
+**Stage only:**
+- `bridge/vapi_bridge/controller_ioid_registration.py`
+- `bridge/tests/test_controller_ioid_registration.py`
+- `scripts/register_controller_ioid.py`
+- `contracts/deployed-addresses.json`
+- `docs/ioid-ceremony-review-bars-2026-07-11.md`
+
+**Same-commit polish (strongly recommended, not a re-open):** fix D-IOID-CER-5’s `ioid_token_id = 42` line so the corrigendum doc does not contradict the honesty fix.
+
+**Next residual (doc sweep, not Inc-3 re-verify):** F-R34-2 witness / depin-interop / trio TRL registry naming.
+
+**Do not stage:** unrelated working-tree dirt (retina, dualshock, scorecards, artifacts, etc.).

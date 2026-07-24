@@ -1,0 +1,15 @@
+Confirming the round-07 fixes against the live module and tests.## Round-08 CONFIRM — B4 SEL-v0
+
+**22/22 pass** (live module matches paste).
+
+| Finding | Status | Why |
+|---------|--------|-----|
+| **F1 peer collusion** | **CLOSED** | Holdout refuses `_STEWARD_SET`; `operator_decision` is operator-only; sentry×30 holdout → `n_external=0` → `HOLD_INSUFFICIENT_SAMPLES` |
+| **F2 case spoof** | **CLOSED** | steward + `label_source_agent` both `casefold()`; `Guardian`/`guardian` self-source rejected |
+| **F4 diversity** | **CLOSED for v0** | `operator_decision ∉ sources_seen` → `HOLD_NO_OPERATOR_LABELS`; n≥20 + prec≥0.90; challenge-survival still B5 flag |
+
+**F3:** Honest — module docstring + `note` state claimed-field trust + ingestion-layer guarantee (v0.1). Not hidden.
+
+**Regressions / new HIGH:** None. Residual (not blocking): floor is **≥1** operator label, not majority; pure peer `challenge_graph` padding still needs that one operator anchor; authenticity still ingestion-layer (documented).
+
+**Verdict: SHIP**

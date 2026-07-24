@@ -3,7 +3,14 @@
 **Status:** DESIGN / BARS (2026-07-11). Code is complete — **no rebuild**.  
 **Source vision:** `docs/depin-interop-vision-2026-07-11.md` (commit `c6067a41`) move #1.  
 **Code surface:** `bridge/vapi_bridge/controller_ioid_registration.py`  
-**On-chain:** `VAPIioIDRegistry` LIVE `0xF7885B588718b891B2234477D031607da4a7ACfe` (Phase 55; confirm in `contracts/deployed-addresses.json`).  
+**On-chain (CORRIGENDUM 2026-07-17, F-T3-1 / A2A round-33):** the permit ceremony targets the ioID
+**PERMIT** registry `ioIDRegistry` `0x0A7e595C7889dF3652A19aF52C18377bF17e027D` (has `nonces()` + the
+8-param EIP-712 `register`; the same system registry the agent fleet uses; key `ioIDRegistry` in
+`contracts/deployed-addresses.json`). The earlier line here named `VAPIioIDRegistry`
+`0xF7885B58…` — that is the Phase 55 **DID book** (`register(bytes32,address,string)`, **no permit /
+no nonces**); wiring the permit flow at it makes `nonces()` revert. `VAPIioIDRegistry` is a DID
+registry, NOT the permit target. Device-type differs by ioIDStore **deviceContract**
+(`VAPIGamerControllerNFT` for controllers), not by registry.  
 **Rails:** gamer signs · bridge never owns TBA · testnet · no token · DEVICE_ID_CANON_v1 = keccak256(65B SEC1 P-256 pubkey).
 
 ---
@@ -15,7 +22,7 @@
 | **Signer** | Gamer wallet signs EIP-712 `Permit(owner, nonce)` — D-CONTROLLER-IOID-1 Option A |
 | **Bridge role** | Read-only orchestrator: pin DID, assemble 8-param `register`, never holds gamer key as policy |
 | **DID form** | `did:io:{device_id}` · `EcdsaSecp256r1VerificationKey2019` (P-256) · `controller: [gamer_address]` |
-| **Device id** | `DEVICE_ID_CANON_v1` enforced via `verify_device_id_matches_pubkey` before DID build |
+| **Device id** | Binding enforced via `_require_device_binding` before DID build (mint/verify split 2026-07-16: a VMDR-registered device binds by its on-chain `pubkeyHash`, RPC-fetched — unblocks `581a836c`; unregistered = `DEVICE_ID_CANON_v1` canon; see `DEVICE_ID_CANON_v1.md` §8) |
 | **Optional fields already in API** | `birth_cert_cid` → `alsoKnownAs: ipfs://…` · `mfg_registry_tx` → `proof.type=MfgRegistryBinding` |
 | **TBA** | Via `ioID.wallet(tokenId)` after register (agent path precedent) |
 | **Silicon permit** | P-256 controller key ≠ secp256k1 permit — gamer wallet signs; Option C silicon-signed permit **blocked** (D-IOID-P256 / IIP-64 class) |
@@ -150,7 +157,7 @@ Mirror keeper / VHR / deploy posture:
 | **D-IOID-CER-2** | Full-loop: ioID **before** external WMP identity claim; fixtures may omit DID with honest ABSENT | Yes | ☑ **ACCEPTED 2026-07-11** |
 | **D-IOID-CER-3** | Triple-gate + 0.75 IOTX hard cap; estimate-first; dry_run default | Yes | ☑ **ACCEPTED 2026-07-11** |
 | **D-IOID-CER-4** | No absolute “first controller DID” without sourced survey | Yes | ☑ **ACCEPTED 2026-07-11** |
-| **D-IOID-CER-5** | Fire live registration (spend + gamer sign) | Hold until GO | ☑ **HOLD 2026-07-11** — hard pre-req per Claude audit: the live send/readback path is placeholder (`ioid_token_id = 42`, `controller_ioid_registration.py` ~L293); wire-up build (agent-path quality, `operator_session_register_agents.py` step-7 precedent) must go green BEFORE any GO |
+| **D-IOID-CER-5** | Fire live registration (spend + gamer sign) | Hold until GO | ☑ **HOLD** — the fake readbacks are GONE (F-T3-1 / round-33/34): `register_controller_ioid` now returns honest `ioid_token_id=None`/`tba=None` in dry-run and **raises `NotImplementedError`** on a non-dry-run call rather than fabricate a tx. Real registration stays blocked on the `pending_prereqs` (VAPIGamerControllerNFT + a "QorTroller Controllers" project + `ioIDStore.setDeviceContract` + a minted tokenId + a real gamer permit). Wire-up build (agent-path quality, `operator_session_register_agents.py` step-7 precedent) must go green BEFORE any GO |
 
 ---
 
@@ -161,7 +168,7 @@ Mirror keeper / VHR / deploy posture:
 | DID build + optional CID/MFG | `bridge/vapi_bridge/controller_ioid_registration.py` `build_controller_did_document` |
 | Canon device_id | `device_birth_cert.compute_device_id_from_pubkey_hex` / `verify_device_id_matches_pubkey` |
 | Register orchestration | `register_controller_ioid` (dry_run default True) |
-| Deployed ioID registry | `contracts/deployed-addresses.json` → `VAPIioIDRegistry` |
+| Deployed ioID PERMIT registry | `contracts/deployed-addresses.json` → **`ioIDRegistry`** `0x0A7e595C…` (NOT `VAPIioIDRegistry`, which is the Phase 55 DID book — F-T3-1) |
 | Agent register precedent | `bridge/scripts/operator_session_register_agents.py` step 7 |
 | Sequencing context | `docs/depin-interop-vision-2026-07-11.md` §3 #1, §7 |
 

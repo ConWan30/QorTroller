@@ -117,11 +117,35 @@ def register_agent_grind_routes(
         _gameplay_disc_enabled = bool(getattr(cfg, "gameplay_discrimination_enabled", True))
         _latest_gameplay_ctx = _val_summary.get("latest_gameplay_context")
 
+        # ATTEST-FEEDS (F-RIG27-1/2, first CFB 27 rig): honest rate-source visibility + a LIVE
+        # bridge-attested activity fraction (same main reader that mints records; no adjudicator
+        # dependency). Fields come ONLY from the live transport — absent transport -> honest
+        # defaults (stalled False / sources None / fraction None) so nothing reads as attestation.
+        _transport_af = getattr(app, "_transport", None)
+        _rate_stalled = bool(getattr(_transport_af, "_rate_counter_stalled", False))
+        _rate_source = getattr(_transport_af, "_rate_source", None) if _transport_af else None
+        _hid_restarts = int(getattr(_transport_af, "_hid_counter_restarts", 0) or 0)
+        _law = getattr(_transport_af, "_live_activity_window", None) if _transport_af else None
+        if _law is not None and len(_law) > 0:
+            _live_fraction = sum(_law) / len(_law)
+            _live_n = len(_law)
+            _live_src = "bridge_main_reader"
+        else:
+            _live_fraction = None
+            _live_n = 0
+            _live_src = None
+
         return {
             "pcc_enabled":                   _pcc_enabled,
             "capture_state":                 _capture_state,
             "host_state":                    _host_state,
             "poll_rate_hz":                  _poll_rate_hz,
+            "rate_counter_stalled":          _rate_stalled,
+            "rate_source":                   _rate_source,
+            "hid_counter_restarts":          _hid_restarts,
+            "live_trigger_active_fraction":  _live_fraction,
+            "live_activity_window_n":        _live_n,
+            "live_activity_source":          _live_src,
             "sustained_duration_s":          _sustained,
             "grind_mode":                    _grind_mode,
             "grind_ready":                   _grind_ready,

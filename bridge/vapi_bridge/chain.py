@@ -2864,6 +2864,7 @@ class ChainClient:
         pinata_client: object | None = None,
         project_id: int = 0,
         dry_run: bool = True,
+        on_chain_pubkey_hash_hex: str | None = None,
     ) -> dict:
         """Orchestrate Option A controller registration (Phase 2).
 
@@ -2872,12 +2873,19 @@ class ChainClient:
         Always persists TBA fields to store if provided a store (caller side).
         """
         from vapi_bridge.controller_ioid_registration import register_controller_ioid as _reg
-        from vapi_bridge.device_birth_cert import verify_device_id_matches_pubkey
+        from vapi_bridge.device_birth_cert import verify_registered_device_binding
 
-        # Phase 2 integrate: re-assert canon at chain layer (defense in depth; py layer already does)
-        ok, why = verify_device_id_matches_pubkey(device_id, p256_pubkey_hex)
+        # Phase 2 integrate: re-assert the binding at chain layer (defense in depth;
+        # py layer already does). Mint/verify split (A2A round-26): a caller that has
+        # read VMDR devices[deviceId].pubkeyHash passes it here and the binding is the
+        # authoritative chain check (grandfathers the pre-canon 581a836c); without it
+        # the canon best-effort applies unchanged.
+        ok, why = verify_registered_device_binding(
+            device_id, p256_pubkey_hex,
+            on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
+        )
         if not ok:
-            raise ValueError(f"chain.register_controller_ioid: canon violation: {why}")
+            raise ValueError(f"chain.register_controller_ioid: binding violation: {why}")
 
         # Use a stub pinata if none (real caller injects)
         if pinata_client is None:
@@ -2901,6 +2909,7 @@ class ChainClient:
             pinata_client=pinata_client,
             project_id=project_id,
             dry_run=dry_run,
+            on_chain_pubkey_hash_hex=on_chain_pubkey_hash_hex,
         )
         return {
             "device_id": res.device_id,

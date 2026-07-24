@@ -11,7 +11,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from l9_presence.poep_live_verify import (
-    ChallengeResponse, LiveChallenge, poep_commitment, response_feature_digest, verify_live_response,
+    ChallengeResponse, LiveChallenge, poep_commitment, response_feature_digest, schedule_commitment,
+    verify_live_response,
 )
 
 DEV = "581a836c"
@@ -40,11 +41,21 @@ def test_A_REPLAY_defeated_by_fresh_nonce():
 
 
 def test_A_CONST_pre_scheduled_macro_defeated_by_unpredictable_timing():
-    # a fixed-schedule macro fires 500ms after ITS expected time, but the real challenge fired later;
-    # the response lands outside the [80,300]ms reaction window of the actual challenge.
+    # a fixed-schedule macro fires long after the real challenge; the response lands outside the reaction
+    # window (1.5s >> the 450ms surprise-mode ceiling) of the actual challenge.
     ch = LiveChallenge(DEV, nonce="n1", t_challenge_ns=T0)
     early = _valid_response("n1", dt_ms=1500.0)   # 1.5s after challenge -> out of band (too slow / pre-scheduled)
     r = verify_live_response(ch, early)
+    assert r["ok"] is False and any("reaction_band" in x for x in r["reasons"])
+
+
+def test_surprise_mode_slow_reaction_passes_after_band_widen():
+    # a genuine surprise reaction at 380ms (slower than the old 300ms primed ceiling) now PASSES the
+    # widened [80,450] surprise-mode band. Rig-observed reactions ran 216-318ms; 380 leaves margin.
+    ch = LiveChallenge(DEV, nonce="s1", t_challenge_ns=T0)
+    assert verify_live_response(ch, _valid_response("s1", latency_ms=380.0, dt_ms=380.0))["ok"] is True
+    # but a clearly-inattentive 600ms response is still rejected (data-quality ceiling holds at 450)
+    r = verify_live_response(ch, _valid_response("s1", latency_ms=600.0, dt_ms=600.0))
     assert r["ok"] is False and any("reaction_band" in x for x in r["reasons"])
 
 
@@ -71,3 +82,49 @@ def test_never_claims_presence_verdict_or_flips_poep():
     r = verify_live_response(ch, _valid_response("n4"))
     assert r["is_presence_verdict"] is False and r["poep_enabled"] is False
     assert "NOT yet anti-reactive-bot" in r["claim"]
+
+
+# --- F-POEP-LIVE-1 (ii): schedule-commitment leg -----------------------------------------------------
+
+DELAY_NS = 7_000_000_000     # 7s committed CSPRNG delay
+T_ARM = T0 - DELAY_NS        # arm 7s before the fire -> t_challenge == t_arm + delay exactly
+
+
+def _sched_challenge(nonce, *, t_challenge=T0, t_arm=T_ARM, delay_ns=DELAY_NS, tamper=None):
+    sc = schedule_commitment(nonce=nonce, delay_ns=delay_ns, t_arm_ns=t_arm, t_challenge_ns=t_challenge)
+    if tamper == "commitment":
+        sc = "deadbeef" * 8
+    return LiveChallenge(DEV, nonce, t_challenge, t_arm_ns=t_arm, delay_ns=delay_ns, schedule_commitment=sc)
+
+
+def test_legacy_challenge_has_schedule_ok_none():
+    # 3-field challenge (no schedule leg) -> schedule_ok None, existing behavior byte-identical
+    ch = LiveChallenge(DEV, nonce="leg", t_challenge_ns=T0)
+    r = verify_live_response(ch, _valid_response("leg"))
+    assert r["ok"] is True and r["schedule_ok"] is None
+
+
+def test_schedule_bound_challenge_verifies():
+    ch = _sched_challenge("sch1")
+    r = verify_live_response(ch, _valid_response("sch1"))
+    assert r["ok"] is True and r["schedule_ok"] is True
+
+
+def test_schedule_commitment_forgery_fails():
+    ch = _sched_challenge("sch2", tamper="commitment")
+    r = verify_live_response(ch, _valid_response("sch2"))
+    assert r["ok"] is False and r["schedule_ok"] is False
+    assert any("schedule_commitment_mismatch" in x for x in r["reasons"])
+
+
+def test_schedule_drift_fails_when_fire_deviates_from_committed_delay():
+    # fire lands 2s after t_arm+delay -> beyond the ~300ms silent pre-collection tolerance
+    t_arm = T0 - DELAY_NS
+    drifted_challenge = LiveChallenge(
+        DEV, "sch3", T0, t_arm_ns=t_arm, delay_ns=DELAY_NS - 2_000_000_000,  # committed delay 2s short
+        schedule_commitment=schedule_commitment(
+            nonce="sch3", delay_ns=DELAY_NS - 2_000_000_000, t_arm_ns=t_arm, t_challenge_ns=T0),
+    )
+    r = verify_live_response(drifted_challenge, _valid_response("sch3"))
+    assert r["ok"] is False and r["schedule_ok"] is False
+    assert any("schedule_drift" in x for x in r["reasons"])

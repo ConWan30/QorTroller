@@ -1,0 +1,117 @@
+Grounding in the shipped HSM path, provision tooling, and VMDR register semantics so the consult is code-true, not speculative.## Verdict
+
+**Preflight is the right de-risk.** Ship it.
+
+**Re-anchor as “`provision_device_mfg.py --execute` again” is wrong for `581a836c`.** VMDR is one-shot; that is the ceremony’s real blocker, not KMS readiness.
+
+---
+
+## 1. Preflight go/no-go (before any IOTX)
+
+| Check | Go if | Severity |
+|-------|--------|----------|
+| **Alias resolves** | `GetPublicKey` on `VAPI_KMS_MFG_CA_ALIAS` succeeds | hard fail |
+| **Key metadata** | `describe_key`: `Enabled`, `KeyUsage=SIGN_VERIFY`, `KeySpec=ECC_NIST_P256` (or customer-managed P-256 equivalent) | hard fail |
+| **Wire shape** | `public_key_bytes` = **65B `0x04‖X‖Y`** | hard fail |
+| **Canary** | `sign(body)` → **64B raw r‖s** → `verify_cert_signature(pub, body, sig)` | hard fail |
+| **New root** | if `prior_software_ca_pubkey_hex` set: `issuer ≠ prior` | hard fail when prior supplied |
+| **Production path** | minimal `DeviceBirthCertificate` → `sign_cert` → `verify_cert` (not canary-only) | hard fail — exercises hash-once + DIGEST + full body codec |
+| **IAM isolation** | optional soft `GetKeyPolicy` scan for Guardian/Sentry ARNs / over-broad `*` | **warn only** — IAM can change after preflight; document as operator ceremony step, not CI truth |
+| **No spend** | no `registerDevice`, no estimate-as-broadcast | invariant |
+
+**Skip as hard gates:** full IAM proof, chain RPC, Sensor-C, destroying software key.
+
+Your dict shape is fine; add (or fold into `reason`/`warnings`): `key_enabled`, `key_usage_ok`, `key_spec_ok`, `full_cert_path_ok`.
+
+---
+
+## 2. Re-issue / re-anchor
+
+**Backend select under `MFG_CA_BACKEND=kms`:** routes to `KMSIdentityBackend`; **does not** auto-generate / touch the software key file. `key_path` is irrelevant on the kms branch. Good.
+
+**Re-issue:** yes —  
+`MFG_CA_BACKEND=kms` + `provision_device_mfg.py --dry-run`  
+= local re-sign + persist. Correct.
+
+**Re-anchor:** **no — not with `--execute` on the live device.**
+
+VMDR:
+
+```solidity
+require(!registered[deviceId], "VMDR: already registered");
+// revoke: active=false only; registered stays true forever
+// docs: replace = revoke + NEW deviceId
+```
+
+So for `581a836c…`:
+
+- `--execute` → **revert** (`already registered`), not orphan overwrite  
+- `revoke` then re-register same `deviceId` → still **revert**  
+- new `deviceId` → breaks device identity canon (wrong)
+
+**Honest paths (pick one; don’t pretend `--execute` re-anchors):**
+
+| Path | Meaning |
+|------|--------|
+| **A (recommended)** | Small VMDR writer: `updateBirthCertHash(deviceId, newHash)` `onlyOwner` (+ optional `UpdateBirthCert` event). Then operator-fired re-anchor. **CA migration needs this for inventory N≥1.** |
+| **B** | No on-chain re-anchor for existing device. Keep software-signed hash on-chain; KMS only for **net-new** devices. Flip is partial; `verify_device_cert` VALID only against the **old** cert JSON forever for `581a836c`. Do **not** demote F-DECON-3.2 as “closed” until inventory policy is explicit. |
+| **C** | New VMDR + Lens rewire — too big for this pass. |
+
+Migration doc step 4 (“re-`registerDevice`”) is **false against current Solidity**. Fix the runbook before ceremony day.
+
+---
+
+## 3. Rollback / key retention
+
+- **No dual-root** (round-13). Correct.
+- **Rollback:** `MFG_CA_BACKEND=software` (or unset) is the flip-back. Document it.
+- **Retention rule (load-bearing):**  
+  **Do not destroy / offline-wipe the software key until:**  
+  (1) new root preflight GO, and  
+  (2) for every live device you care about, either  
+  - on-chain hash matches KMS-issued cert **and** `verify_device_cert` → VALID, **or**  
+  - written policy that that device stays on the software-anchored cert forever.  
+  Until then: software key = **cold retain**, not dual-signer in prod config.
+- Current doc “Retire software key” after flip is too eager if re-anchor isn’t real yet.
+
+---
+
+## 4. G1.6
+
+**Do not touch Sensor-C from preflight/tooling.** Agree.
+
+Demotion is earned only after: HSM is the live issuer **and** the structural single-copy pattern is gone for the **authoritative** root (and inventory story is honest). That is a **separate operator-confirmed Sensor-C edit** (G1.6 verifier today is “file present → LIVE-FRAGILE”).
+
+Optional later: a **read-only “demotion eligibility” check** (file exists? `MFG_CA_BACKEND`? KMS ready? on-chain hash matches new cert?). Not this pass’s mutation surface.
+
+---
+
+## 5. Scope cut
+
+| Build this pass | Operator | Do not build |
+|-----------------|----------|--------------|
+| `check_ca_readiness` + `mfg_ca_hsm_preflight.py` | AWS P-256 key + alias + IAM | IAM as hard gate |
+| Migration doc: AWS CLI + IAM JSON + sequence | Flip `MFG_CA_BACKEND` | Auto-flip `.env` |
+| **Doc fix:** VMDR one-shot; re-anchor = update path or deferred | IOTX only when path exists | Silent `--execute` “re-anchor” |
+| Loud warning: new root; old certs | G1.6 demotion after proof | Sensor-C mutation |
+
+**Missing for a safe flip:** either **VMDR `updateBirthCertHash` (or equivalent)** or an explicit **“N=1 stays software-anchored”** policy. Tooling alone cannot re-anchor `581a836c`.
+
+---
+
+## Top 2 footguns (pin hard)
+
+1. **VMDR one-shot:** `registerDevice` never updates `birthCertHash` for an existing `deviceId`; revoke does not free the id. **`--execute` re-anchor will burn gas and fail.** Ceremony without Path A/B choice above is unsafe.
+
+2. **“Re-issue then flip then verify VALID” under current chain:** KMS cert hash ≠ on-chain software hash → `verify_device_cert` **INVALID (birthCertHash mismatch)** even if sig is perfect. Operators will think KMS is broken; it isn’t — **anchor can’t move**.
+
+---
+
+## Ship checklist (terse)
+
+1. Preflight: describe_key + 65B + canary + **full cert path** + optional new-root diff + soft IAM warn.  
+2. Re-issue: `--dry-run` under kms. Confirmed.  
+3. Re-anchor: **blocked** until update-hash (or accept no re-anchor for inventory).  
+4. Rollback: env flip back; **retain software key** until VALID under new root *or* explicit keep-old policy.  
+5. G1.6: operator-only, after real proof.  
+6. Scope: your cut is right **plus** honest re-anchor design decision in the runbook (blocker, not a footnote).

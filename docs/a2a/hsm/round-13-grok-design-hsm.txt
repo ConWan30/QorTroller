@@ -1,0 +1,147 @@
+I'll ground this against the actual backend/KMS/cert verify contracts, then give a cut recommendation.## Verdict
+
+Your cut is mostly right. **Build MFG-CA-on-HSM as default-OFF capability + migration doc.** Do **not** dual-root this pass. Do **not** fold SEL/WMP. Curve split is correct. One real design fix below (hashing + “agent” overload).
+
+---
+
+## Recommended cut
+
+| This pass | Defer |
+|-----------|--------|
+| `KMSIdentityBackend` implementing `hardware_identity.SigningBackend` (P-256, raw r\|\|s + 65B uncompressed) | Dual-root verify |
+| `create_backend("kms")` + `ManufacturerRootCA` backend select via config/env (`software` default) | Live KMS key provision / flip |
+| Conversion helpers (DER↔raw, SPKI→uncompressed) pure + tested | Device re-issue / re-anchor ceremony |
+| Honest migration doc (new issuer pubkey = new root; one live device breaks; ceremony steps) | SEL-graduation seal |
+| | WMP / federation receipts |
+| | Sensor-C G1.6 LIVE-FRAGILE demotion (only after real flip) |
+
+**(b) is not cheap** — it is not “seal a preimage.” It needs an operator-acceptance surface that does not exist. Folding it now invents half a product. Same for (c): reuse later once the backend exists.
+
+---
+
+## 1. Curve mismatch — your call is right
+
+**New `ECC_NIST_P256` key + new alias.** Do not put MFG CA on the existing k1 agent keys.
+
+Reasons:
+
+- Cert path is **ECDSA-P256 over SHA-256(body)** and verifies on `SECP256R1` (`verify_cert_signature`). Changing curve is a format/protocol break, not a backend swap.
+- Bridge wallet / agent KMS keys are **k1 for a reason** (IoTeX/Eth-shaped). MFG CA was deliberately separate (doc in `manufacturer_root_ca.py`).
+- `ECDSA_SHA_256` is algorithm-name only; **KeySpec still decides the curve.** Same client constants work; **not** the same key.
+
+Keeping MFG software-P-256 and “HSM elsewhere” leaves F-DECON-3.2 / G1.6 open. That is the wrong “elsewhere.”
+
+---
+
+## 2. Wire contract — conversions yes; real footgun is hashing
+
+Verified path:
+
+- Sign wire: **64-byte raw r\|\|s** (`SoftwareIdentityBackend.sign` DER→raw).
+- Pub wire: **65-byte 0x04\|\|X\|\|Y**.
+- Verify: raw→DER via `encode_dss_signature`, then `pub.verify(der, body, ECDSA(SHA256()))`.
+
+So backend must:
+
+1. `GetPublicKey` DER SPKI → SEC1 uncompressed  
+2. `Sign` DER → raw r\|\|s  
+
+**Low-s:** not a verify footgun. `cryptography` accepts high-s and low-s. Only matters if something **byte-compares** `signature_hex`. Pin “verify succeeds,” not “s equals software re-sign.”
+
+**The actual footgun:**
+
+| Layer | What it does |
+|-------|----------------|
+| `SoftwareIdentityBackend.sign(body)` | `sign(body, ECDSA(SHA256()))` — **hashes inside** |
+| `KMSClient.sign` | `MessageType=DIGEST`, **exactly 32-byte prehash** |
+
+`KMSIdentityBackend.sign(body)` must be:
+
+```text
+digest = SHA-256(body)   # once
+kms.sign(role, digest)   # DIGEST mode
+DER → raw r||s
+```
+
+**Not** pass `body` as DIGEST. **Not** `SHA256(SHA256(body))`.
+
+Second subtlety: `kms_client` is **async**; MFG CA / `sign_cert` is **sync** (ceremony scripts). Prefer a **sync sign path** for identity (or a clearly documented blocking wrapper). Do not `asyncio.run` from inside the backend in production code paths.
+
+Third: do **not** silently teach `kms_client` that `"mfg-ca"` is an Operator agent. Prefer a **key-role** map (or MFG-only alias env owned by the identity backend) so IAM stays separable: agents = Sign on k1 aliases; MFG = Sign on P-256 alias; different principals if you ever want least privilege. Overloading `_AGENT_ALIAS_ENV_VARS` works short-term but muddies the trust domains you already separated.
+
+---
+
+## 3. Migration — default-OFF capability, not dual-root
+
+**Right scope: capability + migration doc. Flip = operator ceremony.**
+
+Why dual-root now is wrong:
+
+- Live inventory is **one** device (`581a836c…`). Dual-root is multi-root PKI product work (trust store, which root mints what, deprecation window, on-chain VMDR semantics for dual issuer).
+- Path A already treats issuer as **cert field** (`issuer_pubkey_hex`), not a global frozen root. New root = new certs; old certs stay valid against **old** issuer_pubkey stored on them.
+- Transparent swap is a fiction; writing dual-root code pretends it is not.
+
+Migration doc should say explicitly:
+
+1. Provision P-256 KMS key + alias + IAM  
+2. Config still `software` until ceremony  
+3. Re-issue DeviceBirthCertificate under new issuer  
+4. Re-`registerDevice` / re-anchor if VMDR binds birthCertHash  
+5. Only then flip `MFG_CA_BACKEND=kms`  
+6. Software key: archive offline / destroy policy — do not leave dual live signers without policy  
+
+**Do not** demote G1.6 LIVE-FRAGILE in this pass. Capability ≠ root fix.
+
+---
+
+## 4. Mock decision
+
+**Prefer: injectable KMS port + optional curve on MockKMS, default k1.**
+
+Cleanest / lowest blast radius:
+
+1. **Pure converters** unit-tested (no mock at all).  
+2. **`KMSIdentityBackend` tests** inject a tiny fake client (returns fixed DER/SPKI) — proves wire contract.  
+3. If you want end-to-end crypto: extend `MockKMSClient` with  
+   `curve_by_agent: dict[str, Curve] | None = None`  
+   default **all SECP256K1** (existing agent tests untouched).  
+   MFG tests pass `{"mfg-ca": SECP256R1}` and assert `KeySpec` in `describe_key`.
+
+**Avoid a second parallel mock class** unless (3) is ugly — two mocks diverge.  
+**Avoid forcing all agents to P-256.**
+
+Do not only test with `SoftwareIdentityBackend` as stand-in: that skips the DER/SPKI conversion path, which is where the bugs live.
+
+---
+
+## 5–6. Scope + “is MFG a bad first pick?”
+
+**MFG-CA is the correct first pick** for OA-4 / F-DECON-3.2 / G1.6. Design already said partner-HSM via `create_backend()`.
+
+It is a **bad** first pick only if you redefine the ask as “more novel agent seals with existing k1 keys.” That path is cheaper (no new key, no CA migration) but **does not close the CRITICAL finding.** Operator approved HSM expansion; closing the longest critical is the high-leverage cut.
+
+Do **not** start with SEL seal as primary: no acceptance path → you will invent governance mid-build.
+
+---
+
+## Top 2 footguns to pin in tests
+
+1. **Single-hash DIGEST contract**  
+   - Fixture body B; expected digest = `SHA256(B)`.  
+   - Assert mock/client receives **exactly 32 bytes** equal to that digest.  
+   - Assert `verify_cert_signature(issuer_pub, B, raw_sig)` True.  
+   - Negative: double-hash digest must fail verify.
+
+2. **Wire shape + SPKI round-trip**  
+   - `len(sign)=64`, `len(pubkey)=65`, `pubkey[0]=0x04`.  
+   - SPKI → uncompressed matches what was used to verify.  
+   - End-to-end: `sign_cert` → `verify_cert` True with KMS backend (mock P-256).  
+   - Optional third pin: wrong curve key (k1 SPKI) fails closed at setup/describe, not at vague verify.
+
+---
+
+## One-line build charter
+
+> **Ship `KMSIdentityBackend` (P-256, DER/SPKI→raw wire, single SHA-256 then DIGEST) + config-selected MFG CA backend defaulting to `software` + migration doc. No dual-root, no live flip, no SEL/WMP, no G1.6 demotion. Tests pin hash-once + wire round-trip. Operator ceremony owns key provision and re-anchor.**
+
+If you want a tighter PCRA-style round-11 reshape: rename the map from “agent” to “kms_role” in the same PR only if it stays mechanical; otherwise leave the map, add `mfg-ca` / `mfg_ca` as a **non-operator role** with a comment, and do not give Guardian IAM Sign on that alias.

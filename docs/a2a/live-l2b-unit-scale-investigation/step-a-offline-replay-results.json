@@ -1,0 +1,33 @@
+{
+  "raw_thresh": 30.0,
+  "live_thresh_recovery": 0.03,
+  "min_press_events": 15,
+  "coupled_fraction_anomaly_floor": 0.55,
+  "n_sessions_with_enough_presses": 1,
+  "sessions": [
+    {
+      "session": "hw_nqpv_009.json",
+      "pass1_raw_asstored": {
+        "n_press_events": 19,
+        "coupled_fraction": 1.0,
+        "anomaly": false,
+        "fires_0x31": false,
+        "humanity_score": 1.0
+      },
+      "pass2_live_sim_div1000": {
+        "n_press_events": 19,
+        "coupled_fraction": 0.0,
+        "anomaly": true,
+        "fires_0x31": true,
+        "humanity_score": 0.0
+      },
+      "pass3_recovery_thresh_0_03": {
+        "n_press_events": 19,
+        "coupled_fraction": 1.0,
+        "anomaly": false,
+        "fires_0x31": false,
+        "humanity_score": 1.0
+      }
+    }
+  ]
+}

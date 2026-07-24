@@ -1,0 +1,154 @@
+I'll ground this in the existing SEL / MFG-CA / KMS patterns before giving the cut recommendation.## Verdict
+
+**Build this pass** — pure module only. The cut is right if you fix the **claim**, not the plumbing. Plumbing is solid (compose-over-SEL, injectable sync signer, no new table, no endpoint).
+
+**Do not ship** if the headline stays “operator non-repudiable acceptance with zero trust in the bridge.” That claim is **false** under a Guardian-signed record.
+
+---
+
+### Recommended cut
+
+| Surface | This pass | Later |
+|--------|-----------|--------|
+| `build_*_preimage` + digest | **YES** | — |
+| `attest_graduation` / `verify_*` (pure) | **YES** | — |
+| Injectable sync `digest→DER` (Guardian KMS wrap) | **YES** | — |
+| Store adapter → `insert_operator_agent_signature` | thin / `#pragma` OK | — |
+| HTTP acceptance endpoint | **NO** | v0.1 |
+| Auto-apply graduation / flip executor | **NEVER** | never |
+| Cross-steward notary matrix | **NO** | only if optics force it |
+| FROZEN / `--confirm-governance` | **NEVER** | separate ceremony |
+
+Mirrors PCRA Inc-1 and MFG-CA: pure + injectable + tested; wiring is a different commit.
+
+---
+
+### 1. Notary: Guardian-self is fine for v0
+
+Your self-dealing take is right **for this arc**:
+
+- Seal grants nothing; operator still accepts; SEL already blocks self-scoring.
+- Guardian is **notary of a recorded decision**, not the decider.
+
+**Cross-steward notary is over-engineering for v0.** It does not fix the real honesty gap (see below). It adds key-routing, “who notaries whom” policy, and failure modes for a property you still don’t have (operator-key non-repudiation).
+
+**Honest claim (load-bearing):**
+
+> “Guardian’s HSM attested that, at `ts_ns`, an operator decision `ACCEPT|REJECT` was recorded for steward S / task-class T at precision P over N labels, bound to SEL chain head H.”
+
+**Not:**
+
+> “The operator cryptographically authorized this; a third party needs zero trust that the operator acted.”
+
+A third party with Guardian’s **published** pubkey verifies **Guardian said so**. `operator_id` is declarative metadata unless the **operator** signs (dual-key / operator KMS / separate accept key). That is a real v1 upgrade, not a notary-matrix problem.
+
+If you need a one-line policy for optics without building the matrix: **refuse to attest when `steward == notary` only if you want the press release; don’t do it for crypto reasons in v0.**
+
+---
+
+### 2. Name: drop “seal”
+
+“Seal” collides with governance-seal / `--confirm-governance` / FROZEN allowlist ceremony. That collision is worse than the feature is worth.
+
+| Avoid | Prefer |
+|-------|--------|
+| seal, governance seal, VAPI-SEL-SEAL-v0 | **attestation / acceptance record** |
+| | Domain: **`VAPI-SEL-GRAD-ATTEST-v0`** (CANDIDATE) |
+| | Module: `steward_sel_attestation.py` (or `…_accept_record.py`) |
+| | Functions: `build_graduation_attestation_preimage`, `attest_graduation`, `verify_graduation_attestation` |
+
+Keep “seal” out of docs, domain tags, and filenames.
+
+---
+
+### 3. Preimage pin (your instinct is correct — strengthen it)
+
+Reuse SEL’s **length-prefix** discipline (`_lp`), not bare concat:
+
+```
+domain || _lp(steward) || _lp(task_class) || precision_milli_be8
+|| n_labels_be4 || min_samples_be4 || precision_floor_milli_be8
+|| decision_byte || _lp(operator_id) || ts_ns_be8
+|| chain_head_32B   # see 3b
+```
+
+Rules:
+
+1. **One** preimage builder; verify **only** re-derives via that function.
+2. Store **only** canonical ints (`precision_milli`, `precision_floor_milli`) — never float in the record.
+3. Enum pin: `decision ∈ {ACCEPT, REJECT}` only; reject anything else at build time.
+4. Tests: round-trip verify; **each field flip** fails verify; wrong pubkey fails; truncated/missing field fails closed.
+
+---
+
+### 3b. Chain-head binding: **YES** (this is the cheap novelty)
+
+Bind `sel_chain_head` (32B from `chain_head(entries)` at acceptance) into the preimage.
+
+Without it you get a floating params receipt: same precision/N/floor could be re-attested after the label ledger is rewritten (or never matched any ledger). With it, the record says “accepted **against this evidence head**.”
+
+Cheap, on-theme, not scope creep. Defer only if you refuse to pass labels/head into the attester this pass — then the artifact is weaker and closer to theater.
+
+---
+
+### 4. Acceptance surface: pure now, wire later
+
+Right cut (PCRA-shaped):
+
+- `attest_graduation(accepted: {…decision, operator_id, sel_chain_head, score fields…}, *, sign_digest)`  
+- Caller injects decision; module never invents ACCEPT.
+- Endpoint / draft-accept path = **v0.1**.
+
+Without a later wire path it doesn’t “mean” operational autonomy change (SEL still doesn’t apply). That’s fine: this pass is the **cryptographic receipt primitive**, not the governance actuator. Do not half-build an endpoint that pretends to graduate.
+
+---
+
+### 5. Signer: reuse MFG-CA port pattern; keep agent differences explicit
+
+| | MFG-CA | This attestation |
+|--|--------|------------------|
+| Curve | P-256 | **secp256k1** (Guardian) |
+| Port shape | sync `sign_digest_der(32)→DER` | **same** |
+| Output to store/verify | cert path wants raw r\|\|s | **keep DER end-to-end** here |
+| Key | MFG alias (IAM-isolated) | **Guardian agent alias only** |
+
+Same pattern for the right reason (async-in-sync is a production footgun). Different key, different curve, no r\|\|s conversion unless you already have a shared verifier that demands it.
+
+---
+
+### 6. Novel + necessary, or theater?
+
+**Earns keep if** you sell the real property:
+
+- HSM-backed, externally verifiable **provenance** that a graduation decision package (params + ledger head + operator_id claim + ACCEPT/REJECT) was fixed at `ts_ns`.
+- Bridge SQLite alone cannot silently rewrite that package after the fact without invalidating the sig.
+- Completes the arc: score → recommend → **attested operator decision record** (still human-applied).
+
+**Theater if** you claim operator non-repudiation without an operator key, or if you skip chain-head binding and ship “signed floats in a log row.”
+
+SEL’s honest limit already says label authenticity is ingestion-layer. This attestation is the same family: it hardens **what was decided and against which head**, not **who the human was** beyond declarative `operator_id`.
+
+---
+
+## Answers in one line each
+
+| Q | Answer |
+|---|--------|
+| Notary | **Guardian-self v0**; cross-steward later-or-never |
+| Name | **Attestation / `VAPI-SEL-GRAD-ATTEST-v0`**, not seal |
+| Chain bind | **Yes** — include `sel_chain_head` |
+| Acceptance API | **Defer**; inject decision into pure API |
+| Signer | **MFG-CA injectable sync port**; DER; Guardian secp256k1 |
+| Novel? | **Yes as HSM acceptance-record**; **no as operator non-repudiation** |
+
+---
+
+## Top 2 footguns to pin in tests
+
+1. **Preimage canonicalization** — float vs milli, field order, encoding, dual builders. One builder; round-trip + per-field tamper + wrong-key. Fail closed on malformed records (no silent false-OK).
+
+2. **Claim / operator binding** — tests + docstring must assert verify = f(Guardian_pubkey, public_fields), and that **operator_id is not authenticated by the sig**. Bonus third pin: **store subject discipline** — `subject` is `[:200]`; use short stable id (`sel-grad-attest:{digest16}`), never stuff the preimage into `subject`.
+
+---
+
+**Bottom line:** Build the pure attestation module this pass with Guardian notary, chain-head binding, milli-ints, length-prefix preimage, injectable DER signer. Rename away from seal. Defer endpoint and cross-steward. Fix the marketing claim before the first test name lands, or the arc ships governance theater.

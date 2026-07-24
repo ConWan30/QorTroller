@@ -1,0 +1,52 @@
+Targeted r04 re-verify of F-HIDRING-1. Reading your r03 fix spec, the patched auto-tick block, and the two new race tests.Reading the full auto-tick dispatch block, poep request path, and the two new race tests in detail.Confirming pending writers and that the interleave test matches production order:# POEP-HID-RING r04 — TARGETED RE-VERIFY (F-HIDRING-1 only)
+
+Rails: r03 FIX spec + patched auto-tick block + 2 new tests. Bridge re-run: **12/12** in 0.63s. Sealed/client honesty not re-opened (per r03 instruction).
+
+---
+
+## (1) Three-part minimal fix — implements r03?
+
+| Spec part | Verdict | Evidence |
+|-----------|---------|----------|
+| Claim `_poep_fire_inflight=True` **before** auto-tick `await send_l6b_probe` | **PASS** | Lines 2936–2939 then 2951; source order pin `claim_idx < await_idx` |
+| Belt: refuse assign if `_l6b_pending` already non-None | **PASS** | Lines 2967–2970 drop + warn; else arms (2971–2981) |
+| `finally: False` after arm/fail | **PASS** | Lines 2993–2995 wraps try/except |
+
+Same two-way shape as poep (`True` @3057 before await @3066; `finally` @3105–3106).
+
+---
+
+## (2) Race both directions — try to break again
+
+| Attack | Verdict | Detail |
+|--------|---------|--------|
+| **Poep during auto mid-await** (r03 hole) | **PASS** | Auto claims flag first; poep busy-check sees inflight → 409. Proved by `test_f_hidring_1_concurrent_request_mid_await_sees_409` (`_SlowDriver` event-gate): pending stays auto-only (`probe_ts=123.456`, no `poep_future`), flag released. |
+| **Auto during poep mid-await** | **PASS** | Unchanged: auto gate `not _poep_fire_inflight` (2928) + `pending is None` (2926). Single-threaded: no yield between poep busy-check and claim. |
+| **Exception on auto fire path → stuck flag** | **PASS** | `finally` always clears (2993–2995); same on poep (3105–3106). `test_pre_write_abort_releases_slot` still holds. |
+| **Double-release / post-arm window** | **PASS** | Inflight released after arm; slot held by `_l6b_pending` until completion clears it (2826). Second fire → 409 on pending. Setting False twice is harmless. |
+| **TOCTOU check→claim on auto** | **PASS** | Condition + `True` are sync (no `await` between if and claim). Only writers of `_l6b_pending` are auto arm (2972), poep arm (3081), completion clear (2826). Belt is defensive unreachable under the flag. |
+
+Source pin `test_f_hidring_1_auto_tick_claims_flag_in_source` locks claim + belt string + finally release in the real dispatch region.
+
+---
+
+## (3) Additive for normal auto-tick (no concurrent poep)?
+
+| Check | Verdict |
+|-------|---------|
+| Enter conditions unchanged except extra inflight guard | **PASS** — when no poep, inflight is False; same entry |
+| Pending shape on success | **PASS** — same keys; no `poep_*` fields on auto path |
+| Fire path | **PASS** — still `send_l6b_probe` + hold `call_later` + same post-buffer reset |
+| Side effect of flag | **None observable** — True only across fire→arm window; False before next loop sleep |
+
+---
+
+## Residual (non-blocking)
+
+Belt-drop still falls through to the existing `log.info("L6B: probe dispatched …")` — cosmetic if belt ever hit; flag makes that path unreachable. Not a race / not a clobber path.
+
+---
+
+## FINAL: **SHIP**
+
+F-HIDRING-1 closed two-way: auto claims before await, belt on arm, finally release; concurrent poep mid-auto-await is 409 with no pending clobber; reverse direction still held; exception cannot stick the flag; normal auto-tick behavior unchanged when no poep request exists.

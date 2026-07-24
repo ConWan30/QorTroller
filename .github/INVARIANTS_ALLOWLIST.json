@@ -563,6 +563,10 @@
     "digest": "8b644591c89ccd870818969d5af764cd258856ed996b4d802a8f141f39bb586a",
     "description": "VAPIManufacturerDeviceRegistry FROZEN proofTier enum: PROOF_TIER_FULL=1, PROOF_TIER_STANDARD=2, PROOF_TIER_BASIC=3 (Path A Arc 1; tiers correspond to DualSense Edge CFI-ZCP1 / DualSense CFI-ZCT1 / third-party \u2014 drift would silently reclassify hardware capability)."
   },
+  "INV-MFG-003": {
+    "digest": "e7d7a8d1447f496904035ba3df7ab759496bd908b66a6ca95070b36fdfc4ef7d",
+    "description": "VAPIDeviceBirthCertUpdateRegistry FROZEN trust surface (Path A HSM flip, LIVE 2026-07-16 at 0x31030C8F\u2026): setUpdatedBirthCertHash onlyOwner + isActive-on-VMDR gate + non-zero newHash guard + BirthCertHashUpdated event + currentBirthCertHash signature AND its override-wins branch (override-then-VMDR semantics). Verifiers read currentBirthCertHash as the effective hash; loosening any guard, renaming the view, or rewriting the branch silently breaks the HSM re-anchor trust chain for 581a836c and every future device."
+  },
   "INV-LENS-V2-001": {
     "digest": "000c4140d4d03db602bd9bfa2f7fd9d56d911d65ca95ea4c27fb04d648e4963c",
     "description": "VAPIProtocolLensV2 FROZEN function surface: isFullyEligible_PathA(bytes32) + getDeviceTier(bytes32) \u2014 both pinned in the v2 source. Tournament integrators bind against these names; renaming either is a wire-break for every Path A consumer."

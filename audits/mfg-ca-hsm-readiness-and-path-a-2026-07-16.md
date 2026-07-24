@@ -1,0 +1,121 @@
+# MFG Root CA → HSM: readiness PROVEN + Path A re-anchor tooling — 2026-07-16
+
+## Part 1 — HSM CA readiness PROVEN (live, no spend)
+
+The operator provisioned a real AWS KMS P-256 key and the no-spend preflight passed against it:
+
+- Key: alias `qortroller-mfg-ca`, ARN `…key/3c7098fa-204d-4cca-8221-30ad335e2bb1`, `us-east-1`, Enabled,
+  `KeyUsage=SIGN_VERIFY`, `KeySpec=ECC_NIST_P256`.
+- `scripts/mfg_ca_hsm_preflight.py` → **READY: True**. All hard checks green: `is_p256_65b`,
+  `canary_verifies`, `full_cert_verifies` (a full DeviceBirthCertificate signed by the KMS CA passed
+  production `verify_cert`, incl. the DEVICE_ID_CANON keccak binding), `key_enabled`, `key_usage_ok`,
+  `key_spec_ok`, `is_new_root`.
+- **New HSM issuer pubkey (public, not secret):** `04d2636cbce595ab9d0acff76f0dfb7058…` (65-byte P-256),
+  genuinely a NEW root — differs from the software CA.
+- No IOTX spent, no chain write, no key material left the HSM (non-exportable). The `vapi-bridge` IAM user
+  can Sign/GetPublicKey on the key; `kms:CreateKey` was correctly DENIED to it (least-privilege) — the key
+  was created via the Console under an admin identity.
+
+This closes the **root half** of F-DECON-3.2: a non-exportable HSM key provably issues valid device certs.
+
+## Part 2 — Path A re-anchor tooling (built; operator fires the deploy + spend)
+
+The one live device `581a836c` is anchored on the immutable one-shot VMDR (`0x2e5B5FB1…`) under its old
+software-signed `birthCertHash`. VMDR cannot be updated in place (grok round-22/24). Path A closes the
+**device half** via a companion OVERRIDE (grok round-24 — no VMDR redeploy, no Lens migration):
+
+- **`contracts/contracts/VAPIDeviceBirthCertUpdateRegistry.sol`** (Ownable): owner-vouched
+  `setUpdatedBirthCertHash(deviceId, newHash)` (requires the device active on VMDR, non-zero, no-op
+  rejected) / `clearOverride` (honest rollback) / `currentBirthCertHash` = OVERRIDE-then-VMDR (the single
+  effective-hash view verifiers read) + `BirthCertHashUpdated`/`Cleared` events. Same `onlyOwner`
+  Foundation trust as `VMDR.registerDevice` — a second hash write path, NOT a new trust principal.
+- **10/10 Hardhat tests** (`test/VAPIDeviceBirthCertUpdateRegistry.test.js`): active-gate + precedence +
+  guards + events + revoke-after-override-is-inert (isActive stays the eligibility gate).
+- **Deploy** `scripts/deploy-device-birthcert-update-registry.js` (estimate-first, triple-gated:
+  deployer==bridge wallet + hard-cap 0.5 IOTX + 2× balance guard; broadcast iff `VAPI_DBC_DEPLOY_CONFIRM=1`).
+- **Re-anchor** `scripts/set-updated-birth-cert-hash.js` (estimate-first + pre-send revert guard; broadcast
+  iff `VAPI_DBC_SET_CONFIRM=1`).
+- **Verify** `scripts/verify_device_cert.py` now reads `currentBirthCertHash` (override-then-VMDR) when
+  `BIRTH_CERT_UPDATE_REGISTRY_ADDRESS` is set; env unset → legacy VMDR-only (fail-open). **env SET +
+  override read fail → ERROR exit 3 (fail-CLOSED)** — never fall back to the raw VMDR hash once the
+  registry is wired (would silently re-accept a software cert after HSM re-anchor).
+
+### Operator ceremony (fires the AWS-already-done + the chain steps)
+> **Amended 2026-07-16 (F-PATHA-1 resolution):** step 2 MUST use `--reissue` — a plain `--dry-run`
+> canon-derives `20b37e1c` (the composite key's keccak), NOT the registered `581a836c`. The mint/verify
+> split (`DEVICE_ID_CANON_v1.md` §8) made the chain binding authoritative, so this override re-anchor is
+> now SUFFICIENT for 581a836c. (Pre-split it was necessary-but-not-sufficient — F-PATHA-1.)
+1. ✅ Provision KMS key + preflight READY (done — Part 1).
+2. Re-issue the cert for the EXISTING id under KMS (fail-closed chain-gated on the on-chain pubkeyHash):
+   `MFG_CA_BACKEND=kms VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca AWS_PROFILE=vapi-bridge python scripts/provision_device_mfg.py --reissue 581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8 --controller-model CFI-ZCP1 --signing-path B --proof-tier FULL` → note the printed `birthCertHash` (cert lands at `~/.vapi/device_birth_cert_reissue.json` — the registered software cert is never clobbered).
+3. Deploy the override (estimate first, then `VAPI_DBC_DEPLOY_CONFIRM=1`). Record the address; set
+   `BIRTH_CERT_UPDATE_REGISTRY_ADDRESS` in `bridge/.env` + add the `deployed-addresses.json` entry.
+4. Re-anchor (estimate first, then `VAPI_DBC_SET_CONFIRM=1` with `DEVICE_ID`=581a836c, `NEW_HASH`=the step-2 hash).
+5. `python scripts/verify_device_cert.py --cert-path ~/.vapi/device_birth_cert_reissue.json` → expect **VALID**.
+6. Flip `MFG_CA_BACKEND=kms` in `bridge/.env`; archive the old software cert as forensic-only.
+
+## Part 3 — CEREMONY FIRED 2026-07-16/17 (operator-fired broadcasts; agent ran read-only/no-spend steps)
+
+**The live device `581a836c` now verifies VALID under the AWS KMS HSM root. F-DECON-3.2 closed at ROOT
+for the live device.** Measured live, wallet 28.441474 → **27.754206 IOTX = 0.687268 IOTX total**:
+
+1. ✅ **Re-issue under KMS (0 IOTX):** `--reissue 581a836c…` under `MFG_CA_BACKEND=kms` — gate PASS
+   (registered + active + on-chain pubkeyHash `235a2c04…` == local key); cert signed by HSM issuer
+   `04d2636c…` (`issuer_backend: kms`); `birthCertHash 0x3fa0e79586d0593c7fe08669ce006a9f66c6de1b47570d75dfe16eecfdc79da7`;
+   persisted `~/.vapi/device_birth_cert_reissue.json`.
+2. ✅ **Override deployed (operator-fired):** `VAPIDeviceBirthCertUpdateRegistry`
+   **`0x31030C8F4d805bC73e2c49D935eD0FB6a12987a5`** — wired VMDR `0x2e5B5FB1…`, owner = bridge wallet;
+   estimate_gas 604254, **0.604254 IOTX** measured. (Estimate-first gate caught the original 0.5 hard-cap
+   as too low for a contract deploy — bumped to 1.0 per repo deploy-cap convention, annotated in-script.)
+3. ✅ **Re-anchor (operator-fired):** `setUpdatedBirthCertHash(581a836c…, 3fa0e795…)` — tx
+   **`0x9f2821574dc50db7f22048af7247a756f329f0ce358bfb8a2f46c39c424a979c`** block **45715805** status 1,
+   gas 83014 = **0.083014 IOTX**; `currentBirthCertHash` readback = the new hash.
+4. ✅ **Verify (read-only):** KMS cert → **VERDICT: VALID exit 0** (sig by HSM root + CHAIN pubkeyHash
+   binding + override hash match + active). **Old software cert → INVALID (birthCertHash mismatch)** —
+   the override supersedes it; the plaintext-key cert can no longer be presented. Wiring note: the
+   verifier loads the REPO-ROOT `.env` — `BIRTH_CERT_UPDATE_REGISTRY_ADDRESS` set in BOTH root `.env`
+   (scripts) and `bridge/.env` (bridge process).
+5. ✅ **Backend flipped:** `MFG_CA_BACKEND=kms` + `VAPI_KMS_MFG_CA_ALIAS=alias/qortroller-mfg-ca` in
+   `bridge/.env`; `CHAIN_SUBMISSION_PAUSED=true` untouched. Software CA key **cold-retained** per the
+   retention rule (forensic-only; never a second live signer).
+
+Root fix landed end-to-end: mint/verify split (`b558bdec`) made the re-anchor sufficient; node_id
+`01a574e7…` preserved. Remaining: INV-MFG-003 seal + Sensor-C G1.6 demote (below).
+
+### Governance seal — ✅ FIRED 2026-07-17 (operator, `--confirm-governance`)
+- **INV-MFG-003 SEALED: PV-CI baseline 183→184.** Operator fired
+  `scripts/fire_inv_mfg_003_seal.ps1` (wrapper exists because long inline `--reason` strings
+  newline-split in PowerShell) + typed the governance phrase. Allowlist regenerated: **+1
+  INV-MFG-003 digest `e7d7a8d1447f4969…`, 183 pre-existing digests byte-identical**; gate PASS 184.
+  Six pins on the LIVE contract: `setUpdatedBirthCertHash` onlyOwner / `isActive`-on-VMDR gate /
+  non-zero newHash / `BirthCertHashUpdated` event / `currentBirthCertHash` signature / the
+  override-wins branch (`if (o != bytes32(0))` — grok round-28's residual: signature-only would let
+  the body silently become always-VMDR). grok round-28 verify = SHIP
+  (`docs/a2a/hsm/round-28-grok-verify-inv-mfg-003.txt`). The bridge-unreachable warning at seal time
+  is the documented fail-open (governance event POST skipped — bridge not running; allowlist write
+  is the seal).
+- **Sensor-C G1.6 LIVE-FRAGILE → LIVE** is earned only AFTER step 5 (581a836c VALID under the HSM root) —
+  a separate operator-confirmed Sensor-C edit. Not touched here.
+
+## Part 4 — offline-seal provenance gap + the replay tool (A2A round-30 T4)
+
+The `INV-MFG-003` `--generate` seal fired while the bridge was **down**, so the gate printed
+"Governance event not stored — run bridge and POST manually": the bridge DB's tamper-evident
+allowlist-governance provenance chain is missing this seal event. This is a **secondary audit gap, not a
+PV-CI gap** — the allowlist write IS the seal (the `816b4d81` commit message says so), and the gate reads
+the 184 digest-pinned entries fail-closed regardless of the bridge.
+
+`scripts/replay_governance_event.py` closes the gap honestly and reusably (for every future offline
+`--generate`): it records a **NEW** provenance-chain entry that DOCUMENTS the offline seal — it does NOT
+and cannot backdate the original (the provenance hash embeds a fresh `ts_ns`). It reuses the gate's own
+canonicalization + provenance formula (no reinvention), defaults to dry-run, and only POSTs under
+`--execute`. Dry-run for this seal is proven: prev-hash `2ade1082…` (allowlist at `74c864c8`, 183 entries)
+→ new-hash `a47d6dbb…` (current, 184) — a real transition. **Firing the late POST is OPTIONAL and
+operator-fired** (needs the bridge up + read key); the reusable tool is the deliverable.
+
+  `python scripts/replay_governance_event.py --prev-git-ref 74c864c8 --category invariant_change --reason "late record of INV-MFG-003 seal (816b4d81), PV-CI 183 to 184" [--execute]`
+
+**This pass:** contract + tests + deploy + re-anchor + verify integration + this audit note + the offline-seal
+replay tool. PV-CI 184; 0 IOTX; no chain write; no key provisioned by the repo. grok round-24 (design) +
+round-25 (verify) + round-30 T4. Operator fires the deploy + the ~0.2 IOTX re-anchor (done, Part 3) + the
+optional late governance POST.

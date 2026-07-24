@@ -1,0 +1,81 @@
+I'll verify B1 PCRA against the codebase: mechanical delta vs FSCA/Mythos, the precision heuristic, rails, and whether it's a working capability or a rename.## B1 PCRA VERIFY (PRE-commit)
+
+**Tests:** 10/10 pass. **Dogfood repro:** 208 surfaces (`docs/a2a`+`audits`) → **1** CEILING_OVERCLAIM = `audits/l6b-operator-attestation-2026-06-20.md#l6b_enabled` (codefence `L6B_ENABLED=true` local-activation block). Claim matches.
+
+---
+
+### 1. MECHANICAL DELTA — **distinct enough; not a rename**
+
+| Surface | What it watches | vs PCRA |
+|---|---|---|
+| **FSCA** | `fleet_coherence_log` agent-signal CONTRADICTION/ORPHAN/INVERSION | Different ontology (runtime agent health, not prose claims) |
+| **honesty-board** | Weekly VPM snapshot (flags, wallet, PV-CI count, Cedar) | Emits protocol-state board; does **not** score narrative claims against oracles |
+| **Mythos `doc_number_consistency`** | Registered `CanonicalFact` superseded values in **named** target docs | Registry-bounded number drift; not A2A tree; not flag-oracle overclaim |
+| **PCRA CEILING** | `docs/a2a/**` + `audits/**` text vs **live flag oracles** | **New** — no agent treats A2A/audit narrative as integrity surface vs capability flags |
+| **PCRA STALE** | claimed vs live anchors | **Cousin** of Sensor-A / Mythos numbers — same *idea*, different join (injected claimed/live dicts, not registry superseded list) |
+| **PCRA UNBANKED** | A2A SHIP tag ∉ audits bank | **New** process integrity |
+
+**Hammer:** “A2A tree + audits vs live oracles” **is** a real new capability **for CEILING_OVERCLAIM**. STALE is incremental reuse, not redundant. UNBANKED is novel.
+
+**Adapter honesty gap:** `scan_repo()` only wires flag oracles + surfaces. It passes `claimed_anchors={}`, `live_anchors={}`, `a2a_rounds=[]`, `banked_tags=set()` → **STALE_ANCHOR and UNBANKED never fire from the adapter**. Lock prose (SENSOR-A / node-ledger tip / PV-CI / SHIP banking) **overclaims the adapter**. Pure detectors for all three are real; end-to-end repo scan is **1/3 classes**.
+
+---
+
+### 2. Negation/definitional guard — **useful, brittle, mild overfit**
+
+- Dogfood 12→2→1 **reproduced** (now 1). Not vapor.
+- Window=90 + big hedge list is a **precision heuristic**, not a semantic assert/deny classifier.
+- **(a) miss risk:** affirmative + stray hedge in window: `if`, `held`, `until`, `would`, `un\w*` (matches “under/unique/unit…”), `propos*` — real overclaims near those words can be **suppressed**.
+- **(b) residual FP risk:** bare config literals / env blocks without hedges still trip (the remaining 1 is exactly that). Other forms: tables, quoted configs, “set X=true” instructions without “do not”.
+- **Overfit?** Partially yes to *this* tree’s honest-negative style — but leaving the residual **instead of adding another special-case** is the anti-overfit move. Guard is shippable v0 if treated as **recall-capped precision aid**, not ground truth.
+
+---
+
+### 3. Leave the 1 ambiguous finding — **RIGHT**
+
+- That path is a **local-activation runbook** with fenced `.env` (`L6B_ENABLED=true`), not “gate met in production.” Ambiguous = correct for operator/SEL labels.
+- Suppressing it would **poison SEL** (false negative on a real class of config-string claims).
+- **Noise risk before SEL:** low *now* (1 HIGH residual on 208 surfaces). Risk rises if more rules ship without hedge discipline — class becomes FP soup before labels exist. **v0 scope (3 rules) holds that.**
+
+---
+
+### 4. Rails — **mostly held; footguns noted**
+
+| Rail | Status |
+|---|---|
+| `pcra_enabled` default False | **Held** |
+| Draft-only note / no self-grade | **Held** in `detect_residue` output |
+| No git / chain | **Held** (no write paths) |
+| Guardian drafting loop import | **Not wired** (`operator_agent_guardian_*` untouched) |
+
+**Footguns:**
+1. **`scan_repo` incomplete** (STALE/UNBANKED dead) — biggest honesty hole vs lock doc.
+2. Docstring: “optionally emitted to gitignored JSONL” — **no emitter in code**.
+3. Missing oracle → `False` = **fail-closed for CEILING** (correct direction: don’t treat unknown as capability-on).
+4. `tournament_block_ready: False` **hardcoded** forever → any match always OVERCLAIM even if gate later clears.
+5. Loads up to ~800 files full text into memory; no size/token guard; exception → silent skip.
+6. No draft persistence path despite “local draft emitter” in lock.
+
+---
+
+### 5. Working capability vs stub — **working pure library; thin Guardian task**
+
+- **Working:** pure detectors + 10 tests + dogfood precision path for CEILING.
+- **Not yet:** Guardian poll/draft integration, draft JSONL, STALE/UNBANKED extraction in `scan_repo`, live SENSOR-A/node-ledger/PV-CI oracles.
+- Default-off capability package: **honest**. “Guardian’s novel autonomous task” live in-process: **not yet** — library-shaped B1.
+
+**Evolve vs rename:** **Evolve** of Guardian’s *mission* (integrity drafts) onto a **new surface** (A2A/audit narrative vs oracles). Not a rename of FSCA/Mythos/honesty-board. Incomplete until adapter + Guardian invoke match the lock.
+
+---
+
+## VERDICT: **SHIP-WITH-FIX**
+
+**Fix before calling B1 “closed” (not necessarily same commit if operator accepts adapter debt):**
+1. Either **wire** `scan_repo` to extract STALE (SENSOR-A anchors / live figures) + UNBANKED (SHIP tags ↔ audits) **or** mark adapter as **CEILING-only v0** in module + lock (stop overclaiming three live classes).
+2. Drop or implement the **JSONL draft emitter** claim.
+3. Soften/document hedge brittleness (`if`/`un\w*`/etc.) — do **not** special-case away the residual 1.
+4. Optional: pin `tournament_block_ready` to a real oracle, not forever-False.
+
+**Do not BLOCK:** pure core is real, rails default-safe, residual FP posture correct, tests green, mechanical delta for CEILING is not Mythos+FSCA redux.
+
+**Guardian evolution:** **yes, incremental** — new task-class seed, not rename. Full “novel autonomous steward task” claim waits on adapter completeness + drafting hook.

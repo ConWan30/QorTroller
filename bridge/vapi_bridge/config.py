@@ -796,6 +796,14 @@ class Config:
         default_factory=lambda: _env("L6B_ENABLED", "false").lower() == "true"
     )
     """False by default — L6b disabled unless L6B_ENABLED=true env var set."""
+    poep_campaign_mode: bool = field(
+        default_factory=lambda: _env("POEP_CAMPAIGN_MODE", "false").lower() == "true"
+    )
+    """POEP-CAMPAIGN carve-out (N-growth ONLY; grok campaign-r02, operator pick 1b): inits the L6b
+    ring prerequisites (analyzer + driver + the nonce-bound fire endpoint) while L6B_ENABLED stays
+    false — auto-tick and the humanity-formula contribution remain STRICTLY l6b_enabled-gated.
+    Campaign fires stamp policy_ref=edge_operator_reflex_v1 so they COUNT toward the N>=50 usable
+    gate. Default False; process-scoped env lift only (never persisted to bridge/.env)."""
     poep_enabled: bool = field(
         default_factory=lambda: _env("POEP_ENABLED", "false").lower() == "true"
     )
@@ -871,6 +879,12 @@ class Config:
         )
     )
     """How long R2 effect stays active before BASELINE_OFF clear (default 15ms)."""
+    poep_ring_dump_enabled: bool = field(
+        default_factory=lambda: _env_bool("POEP_RING_DUMP_ENABLED", False)
+    )
+    """(ii) R2-onset study — when True, each nonce-bound POEP ring fire dumps its full pre+post
+    r2/accel/device_ts series to audits/poep_ring_dump/ for the OFFLINE actuator-coupling study.
+    Default False; instrument-only, non-gating; never touches the corpus/verdict/flags."""
 
     # --- Phase 62: Player Enrollment Ceremony ---
     enrollment_min_sessions: int = field(
@@ -2126,7 +2140,15 @@ class Config:
         default_factory=lambda: os.environ.get("RETINA_KILLFEED_CAPTURE_DIR", "retina_kf_crops")
     )
     retina_killfeed_capture_max: int = field(
-        default_factory=lambda: max(0, int(os.environ.get("RETINA_KILLFEED_CAPTURE_MAX", "600") or 600))
+        default_factory=lambda: max(0, int(os.environ.get("RETINA_KILLFEED_CAPTURE_MAX", "1200") or 1200))
+    )
+    # Dense-capture save cadence (ms). Crops are saved by a dedicated timer thread at this interval, DECOUPLED
+    # from the per-PITL-record tune() rate (~3s) so transient kill-feed rows are sampled at their peak
+    # visibility (a single per-record sample can catch a row at the edge of its render window = low match).
+    # 750ms (~1.3/s) is denser than per-record; the ring cap (1200) covers a ~15min session. Off the WGC
+    # frame callback (dedicated thread) per the hot-path discipline.
+    retina_killfeed_capture_interval_ms: int = field(
+        default_factory=lambda: max(100, int(os.environ.get("RETINA_KILLFEED_CAPTURE_INTERVAL_MS", "750") or 750))
     )
     retina_capture_panel_roi: str = field(
         default_factory=lambda: os.environ.get("RETINA_CAPTURE_PANEL_ROI", "0.0,0.28,0.32,0.67")
@@ -3163,6 +3185,22 @@ class Config:
     )
     """Phase O1-D-PATH-B v1 — Enable Curator's live-write executor (chain ops
     via VAPIDataMarketplaceListings.suspendListing). Default False = OPT-IN."""
+
+    # --- A2A-STEWARD-EVOLVE 2026-07-16: novel steward autonomous-tasking capabilities ---
+    # New autonomous DRAFT surfaces per steward + cross-cutting evolution primitive. All DEFAULT FALSE
+    # (capability packaging, zero behavior change). draft != act: these emit local drafts only; the
+    # existing two-key IOTX executors (above) still gate any chain/marketplace action. Sequence B1..B6.
+    pcra_enabled: bool = field(default_factory=lambda: _env_bool("PCRA_ENABLED", False))
+    """B1 — Guardian Protocol Claim Residue Auditor: draft claim-residue findings over docs/a2a/** +
+    audits/** + machine oracles. 0 IOTX, local drafts only. Default False = OPT-IN."""
+    mpja_enabled: bool = field(default_factory=lambda: _env_bool("MPJA_ENABLED", False))
+    """B2 — Sentry Multi-Surface Provenance Join Attestor (draft join attestations; anchor two-key)."""
+    dpig_enabled: bool = field(default_factory=lambda: _env_bool("DPIG_ENABLED", False))
+    """B3 — Curator Data-Product Integrity Gate (draft suspend/relist recs; act two-key)."""
+    sel_enabled: bool = field(default_factory=lambda: _env_bool("SEL_ENABLED", False))
+    """B4 — Steward Evolution Ledger: external-label task-class graduation scorer (graduation = draft)."""
+    pgsw_enabled: bool = field(default_factory=lambda: _env_bool("PGSW_ENABLED", False))
+    """B6 — Presence-Gated Steward Window: gate steward draft severity on live node presence (PoEP/PoSP)."""
 
     # Per-agent daily IOTX budget caps — runaway prevention. Executor refuses
     # drafts that would push daily spending over budget. Defaults align with

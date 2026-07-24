@@ -1,0 +1,49 @@
+I'll re-verify the Inc-C delta against F1/F2 only: mint tokenId fallback safety, pure Transfer parser, and any remaining None/IndexError paths after a paid tx.## r05 DELTA re-verify (F1 + F2 only)
+
+### F1 — CLOSED
+`cmd_mint` no longer prints `CONTROLLER_TOKEN_ID=None` after a paid tx:
+1. Primary: `minted_token_id_from_logs(rcpt.logs, nft, gamer)`
+2. Fallback: `nft_c.functions.total().call()` when parse is empty
+3. If still unusable → `exit(1)` + explorer URL via `_tx_url`
+4. Cross-check WARN when `parsed != total()`
+5. `balanceOf` must be exactly `+1` or `exit(1)` before any id is printed
+
+`cmd_register_project` mirrors the same discipline (parse → enumerable fallback → `exit(1)`, never `None`).
+
+ABI has `total` as a view; contract confirms the invariant:
+
+```84:86:contracts/contracts/VAPIGamerControllerNFT.sol
+        uint256 _tokenId = ++total;
+        _safeMint(_to, _tokenId);
+        return _tokenId;
+```
+
+### F2 — CLOSED
+`minted_token_id_from_logs` is pure and hardens the bad path:
+- `len(topics) < 4` → skip (ERC-20 3-topic never indexes)
+- `from != 0` → skip (non-mint Transfer)
+- contract + `to` filters
+- `_topic_hex` normalizes HexBytes bare / `0x` / dict AttributeDict shapes
+- returns `None` only on no match; never raises `IndexError`
+
+**38/38** ceremony tests green (incl. 9 T-CC-10 parser cases).
+
+---
+
+### Adversarial on the delta
+
+| Edge | Verdict |
+|------|---------|
+| **Multi-mint / one tx** | CLI calls one `mint()`; contract mints one id per call. `total()` after a successful single mint **is** that id. |
+| **Reentrancy via `_safeMint`** | No `nonReentrant`, but ceremony mints to EOA (bridge/gamer). If a contract recipient re-entered and minted elsewhere, primary parse still takes the **first** matching mint-to-gamer; `total()` could be higher and WARN fires. Fallback wrong only if parse **and** multi-mint reentrancy both fail together — outside intended Inc-C path. |
+| **Counter ≠ id** | Not for this contract: id assignment is `++total`, sequential from 1. Not ERC721Enumerable-gap / burn-reuse. |
+| **`_topic_hex` vs real web3.py** | Covers AttributeDict logs + HexBytes/bytes/str topics (0x or bare). Synthetic tests cover all three. Integer topics would mis-parse (not a real receipt shape). |
+| **Remaining `None` / `IndexError` after paid tx** | No remaining print-`None` path on mint or register-project. Parser cannot IndexError. Residual: uncaught `ValueError` on pathological non-hex topic is fail-loud, not silent `None`. |
+
+Minor non-blocking: the second `if token_id is None` after `token_id = total_after` is dead (`total()` returns an int, not `None`). Harmless.
+
+F3/F6 as claimed (tests + header sequencing) — not re-opened.
+
+---
+
+**VERDICT: PASS**

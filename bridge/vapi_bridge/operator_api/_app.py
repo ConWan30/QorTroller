@@ -791,6 +791,24 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             }
 
 
+    # WMP UC-15 — GET /player/self-analytics
+    # ------------------------------------------------------------------
+    # The gamer consuming their OWN verified data (demand-side seed). Read-only aggregation over
+    # already-computed protocol truth (GIC-stamped ruling rows + chain status). SELF-VIEW ONLY:
+    # no cross-player comparison, no rank (population gate stands); advisory, developer_self scale.
+    # No chain call, no consent write, no biometric — pure local aggregates.
+    @app.get("/player/self-analytics")
+    async def player_self_analytics(
+        grind_session_id: str = Query(default="", description="Optional grind session scope"),
+        x_api_key: str = Header(default=""),
+    ):
+        _check_read_key(x_api_key)
+        from ..wmp.self_analytics import self_analytics_from_store
+        import asyncio as _aio
+        # DB aggregation off the event loop (event_loop_invariants discipline)
+        return await _aio.to_thread(
+            self_analytics_from_store, store, grind_session_id=grind_session_id)
+
     # Phase 3 Path B — Gameplay Workflow Layer: GET /player/session-status
     # ------------------------------------------------------------------
     # Single-glance "am I verified?" for the casual player. Read-only COMPOSITION over
@@ -1358,6 +1376,60 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "posca_coupling_score": getattr(proof, "posca_coupling_score", None),
             "posca_action_count": getattr(proof, "posca_action_count", 0),
         }
+
+
+    # POEP-HID-RING — POST /operator/poep/fire (nonce-bound fire on the single-HID L6b ring)
+    # ------------------------------------------------------------------
+    # Serves ONE nonce-bound low-amp probe from the bridge's OWN reader (the same one that attests
+    # activity/PCC) so the gameplay-live path gets a real fire+capture without a second HID open.
+    # Event-loop discipline: this handler ARMS (transport does the to_thread write) then AWAITS a
+    # Future the session-loop completion resolves — it never touches HID and never busy-waits.
+    # Fail-closed: full operator key; 503 gated (POEP_LIVE_FIRE_ENABLED + l6b_enabled) / 409 busy.
+    # CANDIDATE/CAMPAIGN mechanism only — does NOT flip poep_enabled / L6B enablement.
+    @app.post("/operator/poep/fire")
+    async def poep_ring_fire(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Fire one nonce-bound probe on the ring; returns the MEASURED reflex features.
+
+        Body: {"nonce": str, "amplitude": int}. Response (the BridgeFireCaptureAdapter contract):
+        {fired, real_hardware, nonce, t_fire_ns, latency_ms, peak_lsb, precursor_gap_ms, error?}.
+        """
+        _check_key(x_api_key)   # full operator key; 503 when unconfigured (fail-closed, it FIRES haptics)
+        transport = getattr(app, "_transport", None)
+        if transport is None or not hasattr(transport, "request_poep_nonce_probe"):
+            raise HTTPException(503, "dualshock transport not running")
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(400, 'JSON body required: {"nonce": str, "amplitude": int}')
+        nonce = str(body.get("nonce") or "")
+        if not nonce:
+            raise HTTPException(400, "nonce required")
+        try:
+            amplitude = int(body.get("amplitude", 60))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "amplitude must be an int")
+
+        from ..dualshock_integration import PoepFireRefused
+        try:
+            fut = await transport.request_poep_nonce_probe(nonce, amplitude)
+        except PoepFireRefused as _e:
+            raise HTTPException(getattr(_e, "status_code", 503), str(_e))
+        try:
+            # F-RIG27-6 (rig-2, grok firetimeout-r02): the 350-frame capture window drains at
+            # len(frames)/~1s-iter, which under Remote Play's sparse frame cadence took 5-11s -
+            # over the old 5s bound, so every real fire 504'd -> honest IDENTITY_ONLY. Raise +
+            # make configurable (env POEP_FIRE_TIMEOUT_S, default 20, ~2x headroom over the observed
+            # drain), clamped. This only makes the handler WAIT LONGER for a REAL confirmed fire -
+            # a 504 is still a pure fail-closed (no fired=True on timeout).
+            _fire_to = float(os.environ.get("POEP_FIRE_TIMEOUT_S", "20") or 20)
+            _fire_to = max(5.0, min(60.0, _fire_to))
+            return await asyncio.wait_for(fut, timeout=_fire_to)
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                504, "fire dispatched but capture did not complete (IMU frames stalled)")
 
 
     # Phase B item ② P4b — GET /operator/poep-registry/{device_id}

@@ -26,20 +26,24 @@ class CalibrationMixin:
         cco_profile_id: str | None = None,
         policy_ref: str | None = None,
         trigger_r2_at_probe: int | None = None,
+        player: str | None = None,
     ) -> int:
         """Persist one L6b reflex probe result (Phase 63; CCO Phase B telemetry).
 
         latency_ms=-1.0 indicates NO_RESPONSE (stored as NULL in DB).
+        player: optional corpus tag (P1/P2/P3) for multi-op surprise campaigns —
+        operator label only, not gamer identity (A2A-POEP-CORPUS-TOOLING).
         Never raises — caller wraps in try/except.
         Returns the new ``l6b_probe_log`` row id.
         """
         _lat = None if latency_ms < 0 else latency_ms
+        _player = (player or "").strip() or None
         with self._conn() as conn:
             cur = conn.execute(
                 "INSERT INTO l6b_probe_log "
                 "(device_id, probe_ts_ms, latency_ms, classification, accel_delta_peak, "
-                "reflex_verdict, cco_profile_id, policy_ref, trigger_r2_at_probe) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "reflex_verdict, cco_profile_id, policy_ref, trigger_r2_at_probe, player) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     device_id,
                     probe_ts_ms,
@@ -50,6 +54,7 @@ class CalibrationMixin:
                     cco_profile_id,
                     policy_ref,
                     trigger_r2_at_probe,
+                    _player,
                 ),
             )
             return int(cur.lastrowid)

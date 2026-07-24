@@ -1,0 +1,100 @@
+Reading the continuous-poll implementation and harness to re-verify the fix adversarially.## RE-VERIFY (adversarial, pre-commit)
+
+### 1. Continuous-poll vs residual cadence tell
+
+**Trace (`_fire_probe_silent`):**
+
+```
+while mono < fire_at:  poll → ring.append → sleep(poll_interval)   # ~8ms
+pre = list(ring)
+poll  # r2_at_probe
+profile = l6b_probe_profile(...)
+probe_ts / t_challenge_ns          # stamped BEFORE write
+_sync_write(force)
+while mono < deadline: poll → [maybe asyncio.run(clear_triggers)] → sleep(8ms)
+```
+
+**Does it close the silence→burst pre-tell?** Yes. From `t_arm` there is no quiet→dense transition ~200–600 ms before force. A pure INPUT-poll-rate watcher sees ~125 Hz from arm; the CSPRNG delay is not keyed by a burst edge.
+
+**Is pre→post cadence uniform?** No. At the fire boundary:
+
+| segment | inter-poll spacing |
+|---|---|
+| pre loop | ≈ `poll + 8ms sleep` |
+| last pre → r2 poll | ≈ 8ms (full sleep after last ring sample, then exit) |
+| r2 poll → first post poll | **profile + `_sync_write` only — no `sleep`** → often **&lt;8ms** (compressed) |
+| mid-post at `hold_ms` | `asyncio.run(clear_triggers)` inserts a **blocking stall** |
+
+Those discontinuities sit **at/after** `t_challenge` / force write (and later at clear). That is **A-REACTIVE-adjacent** (onset-coupled), not a **pre-fire** tell.
+
+**“One iteration early”?** Not as a pre-tell. Last ring sample is always under `mono < fire_at`; then a full 8ms sleep; then exit; then r2 poll + stamp + write. Worst lag after intended `fire_at` is ~one poll period + write cost (well inside `SCHEDULE_TOLERANCE_MS=300`). There is no observable “about to fire in ~pre_count×8ms” edge before the force. The r2 poll is still a normal INPUT read, ms before write — not a 200–600ms arm cue.
+
+**Verdict on (1):** Burst residual closed. Remaining cadence wiggle is at fire / clear, out of P-LIVE-0 claim.
+
+---
+
+### 2. Harness honesty (continuous → 0.02)
+
+Modeling `poll_burst_watcher` on `continuous_poll` as **blind uniform-delay + 150ms** is the **right** model for a bot whose only signal was the burst edge.
+
+Could continuous-poll-aware timing beat blind?
+
+| signal | leak? |
+|---|---|
+| `t_arm` = when continuous poll starts | Yes, but blind already conditions on `t_arm` |
+| ring fill / first `pre_count` polls | No — fill finishes in ~0.2–0.6s; fire is still U[3,12]s |
+| `fire_at = t_arm+delay` | Only if delay known; delay is independent CSPRNG, not printed pre-fire |
+| multi-trial learning | Independent draws; single-shot FAR floor unchanged |
+| short inter-poll at fire / OUTPUT force | A-REACTIVE, explicitly out of harness |
+
+**0.0225 is not flattering** under a non-reactive timing adversary: acceptance width ~220ms over ~9s span → ~0.024. That is the information-theoretic floor for this delay window + reaction band. Harness is honest for its threat model; it does **not** prove “no HID-output bot.”
+
+---
+
+### 3. Is `O_opt = mid(est_pre)+190` strongest?
+
+On `sleep_then_burst` with **unknown** `est_pre ~ U[208,600]`:
+
+- Accept when `est_pre ∈ [O−300, O−80]` (220ms window).
+- Any fixed `O ∈ [508, 680]` saturates at **220/392 ≈ 0.56**.
+- `mid+190 = 594` is in that plateau (measured 0.5575). Scanning fixed offsets does **not** beat ~0.56.
+
+**Stronger if `est_pre` known exactly** (fixed public `pre_count`, count down): fire `t_burst+est_pre+150` → **FAR → 1.0**. That needs a known remaining pre-window, which continuous poll removes (no burst start). Randomized `pre_count` is what keeps the naive path at ~0.56 rather than 1.0.
+
+**Fix still passes** if you strengthen the naive bot (naive FAR only rises; `fixed ≤ 0.15` unchanged). Flaw is not under-shown in a way that flatters the fix.
+
+---
+
+### 4. Schedule leg / claim language
+
+| surface | accurate? |
+|---|---|
+| `schedule_commitment` docstring (integrity MAC + lag; not commit-reveal vs malicious host) | **Yes** |
+| Audit BUILT table + schedule honesty paragraph | **Yes** |
+| Capture `audit["claim"]` (closes stdout + poll-burst; A-REACTIVE out) | **Yes** |
+| `verify_live_response` lag comment: *“within the silent pre-collection window”* | **Stale** — continuous poll intends lag≈0; 300ms is jitter budget, not a silent pre-window |
+| Module top (`poep_live_verify`): *“nonce-derived UNPREDICTABLE time”* | **Stale** — delay is `csprng_delay_s`, not nonce-derived |
+| `nonce_derived_delay_s` “hygiene upgrade deferred” | **Stale** — upgrade is live via `csprng_delay_s` |
+| `build_live_record`: schedule “becomes auditable” | Mildly soft; OK if read with schedule_commitment honesty |
+
+No load-bearing overclaim on the path that ships the proof. Doc drift only.
+
+---
+
+### 5. Correctness bugs in the diff
+
+No ship-blocker:
+
+- Continuous loop + ring arithmetic matches stated `[base//2+1, 3base/2)` for `base=50` → `[26,75)`.
+- Fire uses mono; schedule bind uses `time_ns` pair — lag can include clock domain noise; 300ms budget is intentional.
+- `t_challenge` before `_sync_write` ≠ physical force instant; reaction path uses same `probe_ts` — consistent, slightly early vs force (not a pre-tell).
+- `asyncio.run(clear_triggers)` mid-post is a capture-window stall, not a pre-arm cue.
+- Harness bars (1.0 / ≥0.30 / ≤0.15) match measured (1.0 / 0.5575 / 0.0225); fix bar has margin vs true chance.
+
+---
+
+## VERDICT: **SHIP**
+
+Continuous poll closes the poll-burst pre-tell. Cadence glitch at fire is A-reactive-class, not a moved pre-tell. Fallback FAR is an honest floor for that adversary. `O_opt` is (near) optimal among fixed-offset burst bots. Load-bearing claims are non-overclaiming.
+
+Optional post-commit polish (not must-fix): fix stale “silent pre-collection window” / “nonce-derived” / “hygiene deferred” strings so docs match CSPRNG + continuous-poll reality.

@@ -1,0 +1,221 @@
+# A2A CFB27 r02 — GROK FORWARD (adversarial verifier + design steer)
+# Charter ruling (a). Zero spend. No flag flips. Candidate-not-verdict.
+# Sealed modules untouched. PV-CI 184. Rig session operator-fired.
+# Date: 2026-07-18
+
+Status: STEER — becomes the prereq build list for Claude (build only after operator GO).
+
+---
+
+## A. P# CFB27 r02 — GROK STEER (A–E)
+
+Full artifact: `docs/a2a/poep/round-cfb27-02-grok-brainstorm.txt`
+
+---
+
+### A. Prereq scope — **right; same L5 is honest v1**
+
+- **R2-first L5 + L6-Passive clone is honest.** Priority is sample sufficiency, not full scheme ontology. D2/D4 change *rhythm shape* of L2/catch, not which button wins bootstrap first.
+- **Add:** D1–D4 notes in `button_map`/docstring; runbook `GAME_PROFILE_ID=ncaa_cfb_27`; AIT “RS neutral” eye-check (Tackle Stick fidget risk).
+- **Cut as overkill:** L5 reorder, humanity L2C reweight, live scoreboard OCR as session blocker.
+- **L2C code:** already empirical (`None` when stick static). 27 does not need a flag — prose that treats CFB as always-dead-zone does.
+
+### B. Scoreboard OCR v1
+
+| | |
+|---|---|
+| **P0** | down&distance, play clock |
+| **P1** | score (provisional), quarter |
+| **Defer** | game clock if ROI crowded |
+| **ROI** | First 5 min = dump top/bottom strips; pick fractions from **27 frames**, not Warzone habit |
+| **Cadence** | Change-gated ~1–2 Hz (killfeed pattern); banner static between plays |
+| **Tier** | **INDICATIVE only** — never BLOCK/CERTIFY/GAD/GIC |
+
+Pure grammar already exists: `retina_screen_lobe.py` (`parse_hud` / `diff_hud`). v1 = ROI + edge wire, not a new event language.
+
+### C. Seeds ranked (N×B×V)
+
+| Rank | Seed | Call |
+|---|---|---|
+| 1 | **S1** dead-time challenge scheduler | **PROMOTE** — best ship-shaped presence win |
+| 2 | **S3** snap-as-stimulus | **PROMOTE + rails** — max novelty, adversary-hard |
+| 3 | **S2** scoreboard grammar | **PROMOTE** — football killfeed |
+| 4 | **S5** drive/quarter segments | **Plumbing only** |
+| 5 | **S4** precision meters | **KILL v1** |
+| 6 | **S6** playcall cognition | **KILL/DEFER** — overclaim magnet |
+
+Post-rig build order: S5 → S2 INDICATIVE → S1 → S3 → (much later) S4.
+
+### D. S3 adversarial
+
+**How to game / confuse:** hard-count anticipation (legit human), cadence prediction + band camping, offense-as-snapper nonsense, OCR lag as free pad, humanized Gaussian scripts.
+
+**Rails:** candidate forever; defense/non-snapper only; dual stimulus (playclock_reset **and** optical onset); OCR-lag exclude; anticipation window [−150,0] ms separate; flag only on **low-CV + sub-floor rate over N≥20**; fail-open; **zero** humanity weight.
+
+### E. Sequencing
+
+**MUST before first rig**
+1. Register `ncaa_cfb_27` (same L5/L6-P, D1–D4 annotated)
+2. Runbook: `GAME_PROFILE_ID` + eye-check sheet
+3. CLAUDE.md L2C scoped to 26 + 27 caveat
+4. Campaign path unchanged (process-scoped env only)
+5. Optional scoreboard frame dumps — no live OCR required to play
+
+**WAITS:** live OCR, S1–S6 product, formula reweights, any flag flip, PV-CI, sealed modules.
+
+---
+
+## Prereq build list (Claude after operator GO)
+
+1. `NCAA_CFB_27` in `game_profile.py`  
+2. CLAUDE.md L2C scope note (minimal)  
+3. CFB27 eye-check + `GAME_PROFILE_ID` runbook line  
+4. 2–4 profile unit tests  
+5. **Not in this PR:** OCR live path, seeds, weights, flags
+
+First rig success = dual-connect CFB 27 + filled eye-check + ROI dumps — **claims nothing novel yet**.
+i_bridge/retina_screen_lobe.py` (`HudState`, `parse_hud`, `diff_hud`, playclock_reset / down_advanced events). Killfeed path in `qortroller_retina_capture.py` already has fraction ROI + change-gated OCR. v1 is **edge wiring + ROI**, not a new grammar.
+
+### Load-bearing fields (rank)
+| Priority | Field | Role | Honesty |
+|---|---|---|---|
+| P0 | **down & distance** | Event grammar (play resolved / new set) | High legibility if banner stable |
+| P0 | **play clock** | Snap boundary (`EVT_PLAYCLOCK_RESET` when jumps +10) | Load-bearing for S1/S3 |
+| P1 | **score pair** | Drive outcome / TD ledger | **Provisional** (already marked in screen lobe) |
+| P1 | **quarter** | Session segmentation (S5) | Marker only |
+| P2 | game clock | Nice-to-have strata; easy OCR confusion with play clock | Defer if ROI crowded |
+
+Claude lean (down&distance + play clock + score) = **accept**. Add quarter as cheap P1. Game clock waits.
+
+### ROI strategy
+1. **First rig = measure, don't guess.** First 5 min: dump full-frame + candidate banner crops (top strip ~0–0.12 and bottom strip ~0.85–1.0 at 1080p) with timestamps. Pick fractions **from operator frames of CFB 27**, not from Warzone top-right killfeed habit.
+2. **v1 = single static fraction ROI** (`fx,fy,fw,fh` like killfeed), one skin (default broadcast HUD). No multi-skin bank, no VLM.
+3. **Change-gated OCR** (reuse `kf_fresh_decision` / gray-diff pattern): banner is static between plays → fire OCR on ROI diff, min gap ~500–1000 ms. Do **not** OCR every frame.
+4. **Cadence:** effective ~1–2 Hz during dead time is enough; during play even lower if ROI unchanged. Throttle is a feature (CPU + false transitions).
+5. **Engine:** start with whatever killfeed path is live (tesseract or rapidocr); scoreboard digits/& are friendlier than killfeed handles. No new OCR stack.
+
+### Tier
+**INDICATIVE only** — same discipline as killfeed postcard / STRANGER_OK. Never feeds BLOCK/CERTIFY. Never mutates GAD/GIC/PoAC. Screen events are candidate scene markers for fusion experiments later.
+
+### Explicit non-claims
+- Not possession detection (requires logo/arrow — brittle).
+- Not green-catch window / meter fill OCR (S4).
+- Not "authored play" verdict (S2 needs correlation layer after INDICATIVE stream is stable).
+
+---
+
+## C. S1–S6 kill/promote rank
+
+Score = novelty × buildability × vision fit (gamer-owned data, presence-not-identity, candidate-not-verdict). Scale each 1–5; product is rank key.
+
+| Rank | Seed | N×B×V | Decision | One-line why |
+|---|---|---|---|---|
+| 1 | **S1** Snap-synchronized challenge scheduler | 4×4×5 = **80** | **PROMOTE** | Football's free gift: haptic-quiet dead time. Highest *ship-shaped* presence win. Builds on campaign ring + OCR play-clock quiet. |
+| 2 | **S3** Snap-as-stimulus reflex | 5×3×5 = **75** | **PROMOTE with rails** (see D) | Highest novelty; genre-native liveness without haptic fire. Adversarially hard — candidate forever until dual-stimulus + CV rails proven. |
+| 3 | **S2** Scoreboard event grammar | 3×4×5 = **60** | **PROMOTE** | Football's killfeed. Screen lobe + ROI wiring is most of the build. Authorship correlation is phase-2, not v1 claim. |
+| 4 | **S5** Drive/quarter segmentation | 2×5×3 = **30** | **PROMOTE as plumbing** | Low novelty, high utility for session_id / PoSP strata. Do not sell as anti-cheat. |
+| 5 | **S4** Precision-window forensics | 5×2×4 = **40** | **KILL for v1 / DEFER** | Novel cheat class, but needs meter/green-window vision or input-only proxies that overfit. Not first-rig. |
+| 6 | **S6** Playcall-phase cognition | 3×2×3 = **18** | **KILL / DEFER** | Overclaim magnet ("cognitive menu"). GAD binary stays correct (R2 keeps ACTIVE). Semantic menu models wait for labeled strata. |
+
+### Promote order for builds after first rig data
+S5 plumbing (cheap) → S2 INDICATIVE stream → S1 scheduler → S3 candidate reflex → (much later) S4.
+
+S6 only after multi-session labels prove pre-snap input clusters separable from idle without R2.
+
+---
+
+## D. Adversarial on S3 (snap-reaction liveness)
+
+### How you game it (or how humans look like cheats)
+
+1. **Legitimate anticipation (the load-bearing confound)**  
+   Hard counts, film study, motion tells, audible cadence — humans *should* move before the ball is snapped. Sub-80 ms "reactions" can be true positive humans. Absolute lower band alone = false bot rate on good defenders.
+
+2. **Cadence / AI snap prediction**  
+   Model pre-snap clock + formation → fire input at predicted snap. With OCR lag, a script can sit inside 80–280 ms by design ("band camping").
+
+3. **Offense asymmetry**  
+   On offense the snapper *generates* the stimulus. Measuring "reaction to own snap" is nonsense (or measures motor plan, not liveness). S3 without possession/side filter is garbage.
+
+4. **OCR lag as free pad**  
+   If t_stimulus = OCR detect time (not true on-screen snap), measured latency = true_latency − ocr_lag. Scripts can look human; humans can look slow/bot-high.
+
+5. **Pre-snap feathering**  
+   Micro-inputs already held; "reaction" is release/edge on an armed control — looks instant.
+
+6. **Haptic-free script with humanized jitter**  
+   Gaussian 120±30 ms on every snap defeats naive band checks; needs **distribution** forensics (CV, multimodality), not single-shot thresholds.
+
+### Rails that keep it honest
+
+| Rail | Rule |
+|---|---|
+| **Candidate forever (v0)** | Tag `QORTROLLER-SNAP-REFLEX-v0 CANDIDATE`. Never BLOCK/CERTIFY/eligibility. Never humanity_probability weight. |
+| **Defense-only / non-snapper** | Only score when local player is *not* the snap initiator. Without side detection: require **R2-quiet ≥T ms pre-event** + no Cross-snap edge in the same window (weak proxy) — or operator-labeled defensive drives in v0. |
+| **Dual stimulus** | Require **both** `playclock_reset` (OCR) **and** optical motion onset (center/banner luminance jump) within Δt; if only one fires → NULL (honest), not a latency. |
+| **OCR lag gate** | If OCR pipeline latency p95 > X ms (calibrate on desk), mark samples `stimulus_uncertain` and exclude from band claims. |
+| **Population band, not identity** | 80–280 ms is L6b population physics — presence evidence, not who. Same as PoEP: no cross-session identity claim. |
+| **Script signature = low CV + sub-floor rate** | Flag shape: (fraction of snaps < human_floor) AND (CV of latency < human_floor_cv) over N≥20. Single fast snap never flags. |
+| **Anticipation window** | Inputs in [−150, 0] ms relative to stimulus are **ANTICIPATION**, not REACTION. Count separately; never call them bot. |
+| **No haptic requirement** | Strength of S3 is game-as-stimulus; do not smuggle L6b fire into the metric. Campaign haptics remain orthogonal (S1). |
+| **Fail-open** | Missing OCR, MENU context, CONTESTED host, or dual-stimulus fail → no claim. |
+
+**Bottom line:** S3 is the right novel seed and the easiest to **over-claim**. Ship as INDICATIVE distribution logger first; adversary-test with deliberate hard-count sessions before any severity language.
+
+---
+
+## E. Sequencing
+
+### MUST exist before first CFB 27 rig session
+(Operator can play and capture without product OCR.)
+
+1. **`ncaa_cfb_27` GameProfile** registered: same L5 priority + L6-Passive R2 config; updated `display_name` / publisher / platform; **D1–D4 notes in `button_map` + docstring**.
+2. **Runbook: `GAME_PROFILE_ID=ncaa_cfb_27`** for the session (process-scoped or `.env` — operator choice; do not flip kill-switch flags).
+3. **CLAUDE.md L2C footnote scoped to CFB 26** + one line "CFB 27 RS active in-play → L2C may be non-None; weight still advisory 0.10."
+4. **CFB27 first-minutes eye-check checklist** (paste into campaign runbook or `docs/a2a/poep/cfb27-eye-check.md`):
+   - capture card UVC live; EYE-CHECK first crop content (not room cam)
+   - `latest_gameplay_context == ACTIVE_GAMEPLAY` mid-drive
+   - R2-quiet windows between plays still observed
+   - L2C: log whether `max_causal_corr` is non-None during Tackle Stick / ball-carrier sequences (sanity, not gate)
+   - AIT (if any): RS neutral discipline
+   - optional: dump scoreboard ROI candidates for offline OCR (panel crop, no live claims)
+5. **Existing PoEP campaign path unchanged** — process-scoped `POEP_CAMPAIGN_MODE` + `POEP_LIVE_FIRE_ENABLED`; no `L6B_ENABLED` / `poep_enabled` flips; sealed modules byte-untouched.
+
+### WAIT (after first session artifacts)
+| Work | Why wait |
+|---|---|
+| Live scoreboard OCR wiring into retina tick | Need measured ROI fractions from 27 HUD |
+| S2 authorship correlation | Needs stable INDICATIVE HudState stream |
+| S1 dead-time challenge scheduler | Needs play-clock quiet detector that works on real frames |
+| S3 snap-reflex candidate logger | Needs dual-stimulus + defense labeling plan |
+| L5 priority reorder / L2 dig semantics | Needs N from 27 corpus |
+| Humanity formula L2C reweight | Needs non-None rate + false-positive study |
+| S4 precision-window forensics | Needs meter/release instrumentation design |
+| S6 playcall context model | Needs labeled pre-snap strata |
+| Any flag enablement ceremony | Out of scope for this micro-arc |
+
+### First-rig success criteria (honest wins)
+- Dual-connect play of CFB 27 with bridge NOMINAL + campaign ring optional fires.
+- Eye-check sheet filled (pass/fail per line, no shame on L2C still-None early).
+- ≥1 scoreboard full-frame + ROI dump set for offline parse_hud trial.
+- Zero spend, PV-CI 184 untouched, no sealed-module edit, no env kill-switch flip persisted.
+
+---
+
+## PREREQ BUILD LIST (Claude — only after operator GO)
+
+Minimal, ordered, no gold-plating:
+
+1. **Profile:** `NCAA_CFB_27` in `game_profile.py` (clone 26 structure; D1–D4 annotated maps; same L5 + L6-Passive).
+2. **Docs:** CLAUDE.md L2C dead-zone sentence scoped to 26 + 27 caveat (one paragraph max).
+3. **Runbook:** CFB27 eye-check + `GAME_PROFILE_ID` line (campaign-adjacent doc; no bridge/.env edit by agent).
+4. **Tests:** 2–4 unit tests that `ncaa_cfb_27` registers, L5 priority == R2-first, and profile_id resolves via `get_profile`.
+5. **Explicitly NOT in this PR:** scoreboard OCR live path, S1–S6 features, formula weights, flag flips, PV-CI edits, sealed l9 modules.
+
+**Scoreboard OCR / S1–S3** = separate micro-arc after ROI dumps exist.
+
+---
+
+## One-line charter close
+
+Football is a better timing-distribution genre than shooters; the first rig is for **truth about 27 inputs + HUD geometry**, not for shipping novel presence claims. Register honesty, capture evidence, claim nothing that dual-stimulus and INDICATIVE rails cannot yet carry.

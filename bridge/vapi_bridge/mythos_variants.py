@@ -896,6 +896,18 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
                                       # per-event-line domain tag for off-chain Poseidon
                                       # events_root (ZK-prep); advisory capability,
                                       # candidate / NOT FROZEN-v1, off-chain only
+    b"VAPI-MPJA-JOIN-v0",             # A2A-STEWARD-EVOLVE (2026-07-16) — steward_mpja.py,
+                                      # Sentry MPJA (multi-surface provenance JOIN
+                                      # attestor); draft-only, candidate, NOT FROZEN-v1,
+                                      # self-declared in-module
+    b"VAPI-SEL-GRAD-ATTEST-v0",       # A2A-STEWARD-EVOLVE (2026-07-16) — steward_sel_attestation.py,
+                                      # HSM signature record over the SEL chain head; explicitly
+                                      # NOT a FROZEN-v1 governance seal and NOT the operator-fired
+                                      # --confirm-governance ceremony; grants nothing; self-declared
+                                      # CANDIDATE in-module
+    b"VAPI-SEL-v0",                   # A2A-STEWARD-EVOLVE (2026-07-16) — steward_sel.py, Steward
+                                      # Evolution Ledger (external-label graduation); candidate,
+                                      # NOT FROZEN-v1, no governance seal, self-declared in-module
 })
 
 
@@ -921,6 +933,20 @@ _QORTROLLER_KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
     b"QORTROLLER-IPACT-CHALLENGE-v1",  # ipact_challenge.py — dedicated challenge
                                        # domain tag (W-5); capability, not a
                                        # commitment family
+    b"QORTROLLER-MFG-CA-READINESS-CANARY-v0",  # mfg_ca_readiness.py — fixed canary
+                                       # payload signed during the Ceremony B
+                                       # no-spend HSM CA readiness preflight; a
+                                       # smoke-test constant, not a commitment
+                                       # family or governance seal
+    b"QORTROLLER-NODE-LEDGER-GENESIS-v0",  # node_contribution_ledger.py — A2A-DEPIN-1
+                                       # node contribution ledger genesis; module's own
+                                       # docstring: "Candidate domain tag (PoSP-style
+                                       # REFERENCE-AND-BIND -- NOT a new FROZEN-v1 family)"
+    b"QORTROLLER-NODE-LEDGER-v0",      # node_contribution_ledger.py — same ledger,
+                                       # per-entry domain tag; same candidate status
+    b"QORTROLLER-SCORECARD-ROOT-v0",   # node_contribution_ledger.py — scorecard dict
+                                       # commitment root; same module, same candidate
+                                       # status per the docstring above
 })
 
 

@@ -1,0 +1,95 @@
+I'll read the open brief and the proven fire/capture + adapter surfaces first, then answer A–E with hard verdicts on the topology conflict.Pulling the stub fire path, dual-writer gate, and live_hardware / summarize wiring next.# r02 FORWARD — A–E + break-test (A2A L3 adapter)
+
+## A. Topology conflict — **AGREE with your lean (mechanism now; no forced SYNCHRONIZED)**
+
+**VERDICT:** Build the fused exclusive-HID mechanism. Frame dual-stream SYNCHRONIZED as a **later single-reader arc**, not a blocker for this PR. Do **not** claim this adapter makes `SYNCHRONIZED_CONTROLLER` rig-reachable under today’s topology.
+
+**Why (one line):** Candidate needs `activity_source=="bridge"` (bridge process + USB poll for activity/PCC) **and** exclusive `DualSenseReader` for `_fire_probe_silent` — two openers on the same IN stream; Windows/pydualsense dual-reader is the dual-writer rail already enforced by `run_live_capture`.
+
+| Path | Activity/PCC | Fire+IMU | Honest outcome |
+|------|--------------|----------|----------------|
+| Bridge UP + adapter opens 2nd reader | yes | corrupt / refuse | Prefer **refuse** dual-open → `fired=False` → no live GO |
+| Bridge DOWN + adapter exclusive | no real bridge samples | real fire | Mechanism OK; candidate fails activity/PCC honestly |
+| **(a) single HID in bridge** | yes | yes | Only honest SYNCHRONIZED path — **out of this micro-arc** (bridge ring + fire API) |
+
+**(a)** is real architecture (bridge owns pad: force write + IMU ring + activity from one reader). It is **not** “clean and available now” without bridge surface work and is **not** adapter-only composition. **(c)** activity shims without USB attestation weaken F-GP-4 — reject.
+
+**Steer:** Option **(b) for this build** + name **(a)** as the follow-on. Adapter may `_bridge_running` → `FireResult(fired=False, error="bridge_running_dual_writer")` rather than dual-open. Docstring claim ceiling: *mechanism under exclusive HID; SYNCHRONIZED needs single-stream, not this PR.*
+
+---
+
+## B. Fused-behind-split — **FUSED (confirm lean)**
+
+**VERDICT:** Reuse `_fire_probe_silent` whole; stash `ImuWindow`; split only at the `FireFn`/`ImuCaptureFn` boundary.
+
+**Why:** Decompose reopens continuous-poll anti-tell + measurement drift vs N=52 corpus; sealed primitive must stay byte-untouched.
+
+---
+
+## C. N≥50 corpus feed — **SEPARATE (confirm lean)**
+
+**VERDICT:** Do not persist gameplay adapter captures into the L6B usable-reflex DB in v0.
+
+**Why:** Low amp (40–80) ≠ desk/campaign stimulus; would pollute `is_usable_reflex` / policy_ref without an explicit Edge campaign seal.
+
+---
+
+## D. Anti-tell delay — **SMALL CSPRNG delay (confirm lean, scale it)**
+
+**VERDICT:** Keep independent CSPRNG `delay_s` inside the fused fire; **not** 0; **not** desk 3–12s by default.
+
+**Why:** Activity gate only decides *when* to call `fire_fn`; poll-burst tell is inside the fire window. Gameplay-scaled e.g. **~0.5–2.5 s** (named constants), continuous poll throughout.
+
+---
+
+## E. Overclaim / names — **Mostly honest; tighten claim ceiling**
+
+| Name | Verdict |
+|------|---------|
+| `poep_rig_reflex_adapter.py` | **OK** — rig mechanism module |
+| `EdgeReflexAdapter` | **OK with ceiling** — “reflex” = capture path, not certified presence |
+| Prefer alt if you want zero ambiguity | `EdgeRigFireCaptureAdapter` (optional; not required) |
+
+**Ban in names/fields/docs:** `Presence*`, `Synchronized*`, `make_live_presence`, any implication that building the adapter flips `poep_enabled` / L6B / L6_CHALLENGES, or that `--live` alone mints SYNCHRONIZED.
+
+**OK fields:** `real_hardware` (HID write happened), `fired`, `error`, machine `advances_poep_enabled=False` if anything is exported.
+
+---
+
+## Honesty rail — try to break fused-behind-split
+
+| Attack | Break? | Required counter |
+|--------|--------|------------------|
+| `real_hardware=True` without `_sync_write` | yes if stimulus=False / import-only / exception-before-write | `real_hardware = stimulus and write_attempted_ok` only |
+| No clean peak → invent mid-band `latency_ms` | **the** fabrication path | Map None/≤0 → `latency_ms=0`, peak as measured; `verify_live_response` fails — never clamp into band |
+| Stash replay across challenges | yes if multi-consume | **One-shot stash:** consume-and-clear; 2nd `imu_capture_fn(same t)` → `None` |
+| NO_GO gets GO stash | yes if shared stash | `imu_capture_fn(0)` / NO_GO never returns GO window; peak 0 / None |
+| `fired=True` + empty window | weak: `live_hardware` can rise without verify pass | OK: candidate still needs `n_go_verify_pass≥2`; don’t mark verify ok locally |
+| Bypass `verify_live_response` with desk `classification==HUMAN` | yes if adapter short-circuits | Pass **raw features only**; sealed `challenge_live` owns verify |
+| CLI wires test double `real_hardware=True` | CI/operator spoof | Factory only under `POEP_LIVE_FIRE_ENABLED=1`; no silent success default |
+| Dual-open “success” with garbage IMU | false GO pass risk | Bridge-running → refuse fire, don’t half-open |
+
+**No sealed-path fabrication if:** write-gated `real_hardware`, one-shot stash, honest zero latency, no classification override, refuse dual-open. Host-trust (injected fetcher) remains FLIP-A; adapter must not add a second mint path.
+
+---
+
+## r03 FIX list — Claude builds right first time
+
+1. **Refuse dual-open** when `_bridge_running` → `fired=False`, `real_hardware=False`, explicit error (don’t race HID).
+2. **One-shot stash** keyed by `t_fire_ns == t_challenge_ns`; clear on read; mismatch → `None`.
+3. **`real_hardware=True` iff** stimulus path executed real `_sync_write` (driver present, no pre-write abort).
+4. **Feature map:** `analyze_desk_probe` → `ImuWindow`; no-peak = 0 latency / measured peak; **never** band-fill.
+5. **`cfg.r2_force = clamp_amplitude(amp)`** (40–80); never desk 255 on gameplay path.
+6. **Lazy-import** `_fire_probe_silent` / desk analyze / DualSense **inside** methods; module load HID-free; real path `# pragma: no cover`.
+7. **Factory gated** on `POEP_LIVE_FIRE_ENABLED=1`; else raise (mirror `make_real_hid_fire`).
+8. **Claim ceiling** on module + CLI: mechanism only; `advances_poep_enabled=False`; flags stay False; SYNCHRONIZED = future single-stream.
+9. **No L6B DB write**; no sealed-module edits (runner, live/session, did_sync, presence, `_fire_probe_silent`).
+10. **Unit tests = injected fakes only**; cover: dual-open refuse, one-shot stash, no-peak fail, no-write → `real_hardware=False`, amplitude clamp, env gate.
+11. **Gameplay `delay_s`:** small CSPRNG constants, not 0, not full desk 3–12 default.
+12. **Do not** set `presence_session_candidate_ok` / `live_hardware` in the adapter — only `FireResult` / `ImuWindow`.
+
+---
+
+## Bottom line for Claude
+
+Ship **`poep_rig_reflex_adapter.EdgeReflexAdapter`** as fused-behind-split, exclusive-HID, write-gated, one-shot stash, low-amp, env-gated. **Your lean on A is correct.** Do not sell this round as SYNCHRONIZED; sell it as the **real fire+IMU mechanism** that unblocks the stub. Single-HID bridge fire+IMU ring is the **next** honesty path to candidate under real play.

@@ -24,6 +24,7 @@
   "TournamentGateV3": "0x6fEe9F6fB24A3e6cEF93f0cA5cA9875625c5D4Ef",
   "PitlSessionProofVerifier": "0x07D3ca1548678410edC505406f022399920d4072",
   "VAPIioIDRegistry": "0xF7885B588718b891B2234477D031607da4a7ACfe",
+  "ioIDRegistry": "0x0A7e595C7889dF3652A19aF52C18377bF17e027D",
   "PITLTournamentPassport": "0xa72454748A1E272Bf084bEfBd0A0fC5516685AEC",
   "TournamentPassportVerifier": "0xb95C0561EF2b1081F07B6Cd3c37f4C9dd3caa112",
   "PITLSessionRegistryV2": "0xAfb544c09B6dec303740F2d218d6C784eB064ec3",
@@ -34,7 +35,8 @@
     "IdentityContinuityRegistry": "Wired into PHGRegistry via setIdentityRegistry()",
     "PITLSessionRegistry": "LIVE \u00e2\u20ac\u201d PitlSessionProofVerifier wired via setPITLVerifier() on 2026-03-08. Real Groth16 proofs required.",
     "PitlSessionProofVerifier": "Groth16 verifier for PitlSessionProof v1 circuit (Poseidon 7 inputs).",
-    "VAPIioIDRegistry": "Phase 55 \u00e2\u20ac\u201d DID device identity registry. Bridge: 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692. Deployed 2026-03-16.",
+    "VAPIioIDRegistry": "Phase 55 DID device identity registry (bridge-only: register(bytes32,address,string); NO nonces / NO EIP-712 permit). This is a DID BOOK, NOT the ioID permit registry. Do NOT wire the controller/agent gamer-permit flow here (nonces() reverts) - F-T3-1 / A2A round-33. Bridge 0x0Cf36dB5...; deployed 2026-03-16.",
+    "ioIDRegistry": "IoTeX ioID PERMIT registry (nonces(address) + 8-param EIP-712 register(deviceContract,tokenId,device,hash,uri,v,r,s), selector 0x39a4a241). The system registry BOTH agents and controllers register against; device-type differs by ioIDStore deviceContract (VAPIOperatorAgentNFT vs VAPIGamerControllerNFT), NOT by registry. Same address agent_registration.IOID_REGISTRY_ADDR uses live. Distinct from VAPIioIDRegistry (the DID book above). Wire controller_ioid_registration + register_controller_ioid.py here.",
     "PITLTournamentPassport": "Phase 56 \u00e2\u20ac\u201d ZK tournament passport (mock mode until setPassportVerifier called). Wired to PITLSessionRegistry + VAPIioIDRegistry. Deployed 2026-03-16.",
     "TournamentPassportVerifier": "Phase 56 \u00e2\u20ac\u201d Groth16 verifier for TournamentPassport.circom. Wired via setPassportVerifier() 2026-03-16. PITLTournamentPassport now LIVE.",
     "PITLSessionRegistryV2": "Phase 62 \u00e2\u20ac\u201d PITL session registry with Phase 62 circuit (C3 inference code binding). Bridge: 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692. Deployed 2026-03-16.",
@@ -48,7 +50,9 @@
     "VAPIRewardDistributor": "Phase 69 \u00e2\u20ac\u201d DePIN token distributor. Device-gated (not player-gated, separation ratio 0.362). Multipliers stack: passport 1.5\u00c3\u2014 + enrollment 2.0\u00c3\u2014 + streak 2.5\u00c3\u2014 + MPC 1.25\u00c3\u2014 + gate 3.0\u00c3\u2014. setRewardToken() before first claim.",
     "VAPIDataMarketplace": "Phase 69 \u00e2\u20ac\u201d Three-tier data exchange. MANUFACTURER/DEVELOPER/GAMER only. Data pricing in VAPI reward points. 70% device pool / 30% treasury revenue split. sovereigntyRegistry wired.",
     "VAPIGovernanceTimelock": "Phase 70 \u00e2\u20ac\u201d 48h governance timelock for Phase 69 contracts. coSigner=deployer (update via setCoSigner). operator=0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692.",
-    "VAPIProtocolLens": "Phase 70 \u00e2\u20ac\u201d Zero-state unified device state view. Synthesizes 4 Phase 69 oracles in one eth_call. isFullyEligible(deviceId) -> bool."
+    "VAPIProtocolLens": "Phase 70 \u00e2\u20ac\u201d Zero-state unified device state view. Synthesizes 4 Phase 69 oracles in one eth_call. isFullyEligible(deviceId) -> bool.",
+    "VAPIGamerControllerNFT": "ioID controller DeviceNFT (Inc-A). deviceContract for the 'QorTroller Controllers' ioID project via ioIDStore.setDeviceContract; minted tokenId (CONTROLLER_TOKEN_ID=1) consumed by ioIDRegistry.register (0x0A7e595C...). Owner/minter = bridge wallet; allowance 1. Deploy tx 0xd462a534 succeeded but the deploy script's status!==1n false-positive skipped init; recovered via recover-inca-init.js 2026-07-17.",
+    "_controller_ioid_registration": "ioID controller DID (Inc-D, LIVE 2026-07-17): device 581a836c registered as an ioID device. did:io:0x0cf36db5... (gamer-controlled; system identity = gamer address, agent pattern) / ioID tokenId 498 / ERC-6551 TBA 0xFCee237789FA91a141781aFB574ADAbcA2660e7b / register tx 0xab4d041b8ffeab257178e04dddd69e1033912766842803e0386c3640468e9b1f status 1. The device NFT (VAPIGamerControllerNFT tokenId 1) is now owned by the TBA. Prereq chain (learned live): applyIoIDs(1021,1) prepay + approve(ioIDRegistry,1) + register value=0 (F-INC-D-2/3). Dev-self, testnet 4690. Edge binds via DID doc + birth cert + VMDR, NOT the DID slot."
   },
   "RulingRegistry": "0xa3A2356C90E642a7c510d0C726EC515EA720c621",
   "CeremonyRegistry": "0x739B5fae312834bA2a7e44525bA5f54853C5672f",
@@ -153,5 +157,8 @@
   "VAPIBuyerCategoryVerifier": "0x7EEc6B7Eb843532227528F63a0bC95D6cc537E53",
   "VAPIConsentManifestRegistry": "0x5F7c8068D0e61818FCD613D47e68a9Ea906a2743",
   "VAPIWorldModelConsentRegistry": "0x06836Fb87B64A05D81ebec9C9e234c01c2DEc5C4",
-  "_vapiworldmodelconsentregistry_note": "WMP Phase-2 (W1-D promote) deployed 2026-07-11 tx 0x5456e576ecb4c480a6ba7cf3a2a5e37d75b15de607399692d8bac604eaafa8f1 block 45534708 gasUsed 127229; first gamer-signed setWorldModelConsent(true) tx 0x8f70bca3bd3ab084a271f51d410027a196eba17bc7b787689ac639a0ba658a22 block 45534743 (msg.sender == gamer 0x0Cf36dB5...)"
+  "_vapiworldmodelconsentregistry_note": "WMP Phase-2 (W1-D promote) deployed 2026-07-11 tx 0x5456e576ecb4c480a6ba7cf3a2a5e37d75b15de607399692d8bac604eaafa8f1 block 45534708 gasUsed 127229; first gamer-signed setWorldModelConsent(true) tx 0x8f70bca3bd3ab084a271f51d410027a196eba17bc7b787689ac639a0ba658a22 block 45534743 (msg.sender == gamer 0x0Cf36dB5...)",
+  "VAPIDeviceBirthCertUpdateRegistry": "0x31030C8F4d805bC73e2c49D935eD0FB6a12987a5",
+  "_vapidevicebirthcertupdateregistry_note": "Path A birth-cert override (MFG-CA HSM flip, F-PATHA-1 arc) deployed 2026-07-16 chainId 4690, operator-fired; constructor wired immutable VMDR 0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0, owner = bridge wallet 0x0Cf36dB5... (same Foundation principal as VMDR onlyOwner - a second hash write path, NOT a new trust principal). currentBirthCertHash = OVERRIDE-then-VMDR is the effective-hash view verifiers read (verify_device_cert.py when BIRTH_CERT_UPDATE_REGISTRY_ADDRESS is set; env set + read fail = fail-CLOSED exit 3). Purpose: re-anchor 581a836c... birthCertHash to the KMS-HSM-re-signed cert (issuer 04d2636c..., alias qortroller-mfg-ca) - VMDR registerDevice is one-shot and cannot be updated in place. estimate_gas 604254, buffered 0.755317 IOTX at deploy. Runbook: audits/mfg-ca-hsm-readiness-and-path-a-2026-07-16.md; grok r24/r25 + r26/r27 (mint/verify split).",
+  "VAPIGamerControllerNFT": "0x93b77eB6D8F9e12A801aC06b81bb6E37b7dcdE55"
 }

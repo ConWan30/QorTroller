@@ -115,99 +115,77 @@ WIKI_WHAT_IF_DIR  = WIKI_DIR / "what_if"
 # CLAUDE.md Live Parser — mtime-cached, never stale (Phase 210)
 # ============================================================
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from claude_md_parser import parse_claude_md as _parse_claude_md_shared  # noqa: E402
+
+
+def _phase_num_int(s: dict, default: int = 240) -> int:
+    """
+    Safely coerce phase_num to an int. Since the post-Phase-238 HEAD-commit
+    format sets phase_num to a commit-hash prefix (e.g. "f9e4cb8e") rather
+    than a number, `int(s.get("phase_num", ...))` raises unconditionally in
+    the current CLAUDE.md era — this was a live crash on every call to the
+    4 tools that did this (found + fixed 2026-07-20 Tier-1 MCP audit).
+    """
+    try:
+        return int(s.get("phase_num", default))
+    except (TypeError, ValueError):
+        return default
+
+
+# Test-injection escape hatch ONLY — production state lives in
+# claude_md_parser._CACHE. Some regression tests (test_phase212_autonomous_
+# engineering.py) set this dict directly with an already-adapted-shape state
+# to control tool behavior without touching CLAUDE.md on disk. Stays empty/
+# mtime=0 in production, so it never intercepts real calls.
 _CLAUDE_CACHE_U: dict = {"mtime": 0.0, "state": {}}
 
 
 def _parse_claude_md() -> dict:
-    """Parse CLAUDE.md into current protocol state. One stat() per call."""
-    claude_path = PROJECT_ROOT / "CLAUDE.md"
-    try:
-        mtime = claude_path.stat().st_mtime
-    except OSError:
-        return _CLAUDE_CACHE_U.get("state", {})
+    """
+    Parse CLAUDE.md into current protocol state. Thin adapter over the shared
+    parser (claude_md_parser.py, 2026-07-20 Tier-1 fix).
 
-    if mtime <= _CLAUDE_CACHE_U["mtime"] and _CLAUDE_CACHE_U["state"]:
+    This file's ~15 downstream call sites expect STRING-typed values under
+    specific legacy key names (phase_label, contract, contracts, agents as
+    str, etc.) — the adapter reshapes the shared module's typed dict into
+    that exact shape so none of those call sites need to change. New fields
+    (ait_*, pv_ci_count, wallet_balance_iotx, latest_note) are passed through
+    under their native names/types for any new caller to use directly.
+    """
+    if _CLAUDE_CACHE_U["mtime"] > 0:
         return _CLAUDE_CACHE_U["state"]
 
-    try:
-        text = claude_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return _CLAUDE_CACHE_U.get("state", {})
+    shared = _parse_claude_md_shared(PROJECT_ROOT)
+    if not shared:
+        return {}
 
-    s: dict[str, Any] = {}
+    s: dict[str, Any] = dict(shared)  # pass through native-typed fields (ait_*, pv_ci_count, ...)
 
-    # Phase — legacy "Current phase: Phase NNN" OR post-Phase-238 HEAD-commit
-    # milestone format "Current phase: HEAD `<sha>` — <headline>" (2026-05 onward)
-    m = re.search(r"Current phase:\s*Phase\s*(\d+)", text)
-    if m:
-        s["phase_num"]   = m.group(1)
-        s["phase_label"] = f"Phase {m.group(1)} COMPLETE"
-    else:
-        mh = re.search(r"Current phase:\s*HEAD\s*`?([0-9a-f]{6,40})`?\s*[—\-]+\s*\*{0,2}([^.\n]{5,90})", text)
-        if mh:
-            s["phase_num"]   = mh.group(1)[:8]
-            s["phase_label"] = f"HEAD {mh.group(1)[:8]} — {mh.group(2).strip()}"
-        else:
-            s["phase_num"]   = "238+"
-            s["phase_label"] = "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"
+    s["phase_label"] = shared.get("phase", "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)")
+    s["bridge"] = str(shared.get("bridge", 0))
+    s["contract"] = str(shared.get("hardhat", 0))
+    s["sdk"] = str(shared.get("sdk", 0))
+    s["hardware"] = str(shared.get("hardware", 0))
+    s["hardhat"] = str(shared.get("hardhat", 0))
+    s["agents"] = str(shared.get("agents", 38))
+    s["contracts"] = str(shared.get("contracts_live", 46))
+    s["l4_anomaly"] = str(shared.get("l4_anomaly", 7.009))
+    s["l4_continuity"] = str(shared.get("l4_continuity", 5.367))
+    # AIT is the current primary separation-ratio gate metric; fall back to the
+    # legacy touchpad_corners probe only when AIT hasn't been parsed for some reason.
+    s["separation_ratio"] = str(shared.get("ait_ratio") or shared.get("touchpad_corners_ratio", 0.728))
 
-    # Test counts
-    for label, key in [("Bridge:", "bridge"), ("Contract:", "contract"),
-                        ("SDK:", "sdk"), ("Hardware:", "hardware")]:
-        m2 = re.search(label + r"\s*([\d,]+)\s*passing", text)
-        if not m2:
-            m2 = re.search(r"Bridge:\s*([\d,]+)", text) if key == "bridge" else None
-        s[key] = m2.group(1).replace(",", "") if m2 else "0"
+    # Recent phases as "Phase NNN" strings, for the ~1 call site still consuming
+    # this shape — sourced from the shared parser's Phase Summary table parse.
+    s["recent_phases"] = [f"Phase {k}" for k in list(shared.get("recent_phases", {}).keys())[:5]]
 
-    # Bridge test count — more robust
-    m3 = re.search(r"Bridge[:\s]+([\d]+)\s*\|", text)
-    if m3:
-        s["bridge"] = m3.group(1)
+    # Key flags (not CLAUDE.md-derived; unchanged from the prior static values)
+    s["dry_run"] = True
+    s["ioswarm"] = "emulator_only"
+    s["l4_stale"] = True   # live_dim=13 vs calib_dim=12
+    s["tge_blocked"] = True   # per-pair gate not all cleared
 
-    # SDK test count
-    m4 = re.search(r"SDK[:\s]+([\d]+)", text)  # CLAUDE.md format "SDK: 604." (no pipe)
-    if m4:
-        s["sdk"] = m4.group(1)
-
-    # Hardhat test count
-    m5 = re.search(r"(?:Contract|Hardhat)[:\s]+([\d]+)", text)
-    if m5:
-        s["hardhat"] = m5.group(1)
-
-    # Agent count: max across "N agents" prose and "agent #N" references.
-    # Prose phrases stop at older totals (e.g. "36 agents") while explicit
-    # references (e.g. "agent #38" in Phase 222 / 235) carry the latest number.
-    prose_refs = re.findall(r"(\d+)\s+(?:ACTIVE\s+)?agents?\s", text, re.IGNORECASE)
-    hash_refs  = re.findall(r"agent\s+#(\d+)", text, re.IGNORECASE)
-    candidates = [int(n) for n in prose_refs] + [int(n) for n in hash_refs]
-    s["agents"] = str(max(candidates)) if candidates else "36"
-
-    # Contract count
-    m7 = re.search(r"(\d+)\s+contracts?\s+ALL\s+LIVE", text, re.IGNORECASE)
-    s["contracts"] = m7.group(1) if m7 else "43"
-
-    # L4 thresholds
-    m8 = re.search(r"anomaly=\*\*([\d.]+)\*\*", text)
-    m9 = re.search(r"continuity=\*\*([\d.]+)\*\*", text)
-    s["l4_anomaly"] = m8.group(1) if m8 else "7.009"
-    s["l4_continuity"] = m9.group(1) if m9 else "5.367"
-
-    # Separation ratio — extract current best
-    m10 = re.search(r"Separation ratio[:\s]+\*?\*?([\d.]+)\*?\*?", text)
-    s["separation_ratio"] = m10.group(1) if m10 else "0.728"
-
-    # Recent phases (last 5 complete)
-    phase_matches = re.findall(r"(Phase\s+\d+)\s*[—-]\s*COMPLETE", text)
-    s["recent_phases"] = phase_matches[:5]
-
-    # Key flags
-    s["dry_run"]       = True
-    s["ioswarm"]       = "emulator_only"
-    s["l4_stale"]      = True   # live_dim=13 vs calib_dim=12
-    s["tge_blocked"]   = True   # per-pair gate not all cleared
-
-    _CLAUDE_CACHE_U["mtime"] = mtime
-    _CLAUDE_CACHE_U["state"] = s
     return s
 
 
@@ -687,7 +665,8 @@ class WikiFeedback:
 - SHA-256(raw[:164]) chain hash: FROZEN
 - L4 thresholds 7.009/5.367 (stable EMA, NOMINAL only)
 - Poseidon(8), C3, nPublic=5 ZK binding: FROZEN
-- GSR_ENABLED=false, L6B_ENABLED=false (hardware gates)
+- GSR_ENABLED=false (N=0 GSR calibration; hardware gate)
+- L6B_ENABLED — operator-controlled per-run flag; N>=50 reflex calibration gate MET 2026-07-18 (was N=0). Check current flag state live via bridge GET /player/session-status (l6b_enabled field) rather than assuming a fixed value.
 - dry_run=True default — Phase 97 live-mode gate not cleared
 
 ## Links
@@ -834,7 +813,7 @@ MANDATORY_INVARIANTS = [
     "0.362",
     "ratio > 1.0",
     "GSR_ENABLED=false",
-    "L6B_ENABLED=false",
+    "L6B_ENABLED",  # value is operator-controlled and now context-dependent (gate MET 2026-07-18) — check presence of the flag name only, not a specific boolean
     "dry_run=True",
     "never hard gate",
     "soulbound",
@@ -997,14 +976,14 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
     s = _parse_claude_md()
 
     result: dict[str, Any] = {
-        "source": "CLAUDE.md + unified_server (fallbacks refreshed 2026-05-23 to Guardian-KMS HEAD)",
+        "source": "CLAUDE.md (live parse via claude_md_parser.py) + unified_server (2026-07-20 Tier-1/2/3 MCP audit)",
         "protocol": {
             "phase":        s.get("phase_label", "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"),
             "bridge":       s.get("bridge",    "4330"),     # 2026-05-23 fallback
             "sdk":          s.get("sdk",       "604"),      # 2026-05-23 fallback
             "hardhat":      s.get("hardhat",   "674"),      # 2026-05-23 fallback
             "agents":       "29 standalone + 3 stewards (9 absorbed; 38-ID roster)",  # post-STABILITY-9 steward absorption
-            "contracts":    f"{s.get('contracts', '49')} ALL LIVE (IoTeX Testnet 4690)",  # 49 live as of 2026-05-23
+            "contracts":    f"{s.get('contracts', '49')} ALL LIVE (IoTeX Testnet 4690)",  # live via SENSOR-A-LIVE:CONTRACTS anchor
             "dry_run":      True,
             "ioswarm":      "emulator_only",
         },
@@ -1013,12 +992,29 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
             "l4_continuity_threshold": s.get("l4_continuity", "5.367"),
             "l4_stale":               True,
             "l4_stale_reason":        "live_dim=13 vs calib_dim=12 (touchpad_spatial_entropy added Phase 121)",
-            "separation_ratio_current": "0.728 (diagonal+LOO, N=35, touchpad_corners, 2026-04-11)",
-            "separation_ratio_best":    "1.261 (diagonal+LOO, N=11, Phase 143 — THIN)",
-            "all_pairs_p0_ok":          False,
-            "p1vp3_distance":           "P1vP3=1.133 touchpad; P1vP3_tremor=0.032 CRITICAL BLOCKER",
+            # AIT (Phase 229-231) is the CURRENT primary tournament-gate metric —
+            # superseded touchpad_corners/tremor_resting per the 2026-05-09 policy
+            # adjustment. Legacy probes kept below for history, clearly labeled.
+            "ait_ratio":                s.get("ait_ratio"),
+            "ait_n":                    s.get("ait_n"),
+            "ait_all_pairs_above_1":    s.get("ait_all_pairs_above_1"),
+            "ait_defensibility_ok":     s.get("ait_defensibility_ok"),
+            "separation_ratio_legacy_touchpad_corners": (
+                f"{s.get('touchpad_corners_ratio', 0.728)} (N={s.get('touchpad_corners_n', 35)}, "
+                "diagonal+LOO, 2026-04-11) — still BLOCKS full tournament BLOCK enforcement"
+            ),
+            "separation_ratio_legacy_tremor_resting": (
+                f"{s.get('tremor_resting_ratio', 1.177)} (N={s.get('tremor_resting_n', 27)}) — "
+                "P1vP3=0.032 CAST OUT as a dev-progress blocker per 2026-05-09 operator policy "
+                "adjustment; NOT currently gating anything"
+            ),
+            "all_pairs_p0_ok":          False,  # touchpad_corners P0 gate specifically — see ait_defensibility_ok above for AIT's own (separate) gate
             "tournament_blocker":       True,
-            "tournament_blocker_reason": "per-pair gate fails: P2/P3 proximity + P1vP3 tremor overlap",
+            "tournament_blocker_reason": (
+                "touchpad_corners per-pair gate (P2/P3 proximity) still blocks full tournament BLOCK "
+                "enforcement; AIT is CLEARED (sufficient for testnet/non-tournament demonstration) — "
+                "these are two different gates, do not conflate"
+            ),
         },
         "invariants_frozen": {
             "poac_wire_format":      "228 bytes (164B body + 64B ECDSA-P256 sig) — FROZEN",
@@ -1026,7 +1022,7 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
             "zk_circuit":            "Poseidon(8), C3, nPublic=5 — FROZEN",
             "stable_ema":            "NOMINAL sessions only — FROZEN",
             "gsr_enabled":           False,
-            "l6b_enabled":           False,
+            "l6b_enabled":           "operator-controlled per-run flag; N>=50 gate MET 2026-07-18 (was N=0) — check bridge GET /player/session-status for the live value, don't assume False",
             "block_quorum":          0.67,
             "mint_quorum":           0.80,
             "epistemic_threshold":   0.65,
@@ -1123,7 +1119,7 @@ async def vapi_session_context(domain: str = "general", task_description: str = 
         {"id": 6,  "check": "Phase 66 commitment hash", "status": "FROZEN"},
         {"id": 7,  "check": "Phase 67 circuitId sha3_256", "status": "FROZEN"},
         {"id": 8,  "check": "L6_CHALLENGES_ENABLED",    "status": "false — N<50 hardware"},
-        {"id": 9,  "check": "L6B_ENABLED",              "status": "false — N=0 neuromuscular"},
+        {"id": 9,  "check": "L6B_ENABLED",              "status": "operator-controlled per-run flag; N>=50 gate MET 2026-07-18 (was N=0) — check bridge GET /player/session-status for current value, don't assume false"},
         {"id": 10, "check": "GSR_ENABLED",               "status": "false — N=0 per player"},
         {"id": 11, "check": "Separation ratio",          "status": "0.728 (N=35); P1vP3=0.032 tremor BLOCKER"},
         {"id": 12, "check": "Test counts atomic update", "status": f"Bridge {s.get('bridge','2260')} / SDK {s.get('sdk','452')} / Hardhat {s.get('hardhat','482')}"},
@@ -1548,7 +1544,26 @@ async def vapi_validate_proposal_full(proposal_text: str, write_wiki_on_pass: bo
     }
 )
 async def vapi_invariant_check(value_or_formula: str, proposed_change: str = "", **_):
-    # Check against the frozen invariants registry
+    # Live PV-CI baseline — cross-checks CLAUDE.md's SENSOR-A-LIVE:TESTS-adjacent
+    # PV-CI headline against the actual allowlist file length, rather than trusting
+    # either alone. Both should agree per CLAUDE.md's own "single source of truth" claim.
+    s = _parse_claude_md()
+    pv_ci_claude = s.get("pv_ci_count")
+    pv_ci_allowlist = None
+    try:
+        allowlist_path = PROJECT_ROOT / ".github" / "INVARIANTS_ALLOWLIST.json"
+        pv_ci_allowlist = len(json.loads(allowlist_path.read_text(encoding="utf-8")))
+    except Exception:
+        pass
+    pv_ci_agree = (
+        pv_ci_claude is not None and pv_ci_allowlist is not None and pv_ci_claude == pv_ci_allowlist
+    )
+
+    # Check against the frozen invariants registry. This is a hand-picked SAMPLE of
+    # early-phase invariants for quick point-checks — it is NOT the full PV-CI
+    # registry (currently pv_ci_claude/pv_ci_allowlist entries above, ~184 pinned
+    # invariants in .github/INVARIANTS_ALLOWLIST.json). For a specific INV-* ID,
+    # read that file directly or run scripts/vapi_invariant_gate.py.
     CANONICAL = {
         "228":         ("PoAC wire format: 228 bytes TOTAL (164B body + 64B sig)", "FROZEN"),
         "164":         ("PoAC body: 164 bytes (signed body, NOT full 228B)", "FROZEN"),
@@ -1565,7 +1580,19 @@ async def vapi_invariant_check(value_or_formula: str, proposed_change: str = "",
         "dry_run=True": ("Default mode: always True until Phase 97 3-condition gate cleared", "FROZEN"),
         "90":          ("Biometric TTL: 90-day credential validity (BP-001 temporal decay)", "CONFIG"),
         "NOMINAL":     ("Stable EMA updates ONLY on NOMINAL session inference codes", "FROZEN security invariant"),
+        "PV-CI":       (
+            f"PV-CI invariant baseline: CLAUDE.md claims {pv_ci_claude}, "
+            f".github/INVARIANTS_ALLOWLIST.json has {pv_ci_allowlist} entries "
+            f"({'AGREE' if pv_ci_agree else 'DISAGREE — investigate before trusting either'}). "
+            "For a specific invariant, read INVARIANTS_ALLOWLIST.json directly or run "
+            "scripts/vapi_invariant_gate.py.",
+            "LIVE" if pv_ci_agree else "LIVE — DRIFT DETECTED",
+        ),
     }
+    if pv_ci_claude is not None:
+        CANONICAL[str(pv_ci_claude)] = CANONICAL["PV-CI"]
+    if pv_ci_allowlist is not None and str(pv_ci_allowlist) not in CANONICAL:
+        CANONICAL[str(pv_ci_allowlist)] = CANONICAL["PV-CI"]
 
     val_clean = value_or_formula.strip()
     found_key = None
@@ -1922,7 +1949,7 @@ connection_to_ratio: {seed['connection_to_ratio']}
 - 0.362 (separation ratio free-form baseline — TOURNAMENT BLOCKER)
 - ratio > 1.0 (required ALL pairs, non-negotiable)
 - GSR_ENABLED=false (N=0 calibration)
-- L6B_ENABLED=false (N=0 calibration)
+- L6B_ENABLED (operator-controlled per-run flag; N>=50 gate MET 2026-07-18, was N=0 — do not assert a fixed value)
 - dry_run=True (default until Phase 97 gate)
 - never hard gate (advisory codes advisory only)
 - soulbound (VHP non-transferable)
@@ -1956,7 +1983,7 @@ connection_to_ratio: {seed['connection_to_ratio']}
         # Validate the template itself
         v = _validate_proposal(template)
         if v["passed"]:
-            next_phase = int(s.get("phase_num", "211")) + 1
+            next_phase = _phase_num_int(s) + 1
             wiki_result = WIKI_FB.write_phase_brief(next_phase, template, v["score"])
             result["wiki_brief_written"] = wiki_result
 
@@ -2162,15 +2189,23 @@ async def vapi_skill_state_sync(current_skill_phase: int = 0,
                                  current_skill_bridge: int = 0, **_):
     s = _parse_claude_md()
 
-    live_phase     = int(s.get("phase_num", "211"))
+    live_phase     = _phase_num_int(s, default=211)
+    live_phase_label = s.get("phase_label", f"Phase {live_phase}")
     live_bridge    = int(s.get("bridge",    "2268"))
     live_sdk       = int(s.get("sdk",       "452"))
     live_hardhat   = int(s.get("hardhat",   "482"))
     live_agents    = int(s.get("agents",    "36"))
     live_contracts = int(s.get("contracts", "43"))
     live_ratio     = s.get("separation_ratio", "0.728")
+    # separation_ratio prefers AIT (the current primary gate) over the legacy
+    # touchpad_corners probe — label it correctly rather than hardcoding a
+    # metric name that may not match what the number actually is.
+    live_ratio_label = "AIT" if s.get("ait_ratio") else "touchpad_corners"
     live_anomaly   = s.get("l4_anomaly",    "7.009")
     live_cont      = s.get("l4_continuity", "5.367")
+    live_pv_ci     = s.get("pv_ci_count")
+    live_wallet_iotx = s.get("wallet_balance_iotx")
+    live_wallet_as_of = s.get("wallet_balance_as_of")
 
     # Drift detection
     drift_items: list[str] = []
@@ -2199,13 +2234,16 @@ async def vapi_skill_state_sync(current_skill_phase: int = 0,
         "wallet address and balance.\n"
         "\n"
         f"**Illustrative fallback (NOT authoritative — MCP or CLAUDE.md supersedes):**\n"
-        f"Phase ~{live_phase}+, Bridge ~{live_bridge}+, SDK ~{live_sdk}+, "
-        f"Hardhat ~{live_hardhat}, Contracts {live_contracts} ALL LIVE, {live_agents} agents,\n"
+        f"{live_phase_label}. Bridge ~{live_bridge}+, SDK ~{live_sdk}+, "
+        f"Hardhat ~{live_hardhat}, Contracts {live_contracts} ALL LIVE, {live_agents} agents, "
+        f"PV-CI {live_pv_ci if live_pv_ci is not None else '(see CLAUDE.md)'} invariants.\n"
         f"dry_run=True, ioswarm_enabled=True (emulator), mcp_server_enabled=True.\n"
-        f"TOURNAMENT BLOCKER active (separation ratio target >1.0; "
-        f"current best separation ratio: tremor_resting={live_ratio}).\n"
+        f"Tournament gate: current best separation ratio: {live_ratio_label}={live_ratio}"
+        f" (target >1.0 all pairs).\n"
         f"L4: anomaly=~{live_anomaly}, continuity=~{live_cont} (stale: live_dim=13 vs calib_dim=12).\n"
-        "If MCP unavailable: read CLAUDE.md current phase header — always authoritative."
+        + (f"Wallet: ~{live_wallet_iotx} IOTX as of {live_wallet_as_of}.\n" if live_wallet_iotx is not None else "")
+        + "If MCP unavailable: read CLAUDE.md current phase header — always authoritative "
+        "(note: the header itself can lag the most recent NOTE entries; check both)."
     )
 
     return {
@@ -2214,16 +2252,21 @@ async def vapi_skill_state_sync(current_skill_phase: int = 0,
         "drift_items":      drift_items,
         "lag_phases":       lag_phases,
         "canonical_values": {
-            "phase":        live_phase,
+            "phase":        live_phase,  # numeric fallback — use phase_label below for the real headline
+            "phase_label":  live_phase_label,
             "bridge":       live_bridge,
             "sdk":          live_sdk,
             "hardhat":      live_hardhat,
             "agents":       "29 standalone + 3 stewards (9 absorbed)",
             "registered_roster_ids": live_agents,  # _AGENT_IDS — on-chain Merkle roster
             "contracts":    live_contracts,
+            "pv_ci_count":  live_pv_ci,
             "l4_anomaly":   live_anomaly,
             "l4_continuity": live_cont,
             "separation_ratio": live_ratio,
+            "separation_ratio_metric": live_ratio_label,
+            "wallet_balance_iotx": live_wallet_iotx,
+            "wallet_balance_as_of": live_wallet_as_of,
             "dry_run":      True,
             "ioswarm":      "emulator_only",
             "mcp_servers":  "vapi+vapi-knowledge+vapi-unified (Phase 211)",
@@ -2274,7 +2317,7 @@ async def vapi_skill_state_sync(current_skill_phase: int = 0,
 async def vapi_phase_advance_proposal(focus_area: str = "auto",
                                        next_phase_number: int = 0, **_):
     s = _parse_claude_md()
-    current_phase  = int(s.get("phase_num", "211"))
+    current_phase  = _phase_num_int(s, default=211)
     proposed_phase = next_phase_number or current_phase + 1
 
     all_entries = LEDGER.load()
@@ -2296,21 +2339,31 @@ async def vapi_phase_advance_proposal(focus_area: str = "auto",
     open_wifs = UNIFIED_WIF.load(query=focus_area.replace("_", " "), limit=4)
 
     PROPOSALS: dict[str, dict] = {
+        # SUPERSEDED 2026-07-20 (Tier-1 MCP audit): this entry used to propose an
+        # AccelTremorFFT resolution fix for the P1vP3=0.032 tremor_resting blocker.
+        # That fix already shipped (Phase 205), and the whole tremor_resting/
+        # touchpad_corners blocker it targeted was explicitly cast out as the
+        # tournament gate by the 2026-05-09 policy adjustment in favor of AIT
+        # (Phase 229-231: ratio=1.199, N=37, all_pairs_above_1=True,
+        # ait_defensibility_ok=True). Rather than author a new speculative
+        # proposal without re-deriving it from ~6 weeks of subsequent CLAUDE.md
+        # history, this branch now returns an honest non-proposal — see
+        # "caution" in the tool's return value.
         "separation_ratio": {
-            "name":        "AccelTremorFFT FFT Resolution Enhancement",
+            "name":        "STALE PROPOSAL — needs operator/agent refresh (do not implement as-is)",
             "rationale": (
-                "P1vP3 tremor_resting=0.032 is the critical all_pairs_p0_ok BLOCKER. "
-                "Root cause: AccelTremorFFT uses 1-15 Hz search at ~0.977 Hz/bin — "
-                "P1(3.1 Hz) and P3(3.7 Hz) differ by 0.6 Hz, falling within one bin. "
-                "Fix: zero-padded FFT 4096-point -> 0.244 Hz/bin + parabolic peak interpolation "
-                "-> ~0.05 Hz resolution. After fix, P1/P3 peaks resolve to distinct bins. "
-                "Clears the per-pair P0 gate (Phase 197) when distance exceeds 1.0. "
-                "No new sessions required — uses existing tremor_resting corpus (N=27)."
+                "The prior proposal here (AccelTremorFFT FFT resolution fix for "
+                "P1vP3=0.032) already shipped in Phase 205, and the metric it targeted "
+                "(tremor_resting/touchpad_corners) was superseded as the tournament gate "
+                "by AIT (Phase 229-231, ratio=1.199 N=37 all_pairs_above_1=True) per the "
+                "2026-05-09 policy adjustment. This branch has not been re-derived against "
+                "current CLAUDE.md state — read the CLAUDE.md 'Open Gaps' section and the "
+                "most recent NOTE entries before proposing next work in this focus area."
             ),
-            "scope":       "bridge/vapi_bridge/dualshock_integration.py BiometricFeatureExtractor._accel_tremor; numpy zero-padding",
-            "test_delta":  {"bridge": 8, "sdk": 4, "hardhat": 0},
-            "effort":      "~2h (single FFT function, no new DB tables or HTTP endpoints)",
-            "wif_addressed": "P1vP3=0.032 per-pair blocker (Phase 197/206); all_pairs_p0_ok=False TOURNAMENT BLOCKER",
+            "scope":       "NONE — this is a placeholder, not an actionable scope",
+            "test_delta":  {"bridge": 0, "sdk": 0, "hardhat": 0},
+            "effort":      "N/A",
+            "wif_addressed": "SUPERSEDED — see rationale",
             "hardware_required": False,
         },
         "infrastructure": {
@@ -2371,7 +2424,7 @@ async def vapi_phase_advance_proposal(focus_area: str = "auto",
         f"{proposal['rationale'][:300]} "
         "separation ratio 0.362 baseline TOURNAMENT BLOCKER. "
         "dry_run=True default. ratio > 1.0 non-negotiable ALL pairs. "
-        "BLOCK_QUORUM=0.67. GSR_ENABLED=false. L6B_ENABLED=false. "
+        "BLOCK_QUORUM=0.67. GSR_ENABLED=false. L6B_ENABLED. "
         "228 bytes PoAC FROZEN. SHA-256(raw[:164]) chain hash. Poseidon(8) nPublic=5. "
         "W1 failure mode documented. soulbound VHP non-transferable. never hard gate advisory. "
         "NOMINAL sessions only stable EMA. 7.009 L4 anomaly. 5.367 L4 continuity. "
@@ -2398,8 +2451,17 @@ async def vapi_phase_advance_proposal(focus_area: str = "auto",
             "reason":  pre_score["reason"],
         },
         "invariants_preserved": (
-            "separation ratio 0.362 / TOURNAMENT BLOCKER / dry_run=True / "
-            "ioswarm_enabled=False default / BLOCK_QUORUM=0.67 / ratio > 1.0 all pairs"
+            "AIT ratio (current gate; see vapi_protocol_state ait_separation) / "
+            "TOURNAMENT BLOCKER / dry_run=True / ioswarm_enabled=False default / "
+            "BLOCK_QUORUM=0.67 / ratio > 1.0 all pairs"
+        ),
+        "caution": (
+            "PROPOSALS dict last hand-authored ~Phase 212 and was NOT re-derived against "
+            "the ~6 weeks of subsequent work (AIT breakthrough, Data Economy Arcs 4-7, WMP, "
+            "PoSP/retina, A2A loop + DePIN node, HSM/MFG-CA, ioID, PoEP/L6B). Treat every "
+            "field above as a stale illustration of the mechanism, not a vetted next step — "
+            "cross-check against CLAUDE.md's Open Gaps section and the most recent NOTE "
+            "entries before acting on it."
         ),
     }
 
@@ -2495,7 +2557,7 @@ async def vapi_code_change_impact(
         "dry_run":      ("dry_run=True default — Phase 97 gate not cleared", "HIGH"),
         "soulbound":    ("VHP soulbound — all transfer functions must revert", "HIGH"),
         "gsr":          ("GSR_ENABLED=false — N=0 calibration", "MEDIUM"),
-        "l6b":          ("L6B_ENABLED=false — N=0 calibration", "MEDIUM"),
+        "l6b":          ("L6B_ENABLED — operator-controlled per-run flag; N>=50 gate MET 2026-07-18 (was N=0), don't assume false", "MEDIUM"),
     }
 
     invariant_risks: list[dict] = []
@@ -2602,7 +2664,7 @@ async def vapi_engineering_decision(wif_id_or_description: str,
         f"W2: {w2_text or 'novel opportunity grounded in PITL stack'}. "
         "separation ratio 0.362 baseline TOURNAMENT BLOCKER. "
         "dry_run=True default preserved. ratio > 1.0 non-negotiable ALL pairs. "
-        "BLOCK_QUORUM=0.67 frozen. GSR_ENABLED=false. L6B_ENABLED=false. "
+        "BLOCK_QUORUM=0.67 frozen. GSR_ENABLED=false. L6B_ENABLED. "
         "228 bytes PoAC FROZEN. SHA-256(raw[:164]). Poseidon(8) nPublic=5. "
         "W1 grounded failure mode. soulbound VHP. never hard gate advisory codes. "
         "NOMINAL sessions only stable EMA. 7.009 anomaly. 5.367 continuity. "
@@ -2707,23 +2769,29 @@ async def vapi_engineering_decision(wif_id_or_description: str,
 )
 async def vapi_autonomous_gap_scan(max_gaps: int = 8, hardware_ok: bool = False, **_):
     s = _parse_claude_md()
-    current_phase = int(s.get("phase_num", "211"))
+    current_phase = _phase_num_int(s, default=211)
     live_bridge   = int(s.get("bridge",    "2268"))
     live_sdk      = int(s.get("sdk",       "452"))
 
     # Canonical gap registry — grounded in CLAUDE.md Critical Gaps table
     CANONICAL_GAPS = [
         {
+            # RESOLVED+SUPERSEDED 2026-07-20 (Tier-1 MCP audit): the FFT fix below shipped
+            # in Phase 205, and the metric it targeted (tremor_resting/touchpad_corners) was
+            # explicitly cast out as the tournament gate by the 2026-05-09 policy adjustment
+            # in favor of AIT (Phase 229-231: ratio=1.199 N=37 all_pairs_above_1=True,
+            # ait_defensibility_ok=True). Kept in the registry as a historical record, not
+            # an actionable item — do not re-propose this fix.
             "id":             "G-001",
-            "title":          "P1vP3 tremor_resting per-pair blocker (all_pairs_p0_ok=False)",
-            "impact":         "TOURNAMENT BLOCKER",
-            "severity":       "CRITICAL",
+            "title":          "[RESOLVED+SUPERSEDED] P1vP3 tremor_resting per-pair blocker — see AIT instead",
+            "impact":         "NONE — tremor_resting/touchpad_corners is no longer the tournament gate",
+            "severity":       "INFO",
             "hardware":       False,
-            "effort_hours":   2,
-            "wif_ref":        "WIF-040 Phase 212 candidate",
-            "action":         "AccelTremorFFT zero-padded FFT 4096-point -> 0.244 Hz/bin (Phase 212+1)",
-            "test_delta":     {"bridge": 8, "sdk": 4, "hardhat": 0},
-            "separation_impact": "DIRECT — resolves P1vP3=0.032 bin aliasing; may clear all_pairs_p0_ok",
+            "effort_hours":   0,
+            "wif_ref":        "WIF-040 Phase 212 (shipped Phase 205; superseded by AIT Phase 229-231)",
+            "action":         "No action — check vapi_protocol_state ait_separation for the current gate status instead",
+            "test_delta":     {"bridge": 0, "sdk": 0, "hardhat": 0},
+            "separation_impact": "SUPERSEDED — AIT (ratio=1.199, N=37) is the current primary gate metric",
         },
         {
             "id":             "G-002",
@@ -2774,16 +2842,20 @@ async def vapi_autonomous_gap_scan(max_gaps: int = 8, hardware_ok: bool = False,
             "separation_impact": "NONE — meta-risk mitigation only",
         },
         {
+            # RESOLVED 2026-07-18 (Tier-1 MCP audit, 2026-07-20): the N>=50 calibration gate
+            # this item asked for is MET (independent usable reflexes on the certified Edge).
+            # L6B_ENABLED itself is a separate operator-controlled per-run flag (see
+            # docs/l6b-enable-seal-2026-07-20.md) — check it live rather than assuming a value.
             "id":             "G-006",
-            "title":          "L6b calibration N=0 (L6B_ENABLED=false)",
-            "impact":         "Neuromuscular reflex layer inactive",
-            "severity":       "MEDIUM",
+            "title":          "[GATE MET 2026-07-18] L6b calibration — was N=0, now N>=50 on the certified Edge",
+            "impact":         "Neuromuscular reflex layer calibration-ready; L6B_ENABLED is now an unblocked operator decision",
+            "severity":       "INFO",
             "hardware":       True,
             "effort_hours":   0,
-            "wif_ref":        "Phase 63 open gap",
-            "action":         "N>=50 neuromuscular reflex capture sessions per player (hardware required)",
+            "wif_ref":        "Phase 63 open gap — CLOSED by corpus growth 2026-07-18",
+            "action":         "No calibration action needed — check bridge GET /player/session-status l6b_enabled for the live flag state",
             "test_delta":     {"bridge": 0, "sdk": 0, "hardhat": 0},
-            "separation_impact": "POTENTIAL — L6b adds 4th signal to humanity_probability formula",
+            "separation_impact": "N/A — L6B is a humanity_probability signal, not a separation-ratio input",
         },
         {
             "id":             "G-007",
@@ -2820,21 +2892,28 @@ async def vapi_autonomous_gap_scan(max_gaps: int = 8, hardware_ok: bool = False,
 
     ranked = gaps[:max_gaps]
 
-    # Separation path analysis — current state and next step for each active blocker
+    # Separation path analysis — current state and next step for each active blocker.
+    # CAUTION (Tier-1 MCP audit, 2026-07-20): this block predates the AIT breakthrough
+    # (Phase 229-231) and the 2026-05-09 policy adjustment that cast tremor_resting/
+    # touchpad_corners out as the tournament gate. It's kept as historical context for
+    # the legacy probes, not as the current path — see ait_separation via
+    # vapi_protocol_state for the metric that actually gates the tournament today
+    # (ratio=1.199, N=37, all_pairs_above_1=True, ait_defensibility_ok=True).
     separation_analysis = {
-        "current_best_ratio": "1.177 tremor_resting (N=27, all_pairs_p0_ok=False — P1vP3=0.032 BLOCKER)",
-        "touchpad_corners":   "0.728 (N=35) — declining; centroid ceiling hit for P2/P3 pair",
-        "blocker_P1vP3":      "0.032 tremor_resting — AccelTremorFFT bin aliasing (G-001 fix path)",
-        "blocker_P2vP3":      "0.401 touchpad_corners — structural proximity; grip/trigger probe needed",
+        "caution": (
+            "STALE — tremor_resting/touchpad_corners below are legacy probes, superseded as "
+            "the tournament gate by AIT (Phase 229-231). Read vapi_protocol_state.ait_separation "
+            "for the current metric before acting on anything in this block."
+        ),
+        "ait_current_gate": "ratio=1.199 (N=37, all_pairs_above_1=True, ait_defensibility_ok=True) — see vapi_protocol_state",
+        "current_best_ratio": "1.177 tremor_resting (N=27, all_pairs_p0_ok=False — legacy probe, not the current gate)",
+        "touchpad_corners":   "0.728 (N=35) — legacy probe; centroid ceiling hit for P2/P3 pair",
         "next_software_action": ranked[0]["action"] if ranked else "No software gaps found",
-        "next_hardware_action": "Capture 4+ more P3 tremor_resting sessions (N=6->10 for centroid stability)",
+        "next_hardware_action": "See CLAUDE.md Open Gaps / most recent NOTE entries for the current hardware-capture priority",
         "path_to_tournament":  [
-            "1. G-001: Fix AccelTremorFFT bin resolution (Phase 212) -> may clear P1vP3=0.032",
-            "2. Verify all_pairs_p0_ok=True via GET /agent/per-pair-separation-status",
-            "3. If P2/P3=0.401 still blocks: new probe type (grip-force or trigger-resistance)",
-            "4. G-004: Activate StagedGraduation when P0 gate clears",
-            "5. Collect N>=100 dry_run=False adjudications with zero false positives",
-            "6. Run tournament preflight; if overall_pass=True -> authorized dry_run->False",
+            "See vapi_protocol_state.ait_separation and vapi_tournament_preflight for the "
+            "current, live path — the legacy 6-step tremor/touchpad narrative previously "
+            "here was removed 2026-07-20 as stale (it predated the AIT breakthrough).",
         ],
     }
 
@@ -4090,6 +4169,366 @@ async def vsd_vpm_label(**_):
         }
     except Exception as exc:
         return {"error": f"vsd_vpm_label failed: {exc}", "verified": False}
+
+
+# ============================================================
+# Tier-2 status tools (2026-07-20 MCP audit) — six subsystems shipped over the
+# past ~6 weeks (ioID, PoEP/L6B, HSM/MFG-CA, A2A DePIN node ledger, WMP, the
+# anti-cheat population-band detector) had ZERO MCP surface. Each tool below
+# reuses an existing pure function / script / artifact rather than
+# re-deriving its logic (the Tier-1 audit's #1 lesson: re-derived logic
+# drifts from the source it's supposed to reflect). Read-only, wallet-free.
+# ============================================================
+
+_ENV_FLAG_ALLOWLIST = frozenset({
+    # Boolean/enum config flags safe to surface — NEVER add a key here whose
+    # value could be a secret (private keys, API keys, AWS creds, aliases).
+    "L6B_ENABLED", "L6_CHALLENGES_ENABLED", "GSR_ENABLED",
+    "CHAIN_SUBMISSION_PAUSED", "GRIND_MODE", "GRIND_SESSION_ID",
+    "GAME_PROFILE_ID", "MFG_CA_BACKEND", "DUALSHOCK_ENABLED",
+    "BCC_ENABLED", "CURATOR_ENABLED", "GAMER_READINESS_ENABLED",
+})
+
+_ENV_SECRET_PRESENCE_ALLOWLIST = frozenset({
+    # Keys whose VALUE we never read — only whether they're SET (bool), so a
+    # caller can tell "KMS backend is configured" without seeing any secret.
+    "VAPI_KMS_MFG_CA_ALIAS", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+})
+
+
+def _read_env_flags() -> dict[str, Any]:
+    """
+    Read bridge/.env for a small ALLOWLIST of non-secret config flags. Never
+    returns the raw file, never returns any key outside the two allowlists
+    above, and only returns PRESENCE (not value) for the secret-adjacent set.
+    Caveat surfaced in every caller: this is the .env FILE state — a running
+    bridge can diverge via a process-scoped env override (e.g. the L6B seal
+    fired 2026-07-20 was intentionally process-scoped, not persisted here).
+    """
+    env_path = PROJECT_ROOT / "bridge" / ".env"
+    flags: dict[str, str] = {}
+    presence: dict[str, bool] = {k: False for k in _ENV_SECRET_PRESENCE_ALLOWLIST}
+    if not env_path.exists():
+        return {"flags": flags, "secret_presence": presence, "env_file_found": False}
+    try:
+        for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if key in _ENV_FLAG_ALLOWLIST:
+                flags[key] = value.strip()
+            elif key in _ENV_SECRET_PRESENCE_ALLOWLIST:
+                presence[key] = bool(value.strip())
+    except Exception:
+        pass
+    return {"flags": flags, "secret_presence": presence, "env_file_found": True}
+
+
+def _ensure_repo_paths() -> None:
+    """Add repo root + scripts/ to sys.path for lazy l9_presence.*/scripts.* imports."""
+    for p in (str(PROJECT_ROOT), str(PROJECT_ROOT / "scripts")):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+
+# ── Tool: vapi_node_ledger_status ─────────────────────────────────────────────
+
+@tool(
+    name="vapi_node_ledger_status",
+    description=(
+        "A2A-DEPIN-1 node contribution ledger status. Reads the local hash-chained "
+        "ledger (~/.qortroller/node_contribution_ledger.jsonl) via the pure "
+        "load_ledger()/verify_chain() functions already shipped in "
+        "bridge/vapi_bridge/node_contribution_ledger.py — no re-derivation of the "
+        "chain/hash logic. Returns entry_count, chain_intact, and the latest entry's "
+        "node_id/anchor_state/anchor_tx/anchor_block plus its own may_claim/"
+        "must_not_claim honesty rails. Zero MCP coverage existed for this subsystem "
+        "before 2026-07-20 (Tier-2 MCP audit)."
+    ),
+    schema={"type": "object", "properties": {}, "required": []},
+)
+async def vapi_node_ledger_status(**_):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.node_contribution_ledger import (
+            default_ledger_path, load_ledger, verify_chain,
+        )
+    except Exception as exc:
+        return {"error": f"import vapi_bridge.node_contribution_ledger failed: {exc}", "available": False}
+
+    try:
+        ledger_path = default_ledger_path()
+        if not ledger_path.exists():
+            return {"available": False, "ledger_path": str(ledger_path),
+                     "note": "no ledger file yet — no node has been born"}
+        entries = load_ledger(ledger_path)
+        chain = verify_chain(entries)
+        latest = entries[-1] if entries else None
+    except Exception as exc:
+        return {"error": f"ledger read failed: {exc}", "available": False}
+
+    return {
+        "available": True,
+        "ledger_path": str(ledger_path),
+        "entry_count": len(entries),
+        "chain_intact": chain.get("chain_intact"),
+        "breaks": chain.get("breaks", []),
+        "nodes_tracked": chain.get("nodes_checked", []),
+        "latest_entry": None if latest is None else {
+            "node_id": latest.get("node_id"),
+            "session_id": latest.get("session_id"),
+            "posp_verdict": latest.get("posp_verdict"),
+            "anchor_state": latest.get("anchor_state"),
+            "anchor_tx": latest.get("anchor_tx"),
+            "anchor_block": latest.get("anchor_block"),
+            "anchored": latest.get("anchored"),
+            "w3s_attested": latest.get("w3s_attested"),
+            "may_claim": latest.get("may_claim"),
+            "must_not_claim": latest.get("must_not_claim"),
+        },
+    }
+
+
+# ── Tool: vapi_anticheat_population_band_status ───────────────────────────────
+
+@tool(
+    name="vapi_anticheat_population_band_status",
+    description=(
+        "QorTroller anti-cheat R2-onset population-band detector status. Reads the "
+        "LIVE detector-default constants directly from scripts/poep_r2onset_"
+        "adversarial.py (GO_LO_MS/GO_HI_MS/SUB_FLOOR_MS) and l9_presence/"
+        "population_band.py (MIN_OPERATORS_FOR_POPULATION/MIN_SAMPLES_PER_OPERATOR/"
+        "ANTICIPATION_FLOOR_MS) rather than hardcoding a copy that can drift. This is "
+        "the MEASURED N=5 band (195,416] wired as the detector default 2026-07-20 — "
+        "advisory only, scoped to competitive (fast-to-moderate) players, gates "
+        "nothing (poep_enabled/L6B stay operator decisions). See "
+        "audits/poep-population-band-con-fari-2026-07-19.md for the measurement."
+    ),
+    schema={"type": "object", "properties": {}, "required": []},
+)
+async def vapi_anticheat_population_band_status(**_):
+    _ensure_repo_paths()
+    try:
+        import poep_r2onset_adversarial as _det
+        from l9_presence import population_band as _pop
+    except Exception as exc:
+        return {"error": f"import failed: {exc}", "available": False}
+
+    audit_path = PROJECT_ROOT / "audits" / "poep-population-band-con-fari-2026-07-19.md"
+    return {
+        "available": True,
+        "go_band_ms": {"lo": _det.GO_LO_MS, "hi": _det.GO_HI_MS},
+        "sub_floor_ms": _det.SUB_FLOOR_MS,
+        "anticipation_floor_ms": getattr(_pop, "ANTICIPATION_FLOOR_MS", None),
+        "min_operators_for_population": getattr(_pop, "MIN_OPERATORS_FOR_POPULATION", None),
+        "min_samples_per_operator": getattr(_pop, "MIN_SAMPLES_PER_OPERATOR", None),
+        "measurement_note_path": str(audit_path),
+        "measurement_note_exists": audit_path.exists(),
+        "claim_ceiling": (
+            "Advisory candidate only — voluntary-reaction liveness on a MEASURED N=5 "
+            "population band scoped to competitive players. Gates nothing; does NOT "
+            "prove population biometric identity, tournament-ready poep_enabled, or "
+            "defeat of a fixed-delay/host-observing bot (rig/crypto-gated residual)."
+        ),
+    }
+
+
+# ── Tool: vapi_l6b_poep_status ────────────────────────────────────────────────
+
+@tool(
+    name="vapi_l6b_poep_status",
+    description=(
+        "L6B neuromuscular-reflex calibration + PoEP presence status. Shells out to "
+        "scripts/l6b_probe_status.py --json (the SAME authoritative gate-check the "
+        "operator uses — logic is not re-derived here) for the live independent-"
+        "reflex count + gate_reached on the certified Edge. Also reads bridge/.env "
+        "for L6B_ENABLED/CHAIN_SUBMISSION_PAUSED (file state — a running bridge may "
+        "diverge via a process-scoped override, e.g. the 2026-07-20 seal fire). "
+        "poep_enabled requires the live-play ring arc (docs/poep-live-play-ring-arc-"
+        "spec.md), NOT just the L6B calibration gate — this tool does not conflate "
+        "the two."
+    ),
+    schema={"type": "object", "properties": {}, "required": []},
+)
+async def vapi_l6b_poep_status(**_):
+    result: dict[str, Any] = {
+        "env_flags": _read_env_flags()["flags"],
+        "env_file_caveat": (
+            "bridge/.env FILE state only — a running bridge process may have a "
+            "process-scoped override layered on top (never persisted to this file)."
+        ),
+    }
+    script_path = PROJECT_ROOT / "scripts" / "l6b_probe_status.py"
+    if not script_path.exists():
+        result["gate_status"] = {"error": "scripts/l6b_probe_status.py not found"}
+    else:
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(script_path), "--json"],
+                cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=20,
+            )
+            # NOTE: this script's exit code is a GATE signal, not a success/failure
+            # code — 2 means gate_reached=True, 0 means not yet reached. Always
+            # parse stdout; only exit code 1 (argparse/crash) means real failure.
+            if proc.stdout.strip():
+                result["gate_status"] = json.loads(proc.stdout)
+            else:
+                result["gate_status"] = {"error": f"no stdout, exit={proc.returncode}", "stderr": proc.stderr[-500:]}
+        except Exception as exc:
+            result["gate_status"] = {"error": f"subprocess failed: {exc}"}
+
+    result["seal_doc_path"] = str(PROJECT_ROOT / "docs" / "l6b-enable-seal-2026-07-20.md")
+    result["live_play_ring_arc_spec_path"] = str(PROJECT_ROOT / "docs" / "poep-live-play-ring-arc-spec.md")
+    result["note"] = (
+        "L6B_ENABLED (this tool's gate/env state) and poep_enabled (the live-play "
+        "ring arc's target) are SEPARATE decisions — L6B being enabled unblocks the "
+        "ring campaign, it does not itself flip poep_enabled."
+    )
+    return result
+
+
+# ── Tool: vapi_ioid_controller_status ─────────────────────────────────────────
+
+@tool(
+    name="vapi_ioid_controller_status",
+    description=(
+        "ioID controller-identity ceremony status. Live-reads ioIDRegistry / "
+        "VAPIGamerControllerNFT addresses from contracts/deployed-addresses.json "
+        "(authoritative — the deploy record). Also does a best-effort regex parse "
+        "of the ioID NOTE in CLAUDE.md for tokenId/TBA/DID/register-tx — clearly "
+        "labeled as a TEXT PARSE of prose, not a live chain read (no on-chain view-"
+        "call wired for this yet). Zero MCP coverage existed for ioID before "
+        "2026-07-20 (Tier-2 MCP audit)."
+    ),
+    schema={"type": "object", "properties": {}, "required": []},
+)
+async def vapi_ioid_controller_status(**_):
+    result: dict[str, Any] = {"contract_addresses": {}, "text_parsed": {}, "source": "mixed"}
+
+    addr_path = PROJECT_ROOT / "contracts" / "deployed-addresses.json"
+    try:
+        data = json.loads(addr_path.read_text(encoding="utf-8"))
+        for key in ("ioIDRegistry", "VAPIGamerControllerNFT", "VAPIioIDRegistry"):
+            if key in data:
+                result["contract_addresses"][key] = data[key]
+    except Exception as exc:
+        result["contract_addresses_error"] = str(exc)
+
+    claude_path = PROJECT_ROOT / "CLAUDE.md"
+    try:
+        text = claude_path.read_text(encoding="utf-8", errors="replace")
+        m = re.search(r"did:io:0x[0-9a-fA-F]+", text)
+        result["text_parsed"]["did"] = m.group(0) if m else None
+        m = re.search(r"ioID\s+tokenId\s+\*{0,2}(\d+)\*{0,2}", text)
+        result["text_parsed"]["token_id"] = int(m.group(1)) if m else None
+        m = re.search(r"TBA\s+`?(0x[0-9a-fA-F]{40})`?", text)
+        result["text_parsed"]["tba_address"] = m.group(1) if m else None
+        m = re.search(r"register tx\s+`?(0x[0-9a-fA-F]{6,})", text)
+        result["text_parsed"]["register_tx_prefix"] = m.group(1) if m else None
+    except Exception as exc:
+        result["text_parsed_error"] = str(exc)
+
+    result["caution"] = (
+        "text_parsed.* fields come from a best-effort regex over CLAUDE.md prose, "
+        "NOT a live chain read — treat as illustrative, cross-check on-chain before "
+        "relying on token_id/tba_address/register_tx_prefix for anything consequential."
+    )
+    return result
+
+
+# ── Tool: vapi_hsm_mfgca_status ───────────────────────────────────────────────
+
+@tool(
+    name="vapi_hsm_mfgca_status",
+    description=(
+        "Manufacturer Root CA signing-backend configuration status. Reads ONLY the "
+        "MFG_CA_BACKEND flag (software|kms) from bridge/.env plus whether a KMS "
+        "alias / AWS credentials are SET (boolean presence only — values are NEVER "
+        "read or returned by this tool, they may be secret-adjacent). Does not check "
+        "for the CA file's existence or path — that's out of scope here per the "
+        "existing CA-material sanitization discipline (HWFL-1 Cycle 8/9); see "
+        "docs/disaster-recovery-runbook.md for that surface."
+    ),
+    schema={"type": "object", "properties": {}, "required": []},
+)
+async def vapi_hsm_mfgca_status(**_):
+    env = _read_env_flags()
+    return {
+        "mfg_ca_backend": env["flags"].get("MFG_CA_BACKEND", "software (default — not set in bridge/.env)"),
+        "kms_alias_configured": env["secret_presence"].get("VAPI_KMS_MFG_CA_ALIAS", False),
+        "aws_credentials_configured": (
+            env["secret_presence"].get("AWS_ACCESS_KEY_ID", False)
+            and env["secret_presence"].get("AWS_SECRET_ACCESS_KEY", False)
+        ),
+        "env_file_caveat": (
+            "bridge/.env FILE state only. Values are never read for the "
+            "secret-adjacent keys above — presence only."
+        ),
+        "note": (
+            "software backend is INSECURE/DEV-ONLY per the codebase's own warning "
+            "(manufacturer_root_ca.py); kms is the HSM-backed production path. "
+            "This tool reports which is configured, not whether the CA material "
+            "itself is present or backed up."
+        ),
+    }
+
+
+# ── Tool: vapi_wmp_status ─────────────────────────────────────────────────────
+
+@tool(
+    name="vapi_wmp_status",
+    description=(
+        "World Model Provenance (WMP) data-economy lane status. Reads "
+        "wmp_corpus_real/corpus_manifest.json directly — that manifest is "
+        "PII-free BY DESIGN (pinned by T-WMP2-6) so it's safe to return in full. "
+        "Cross-checks the manifest's entry count against the actual line count in "
+        "wmp_corpus.jsonl (never parses/returns raw bundle content — hex-encoded "
+        "proof/matrix fields stay untouched). Points to scripts/wmp_full_verify.py "
+        "as the authoritative verifier rather than re-running it here (too heavy "
+        "for a status call — needs snarkjs + RPC)."
+    ),
+    schema={"type": "object", "properties": {}, "required": []},
+)
+async def vapi_wmp_status(**_):
+    corpus_dir = PROJECT_ROOT / "wmp_corpus_real"
+    manifest_path = corpus_dir / "corpus_manifest.json"
+    jsonl_path = corpus_dir / "wmp_corpus.jsonl"
+
+    if not manifest_path.exists():
+        return {"available": False, "note": f"no manifest at {manifest_path}"}
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"available": False, "error": f"manifest read failed: {exc}"}
+
+    jsonl_line_count = None
+    if jsonl_path.exists():
+        try:
+            jsonl_line_count = sum(
+                1 for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line.strip()
+            )
+        except Exception:
+            pass
+
+    manifest_entries = manifest.get("entries", [])
+    return {
+        "available": True,
+        "manifest_schema": manifest.get("schema"),
+        "manifest_entry_count": len(manifest_entries),
+        "jsonl_line_count": jsonl_line_count,
+        "counts_agree": (
+            jsonl_line_count is not None and jsonl_line_count == len(manifest_entries)
+        ),
+        "entries": manifest_entries,  # already PII-free per T-WMP2-6
+        "verifier_path": str(PROJECT_ROOT / "scripts" / "wmp_full_verify.py"),
+        "note": (
+            "This is corpus-presence bookkeeping, NOT a verification result — run "
+            "scripts/wmp_full_verify.py for a real 5/5-check pass on a bundle."
+        ),
+    }
 
 
 async def main():

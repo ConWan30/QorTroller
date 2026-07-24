@@ -1,0 +1,128 @@
+Verifying B2 adversarially: checking mechanical novelty vs existing join surfaces, join logic, broken rails, preimage binding, adapter honesty, and draft-only rails.# B2 MPJA — Grok adversarial verify (charter a)
+
+**VERDICT: SHIP-WITH-FIX**  
+Not a rename of PDA-anchor. Capability is real but **thinner than the lock claims**. Rails hold. Do not ship the docstring/adapter as-written without honesty patches.
+
+---
+
+## Findings (severity order)
+
+### F1 — HIGH: “consistency / non-contradictory” overclaim
+Lock/module claim: join attests **completeness + consistency**.
+
+**Reality:** completeness bitmap + **3** structural broken checks. No cross-surface content consistency:
+- no `session_id` match across KAS/PoSP/ledger/scorecard
+- no kas commitment ↔ posp root bind
+- no “SYNCHRONIZED but kas missing” as BROKEN (that is PARTIAL only — fine if claimed completeness-only)
+
+`kas_verdict="HYGIENE_FAIL"` and `"AUTHORED_SESSION"` both yield **JOIN_COMPLETE** with **identical** `proposed_anchor_preimage_hash` (same bitmap bits). Presence ≠ quality; preimage is not a provenance seal.
+
+**Fix (this commit):** rewrite claims to:  
+“v0 = **completeness** + structural false-claim rails; **content-consistency v0.1**.”  
+Mirror B1 PCRA honesty after round-04.
+
+### F2 — HIGH: Store adapter is a stub that emits hollow PARTIALs
+```python
+drafts.append(evaluate_join(session_id=sid))  # no store reads
+```
+Enabled + `session_ids=["s1"]` → always missing all 6 required surfaces. `limit` unused.  
+`adapter_scope` half-admits v0.1 extraction; return still looks like a real join product (`n_drafts`, full draft objects). Weaker than B1 `scan_repo` post-fix (“CEILING_OVERCLAIM only… adapters v0.1”).
+
+**Fix (this commit):**  
+`adapter_scope: "STUB — session_id list only; no ledger/PoSP/scorecard/W3S Store extraction"`  
+docstring: “pure evaluator works; Store adapter is a stub.”  
+Optional: refuse to invent drafts when no surface kwargs (return empty + explicit stub note).
+
+### F3 — MED: preimage binding is mostly theater
+Domain tag `VAPI-MPJA-JOIN-v0` + `session_id` + **sorted boolean bits** + scorecard/wmp roots.
+
+| Bound? | Surface |
+|--------|---------|
+| yes | session_id, scorecard_root, wmp_root, bitmap bits |
+| no | kas verdict/commitment, posp verdict/root, ledger tx, w3s evidence |
+
+Boolean bits encode “flags that are true,” not *what* was joined. Two COMPLETE joins with different KAS truth collide.  
+Proposing a preimage **draft-only** is not spend-creep (no executor call, no chain import) — but calling it what “Sentry WOULD anchor” without binding surface hashes is overselling.
+
+**Fix (this commit):** note: “completeness-certificate hash, **not** content-bound join root.”  
+**Defer v0.1:** bind kas_commitment / posp roots / anchor_tx when present.
+
+### F4 — MED: BROKEN coverage is the right *class*, incomplete set
+**Good (load-bearing, correctly tested):**
+- ANCHORED + empty/whitespace tx → JOIN_BROKEN, no preimage
+- pre-anchor COMPLETE with PENDING is valid (`ledger_anchored` optional) ✓
+- malformed non-hex scorecard/wmp → BROKEN ✓
+
+**Missed / wrong:**
+| Case | Observed | Should |
+|------|----------|--------|
+| `ledger_anchor_tx="not-a-tx"` | JOIN_COMPLETE | BROKEN (tx shape) |
+| scorecard `0x`+64hex | JOIN_BROKEN (malformed) | accept or normalize (real roots use 0x) |
+| tx present, status PENDING | COMPLETE | at least note / soft-BROKEN orphan claim |
+| any non-empty `kas_verdict` | present=True | presence OK for completeness; quality is separate |
+| empty `session_id` | COMPLETE + hash | reject / BROKEN |
+
+False-anchored is high-value and **already demoted in UI** (`ContributionPulse` ANCHORED-without-tx → PENDING). MPJA elevates that rail to steward draft domain — real, not novel physics.
+
+**Other contradictions the “non-contradictory” claim implies but v0 skips:** session_id mismatch across surfaces; posp SYNCHRONIZED with no KAS; scorecard bound with no ledger entry; w3s_ok True with no ledger — all PARTIAL or invisible without real extraction.
+
+### F5 — LOW-MED: mechanical delta vs existing surfaces
+| Existing | Overlap |
+|----------|---------|
+| Sentry PDA anchor | **Different** — single root on chain vs multi-surface completeness draft |
+| PoSP `build_posp` | **Partial** — already joins KAS/NQPV/archive + anti-mismatch → UNVERIFIABLE |
+| FSCA CONTRADICTION/INVERSION | **Different domain** — fleet/agent DAG, not product session surfaces |
+| ContributionPulse | **Same false-anchor honesty**, UI-only |
+| qortroller verify / scorecard | adjacent readers; not a steward join draft |
+
+**Not redundant.** Not “evolution of mandate” at full strength until Store join + content bind. Pure function + flag is a **draft primitive**, not a live Sentry task (no agent import, no poll loop).
+
+### F6 — Rails: held
+| Rail | Status |
+|------|--------|
+| `mpja_enabled` default False | held (config) |
+| draft-only note / no chain import | held |
+| no IOTX / no anchor API | held |
+| JOIN_BROKEN never proposes preimage | held (tested) |
+| agent/executor wiring | **absent** — good for blast radius; also means “Sentry task” is aspirational |
+
+No act footgun in this module. Silent-PARTIAL adapter is an **honesty** footgun, not a spend footgun.
+
+---
+
+## Hammer answers (1–6)
+
+1. **Real delta**, thin: multi-surface completeness enum ≠ single-root PDA. Not FSCA reskin. Overlaps PoSP + UI demote.
+2. **Bitmap OK for v0 completeness.** ANCHORED + WMP optional is correct. Required set reasonable for product join; does not require AUTHORED quality.
+3. **False-anchored is right top rail.** v0 BROKEN set is an honesty hole vs “non-contradictory.” Expand or downscope claim.
+4. **Domain-separated yes; boolean bits weak.** Prefer surface hashes. Draft preimage OK if labeled completeness-cert only.
+5. **Adapter under-honest** vs B1 post-round-04. Call it stub.
+6. **Rails held.** No act path.
+
+---
+
+## Tests I ran (not rubber-stamp of “8/8”)
+- 8/8 pytest pass.
+- Edge: garbage tx → COMPLETE (hole); `0x` root → BROKEN (footgun); KAS content swap → same preimage; adapter enabled → hollow PARTIALs.
+
+---
+
+## MINIMAL fixes — this commit vs v0.1
+
+**This commit (required for SHIP-WITH-FIX):**
+1. Docstring + return `note`: completeness + structural rails only; content-consistency deferred.
+2. Adapter honesty = B1 quality: **STUB**, no Store extraction; do not imply live multi-surface join.
+3. (Strongly preferred, ~5 LOC) `_is_hexish`: strip optional `0x`; ANCHORED requires hexish tx (not just non-empty strip).
+
+**Defer v0.1 (do not block):**
+- Real Store/file extraction (ledger, posp audits, scorecard, w3s)
+- Preimage binds surface commitments
+- session_id cross-surface mismatch → BROKEN
+- Sentry draft loop / `draft://attestations/join/...` emitter
+- More contradiction rules
+
+---
+
+## Bottom line
+Ship the **pure evaluator** as a gated draft primitive after honesty + (preferably) hex/tx shape fixes.  
+Do **not** ship narrative that this is a working multi-surface join attestor or content-bound anchor preimage — that is thicker than the code.

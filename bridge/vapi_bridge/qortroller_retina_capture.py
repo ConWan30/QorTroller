@@ -671,6 +671,30 @@ class WgcFrameSource:
             self._control = None
 
 
+def _uvc_backend_order(backend_env: str, cv2mod) -> list:
+    """Ordered cv2 capture backends to try for a UVC/virtual-camera source (testable, no I/O).
+
+    auto  -> [DSHOW, MSMF, default]  (DSHOW+MJPG first: the intended physical direct-capture path —
+             it delivers a CLEAN 1080p frame; MSMF on the same physical card mis-decodes the raw
+             format into RGB-speckle noise. MSMF is the fallback for MF-only virtual cameras / boxes
+             where DSHOW can't open a free device. NOTE: DSHOW-by-index "can't capture" only when the
+             device is held exclusively by another app, e.g. OBS — close OBS and DSHOW index-0 works.)
+    msmf  -> [MSMF]
+    dshow -> [DSHOW]
+    any   -> [default]  (0 = let OpenCV choose)
+    0 in the list means the default backend (no explicit backend arg).
+    """
+    msmf = getattr(cv2mod, "CAP_MSMF", 1400)
+    dshow = getattr(cv2mod, "CAP_DSHOW", 700)
+    table = {
+        "msmf": [msmf],
+        "dshow": [dshow],
+        "any": [0],
+        "auto": [dshow, msmf, 0],
+    }
+    return table.get((backend_env or "auto").lower(), table["auto"])
+
+
 class UvcFrameSource(WgcFrameSource):
     """OA-RP-1 direct-HDMI source (2026-07-11): a UVC capture card (PS5 -> HDMI-in card -> loop-out to the
     TV; card USB -> laptop) delivered via cv2.VideoCapture on a dedicated reader thread. DELIVERY SWAP
@@ -699,23 +723,40 @@ class UvcFrameSource(WgcFrameSource):
             log.warning("RetinaGameCapture: cv2 unavailable for UVC source (lobe abstains): %s", exc)
             return False
         try:
-            # CAP_DSHOW honors FOURCC/FPS requests far more reliably than MSMF on Windows; fall back to
-            # the default backend if DSHOW can't open the device.
-            cap = cv2.VideoCapture(self._uvc_index, getattr(cv2, "CAP_DSHOW", 0))
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(self._uvc_index)
-            if not cap.isOpened():
-                log.warning("RetinaGameCapture: UVC device #%d did not open (lobe abstains)", self._uvc_index)
-                return False
-            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self._uvc_fourcc))
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self._uvc_w)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._uvc_h)
-            cap.set(cv2.CAP_PROP_FPS, self._uvc_fps)
-            ok, first = cap.read()                       # prove frames flow before declaring the lobe up
-            if not ok or first is None:
-                log.warning("RetinaGameCapture: UVC device #%d opened but no frame (HDCP on? cable?) — "
-                            "lobe abstains", self._uvc_index)
-                cap.release()
+            # Backend order (env RETINA_UVC_BACKEND: auto|msmf|dshow|any). AUTO tries MSMF first —
+            # OBS Virtual Camera (OBS 28+) and MF virtual cameras register via Media Foundation, and
+            # on some Windows boxes DSHOW-by-index is broken ("can't capture by index"). DSHOW is kept
+            # for physical cards that honor MJPG/FPS. A backend that OPENS but delivers NO FRAME (broken
+            # DSHOW-by-index, HDCP, or a device held exclusively) is SKIPPED, not accepted.
+            _bk_env = str(os.environ.get("RETINA_UVC_BACKEND", "auto") or "auto").lower()
+            cap = None
+            first = None
+            for be in _uvc_backend_order(_bk_env, cv2):
+                try:
+                    c = cv2.VideoCapture(self._uvc_index, be) if be else cv2.VideoCapture(self._uvc_index)
+                except Exception:  # noqa: BLE001
+                    continue
+                if not c.isOpened():
+                    c.release()
+                    continue
+                # MJPG FOURCC is for physical DSHOW cards; virtual cameras (MSMF) reject it — set it
+                # only on the DSHOW path so an MSMF virtual cam isn't forced into a mode it can't do.
+                if be == getattr(cv2, "CAP_DSHOW", -999):
+                    c.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self._uvc_fourcc))
+                c.set(cv2.CAP_PROP_FRAME_WIDTH, self._uvc_w)
+                c.set(cv2.CAP_PROP_FRAME_HEIGHT, self._uvc_h)
+                c.set(cv2.CAP_PROP_FPS, self._uvc_fps)
+                ok, frame0 = c.read()                    # prove frames flow before accepting this backend
+                if ok and frame0 is not None:
+                    cap, first = c, frame0
+                    log.info("RetinaGameCapture: UVC device #%d up on backend=%s (%dx%d)",
+                             self._uvc_index, be, frame0.shape[1], frame0.shape[0])
+                    break
+                c.release()                              # opened but no frame -> skip, try next backend
+            if cap is None or first is None:
+                log.warning("RetinaGameCapture: UVC device #%d delivered no frame on any backend (%s; "
+                            "HDCP? cable? OBS holding the card? try RETINA_UVC_BACKEND=msmf) — lobe abstains",
+                            self._uvc_index, _bk_env)
                 return False
             self._uvc_cap = cap
             self._running = True

@@ -1,0 +1,80 @@
+I'll verify UC-5 against the round-1 risks: read the Python reference, tests, and wasm-port doc, then hammer binding consent, cross-gamer collapse, field creep, and the deferred-wasm ceiling.## UC-5 PRE-commit verify (round-1 hammers)
+
+**Scope checked:** `analytics_ref.py` + `test_wmp_analytics_ref.py` (10/10 PASS) + `docs/wmp-uc5-wasm-analytics-design.md`. No wasm/Rust present (deferred as claimed). Untracked only — not committed.
+
+---
+
+### 1. Consent binding vs host-forged consent
+
+**What it does:** `row_commit` binds `consent_bits | cross | gec | field | value` into one SHA-256. Flip any bit → new leaf → different merkle root.
+
+**What it does *not* do:** This module never checks that `gamer_export_commitment` was gamer-signed or that it was derived from a package that already encodes those consent bits. Host who **invents both** `consent_bits=1` and a fresh `gec` still produces a self-consistent triple.
+
+**Verdict on the claim:** That residual is exactly DEPIN-1 **format-not-truth**, and the **ceiling block states it honestly** (code `ceiling` string + doc §Honest ceiling).  
+The rail wording *“cannot forge consent=1 without the published gec”* is only true if the buyer independently holds/verifies a prior gamer-attested export under that `gec`. Alone, the applet is **format binding**, not a consent oracle. **Not over-claim if ceiling is load-bearing; mild wording tightness only.**
+
+---
+
+### 2. Cross-gamer rail
+
+| Check | Assessment |
+|--------|------------|
+| `\|unique gec\| > 1 ⇒ every row.cross_aggregate_ok` | **Right** fail-closed rail; rejects single global flag. |
+| Single-gamer, `cross=False` | **Correct** (no cross-pool without multi-identity). |
+| Collapse two gamers → one `gec` | **Host can dodge** if `gec` is host-asserted. Same format-not-truth class; cannot fix in gate alone without identity truth oracle. |
+
+Rail is the right *protocol* check for honestly distinct export packages. Collapse is residual of “applet doesn’t attest gamer identity.”
+
+---
+
+### 3. Field allowlist + mean-milli
+
+**Deny-by-default + 5 fields: right shape.** No IMU/tremor/humanity/liveness/APM.
+
+| field | Biometric? | Note |
+|--------|------------|------|
+| `session_tick_count` | No | Session meta |
+| `match_span_s` | No | Duration |
+| `authored_kill_count` | No | KAS/game-event discrete count — post-OCR authorship, **not** bio features |
+| `clean_session_count` | No | Ruling/grind counter |
+| `verdict_class` | No | Adjudication enum (protocol output) |
+
+None are secretly biometric-derived feature vectors. Privacy leakage of *rulings* is a product concern, not APM/bio creep. **mean as fixed-point milli (`sum*1000//n`, no IEEE float):** sound and deterministic.
+
+---
+
+### 4. Wasm deferral
+
+**Honest.** Uninstallable target → uncompiled Rust is worse (dead, drifts, CI-red theater). Python reference-first + parity vectors matches repo pattern (`resolve_node_session`). Doc does **not** claim wasm exists; CI-builds-it framing is correct. Ceiling non-overclaiming.
+
+---
+
+### 5. Merkle determinism / empty sentinel
+
+| Item | Status |
+|------|--------|
+| Sorted leaves → order-independent root | **OK** (verified ab==ba) |
+| Dup-last-if-odd | **OK** (standard; document for buyer) |
+| Empty → `SHA-256(b"WMP-ANALYTICS-EMPTY-v0")` | **OK** (no empty-hash footgun) |
+| **Buyer footgun** | Output `leaves` = **sel order, not sorted**; root is over `sorted(leaves)`. Buyer who pairwise-hashes listed order without sorting **fails re-derive**. Doc says “sorted”; code doesn’t pin listed order. Test uses weak `or set(...)` and does not enforce sorted leaves. |
+
+Non-blocking for a REFERENCE if doc is clear; one-line `leaves = sorted(...)` would remove the footgun.
+
+Also: `field_id` not length-prefixed — fine under allowlist-only ASCII; pin that in wasm.
+
+---
+
+## VERDICT: **SHIP**
+
+| Question | Answer |
+|----------|--------|
+| Honest REFERENCE (not pretend-wasm)? | **Yes** |
+| Wasm-deferred framing correct? | **Yes** |
+| Round-1 risks discharged for this scope? | **Yes** — consent in preimage + fail-closed category bit; per-row cross flag (no single global); deny-by-default non-bio allowlist; DEPIN-1 ceiling explicit |
+| Residual (expected) | Host invents `gec`+consent, or collapses identities under one `gec` — **format not truth**; correctly out of applet scope |
+
+**Non-blocking nits (optional follow-up, not pre-commit blockers):**
+1. Sort `leaves` in the triple output (or harden test to require sorted).
+2. Tighten rail #1 prose: *binding defeats silent consent flip on a fixed preimage; host-fabricated gec+consent remains format-not-truth* (ceiling already says this — don’t let rail #1 read stronger than the ceiling).
+
+**Commit the reference + spec.** Do not invent uncompiled Rust for show.

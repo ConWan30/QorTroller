@@ -1218,6 +1218,26 @@ INVARIANTS: list[Invariant] = [
         pattern=r"PROOF_TIER_FULL\s*=\s*1|PROOF_TIER_STANDARD\s*=\s*2|PROOF_TIER_BASIC\s*=\s*3",
         min_matches=3,
     ),
+    # Path A MFG-CA HSM flip (2026-07-16, deployed 0x31030C8F4d805bC73e2c49D935eD0FB6a12987a5) —
+    # VAPIDeviceBirthCertUpdateRegistry is now LIVE trust: verify_device_cert reads
+    # currentBirthCertHash (OVERRIDE-then-VMDR) as THE effective birth-cert hash for the live
+    # device 581a836c under the KMS HSM root. Five pins, any drift is a trust break:
+    # (1) setUpdatedBirthCertHash stays onlyOwner (loosening = anyone re-anchors any device);
+    # (2) the isActive VMDR gate (dropping = re-anchor revoked devices); (3) the non-zero
+    # newHash guard (zero = override-slot confusion with the no-override sentinel);
+    # (4) the BirthCertHashUpdated audit event declaration (removing = silent re-anchors);
+    # (5) the currentBirthCertHash public view signature (verifiers bind against it —
+    # renaming is a wire-break for verify_device_cert + every future integrator);
+    # (6) the override-wins branch line inside currentBirthCertHash (grok round-28 V2:
+    # without it the signature could stay while the body silently becomes always-VMDR
+    # or always-override — the semantics pin, not just the wire name).
+    Invariant(
+        id="INV-MFG-003",
+        description="VAPIDeviceBirthCertUpdateRegistry FROZEN trust surface (Path A HSM flip, LIVE 2026-07-16 at 0x31030C8F…): setUpdatedBirthCertHash onlyOwner + isActive-on-VMDR gate + non-zero newHash guard + BirthCertHashUpdated event + currentBirthCertHash signature AND its override-wins branch (override-then-VMDR semantics). Verifiers read currentBirthCertHash as the effective hash; loosening any guard, renaming the view, or rewriting the branch silently breaks the HSM re-anchor trust chain for 581a836c and every future device.",
+        file="contracts/contracts/VAPIDeviceBirthCertUpdateRegistry.sol",
+        pattern=r'function setUpdatedBirthCertHash\(bytes32 deviceId, bytes32 newHash\) external onlyOwner|require\(vmdr\.isActive\(deviceId\), "DBC-UPD: not active on VMDR"\)|require\(newHash != bytes32\(0\), "DBC-UPD: zero hash"\)|event BirthCertHashUpdated\(bytes32 indexed deviceId|function currentBirthCertHash\(bytes32 deviceId\) public view returns \(bytes32\)|if \(o != bytes32\(0\)\)',
+        min_matches=6,
+    ),
     # Path A Arc 1 Commit 4 — VAPIProtocolLensV2 FROZEN function surface.
     # Tournament integrators bind against these two function names; renaming
     # either is a wire-break for every Path A consumer.

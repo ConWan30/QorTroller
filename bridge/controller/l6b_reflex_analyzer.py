@@ -73,6 +73,14 @@ class L6bReflexResult:
     reflex_gap_ms: float | None = None
     """crossing_t_mono - precursor_t_mono in ms; None when precursor not detected."""
 
+    crossing_device_ts: float = -1.0
+    """F-RIG27-8 (ADDITIVE): the DEVICE sensor timestamp of the crossing frame as RAW uint32 ticks
+    (@~3MHz), when reports carry `device_ts`. -1 when absent. The analyzer only CAPTURES it (no
+    interpretation); the canonical latency_ms / classification are UNCHANGED — this is a robust-clock
+    companion for the RP nonce-bound verify path (bridge t_mono is inflated under Remote Play's bursty
+    frame reads; the device clock is immune to bridge processing lag). The caller wrap-diffs
+    (crossing - probe) ticks and converts to ms for the true reaction latency; never gates the corpus."""
+
 
 class L6bReflexAnalyzer:
     """Analyze IMU accel response after a sub-perceptual L6b haptic probe.
@@ -126,6 +134,7 @@ class L6bReflexAnalyzer:
         true_latency_ms = -1.0
         precursor_t_mono: float | None = None
         crossing_t_mono: float | None = None
+        crossing_device_ts: float = -1.0   # F-RIG27-8 additive companion clock
         threshold = self.accel_delta_threshold_lsb
 
         for i, report in enumerate(post_reports):
@@ -141,6 +150,12 @@ class L6bReflexAnalyzer:
                 legacy_latency_ms = float(i) * MS_PER_REPORT
                 if t_mono > 0.0 and t_mono >= probe_ts:
                     crossing_t_mono = t_mono
+                # F-RIG27-8 additive: capture the device sensor ts (raw uint32 ticks) at the SAME
+                # crossing frame (robust clock; canonical latency stays t_mono-based). -1 stays if the
+                # report has no device_ts (0 = absent). The caller wrap-diffs + converts ticks->ms.
+                _dev_ts = float(report.get("device_ts", 0.0) or 0.0)
+                if _dev_ts > 0.0:
+                    crossing_device_ts = _dev_ts
 
         if crossing_t_mono is not None and probe_ts > 0.0:
             true_latency_ms = (crossing_t_mono - probe_ts) * 1000.0
@@ -173,6 +188,7 @@ class L6bReflexAnalyzer:
             confidence=confidence,
             probe_ts=probe_ts,
             valid=valid,
+            crossing_device_ts=crossing_device_ts,
         )
 
     def classify(self, result: L6bReflexResult) -> float:

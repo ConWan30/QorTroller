@@ -56,9 +56,12 @@ def test_t_freeze_3_qortroller_scanner_clean():
     assert len(findings) == 0, [getattr(f, "description", f) for f in findings]
 
 
-# T-FREEZE-4: VAPI scanner + frozenset UNTOUCHED — 12 families, 0 findings (FC-(a))
+# T-FREEZE-4: VAPI scanner + frozenset UNTOUCHED — 14 families, 0 findings (FC-(a))
+# (bumped 12->14 2026-07: VAPI-RETINA-STATE-v3 promoted candidate->FROZEN-v1 2026-07-12,
+# see CLAUDE.md's PV-CI baseline note; doc_consistency_registry's own canonical fact is a
+# separate source of truth, untouched here -- see test_t_freeze_5_count_facts)
 def test_t_freeze_4_vapi_namespace_untouched():
-    assert len(mv._PATTERN_017_FROZEN_TAGS) == 12
+    assert len(mv._PATTERN_017_FROZEN_TAGS) == 14
     findings = asyncio.run(mv.mythos_crypto_drift())
     assert len(findings) == 0, [getattr(f, "description", f) for f in findings]
 

@@ -1,0 +1,59 @@
+I'll adversarially review both deltas for the banking commit — reading the two scripts first, then checking the fallback and approve-nft paths against the stated invariants.Core signer-check and registry resolution next — those close the adversarial cases for both deltas.## A2A (ruling a) — grok verify, banking commit
+
+Read both files + core signer gate in `controller_ioid_registration.py`. Live ceremony facts treated as ground truth.
+
+---
+
+### DELTA 1 — dev-self `BRIDGE_PRIVATE_KEY` fallback
+
+**Could this sign with the bridge key for a non-bridge gamer?**  
+**No.** Two independent stops:
+
+1. **CLI gate (necessary condition):** fallback only when `not key` **and** `args.gamer.lower() == 0x0Cf36dB5…`. Non-bridge `--gamer` never loads `BRIDGE_PRIVATE_KEY`.
+2. **Core gate (sufficient condition):** `Account.from_key(gamer_private_key).address` must equal `gamer` or register raises. Wrong key × wrong gamer cannot broadcast.
+
+**Key priority (safe):** `--gamer-key` → `GAMER_PRIVATE_KEY` → (dev-self only) `BRIDGE_PRIVATE_KEY`. Explicit keys always win.
+
+**Key leak?**  
+**No.** Prints only the honest note (env *name*, not material). Result JSON has device/tba/tx — never the key. Key stays in env/process memory (same as existing bridge ops).
+
+| Adversarial case | Result |
+|---|---|
+| `--gamer` ≠ bridge, no key | fallback OFF → exit 2 on `--confirm` |
+| `--gamer` ≠ bridge, bridge key forced via env as `GAMER_PRIVATE_KEY` | core address mismatch → refuse |
+| `--gamer` = bridge, no explicit key | fallback ON — intended |
+| whitespace / mangled gamer | no match → fail-closed |
+
+---
+
+### DELTA 2 — `approve-nft` (F-INC-D-3)
+
+**`approve(registry, tokenId)` vs `setApprovalForAll`?**  
+**Minimal and correct.** Per-token, single operator. `setApprovalForAll` would grant every present/future token — strictly worse.
+
+**Over-approval risk?**  
+Bounded and appropriate:
+
+- Spender is the system **ioID permit registry** (`0x0A7e595C…`), not an EOA
+- One `tokenId` only
+- ERC-721 clears approval on `transferFrom` (register consumes it into the TBA)
+- Owner preflight, `getApproved` short-circuit, estimate-first + `IOID_CONTROLLER_CEREMONY_CONFIRM=1`, post-tx readback
+
+**`_IOID_PERMIT_REGISTRY` hardcode?**  
+Acceptable for banking: same address as `agent_registration.IOID_REGISTRY_ADDR`, `deployed-addresses.json` `ioIDRegistry`, and live success (`getApproved(1)=0x0A7e595C`). `--registry` override exists. Optional future DRY: call `resolve_ioid_registry_address()` — **not a banking blocker** (hardcode of the IoTeX system registry is actually less exposed to env/DID-book confusion than a naïve shared-env read).
+
+**Fee-model (value=0 / prepay):** not re-opened (r10 PASS).
+
+---
+
+### Residuals (non-blocking)
+
+- DELTA 1 hardcodes bridge wallet (duplicates `BRIDGE_WALLET` constant) — fine for CLI isolation.
+- DELTA 2 reuses `assert_project_token_id` for controller tokenId (name smell; `>0` semantics are correct).
+- No dedicated unit tests for the fallback / `approve-nft` CLI paths (62 suite green covers ceremony helpers + register core; live path already exercised).
+
+---
+
+### VERDICT
+
+**PASS** — both deltas bankable; no adversarial FIX required.

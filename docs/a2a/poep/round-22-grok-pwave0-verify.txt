@@ -1,0 +1,111 @@
+I'll ground this in the actual generators, gate thresholds, and audit claim — starting with the waveform module and the banked report.Running the report and adversarial counter-shapes against the gate next.Checking rise_samples semantics and whether the doc FRR matches a clean re-run:# P-WAVE-0 PRE-commit verify (adversarial)
+
+Grounded in `l9_presence/poep_waveform_shape.py`, the audit, and live re-runs / counter-shapes.
+
+---
+
+### 1. CIRCULARITY / OVERFIT — attack holds
+
+**Gate is partly physics, partly post-hoc patch.**
+
+| Feature | Physics motivation | Fit smell |
+|---|---|---|
+| rise 2–16, jerk≤0.60, hf≤0.50, sign_changes≤3 | Real (step edges, noise, non-instant rise) | Low — kills step/pulse/random without tuning narrative |
+| overshoot≥0.03 | Underdamped claim | Medium — round, but model *forces* overshoot (ζ∈[0.28,0.5]) |
+| **tail_slope≥−0.030** | “Damped settles” | **High — added after triangle FAR 0.58** |
+
+Reproduced: **without** `tail_slope`, triangle FAR ≈ **0.585**, human FRR unchanged. Triangle per-condition rates: overshoot/jerk/hf ~pass; **tail alone → 0.00**. So triangle “PASS” is 100% that one threshold.
+
+Is settle-vs-descend “real physics”? **Yes as a description of underdamped step response to a held force.** **No as a free fact about grip/IMU reflexes.** A triangle is not “anti-physics”; return-to-baseline is equally physical (stretch reflex + relaxation). You added a feature that kills *your* triangle generator, not a theorem that macros cannot look human.
+
+**Smarter macros that beat the gate (constructed, not in the suite):**
+
+| Shape | FAR (n=400) | Verdict |
+|---|---|---|
+| **decayed-exp → raised plateau** | **0.965** | Trivial pass — not a reflex, just smooth rise + settle |
+| **smart triangle that settles** (smoothstep peak → exp to plateau) | **1.00** | One line of “learn the gate” |
+| **high-ζ 2nd-order** (same family, less ring) | **0.745** | Same model family, different params |
+| **ramp-then-hold** (+ small overshoot bump) | **0.362** | Non-reflex; still >> FAR_BAR 0.05 |
+| noisy-plateau | 0.105 | Borderline |
+| double-step / pure 1st-order / pure sigmoid | ~0 | Gate still kills *naive* edges |
+
+**Does this void the PASS?**  
+**Yes for any strong claim** (“shape separates macros”).  
+**No for a weak claim** (“shape separates *these four canned templates* under *settle-to-plateau*”).  
+
+Harness proves: **naive step/pulse/linear-triangle/random ≠ textbook underdamped step.** It does **not** prove shape resists an adversary who (a) settles to a plateau, or (b) copies the human generator. FLIP-B is correctly out of scope; **in-scope adversary that settles is not.**
+
+`tail_slope` threshold −0.030 sits between human mean ~0 and triangle mean ~−0.05 — classic “split the one failure.” Round-number dress does not make it pre-specified.
+
+---
+
+### 2. Human model too clean — yes; FRR is flattering
+
+`synth_human` is textbook underdamped 2nd-order + light tremor + small Gauss:
+
+- ζ ∈ [0.28, 0.5] → **forced** 15–40% overshoot  
+- Smooth analytic rise → **rise_sign_changes ≈ 0** (mean 0.0 on 100 draws)  
+- Settles by construction → **tail_slope ≈ 0**  
+- Failures are almost all **hf_ratio just over 0.50** (noise tails), not biomechanical mess
+
+Live FRR ~0.015–0.025 (hash seed variance; see §4), not “hard human.” A return-to-baseline human-like curve I built gets **FRR ≈ 0.35** under the same gate — so the **low FRR is model-conditioned**, not evidence real reflexes clear the bar.
+
+Real Edge IMU reflex: voluntary co-contraction, gravity/posture, multi-peak, partial relaxation, pad coupling — none of that is in the generator. **FRR 0.012 overstates distinctiveness.**
+
+---
+
+### 3. Caveat 2 — under-weighted relative to the headline
+
+Audit body is better than the title:
+
+- Body: triangle closed only because settle; caveat 2 names the assumption.  
+- **Headline: “Result — shape separates all four canned classes” + PASS**
+
+Without settle-to-plateau the **PASS is false** (triangle FAR ~0.58). If real reflexes **return-to-baseline**, either:
+
+- keep `tail_slope` → **human FRR blows up**, or  
+- drop it → **triangle FAR returns**
+
+So caveat 2 is not a footnote; it is **the load-bearing conditional.**
+
+Honest headline:
+
+> **Shape separates IFF (a) adversary is naive canned + (b) human settles-to-plateau — (b) UNKNOWN until rung 2.**
+
+“Shape is a viable discriminator → rung 2 justified” is still OK as **engineering justification for capture**, not as a **separability result**.
+
+---
+
+### 4. Correctness / report bugs
+
+1. **`hash(cls)` in `class_pass_rate`** — `seed ^ hash(cls) & 0xFFFFFFFF` uses Python’s **salted** `str` hash. FRR/FAR **not stable across processes**; doc’s 0.012 vs live 0.015/0.025. `test_deterministic_under_seed` only same-process. **Fix:** `zlib.adler32(cls.encode())` or fixed map — not `hash()`.
+
+2. **`rise_samples`:** `range(pidx + 1)` is `0..pidx` — OK. No div-by-zero: `amp or 1e-9`, `e1 or 1e-9`. Flat line fails closed. **No crash bugs.**
+
+3. **`overshoot_ratio` mis-semantics:** triangle mean overshoot **0.73** is not “overshot then settled”; it is **peak high + tail still low (descending)**. Feature double-counts settle with `tail_slope` and **would also fire on return-to-baseline “humans.”** Label/claim oversells “underdamped overshoot.”
+
+4. **`rise_decay_asym` computed, never gated** — dead; fine, not a claim bug.
+
+5. **Report claim string** correctly says synthetic / not HIL / not FLIP-B; **does not** condition on settle-to-plateau (code comment does; `separability_report()["claim"]` does not).
+
+6. No test that a **settling non-human** fails — only that triangle’s tail is more negative. Circularity untested by design.
+
+---
+
+## VERDICT: **SHIP-WITH-FIX**
+
+**Ship the harness** as a de-risk artifact (naive canned shapes, justification to build rung-2 capture).  
+**Do not ship the audit headline / PASS framing as written.**
+
+**Smallest must-fix (claim demotion only):**
+
+1. Title/result: not “shape separates” →  
+   **“Naive canned shapes separable under settle-to-plateau model (conditional PASS).”**  
+2. Elevate caveat 2 to **result condition**, not bullet under “what PASS does not mean.”  
+3. Explicitly: **does not bound settling adversaries** (decayed-exp / ramp-hold / smart-triangle-settle FAR ≫ 0.05).  
+4. Optional but cheap: replace `hash(cls)` so banked FRR is reproducible; re-measure FRR once.
+
+**Not BLOCK** — no FROZEN/PoAC/presence enablement; scope comments mostly honest; triangle post-mortem is documented.  
+**Not SHIP as-is** — circularity is real; PASS is overfit to four self-authored macros + one post-hoc feature; honest result is **weaker** than “shape separates.”
+
+**Bottom line:** P-WAVE-0 shows **textbook underdamped ≠ step/pulse/linear-triangle/random**, not that **waveform shape is a robust FLIP-A discriminator**. Rung 2 is still the right next spend **to test the settle assumption**, not because separability is proven.

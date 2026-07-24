@@ -165,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report = assemble_watch_report(
         cycle=args.cycle, cycle_date=args.date, fetched=fetched,
+        repo_root=_REPO_ROOT,
     )
 
     if args.stdout:

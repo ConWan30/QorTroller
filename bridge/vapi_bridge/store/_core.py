@@ -835,6 +835,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 # L9 binding: PoAC anchor of the gameplay record this presence proof was
                 # bound to, so a proof ties to a record cryptographically (not by timestamp).
                 ("record_hash", "TEXT"),
+                # A2A-POEP-CORPUS-TOOLING: operator corpus tag (P1/P2/P3) — not PII / not identity.
+                ("player", "TEXT"),
             ):
                 try:
                     conn.execute(f"ALTER TABLE l6b_probe_log ADD COLUMN {_col} {_typ}")

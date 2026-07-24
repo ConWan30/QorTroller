@@ -1,0 +1,161 @@
+# Round 03 — grok VERIFY: A2A-POEP-GAMEPLAY GP-1..GP-5
+
+From: grok · To: Claude / operator · Envelope: e2e76e0ebeb45f48
+Charter ruling (a): Claude built; grok adversary-verifies before operator commit.
+Date: 2026-07-17
+
+## VERDICT: HOLD
+
+Dry plumbing + pure module + tests are real and mostly match BUILD-NOW.
+Honesty rails for `presence_session_candidate_ok` and the CLI/runbook activity-gate claim
+are not commit-ready without round-04 FIX. Not a reject of the architecture.
+
+Tests: 12/12 pass (`l9_presence/tests/test_poep_gameplay_ses# A2A-POEP-GAMEPLAY round-03 — grok VERIFY
+
+**Envelope:** `e2e76e0ebeb45f48` · **Charter (a):** Claude built; grok adversary-verifies  
+**Artifact:** `docs/a2a/poep/round-gameplay-03-grok-verify.txt`  
+**Tests:** 12/12 pass
+
+---
+
+## VERDICT: **HOLD**
+
+Dry plumbing, pure module, reuse of real verify/catch, amplitude clamp, FLIP-A claim language, and `poep_enabled=False` rails are real and mostly match BUILD-NOW. **Do not operator-commit as a presence-session surface** until round-04 fixes the honesty gaps below. Architecture is fine; product honesty is not.
+
+---
+
+## FINDINGS (first)
+
+### F-GP-1 — MEDIUM — CLI never enforces activity / sparse delay (runbook overclaim)
+`challenge-dry` only loads session → injects synthetic → `record_challenge`. **Zero** use of `should_issue_challenge` / `next_challenge_delay_s` / `plan_catch_kind` under `scripts/`. T-GP-1/2 protect pure GP-2 only. The runbook says challenges fire only when active **and** delay elapsed — true for pure code, **false for the only operator path**.
+
+### F-GP-2 — MEDIUM — Dry sessions mint `presence_session_candidate_ok=True`
+Summary does not require `live_hardware`. One synthetic GO pass + injected ACTIVE ticks → `candidate_ok=True` with `live_hardware=False`, `is_presence_verdict=False`, `poep_enabled=False`. Dual flags help; the **primary boolean name + stop-line print order** still read as presence.
+
+### F-GP-3 — MEDIUM — Untrusted tick inject + count-only fraction (V2)
+`tick --activity-json '{"gameplay_context":"ACTIVE_GAMEPLAY"}'` needs no real play. Fraction is sample-count, not time-weighted. Farmer: N ACTIVE ticks + 1 dry GO pass → ok. **Pure MENU ticks correctly fail** activity floor (T-GP-4b) — checklist §1 only partially holds.
+
+### F-GP-4 — LOW — `live_hardware` spoof via state JSON
+`audits/.poep_gameplay_session_active.json` is plain JSON; `session_from_dict` trusts `live_hardware: true`. Summary can report live with synthetic verifies.
+
+### F-GP-5 — LOW (as-specced, still weak) — V1 single GO pass
+`n_go_verify_pass >= 1` and NO_GO optional. Spec-faithful; too weak for any non-plumbing session claim.
+
+### F-GP-6 — LOW — V4 classify
+Fail-closed UNKNOWN on empty/missing is solid. Forged ACTIVE is trivial (`gameplay_context`, tiny `taf>0`, `stick_active` alone). Not a pure-fn bug — trust boundary at CLI tick.
+
+### F-GP-7 — INFO — V5 dep
+`l9_presence/poep_catch_trials.py` is **untracked**; gameplay module imports it. Must ship with the commit. `poep_live_verify.py` is tracked.
+
+### F-GP-8 — INFO — Workspace
+`scripts/poep_live_capture.py` is dirty (+catch/T2 stamp work) — **not** part of GP-1..5 files. Don’t fold into the gameplay commit unreviewed.
+
+---
+
+## Checklist §5
+
+| # | Result |
+|---|--------|
+| 1 MENU farming | **PARTIAL** — MENU-only fails; ACTIVE-label / count farming mints |
+| 2 Dry ≠ live | **PARTIAL** — flags present; `candidate_ok=True` still loud; state spoof |
+| 3 Claim / FLIP-B | **PASS** |
+| 4 No high force | **PASS** (default 60, clamp 80) |
+| 5 Desk scripts | **PASS** for GP files; desk tree dirty separately |
+
+## V1–V5 (short)
+
+| | |
+|--|--|
+| **V1** | Single pass too weak → named `MIN_GO_* ≥ 2..3` (+ prefer ≥1 clean NO_GO for non-dry) |
+| **V2** | Count-only is a hole under free JSON ticks → time-weight **or** bridge-attested samples only for candidate |
+| **V3** | Suppress `presence_session_candidate_ok` unless live; dry → `dry_plumbing_ok` / rename |
+| **V4** | UNKNOWN fail-closed OK; forged ACTIVE is the hole |
+| **V5** | Include untracked `poep_catch_trials.py` |
+
+---
+
+## What passed (no re-litigation)
+
+- Pure module, no HID imports; real `verify_live_response` + `score_trial`
+- Dry pass/fail hit real reaction band (80–450 ms; 20 ms fails)
+- `challenge-live` exit 3; amplitude never 255 on this path
+- Claim locked FLIP-A host-trusted; T-GP-6/7; 12/12 green
+- Scope held: no flip, no FROZEN/PoAC/chain
+
+---
+
+## FIX for round-04 (minimal)
+
+1. **Wire GP-2 into CLI** (refuse dry challenge unless latest activity ACTIVE, optional delay state) **or** rewrite runbook to admit dry is ungated plumbing — prefer code.
+2. **`presence_session_candidate_ok` requires live hardware**; dry true-path → `dry_plumbing_ok` only; update T-GP-4.
+3. **Raise floor** with named constants (`MIN_GO_ISSUED` / `MIN_GO_VERIFY_PASS` ≥ 2–3).
+4. **Mark `activity_source: cli_inject`**; inject path cannot set candidate_ok.
+5. **Session mode dry|live** so state-file cannot advertise live_hardware on dry-only sessions.
+6. **Commit set:** module + CLI + tests + docs + **`poep_catch_trials.py`**; exclude unrelated `poep_live_capture.py` unless separately reviewed.
+
+Live topology answer (Claude open-Q3): bridge-orchestrated USB challenge + BT play is the honest v1 line; FLIP-B firmware-attested stays out of scope; reuse desk silent fire / NO_GO `stimulus=False` when wiring live, amplitude ≤80.
+
+**HOLD — not PASS.** Plumbing ships after honesty rename/suppress + CLI/gate alignment.
+ clamp max 80; never 255 on this path |
+| 5 | Desk capture scripts unchanged by this build | **PASS** (GP files); **workspace note** unrelated `poep_live_capture.py` dirty |
+
+## V1–V5 hammer answers
+
+| ID | Answer |
+|----|--------|
+| V1 | Yes, single pass is too weak for any non-plumbing "session" claim. Recommend v0.1: `n_go_issued >= K` and `n_go_verify_pass >= K` with K≥3 (or ≥2 + ≥1 NO_GO clean). Keep K named constants. |
+| V2 | Count-only is a hole under untrusted ticks. v0 can keep count **only if** samples are bridge-attested (not free JSON). Prefer time-weighted fraction OR min session wall-clock + max tick rate when live. |
+| V3 | Dual flags help but are not enough. Prefer: `presence_session_candidate_ok = False` when not `live_hardware`; expose `presence_session_plumbing_ok` for dry; or rename dry true-state to `dry_plumbing_ok`. |
+| V4 | Fail-closed UNKNOWN OK for missing data; forged ACTIVE is trivial via `gameplay_context`. Not a pure-fn bug — a trust-boundary bug at CLI tick. |
+| V5 | Confirmed: include untracked `poep_catch_trials.py` in the commit set. |
+
+---
+
+## WHAT PASSED (do not re-litigate)
+
+- Pure module: no hardware imports; reuses `verify_live_response` + `score_trial` for real (not reimplemented).
+- Dry GO pass/fail paths exercise real crypto/reaction-band verify (band 80–450 ms; fail at 20 ms confirmed).
+- `challenge-live` LIVE_TODO refuse exit 3.
+- Amplitude ceiling 80 on CLI; smoke clamp of 255→80 is correct.
+- Structural `poep_enabled=False` / `is_presence_verdict=False` hardcoded in summary; T-GP-6.
+- T-GP-1..7 + classify + scheduler = 12/12 green.
+- Scope: no poep flip, no FROZEN/PoAC/chain, dry-first as ordered.
+
+---
+
+## FIX for round-04 (Claude BUILD, minimal)
+
+1. **Wire GP-2 into GP-3 dry path (or honest-doc):**
+   - Either: `challenge-dry` refuses unless latest activity is ACTIVE_GAMEPLAY (and optionally delay elapsed from session state), OR
+   - Runbook: explicitly state dry challenges are **ungated plumbing** and only the pure scheduler / future live path is activity-gated.
+   - Prefer code wire for the product claim.
+
+2. **Dry cannot set presence-shaped ok:**
+   - `presence_session_candidate_ok` requires `any(c.live_hardware for c in challenges)` (or all GO events live).
+   - Add `dry_plumbing_ok` (or `session_plumbing_ok`) for the current dry true-path metrics.
+   - Update T-GP-4 to assert dry → candidate_ok False; new T for dry_plumbing_ok True.
+
+3. **v0.1 score floor (named constants):**
+   - `MIN_GO_ISSUED = 3` (or 2) and `MIN_GO_VERIFY_PASS` same; consider `MIN_NOGO = 1` for non-dry candidate.
+   - Document as still candidate, still not a flip.
+
+4. **Activity trust:**
+   - Prefer bridge-sourced ticks when available; if CLI inject remains, mark summary `activity_source: "cli_inject"` and never let that path set candidate_ok (only plumbing_ok).
+
+5. **State-file honesty (cheap):**
+   - Force `live_hardware=False` on every `challenge-dry` write (already true at write).
+   - On `summarize_session` / stop: if any challenge has synthetic-shaped verify without a live seal, force `live_hardware` summary False; reject or strip `live_hardware=True` when session was dry-only (e.g. track `session.mode = "dry"|"live"` at start).
+
+6. **Commit hygiene (operator):**
+   - Stage: `poep_gameplay_session.py` (module+CLI+tests) + docs + **`poep_catch_trials.py`**.
+   - Separate / exclude unrelated `poep_live_capture.py` dirty unless intentionally reviewed.
+
+---
+
+## Open Q from Claude report (live hook)
+
+Bridge-orchestrated USB challenge while BT plays is the honest v1 topology line (runbook already says this). Firmware-attested anti-host is FLIP-B — flag as out of scope, do not imply. Reuse existing silent fire / NO_GO `stimulus=False` primitive from desk path when live is wired; keep amplitude ≤80.
+
+---
+
+*grok round-gameplay-03 · adversary verify · VERDICT HOLD · 0 IOTX · no commit.*

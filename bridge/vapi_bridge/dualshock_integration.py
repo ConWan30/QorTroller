@@ -194,6 +194,180 @@ def _rating_tier(rating: int) -> str:
 # ---------------------------------------------------------------------------
 # SkillOracle tracker — mirrors contract logic locally, submits on-chain
 # ---------------------------------------------------------------------------
+# F-RIG27-8: DualSense sensor timestamp is a uint32 counter at ~3 MHz (documented ~0.33 µs/tick;
+# the raw drain thread + poll() both read offset 28). 3000 ticks/ms matches the existing "@3MHz"
+# codebase convention; the ~1% vs the 0.33µs figure is immaterial for the 80-350ms in-band check
+# (this is a robustness companion, NOT a corpus input). The counter wraps every 2^32/3000 ≈ 23.9 min.
+_DEVICE_TS_TICKS_PER_MS: float = 3000.0
+_U32: int = 1 << 32
+
+
+def _rp_device_latency_ms(crossing_device_ticks, probe_device_ticks, max_ms: float = 500.0) -> float:
+    """F-RIG27-8: DEVICE-clock reaction latency (ms) from raw uint32 sensor ticks (grok rplatency-r04).
+
+    latency_ms = wrap_u32(crossing_ticks - probe_ticks) / 3000  — the device sensor timestamp is immune
+    to the RP frame-PROCESSING lag that inflates the bridge t_mono canonical (rig-3: real reflexes
+    measured 594-4600ms via t_mono, never in the 80-280ms band). Fail-closed to -1 on any rail miss:
+      (1) BOTH ends required (>0; 0 = absent, e.g. len(states)<32 or first-frame fallback);
+      (2) inputs are non-negative uint32 ticks (negative/non-numeric -> reject);
+      (3) modular u32 wrap on the raw tick diff (a real ~24-min rollover recovers a small span; a
+          FROZEN/duplicate stream gives span 0 -> reject; a stale/regressed ts wraps to a huge span);
+      (4) resulting span in (0, max_ms] — implausible -> reject.
+    The caller falls back to the t_mono canonical when this returns -1. NEVER fabricates a latency; the
+    analyzer + the 220-usable corpus + the band are byte-untouched — this companion clock is used ONLY
+    on the nonce-bound RP verify path.
+    """
+    try:
+        c = float(crossing_device_ticks)
+        p = float(probe_device_ticks)
+    except (TypeError, ValueError):
+        return -1.0
+    if c <= 0.0 or p <= 0.0:                 # both ends required (0 = absent)
+        return -1.0
+    if c >= _U32 or p >= _U32:               # not a valid uint32 tick -> reject
+        return -1.0
+    span_ticks = (c - p) % _U32              # wrap-safe: real rollover -> small span; frozen -> 0
+    span_ms = span_ticks / _DEVICE_TS_TICKS_PER_MS
+    if not (0.0 < span_ms <= max_ms):        # plausible reaction span only
+        return -1.0
+    return span_ms
+
+
+def _build_l6b_report(frame, accel_scale: float, t_mono: float | None = None) -> dict:
+    """F-RIG27-8: build one L6b analyzer report dict from a controller frame (InputSnapshot).
+
+    Pure extraction of the session-loop entry build so the exact device-clock wiring
+    (`sensor_ts_ticks` -> `device_ts` as raw uint32 ticks) is PRODUCTION-covered by tests, not just a
+    re-implemented ternary (grok rplatency-r04 F3: a silent getattr-name typo must fail a test). accel is
+    scaled to raw LSB (InputSnapshot stores g); `t_mono` defaults to time.monotonic() per-frame, matching
+    the loop; `device_ts` is 0 when the frame lacks sensor_ts_ticks -> the resolve helper falls back to t_mono.
+    """
+    return {
+        "ax": getattr(frame, "accel_x", 0) * accel_scale,
+        "ay": getattr(frame, "accel_y", 0) * accel_scale,
+        "az": getattr(frame, "accel_z", 0) * accel_scale,
+        "t_mono": time.monotonic() if t_mono is None else t_mono,
+        "device_ts": int(getattr(frame, "sensor_ts_ticks", 0) or 0),
+        # (ii) R2-onset study (grok r2onset-01 Increment-0): carry the RAW R2 analog channel (0..255)
+        # + L2 + the adaptive-trigger mode so the OFFLINE actuator-coupling study can time the reaction
+        # on the R2 channel with the live device clock. The reflex analyzer IGNORES these keys (reads
+        # only ax/ay/az/t_mono/device_ts) — pure pass-through instrumentation, non-gating, no corpus/verdict.
+        "r2": int(getattr(frame, "r2_trigger", 0) or 0),
+        "l2": int(getattr(frame, "l2_trigger", 0) or 0),
+        "r2_mode": int(getattr(frame, "r2_effect_mode", 0) or 0),
+    }
+
+
+def _classify_l6b_batch(
+    frames: list,
+    collect_t_mono: list,
+    accel_scale: float,
+    pending: dict | None,
+) -> tuple[list, list]:
+    """F-RIG27-8 continuation (ASM-Loop 2026-07-20, grok HOLD r03/r05): classify one
+    `_poll_frames()` batch into (pre_entries, post_entries) for the L6b pre/post buffers.
+
+    Pure extraction of the session-loop's L6b entry-build + pre/post routing (same
+    production-coverage rationale as `_build_l6b_report`'s extraction: a re-implemented
+    inline version in a test is not the same code path as production).
+
+    Two fixes over the pre-2026-07-20 behavior (which routed on `pending is None` alone):
+    1. Each entry's `t_mono` is the frame's actual HID-COLLECTION time (`collect_t_mono[i]`),
+       not the time this function happens to run — `_poll_frames` returns only after its full
+       ~1s window, so classification-time stamping inflated every measured latency by up to
+       that window (grok r03 F1/F2).
+    2. Pre-fire contamination gate: when `pending` is armed, a frame is still routed to
+       `pre_entries` if its OWN collection time predates `pending["probe_ts"]` — a fire that
+       arms mid-batch (concurrent with an in-flight `_poll_frames()` call) must not
+       retroactively reclassify already-collected pre-fire frames as post-fire.
+
+    `collect_t_mono` must be 1:1 index-aligned with `frames` (as `_poll_frames` produces it).
+    A length mismatch degrades PER-FRAME to the classification-time fallback (both the stamp
+    fix and the contamination gate are no-ops for that frame) and is logged — this must never
+    silently disable the gate without a trace, per grok r03 F3.
+    """
+    if len(collect_t_mono) != len(frames):
+        log.warning(
+            "L6B: frame_collect_t_mono length mismatch (%d stamps for %d frames) — "
+            "falling back to classification-time stamps for this batch (gate degraded)",
+            len(collect_t_mono), len(frames),
+        )
+        collect_t_mono = [None] * len(frames)
+    pre_entries: list = []
+    post_entries: list = []
+    for _f, _t_mono in zip(frames, collect_t_mono):
+        _entry = _build_l6b_report(_f, accel_scale, t_mono=_t_mono)
+        if pending is None:
+            pre_entries.append(_entry)
+        elif _t_mono is not None and _entry["t_mono"] < pending["probe_ts"]:
+            pre_entries.append(_entry)
+        else:
+            post_entries.append(_entry)
+    return pre_entries, post_entries
+
+
+def _stamp_frame_collection_times(frames: list, collect_t_mono: list) -> None:
+    """C-fail-4 fix (docs/a2a/live-l2b-unit-scale-investigation/c-fail-4-fix-scope.md):
+    stamp each snap's timestamp_ms from its REAL HID-collection time, before the
+    L2B/L2C oracle-feeding loops run.
+
+    InputSnapshot has no timestamp_ms field. ImuPressCorrelationOracle.push_snapshot()
+    and StickImuCorrelationOracle.push_snapshot() both fall back to
+    time.monotonic()*1000.0 when the attribute is absent — fine for a real-time
+    caller (one push_snapshot() per actual poll), but `_session_loop` feeds an
+    ALREADY-COLLECTED ~1s batch through both oracles in a tight, synchronous loop
+    that completes in low-single-digit milliseconds. Every fallback timestamp in
+    that loop then clusters within a few ms of each other instead of spanning the
+    true ~1s the frames were actually collected over, which deterministically
+    breaks L2B's 5-80ms precursor window (empirically confirmed,
+    c-fail-4-timing-repro-results.md: batch-style processing collapses a 1000ms
+    real span to 1.08ms and misses every precursor; realtime-style processing,
+    with real per-frame timing, spans 1079ms and detects all of them).
+
+    `_poll_frames()` already computes the correct per-frame collection time
+    (`collect_t_mono`, "stamped the instant the HID read returns" — the same
+    source `_classify_l6b_batch` already trusts for the L6B path) but never
+    wired it into L2B/L2C until now.
+
+    Mutates `frames` in place (InputSnapshot is a plain, non-frozen, non-slotted
+    dataclass — setting an attribute it doesn't formally declare works and is
+    immediately visible to `getattr(snap, "timestamp_ms", None)` in both
+    oracles). No effect on the 228B PoAC wire or any FROZEN commitment:
+    `serialize()`, `_make_record()`, `_build_ewc_session_vec()`, and
+    `AntiCheatClassifier.extract_features()` were all checked and none of them
+    read `snap.timestamp_ms`.
+
+    `collect_t_mono` must be 1:1 index-aligned with `frames` (as `_poll_frames`
+    produces it). A length mismatch is a no-op (frames keep whatever default/
+    absent timestamp_ms they had) and is logged — must never silently degrade
+    without a trace, matching `_classify_l6b_batch`'s discipline for the same
+    `collect_t_mono` source.
+    """
+    if len(collect_t_mono) != len(frames):
+        log.warning(
+            "L2B/L2C: frame_collect_t_mono length mismatch (%d stamps for %d frames) — "
+            "skipping timestamp stamping for this batch (oracles fall back to "
+            "call-time monotonic(), same as before this fix)",
+            len(collect_t_mono), len(frames),
+        )
+        return
+    for _snap, _t_mono in zip(frames, collect_t_mono):
+        if _t_mono is not None:
+            _snap.timestamp_ms = _t_mono * 1000.0
+
+
+class PoepFireRefused(RuntimeError):
+    """POEP-HID-RING: a nonce-bound fire request was refused (gate closed / busy / bad input).
+
+    Fail-closed refusals from DualShockTransport.request_poep_nonce_probe. `status_code` maps the
+    refusal onto the operator endpoint's HTTP surface (503 gate/unavailable, 409 busy, 400 bad input).
+    """
+
+    def __init__(self, msg: str, status_code: int = 503) -> None:
+        super().__init__(msg)
+        self.status_code = int(status_code)
+
+
 class _SkillOracleTracker:
     """
     Local SkillOracle state tracker.
@@ -404,10 +578,38 @@ class DualShockTransport:
         # internal read loop.  Single producer / single consumer => safe with
         # CPython's GIL; no lock needed for the increment-only int.
         self._hid_report_total      = 0
+        # F-R2ONSET-1 read-at-fire (C): the raw drain thread (~1 kHz, one report per read — NOT
+        # burst-drained) keeps this fresh with the pad's latest offset-28 device tick. The nonce-bound
+        # fire reads it at the fire instant for a gold-standard t0 in device space (immune to the
+        # session-loop pre-buffer staleness that F-R2ONSET-1 exposed). Single-writer int, GIL-safe.
+        self._last_raw_device_ts: int = 0
+        # C-precision: monotonic wall time when _last_raw_device_ts was last written, so the fire can
+        # measure the read's ACTUAL staleness (fire_mono - drain_mono) -> a CERTIFIED read-at-fire
+        # uncertainty bound instead of the median-frame-gap proxy (grok C-verify residual).
+        self._last_raw_wall: float = 0.0
+        # DIAG (r2-blind investigation): freshest RAW R2 byte (data[6]) from the drain, to compare against
+        # the session-loop ds.state.R2_value path that populates the dump. Distinguishes a code read-path
+        # issue (drain sees R2, ds.state doesn't) from a true topology blind (both 0).
+        self._last_raw_r2: int = 0
         self._last_hid_report_total = 0
         self._hid_counter_thread    = None
         self._hid_counter_running   = False
         self._hid_counter_restarts  = 0  # Phase 235-CONTENTION: self-healing retry count
+        # ATTEST-FEEDS (F-RIG27-1, first CFB 27 rig): the counter thread can be ALIVE but SILENT
+        # (0 reports under the RP topology while the main reader mints records) — aliveness != -
+        # productivity, so the len(frames) fallback never engaged and PCC read a fabricated 0
+        # (false-negative DISCONNECTED). These track silent iterations, expose the stall honestly,
+        # and let the session loop force the drain loop through its existing self-healing re-open.
+        self._hid_counter_silent_iters = 0
+        self._hid_counter_force_reopen = False
+        self._rate_counter_stalled  = False
+        self._rate_source           = "hid_interface3"   # | "main_reader_frames"
+        # ATTEST-FEEDS (F-RIG27-2): rolling window of the per-iteration live trigger_active bit
+        # (the same bit already computed for the PCC SPC binding) — surfaces a LIVE bridge-attested
+        # activity fraction on capture-health (no adjudicator dependency). ~20 iters ~= the GAD
+        # evidence-window spirit. The no-frames path appends 0 so a disconnect DECAYS the window
+        # (a frozen window must never hold a stale ACTIVE fraction).
+        self._live_activity_window: deque = deque(maxlen=20)
         # Controller hot-plug auto-reconnect (USB unplug/replug recovery without a bridge restart).
         # The session loop counts consecutive poll failures and, past the policy threshold, re-opens
         # the reader on a capped backoff (off the event loop). Default-on; disable via cfg.
@@ -594,6 +796,12 @@ class DualShockTransport:
         self._bt_presence_verifier = None   # BluetoothPresenceVerifier or None
         self._bt_presence_score: float = 0.5  # last overall_score; 0.5 = neutral/USB
         self._bt_seq_bytes_batch: list = []   # BT sequence counter bytes from last _poll_frames()
+        # F-RIG27-8 continuation (ASM-Loop 2026-07-20, grok HOLD r03): per-frame COLLECTION-time
+        # monotonic stamps from the last _poll_frames() batch, 1:1 aligned with the returned frames
+        # list. Consumers that need "when was this frame actually read off HID" (not "when was it
+        # classified") pass the matching entry into _build_l6b_report(t_mono=...) instead of letting
+        # it default to time.monotonic() at classification time — the bug the audit surfaced.
+        self._frame_collect_t_mono: list = []
 
         # --- Phase 51: Game-Aware Profiling ---
         self._game_profile = None           # GameProfile | None, set in _init_hardware
@@ -618,6 +826,9 @@ class DualShockTransport:
         _need_l6_driver = (
             getattr(self._cfg, "l6_challenges_enabled", False)
             or getattr(self._cfg, "l6b_enabled", False)
+            # POEP-CAMPAIGN R1: the ring's nonce-bound fires need the driver (delivery only —
+            # the humanity formula gates L6 on the ANALYZER, never the driver; see V3 pin below)
+            or getattr(self._cfg, "poep_campaign_mode", False)
         )
         if _need_l6_driver:
             try:
@@ -675,7 +886,16 @@ class DualShockTransport:
         self._cco_l6b_skip_reason = None
         # CCO Phase D: PoEP runner inputs (dormant until poep_enabled)
         self._poep_runner_inputs = None
-        if self._l6b_enabled:
+        # POEP-HID-RING: single-slot claim while a nonce-bound fire is between its busy-check and its
+        # pending-arm (the await inside request_poep_nonce_probe yields the loop; this flag keeps the
+        # auto-tick dispatcher from arming a second probe in that window — one stimulus at a time).
+        self._poep_fire_inflight = False
+        # POEP-CAMPAIGN (grok campaign-r02, operator pick 1b): N-growth carve-out. Inits ONLY the ring
+        # prerequisites (analyzer+driver+endpoint) while L6B_ENABLED stays false — the auto-tick and
+        # the humanity-formula contribution remain STRICTLY l6b_enabled-gated (pins V1/V3/V4 below).
+        # The hard-rule flag never flips: the rule is satisfied by construction, not lifted.
+        self._poep_campaign_mode: bool = getattr(self._cfg, "poep_campaign_mode", False)
+        if self._l6b_enabled or self._poep_campaign_mode:
             try:
                 _proj_root_l6b = str(Path(__file__).parents[2])
                 if _proj_root_l6b not in sys.path:
@@ -686,7 +906,13 @@ class DualShockTransport:
                     human_max_ms=getattr(self._cfg, "l6b_human_max_ms", 280.0),
                     accel_delta_threshold_lsb=getattr(self._cfg, "l6b_accel_delta_threshold_lsb", 500.0),
                 )
-                log.info("Phase 63: L6b Neuromuscular Reflex enabled")
+                if self._l6b_enabled:
+                    log.info("Phase 63: L6b Neuromuscular Reflex enabled")
+                else:
+                    log.info(
+                        "POEP-CAMPAIGN: L6b analyzer initialized for RING CAPTURE ONLY "
+                        "(l6b_enabled stays False; scoring + auto-tick stay gated)",
+                    )
             except Exception as _l6b_exc:
                 log.warning("Phase 63: L6b init failed (non-fatal): %s", _l6b_exc)
                 self._l6b_enabled = False
@@ -813,10 +1039,30 @@ class DualShockTransport:
                                  or getattr(self._cfg, "retina_hid_events_enabled", False))
                                 and self._retina_game_capture is not None)
                     while self._hid_counter_running:
+                        # ATTEST-FEEDS (F-RIG27-1): the session loop sets this when the counter is
+                        # ALIVE but SILENT (reads returning empty under RP while the main reader
+                        # delivers). Break to the finally -> handle closes -> the outer self-healing
+                        # loop re-enumerates + re-opens. Cheap attr check on the ~1kHz thread.
+                        if self._hid_counter_force_reopen:
+                            self._hid_counter_force_reopen = False
+                            self._hid_counter_restarts += 1
+                            log.warning("ATTEST-FEEDS: forced hid-counter re-open "
+                                        "(alive-but-silent; restart #%d)", self._hid_counter_restarts)
+                            break
                         data = handle.read(128, timeout_ms=200)
                         if data:
                             # CPython GIL makes single-producer safe without lock.
                             self._hid_report_total += 1
+                            # F-R2ONSET-1 read-at-fire (C): keep the freshest device tick UNCONDITIONALLY
+                            # (independent of _push_l2 / retina — the drain reads every report at ~1 kHz),
+                            # so the nonce-bound fire can read a gold-standard t0 even in LEAN mode.
+                            if len(data) > 31:
+                                self._last_raw_device_ts = (
+                                    data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
+                                )
+                                self._last_raw_wall = time.monotonic()   # C-precision: read timestamp
+                            if len(data) > 6:
+                                self._last_raw_r2 = data[6]   # DIAG: raw R2 from the drain (vs ds.state)
                             if _push_l2 and len(data) > 31:
                                 _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
                                 _now_wall = time.time() * 1000.0
@@ -1634,6 +1880,10 @@ class DualShockTransport:
                 await self._handle_poll_failure("poll_error")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
 
+            # C-fail-4 fix: stamp real per-frame collection time onto each snap BEFORE the
+            # L2B/L2C oracle-feeding loops run below — see _stamp_frame_collection_times().
+            _stamp_frame_collection_times(frames, getattr(self, "_frame_collect_t_mono", []))
+
             # Phase 235-PCC-SPC: read previous-cycle game-context for SPC haptic-tolerance binding.
             # The previous cycle's haptic event temporally precedes the current rate observation,
             # which is the correct semantic for the binding (motor fires → bandwidth dip after).
@@ -1652,6 +1902,9 @@ class DualShockTransport:
                 log.debug("Session loop iter=%d: no frames, sleeping", _loop_iter)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 1
                     self._pcc_monitor.update_sample(0, self._interval, **_spc_kwargs)
+                # ATTEST-FEEDS (F-RIG27-2 fabrication pin): a disconnect DECAYS the live activity
+                # window — a frozen window must never hold a stale ACTIVE fraction.
+                self._live_activity_window.append(0)
                 await self._handle_poll_failure("no_frames")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
 
@@ -1662,21 +1915,10 @@ class DualShockTransport:
                 self._reconnect_attempts = 0
 
             # Phase 234.7 Layer 1 — report poll rate for PCC.
-            # Phase 235-PCC-RATE-FIX: prefer the TRUE USB HID rate from the
-            # parallel hidapi counter on interface 3 (~1000 Hz on USB high-
-            # speed) over `len(frames)` (capped at ~120 Hz by the dt_ms=8
-            # sleep in _poll_frames, which is required to keep the L4
-            # tremor FFT bin spacing valid).  Falls back to len(frames) if
-            # the hidapi counter never started (no hidapi installed, or
-            # interface 3 unavailable).
-            if self._pcc_monitor is not None:
-                if self._hid_counter_thread is not None and self._hid_counter_thread.is_alive():
-                    _total = self._hid_report_total
-                    _delta = _total - self._last_hid_report_total
-                    self._last_hid_report_total = _total
-                    self._pcc_monitor.update_sample(_delta, self._interval, **_spc_kwargs)
-                else:
-                    self._pcc_monitor.update_sample(len(frames), self._interval, **_spc_kwargs)
+            # ATTEST-FEEDS (F-RIG27-1): extracted to _pcc_rate_feed — same counter-delta-vs-
+            # len(frames) preference PLUS silent-counter stall detection/healing (the alive-but-
+            # silent hole from the first CFB 27 rig) and the F-RIG27-2 live activity window append.
+            self._pcc_rate_feed(frames, _spc_kwargs)
 
             # VSD Cycle 25 tether prototype tick (after PCC so we know host_state context)
             # Only active if dual_grind_tether_enabled + typically when grind + EXCLUSIVE_USB.
@@ -2241,8 +2483,18 @@ class DualShockTransport:
             _p_l2c = _l2c_p_human  # already defaults to 0.5; phantom when L2C oracle is None
             # Phase 63: L6b is "active" once at least one probe has completed.
             # Until probe_count >= 1, l6b_p_human=0.5 neutral prior contributes no signal.
-            _l6_active  = self._l6_driver is not None
-            _l6b_active = self._l6b_analyzer is not None and self._l6b_probe_count >= 1
+            # POEP-CAMPAIGN formula pins (grok campaign-r02 V3+V1 — load-bearing):
+            # V3: L6 gates on the ANALYZER (constructed only under l6_challenges_enabled), NEVER the
+            #     driver — the driver also inits for L6b delivery + campaign fires, and gating on it
+            #     silently ran the L6-included formula with a neutral 0.5 (latent bug, now fixed).
+            # V1: the L6b contribution additionally requires l6b_enabled — campaign-mode probes grow
+            #     the corpus but NEVER feed the humanity score pre-N>=50 (the hard rule's quarantine).
+            _l6_active  = self._l6_analyzer is not None
+            _l6b_active = (
+                self._l6b_enabled
+                and self._l6b_analyzer is not None
+                and self._l6b_probe_count >= 1
+            )
             if _l6_active and _l6b_active:
                 # Both L6 + L6b active — 7-signal formula. Coefficients sum = 1.00.
                 _humanity_prob = (
@@ -2354,6 +2606,9 @@ class DualShockTransport:
                 "l6b_enabled":          self._l6b_enabled,
                 "l6b_probe_count":      self._l6b_probe_count,
                 "l6b_p_human":          self._l6b_p_human if self._l6b_probe_count > 0 else None,
+                # POEP-CAMPAIGN T1 honesty field: campaign state is visible, never conflated with
+                # enablement (l6b_enabled stays the hard flag; probe_count may grow under campaign).
+                "poep_campaign_mode":   self._poep_campaign_mode,
                 # CCO Phase B: T0 telemetry (read-only; non-gating)
                 "cco_t0_engine": (
                     self._cco_capability_report.t0_engine
@@ -2676,25 +2931,35 @@ class DualShockTransport:
                                     pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Phase 63: L6b Neuromuscular Reflex pre-buffer + probe window ---
-            if self._l6b_enabled and _l6b_applicable and frames:
+            # POEP-CAMPAIGN R3/R4: the ring (buffers + completion) must be LIVE under campaign mode or
+            # nonce-bound pendings never complete (orphaned Futures). The campaign path does NOT
+            # consult CCO applicability (the endpoint already verifies reader+ds); scoring stays gated.
+            _l6b_ring_live = (
+                (self._l6b_enabled and _l6b_applicable)
+                or (self._poep_campaign_mode and self._l6b_analyzer is not None)
+            )
+            if _l6b_ring_live and frames:
                 # L6bReflexAnalyzer expects raw accel LSB; InputSnapshot stores g only.
                 _l6b_accel_scale = float(
                     getattr(self._reader, "_accel_scale", None) or 8192.0
                 )
-                for _f in frames:
-                    _l6b_entry = {
-                        "ax": getattr(_f, "accel_x", 0) * _l6b_accel_scale,
-                        "ay": getattr(_f, "accel_y", 0) * _l6b_accel_scale,
-                        "az": getattr(_f, "accel_z", 0) * _l6b_accel_scale,
-                        "t_mono": time.monotonic(),
-                    }
-                    if self._l6b_pending is None:
-                        self._l6b_pre_buffer.append(_l6b_entry)
-                    else:
-                        self._l6b_post_buffer.append(_l6b_entry)
+                # F-RIG27-8 continuation (ASM-Loop 2026-07-20, grok HOLD r03/r05): classification
+                # extracted to _classify_l6b_batch (module-level, production-covered by tests) —
+                # collection-time t_mono stamping + pre-fire contamination gate. NOTE (grok r05 F7):
+                # on the common "already armed before this batch" path, routing and the
+                # frames_remaining decrement are numerically unchanged from the old behavior, but
+                # every entry's t_mono value now reflects collection time, not classification time —
+                # that VALUE change is the actual fix, not a no-op.
+                _pre_entries, _post_entries = _classify_l6b_batch(
+                    frames, self._frame_collect_t_mono, _l6b_accel_scale, self._l6b_pending,
+                )
+                self._l6b_pre_buffer.extend(_pre_entries)
+                self._l6b_post_buffer.extend(_post_entries)
                 # Check if capture window has closed
                 if self._l6b_pending is not None and self._l6b_analyzer is not None:
-                    self._l6b_pending["frames_remaining"] -= len(frames)
+                    # Decrement by frames actually routed to post this batch (not len(frames)) — a
+                    # contamination-gated pre-fire frame must not count toward the post-capture window.
+                    self._l6b_pending["frames_remaining"] -= len(_post_entries)
                     if self._l6b_pending["frames_remaining"] <= 0:
                         try:
                             _l6b_result = self._l6b_analyzer.analyze(
@@ -2708,6 +2973,29 @@ class DualShockTransport:
                                 _l6b_result.classification,
                             )
                             self._cco_reflex_verdict = _reflex_verdict
+                            # F-RIG27-8: prefer the DEVICE-clock reaction latency (crossing device_ts
+                            # minus the probe's device_ts) for the nonce-bound resolve - immune to the
+                            # RP frame-processing lag that inflates the t_mono canonical. Rails
+                            # fail-closed to -1 (both ends required + uint32-range + wrap-safe span in
+                            # (0, 500ms]) -> then the analyzer's latency_ms is used (honest). The device
+                            # clock only changes the latency_ms VALUE fed to the sealed verify when the
+                            # rails pass; the sealed band check still owns pass/fail. Corpus never sees it.
+                            # F-RIG27-8b: hoist both raw device ticks into locals so the resolve LOG
+                            # shows the EXACT values fed to _rp_device_latency_ms (no re-read/divergence).
+                            _cross_dev_ts = getattr(_l6b_result, "crossing_device_ts", -1.0)
+                            _probe_dev_ts = float(self._l6b_pending.get("poep_probe_device_ts", 0.0))
+                            _dev_lat = _rp_device_latency_ms(_cross_dev_ts, _probe_dev_ts)
+                            # POEP-HID-RING: resolve a nonce-bound fire with the MEASURED features
+                            # (raw pass-through; no band-fill — the sealed verify owns the verdict).
+                            # No-op for auto-tick probes (no poep_future on the pending).
+                            self._resolve_poep_fire(
+                                latency_ms=(_dev_lat if _dev_lat > 0.0 else _l6b_result.latency_ms),
+                                peak_lsb=_l6b_result.accel_delta_peak,
+                                precursor_gap_ms=None,
+                                device_latency_ms=_dev_lat,
+                                crossing_device_ts=_cross_dev_ts,
+                                probe_device_ts=_probe_dev_ts,
+                            )
                             log.debug(
                                 "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f reflex=%s",
                                 _l6b_result.latency_ms,
@@ -2728,8 +3016,15 @@ class DualShockTransport:
                                         cco_profile_id=(
                                             _cco_rep.profile_id if _cco_rep is not None else None
                                         ),
+                                        # POEP-CAMPAIGN (grok r02 C): nonce-bound/campaign fires stamp
+                                        # the ALLOWLISTED corpus policy so they COUNT toward the N>=50
+                                        # usable gate (the CCO T0 policy is denylisted by
+                                        # is_usable_reflex — inheriting it made campaign rows count 0).
                                         policy_ref=(
-                                            _cco_rep.policy_ref if _cco_rep is not None else None
+                                            "edge_operator_reflex_v1"
+                                            if (self._l6b_pending.get("poep_nonce")
+                                                or self._poep_campaign_mode)
+                                            else (_cco_rep.policy_ref if _cco_rep is not None else None)
                                         ),
                                         trigger_r2_at_probe=self._l6b_pending.get(
                                             "trigger_r2_at_probe"
@@ -2789,6 +3084,17 @@ class DualShockTransport:
                                     log.debug("Phase 63: L6b store insert failed (non-fatal): %s", _store_exc)
                         except Exception as _exc:
                             log.warning("Phase 63: L6b analysis failed (non-fatal): %s", _exc)
+                            # POEP-HID-RING: the force DID fire but scoring failed — resolve honestly
+                            # with no clean features (latency None -> client maps 0 -> verify fails).
+                            self._resolve_poep_fire(
+                                latency_ms=None,
+                                peak_lsb=0.0,
+                                precursor_gap_ms=None,
+                                error=f"l6b analysis failed (no score): {_exc!r}",
+                                probe_device_ts=float(
+                                    self._l6b_pending.get("poep_probe_device_ts", 0.0)
+                                ) if isinstance(self._l6b_pending, dict) else -1.0,
+                            )
                         finally:
                             self._l6b_pending = None
                             self._l6b_post_buffer = []
@@ -2891,6 +3197,8 @@ class DualShockTransport:
                 and _l6b_applicable
                 and self._l6b_analyzer is not None
                 and self._l6b_pending is None
+                # POEP-HID-RING: never race a nonce-bound fire that is mid-arm (one stimulus at a time)
+                and not getattr(self, "_poep_fire_inflight", False)
                 and self._l6b_loop_count % _l6b_interval == 0
                 and self._l6b_loop_count > 0
                 and self._reader and self._reader.ds
@@ -2898,6 +3206,10 @@ class DualShockTransport:
                 and _l6b_r2_quiet_ok
             ):
                 try:
+                    # POEP-HID-RING F-HIDRING-1: claim the single stimulus slot for the auto-tick's
+                    # OWN fire->arm window too (two-way exclusion — a poep request arriving during
+                    # this await must see busy, exactly as the auto-tick sees the poep window).
+                    self._poep_fire_inflight = True
                     _l6b_r2_force = int(
                         getattr(self._cfg, "l6b_probe_r2_force", 60)
                     )
@@ -2923,16 +3235,23 @@ class DualShockTransport:
                             self._l6_driver.clear_triggers(self._reader.ds)
                         ) if self._reader and self._reader.ds else None,
                     )
-                    self._l6b_pending = {
-                        "probe_ts": _probe_ts,
-                        "pre_reports": list(self._l6b_pre_buffer),
-                        "frames_remaining": int(350),  # 350ms capture window at ~1 report/ms
-                        "trigger_r2_at_probe": _l6b_r2_at_probe,
-                        "probe_r2_force": _l6b_r2_force,
-                        "probe_mode": _l6b_mode,
-                        "probe_hold_ms": _l6b_hold_ms,
-                    }
-                    self._l6b_post_buffer = []
+                    # POEP-HID-RING F-HIDRING-1 belt: never clobber a pending armed by another path
+                    # (defensive — the two-way inflight flag makes this unreachable; log if ever hit).
+                    if self._l6b_pending is not None:
+                        log.warning(
+                            "L6B: pending already armed during auto-tick dispatch — dropping auto probe"
+                        )
+                    else:
+                        self._l6b_pending = {
+                            "probe_ts": _probe_ts,
+                            "pre_reports": list(self._l6b_pre_buffer),
+                            "frames_remaining": int(350),  # 350ms capture window at ~1 report/ms
+                            "trigger_r2_at_probe": _l6b_r2_at_probe,
+                            "probe_r2_force": _l6b_r2_force,
+                            "probe_mode": _l6b_mode,
+                            "probe_hold_ms": _l6b_hold_ms,
+                        }
+                        self._l6b_post_buffer = []
                     log.info(
                         "L6B: probe dispatched mode=%s r2_force=%d hold_ms=%d "
                         "r2_at_probe=%s quiet_threshold=%d",
@@ -2944,6 +3263,9 @@ class DualShockTransport:
                     )
                 except Exception as _exc:
                     log.warning("Phase 63: L6b probe dispatch failed (non-fatal): %s", _exc)
+                finally:
+                    # POEP-HID-RING F-HIDRING-1: release the single stimulus slot (two-way exclusion)
+                    self._poep_fire_inflight = False
             elif (
                 self._l6b_enabled
                 and _l6b_applicable
@@ -2963,6 +3285,293 @@ class DualShockTransport:
             await asyncio.sleep(max(0.0, self._interval - elapsed))
 
     # ------------------------------------------------------------------
+    # ATTEST-FEEDS (F-RIG27-1): PCC rate feed with silent-counter healing
+    # ------------------------------------------------------------------
+    _PCC_STALL_ITERS = 3     # consecutive zero-delta iters (frames flowing) before stall confirms
+    _HID_RESTART_CAP = 10    # bound forced re-opens per process (no thrashing under permanent starve)
+
+    def _pcc_rate_feed(self, frames, spc_kwargs) -> None:
+        """Feed PCC the poll rate; heal the ALIVE-but-SILENT counter hole (first CFB 27 rig).
+
+        Phase 235-PCC-RATE-FIX preferred the interface-3 counter's delta over len(frames), guarded
+        only by thread.is_alive() — but under the RP topology the thread stayed alive while reads
+        returned empty, so a fabricated 0 fed PCC every iteration (false-negative DISCONNECTED)
+        while the main reader minted real records. Fix (grok attestfeeds-r02):
+          - silent-detect: N consecutive zero-delta iters WHILE frames flow -> stall confirmed;
+          - force the drain loop through its EXISTING self-healing re-open (capped);
+          - while stalled: feed len(frames) — the main reader's honest ~120Hz cadence, never a
+            fabricated 0. That yields DEGRADED, and the sealed PCC gate still refuses fires —
+            correct fail-closed until the true rate recovers (never a silent threshold loosen).
+        Also appends the live trigger_active bit to the F-RIG27-2 activity window (frames path).
+        Fabrication pins: empty frames NEVER take the len(frames) path (a real disconnect is never
+        masked); the stall flag only raises while frames flow.
+        """
+        self._live_activity_window.append(1 if spc_kwargs.get("trigger_active") else 0)
+        if self._pcc_monitor is None:
+            return
+        counter_alive = (
+            self._hid_counter_thread is not None and self._hid_counter_thread.is_alive()
+        )
+        if not counter_alive:
+            # counter never started (no hidapi / no iface 3) — documented len(frames) fallback
+            self._rate_source = "main_reader_frames"
+            self._pcc_monitor.update_sample(len(frames), self._interval, **spc_kwargs)
+            return
+
+        _total = self._hid_report_total
+        _delta = _total - self._last_hid_report_total
+        self._last_hid_report_total = _total
+
+        if _delta == 0 and frames:
+            self._hid_counter_silent_iters += 1
+        else:
+            self._hid_counter_silent_iters = 0
+            if self._rate_counter_stalled:
+                log.info("ATTEST-FEEDS: hid rate counter RECOVERED (delta=%d)", _delta)
+            self._rate_counter_stalled = False
+
+        if self._hid_counter_silent_iters >= self._PCC_STALL_ITERS:
+            if not self._rate_counter_stalled:
+                log.warning(
+                    "ATTEST-FEEDS: hid rate counter ALIVE but SILENT for %d iters while the main "
+                    "reader delivers — stall confirmed; feeding main-reader cadence + forcing re-open",
+                    self._hid_counter_silent_iters,
+                )
+            self._rate_counter_stalled = True
+            if (self._hid_counter_restarts < self._HID_RESTART_CAP
+                    and not self._hid_counter_force_reopen):
+                self._hid_counter_force_reopen = True
+            self._rate_source = "main_reader_frames"
+            self._pcc_monitor.update_sample(len(frames), self._interval, **spc_kwargs)
+            return
+
+        self._rate_source = "hid_interface3"
+        self._pcc_monitor.update_sample(_delta, self._interval, **spc_kwargs)
+
+    # ------------------------------------------------------------------
+    # POEP-HID-RING: nonce-bound fire on the single-HID L6b ring
+    # ------------------------------------------------------------------
+    # The gameplay-live path (l9_presence challenge_live) needs a REAL fire+capture from the SAME
+    # reader that attests activity — this bridge already runs that ring under l6b_enabled. This method
+    # serves ONE nonce-bound probe from it: fail-closed gates -> claim the single slot -> the SAME
+    # to_thread fire path the auto-tick uses (send_l6b_probe) -> arm _l6b_pending carrying the nonce +
+    # a Future -> the EXISTING session-loop completion block resolves the Future with the MEASURED
+    # features. HTTP awaits the Future (never touches HID, never busy-waits on the event loop).
+    # CANDIDATE/CAMPAIGN mechanism only: does NOT flip poep_enabled / L6B enablement.
+    _POEP_FIRE_AMP_MAX = 80  # gameplay LOW band ceiling (mirrors l9 LOW_AMPLITUDE_FORCE_MAX; never desk 255)
+
+    async def request_poep_nonce_probe(self, nonce: str, amplitude: int) -> "asyncio.Future":
+        """Fire ONE nonce-bound low-amp probe on the ring; returns a Future of the result dict.
+
+        Result dict (resolved by the session-loop completion): {fired, real_hardware, nonce,
+        t_fire_ns, latency_ms, peak_lsb, precursor_gap_ms, error?} — raw measured features only.
+        Raises PoepFireRefused fail-closed (503 gate/unavailable, 409 busy, 400 bad input).
+        """
+        if os.environ.get("POEP_LIVE_FIRE_ENABLED", "") != "1":
+            raise PoepFireRefused(
+                "poep fire gated: set POEP_LIVE_FIRE_ENABLED=1 on the operator rig (never CI)", 503)
+        if not (self._l6b_enabled or getattr(self, "_poep_campaign_mode", False)):
+            raise PoepFireRefused(
+                "poep fire refused: neither l6b_enabled nor poep_campaign_mode is set — the ring runs "
+                "under the gated L6B flag OR the campaign carve-out (both operator decisions; see the "
+                "CLAUDE.md hard rules + campaign exception)", 503)
+        if self._l6b_analyzer is None or self._l6_driver is None:
+            raise PoepFireRefused("poep fire refused: L6b analyzer/driver not initialized", 503)
+        if not (self._reader and self._reader.ds):
+            raise PoepFireRefused("poep fire refused: controller not connected", 503)
+        if not nonce or not isinstance(nonce, str):
+            raise PoepFireRefused("poep fire refused: non-empty string nonce required", 400)
+        if self._l6b_pending is not None or getattr(self, "_poep_fire_inflight", False):
+            raise PoepFireRefused("poep fire busy: a probe capture is already in flight", 409)
+
+        try:
+            amp = int(amplitude)
+        except (TypeError, ValueError):
+            raise PoepFireRefused("poep fire refused: amplitude must be an int", 400)
+        amp = max(1, min(amp, self._POEP_FIRE_AMP_MAX))
+
+        # Claim the slot BEFORE the await (the fire yields the loop; the auto-tick dispatcher checks
+        # this flag so exactly one stimulus is ever in flight).
+        self._poep_fire_inflight = True
+        try:
+            _pre_reports = list(self._l6b_pre_buffer)   # pre-window snapshot BEFORE the fire
+            # F-RIG27-8: the probe's DEVICE ts = the last pre-frame's device_ts, RAW uint32 ticks (same
+            # device clock as the crossing frame -> a lag-immune reaction latency under RP). 0 if absent.
+            _probe_device_ts = int(_pre_reports[-1].get("device_ts", 0) or 0) if _pre_reports else 0
+            _mode = str(getattr(self._cfg, "l6b_probe_mode", "pulse")).strip().lower()
+            if _mode not in ("pulse", "rigid"):
+                _mode = "pulse"
+            _hold_ms = int(getattr(self._cfg, "l6b_probe_hold_ms", 15))
+
+            # The SAME off-loop fire path the auto-tick uses (send_l6b_probe -> asyncio.to_thread write).
+            _probe_ts = await self._l6_driver.send_l6b_probe(
+                self._reader.ds, r2_force=amp, mode=_mode,
+            )
+            _t_fire_ns = time.time_ns()
+            # F-R2ONSET-1 read-at-fire (C): the freshest drain device tick AT the fire instant = t0 in
+            # device space, gold-standard (no session-loop pre-buffer staleness). 0 if the drain has not
+            # populated yet -> the offline study falls back to mono-extrap/stale_pre honestly.
+            _t0_read_device_ts = int(getattr(self, "_last_raw_device_ts", 0) or 0)
+            # C-precision: the read's ACTUAL staleness at the fire instant (_probe_ts and the drain stamp
+            # are both time.monotonic()). Gives the study a CERTIFIED uncertainty bound (not a proxy).
+            # -1.0 when the drain hasn't stamped yet -> study falls back to the median-frame-gap proxy.
+            _drain_wall = float(getattr(self, "_last_raw_wall", 0.0) or 0.0)
+            _t0_read_age_s = max(0.0, float(_probe_ts) - _drain_wall) if _drain_wall > 0.0 else -1.0
+
+            _loop = asyncio.get_event_loop()
+            _hold_s = max(0.015, _hold_ms / 1000.0)
+            _loop.call_later(
+                _hold_s,
+                lambda: asyncio.ensure_future(
+                    self._l6_driver.clear_triggers(self._reader.ds)
+                ) if self._reader and self._reader.ds and self._l6_driver else None,
+            )
+
+            _fut: asyncio.Future = _loop.create_future()
+            self._l6b_pending = {
+                "probe_ts": _probe_ts,
+                "pre_reports": _pre_reports,
+                "frames_remaining": int(350),  # same 350ms capture window as the auto-tick
+                "trigger_r2_at_probe": None,
+                "probe_r2_force": amp,
+                "probe_mode": _mode,
+                "probe_hold_ms": _hold_ms,
+                # nonce-binding (POEP-HID-RING): completion resolves THIS future with THIS nonce
+                "poep_nonce": nonce,
+                "poep_t_fire_ns": _t_fire_ns,
+                "poep_probe_device_ts": _probe_device_ts,   # F-RIG27-8 robust-clock anchor
+                "poep_t0_read_device_ts": _t0_read_device_ts,   # F-R2ONSET-1 read-at-fire (C) gold t0
+                "poep_t0_read_age_s": _t0_read_age_s,   # C-precision: measured drain-read staleness
+                "poep_future": _fut,
+            }
+            self._l6b_post_buffer = []
+            log.info(
+                "POEP-HID-RING: nonce-bound probe dispatched mode=%s r2_force=%d nonce=%s…",
+                _mode, amp, nonce[:16],
+            )
+            return _fut
+        except PoepFireRefused:
+            raise
+        except Exception as _exc:
+            # Pre/at-write failure: no pending armed, no future — surfaces as an honest refusal.
+            raise PoepFireRefused(f"poep fire aborted pre/at write: {_exc!r}", 503)
+        finally:
+            self._poep_fire_inflight = False
+
+    def _resolve_poep_fire(
+        self,
+        *,
+        latency_ms,
+        peak_lsb: float,
+        precursor_gap_ms,
+        error: str = "",
+        device_latency_ms: float = -1.0,
+        crossing_device_ts: float = -1.0,
+        probe_device_ts: float = -1.0,
+    ) -> None:
+        """Resolve the pending nonce-bound fire Future with MEASURED features (no-op for auto-tick).
+
+        fired/real_hardware are True here BY CONSTRUCTION: this is only reachable from the completion
+        block of a pending that request_poep_nonce_probe armed AFTER a successful real send_l6b_probe
+        write. Raw pass-through — never clamps/synthesizes a latency into the human band.
+        """
+        _p = self._l6b_pending
+        if not isinstance(_p, dict):
+            return
+        _fut = _p.get("poep_future")
+        if _fut is None:
+            return   # auto-tick probe (no poep_future) — stays quiet
+        # F-RIG27-6 (grok firetimeout-r02 C + r03 residual): INFO-log the resolve outcome for
+        # NONCE-BOUND fires. Logged BEFORE the done-check so the "client already 504'd" case still
+        # records (Py3.13 wait_for CANCELS the Future on timeout -> _fut.done() True). Lets the next
+        # rig DISTINGUISH late-completion (log shows "client-gone" + client got 504 -> drain still >
+        # timeout) from analyze-fail (log error!=ok / lat None -> RP post-buffer had no clean reflex).
+        _nonce = _p.get("poep_nonce")
+        _gone = " [client-gone]" if _fut.done() else ""
+        _clk = "device" if device_latency_ms > 0.0 else "t_mono"   # F-RIG27-8: which clock resolved
+        # F-RIG27-8b (rig-4 finding): log the RAW device ticks that feed _rp_device_latency_ms so the
+        # next rig fire splits dead-wire (both ~0 -> sensor_ts_ticks not populating in the RP frame
+        # path) from span-reject (both large, span>500ms -> reaction genuinely slow). Diagnostic-only,
+        # non-gating; never touches latency_ms/verdict/corpus. Both raw ticks are PASSED AS PARAMS
+        # (not re-read here) so the log cannot diverge from what the helper actually consumed (grok 8b NIT).
+        log.info(
+            "POEP-HID-RING: resolve nonce=%s… lat=%s clock=%s dev_lat=%s "
+            "cross_ts=%s probe_ts=%s peak=%.0f post_n=%d error=%s%s",
+            (str(_nonce)[:16] if _nonce else "?"), latency_ms, _clk, device_latency_ms,
+            crossing_device_ts, probe_device_ts,
+            float(peak_lsb), len(self._l6b_post_buffer), (error or "ok"), _gone,
+        )
+        # (ii) R2-onset study Increment-0: optional dump of the FULL pre+post r2/accel/device_ts series
+        # for the offline actuator-coupling study. Gated on poep_ring_dump_enabled; fires BEFORE the
+        # done-check so a client-504'd fire still yields data. Fail-open — instrumentation never breaks
+        # the resolve; never touches latency_ms/verdict/corpus/flags.
+        _cfg = getattr(self, "_cfg", None)
+        if _cfg is not None and getattr(_cfg, "poep_ring_dump_enabled", False):
+            try:
+                self._dump_poep_ring_series(
+                    _p, latency_ms, device_latency_ms, crossing_device_ts, probe_device_ts,
+                )
+            except Exception as _dump_exc:
+                log.debug("POEP-HID-RING: ring dump failed (non-fatal): %s", _dump_exc)
+        if _fut.done():
+            return   # client cancelled on timeout — logged for diagnostics; nothing to set
+        _fut.set_result({
+            "fired": True,
+            "real_hardware": True,
+            "nonce": _nonce,
+            "t_fire_ns": _p.get("poep_t_fire_ns"),
+            "latency_ms": latency_ms,
+            "peak_lsb": float(peak_lsb),
+            "precursor_gap_ms": precursor_gap_ms,
+            "error": error,
+        })
+
+    def _dump_poep_ring_series(
+        self, pending, latency_ms, device_latency_ms, crossing_device_ts, probe_device_ts,
+    ) -> None:
+        """(ii) R2-onset Increment-0: write a nonce-bound fire's FULL pre+post r2/accel/device_ts series
+        to audits/poep_ring_dump/ for the OFFLINE actuator-coupling study. Instrument-only, fail-open;
+        never gates the corpus/verdict/flags. Studied offline by scripts/poep_ring_coupling_study.py."""
+        import json
+        import os
+        _keys = ("r2", "l2", "r2_mode", "ax", "ay", "az", "t_mono", "device_ts")
+        def _slim(reps):
+            return [
+                {k: r.get(k) for k in _keys}
+                for r in (reps or []) if isinstance(r, dict)
+            ]
+        _nonce = str(pending.get("poep_nonce") or "nofuture")
+        _rec = {
+            "schema": "qortroller-poep-ring-dump-v0",
+            "nonce": _nonce,
+            "t_fire_ns": pending.get("poep_t_fire_ns"),
+            "probe_ts_mono": pending.get("probe_ts"),
+            "probe_r2_force": pending.get("probe_r2_force"),
+            "probe_mode": pending.get("probe_mode"),
+            "probe_hold_ms": pending.get("probe_hold_ms"),
+            "probe_device_ts": probe_device_ts,
+            "t0_read_device_ts": int(pending.get("poep_t0_read_device_ts", 0) or 0),   # C gold t0
+            "t0_read_age_s": float(pending.get("poep_t0_read_age_s", -1.0)),   # C-precision: read staleness
+            "raw_r2_at_fire": int(getattr(self, "_last_raw_r2", 0) or 0),   # DIAG: drain's raw R2 vs ds.state
+            "resolved_latency_ms": latency_ms,
+            "device_latency_ms": device_latency_ms,
+            "crossing_device_ts": crossing_device_ts,
+            "device_ticks_per_ms": _DEVICE_TS_TICKS_PER_MS,
+            "pre_series": _slim(pending.get("pre_reports")),
+            "post_series": _slim(self._l6b_post_buffer),
+        }
+        _dir = os.path.join("audits", "poep_ring_dump")
+        os.makedirs(_dir, exist_ok=True)
+        _safe = "".join(ch for ch in _nonce if ch.isalnum())[:24] or "fire"
+        _path = os.path.join(_dir, f"{_safe}_{int(time.time())}.json")
+        with open(_path, "w", encoding="utf-8") as _fh:
+            json.dump(_rec, _fh)
+        log.info(
+            "POEP-HID-RING: ring-dump wrote %d pre + %d post frames -> %s",
+            len(_rec["pre_series"]), len(_rec["post_series"]), _path,
+        )
+
+    # ------------------------------------------------------------------
     # Sync helpers (executed in thread pool)
     # ------------------------------------------------------------------
     def _poll_frames(self, duration_s: float) -> list:
@@ -2970,12 +3579,15 @@ class DualShockTransport:
         if not self._reader:
             return []
         frames = []
+        collect_t_mono: list[float] = []  # F-RIG27-8 continuation: per-frame collection-time stamp
         bt_seq_bytes: list[int] = []  # BT sequence counter bytes; empty on USB (bt_seq_byte == -1)
         t_end = time.monotonic() + duration_s
         dt_ms = 8.0   # target ~120 Hz
         while time.monotonic() < t_end:
             snap = self._reader.poll()
+            _collected_at = time.monotonic()  # stamped the instant the HID read returns, not later
             frames.append(snap)
+            collect_t_mono.append(_collected_at)
             # BT sequence counter — exposed via snap.bt_seq_byte (-1 = USB/unavailable)
             if snap.bt_seq_byte >= 0:
                 bt_seq_bytes.append(snap.bt_seq_byte)
@@ -2985,6 +3597,8 @@ class DualShockTransport:
             time.sleep(dt_ms / 1000.0)
         # Store for consumption by the BT presence verifier in the async loop
         self._bt_seq_bytes_batch = bt_seq_bytes
+        # F-RIG27-8 continuation: 1:1 aligned with `frames` (unlike bt_seq_bytes, which is filtered)
+        self._frame_collect_t_mono = collect_t_mono
         return frames
 
     def _classify(self, frames: list) -> tuple[int, int]:

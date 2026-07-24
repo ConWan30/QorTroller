@@ -1,0 +1,124 @@
+I'll ground A–E in the open round doc, the rig-3 audit, and the three timing seams you named before locking verdicts.# F-RIG27-8 — grok r02 FORWARD (adversarial + build-spec)
+
+**Root cause accepted.** Rig-3 peaks prove the reflex content path is live; 594–4600 ms “latencies” on 6k LSB peaks are a **processing-clock** artifact, not human timing. Options **(b)** and **(c)** are killed for the CFB product path (SYNCHRONIZED under RP is the goal; peak-only drops the anti-script band). **Ship path = additive device-ts latency.**
+
+---
+
+## A — Device-ts latency: right fix? Same clock?
+
+**VERDICT: YES — device-ts is the right fix; probe and crossing MUST share the device clock (last pre-frame device_ts at fire, not monotonic).**
+
+**Why:** `send_l6b_probe` returns `time.monotonic()`; crossing uses `t_mono` stamped when the session loop builds `_l6b_entry` — both are bridge receive time, so RP burst lag inflates both ends of a mismatched pair. Device 3 MHz uint32 (offset 28) is already proven on the l2_ads path; the analyzer never sees it.
+
+**Same-clock rule (non-negotiable):**
+
+| Instant | Source | Not this |
+|--------|--------|----------|
+| `probe_device_ts` | last `_l6b_pre_buffer` entry with valid `device_ts` **at arm/fire** (snapshot before write is fine) | `time.monotonic()` from `send_l6b_probe` |
+| `crossing_device_ts` | first post frame above threshold with valid `device_ts` | `t_mono` on that frame |
+
+```text
+device_latency_ms = wrap_u32(crossing_device_ts - probe_device_ts) / 3000.0
+# 3 MHz → ms; wrap every ~1432 s
+```
+
+**Bias:** last-pre is ≤1 poll sample early (~8 ms at `dt_ms=8`) — inside band noise, not the 3–15× RP error.  
+**Gap:** `InputSnapshot` / `_poll_frames` do **not** surface offset 28 today (IMU uses `states[16:28]` only). Build must extract `states[28:32]` (USB dual-connect path) into the snap → `_l6b_entry`. Do not mix hid-counter ts with pydualsense frames without a join key.
+
+---
+
+## B — Recalibration risk
+
+**VERDICT: ADDITIVE only — keep `t_mono` / `latency_ms` canonical; 220 corpus + band byte-stable; RP/nonce verify prefers device-ts when both ends present.**
+
+**Why:** The 220 usable rows and `DEFAULT_BAND_MS=(80,350)` were derived under t_mono on tight USB. Switching canonical latency reopens the corpus gate for a measurement fix. Additive is strictly safer and matches the rails.
+
+| Field | Role |
+|-------|------|
+| `true_latency_ms` / `latency_ms` | **Unchanged** — t_mono − probe_ts; storage + corpus gate |
+| `device_latency_ms` (new, default −1) | Sensor-clock Δ; used when probe+crossing device_ts present |
+| RP / nonce-bound `_resolve_poep_fire` | Pass **device** latency into the feature dict’s `latency_ms` for sealed `verify_live_response` **only when** `device_latency_ms >= 0`; else keep current (fail closed under RP) |
+| Corpus insert / `is_usable_reflex` | Still reads stored `latency_ms` (t_mono path) unless a later explicit campaign policy promotes device field — **not this build** |
+
+Band math should match under USB (device-ts ≈ true reaction); no band edit until a USB A/B proves otherwise.
+
+---
+
+## C — Blast radius
+
+**VERDICT: Additive field is the minimal safe surface — three touch points only.**
+
+| Touch | Change |
+|-------|--------|
+| Reader / snap | Optional `device_ts: int | None` from report bytes 28–31 |
+| `_l6b_entry` (~2752) | `device_ts` alongside `ax/ay/az/t_mono` (omit or null if missing) |
+| `L6bReflexAnalyzer.analyze` | Compute `device_latency_ms`; **do not** change `canonical_ms` / classification defaults |
+| Fire arm | Store `probe_device_ts` on `_l6b_pending` from last pre entry |
+| `_resolve_poep_fire` | Prefer device latency for the **resolved feature** under nonce-bound path |
+
+**Byte-untouched:** sealed `l9_presence` verify modules (they already consume measured `latency_ms`); `poep_reflex_gate.DEFAULT_BAND_MS`; GIC/WEC/PoAC; flags; PV-CI surface.  
+**Untouched by design:** analyzer HUMAN/BOT buckets for auto-tick / non-device paths; existing probe-log `latency_ms` meaning.
+
+---
+
+## D — 500 ms rigid hold vs pulse
+
+**VERDICT: Clock is primary; hold/mode is a second independent confounder — campaign fire MUST use pulse (corpus default), not rigid/500.**
+
+**Why:** Corpus = pulse (~15 ms hold). Rig-3 forced `mode=rigid` + `L6B_PROBE_HOLD_MS=500`. Continuous force couples motor vibration into IMU for half a second, so first-crossing can shift or precursor/gap rails fire even with a perfect clock. Independent of F-RIG27-8, rigid/500 is **not** an A/B-clean re-val of the 80–350 band.
+
+**Rig-4 protocol:** `l6b_probe_mode=pulse`, hold default (~15 ms); leave rigid/500 for desk diagnostics only.
+
+---
+
+## E — Fabrication rails + tests + r03 bars
+
+**VERDICT: Device-ts is not free authenticity — nonce + peak + ts integrity rails; tests must fake t_mono lag vs honest device-ts.**
+
+### Rails (fail closed → no device latency, never invent)
+
+1. **Both ends required** — missing `probe_device_ts` or crossing `device_ts` → `device_latency_ms = -1` (no fabricate-from-mono).  
+2. **Wrap-safe Δ** in `(0, CAPTURE_WINDOW_MS]` (or ≤ human_max + margin, e.g. 500 ms) — else reject device path.  
+3. **Pre comes from pre-buffer only** — never re-bind probe from a post frame.  
+4. **Progression** — post window not majority-duplicate `device_ts` (stale re-sample under lag); median inter-unique Δ sane for poll (~5–15 ms at 120 Hz, not 0 and not 500).  
+5. **Peak still required** — device band alone insufficient (forged ts + fake peak still needs real IMU content + live fire).  
+6. **Nonce-bound + `real_hardware=True`** — existing HID-ring rails stay; device-ts does not relax them.  
+7. **No sealed-module edit** — only the measured feature value fed in changes when device path is valid.
+
+### Test shape (unit, no rig)
+
+| Case | Expect |
+|------|--------|
+| RP fake: t_mono spaced 50–200 ms, device_ts +1 ms/frame, crossing ~120 frames | `true_latency_ms` ≫ band; `device_latency_ms` ∈ ~80–150; canonical storage still t_mono |
+| Missing device_ts | `device_latency_ms=-1`; t_mono path identical to today |
+| u32 wrap near `2**32-1000` | wrap math correct |
+| Backwards / all-identical device_ts | device path rejected |
+| Existing analyzer tests | green, byte-stable classification without device_ts |
+| Optional: pulse vs rigid fixture | documents hold is orthogonal (need not block ship) |
+
+### Pre-registered r03 bars (accept/reject)
+
+| # | Bar |
+|---|-----|
+| 1 | `t_mono` / `latency_ms` / classification defaults unchanged when `device_ts` absent |
+| 2 | 220-usable gate still MET without re-derivation; `DEFAULT_BAND_MS` unchanged |
+| 3 | Sealed `l9_presence` modules: no content change (diff empty on sealed set) |
+| 4 | PV-CI 184 PASS; zero spend; no flag flips (`L6B_ENABLED` / `poep_enabled` stay false) |
+| 5 | Unit: fabricated RP lag → device in-band, mono out-of-band |
+| 6 | Unit: integrity rails reject stale/forged device_ts streams |
+| 7 | **Rig-4 (operator):** pulse mode, lean env, ≥N nonce fires with `device_latency_ms` in band + peak floor → `n_go_verify_pass > 0` and first `SYNCHRONIZED_CONTROLLER` candidate under honest live hardware |
+
+---
+
+## Sequencing (locked)
+
+```text
+r02 ACCEPT (this) 
+  → build: device_ts on snap + _l6b_entry + probe_device_ts + device_latency_ms 
+           + nonce resolve prefers device when valid
+  → grok r03 against bars 1–6
+  → operator commit
+  → rig-4 (pulse, lean, bar 7) → first SYNCHRONIZED_CONTROLLER
+```
+
+**One-line product claim after ship:** Remote Play can carry live IMU *content* and *device-timed* reflex latency; bridge wall-clock stays audit/corpus-only and must not gate SYNCHRONIZED under RP.

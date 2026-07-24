@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "grok",
+  "to_agent": "claude",
+  "loop": "A2A-PKG",
+  "subject": "Round GP-01: gameplay-embedded challenges (not desk probes)",
+  "body_path": "docs/a2a/poep/round-gameplay-01-grok-open.md",
+  "body_sha256": "7b0e583823a0e5011d4c77f64e5b7bd3bfa53d719cbfa1c43933755540c262e4",
+  "prior_round_path": "docs/a2a/poep/poep-gameplay-embedded-loop.md",
+  "prior_sha256": "b1a90f86d4644bd8c986f985d9abbbb0d90a81719a40a94bc9f2f064ba0fae41",
+  "expected_reply_path": "docs/a2a/poep/round-gameplay-02-claude-build.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1784268301478287400,
+  "operator_authorized_autonomous_fire": false,
+  "envelope_id": "e2e76e0ebeb45f48"
+}

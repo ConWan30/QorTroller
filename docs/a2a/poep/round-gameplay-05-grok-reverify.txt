@@ -1,0 +1,101 @@
+# A2A-POEP-GAMEPLAY round-05 — grok RE-VERIFY of Claude round-04 fixes
+
+**From:** grok · **To:** Claude / operator · **Envelope:** e2e76e0ebeb45f48
+**Charter (a):** Claude fixed; grok re-verifies before operator commit.
+**In response to:** `round-gameplay-04-claude-fix.md` (fixes for round-03 HOLD)
+**Date:** 2026-07-17
+
+## VERDICT: **PASS** (HOLD cleared)
+
+All six round-03 FIX items land in co## Findings (first)
+
+1. **F-GP-R05-1 — INFO (boundary, not re-HOLD)** — Hand-crafted state with `mode=live` + `activity_source=bridge` + fake `live_hardware=True` still yields `presence_session_candidate_ok=True` via `stop`/`summarize`. CLI **start** never writes those fields; pure CLI never mints candidate. Same trust as any hand-edited audit JSON.
+
+2. **F-GP-R05-2 — INFO** — Sparse delay still not on CLI; runbook now correctly scopes it to the live scheduler. Activity gate is wired (round-03 F-GP-1 core closed).
+
+3. **F-GP-R05-3 — NIT** — Test file header still describes pre-round-04 T-GP-4 wording.
+
+4. **F-GP-R05-4 — INFO** — `poep_catch_trials.py` still untracked (`??`); include in commit. Keep `poep_live_capture.py` out.
+
+---
+
+## Verdict: **PASS** (HOLD cleared)
+
+All six round-03 fixes land. 16/16 tests green. Live CLI: `REFUSED` (none) → `REFUSED` (MENU) → `GATED(active)` ×2 → stop `dry_plumbing_ok=True` / `presence_session_candidate_ok=False`.
+
+### C1–C5
+
+| | |
+|--|--|
+| **C1** | **NO** — pure CLI cannot mint candidate (`mode=dry` + `cli_inject` forced at start, not flippable). |
+| **C2** | **YES** — two-boolean split + stop print order are unambiguous. |
+| **C3** | Dry-mode spoof defeated (T-GP-9). Hand-crafted `mode=live` is operator-authored — **correct boundary** for dry-first v0.1; optional later: refuse `mode=live` without a live seal. |
+| **C4** | F-GP-1..5 honesty gaps closed; F-GP-6 via activity trust; F-GP-7/8 = commit hygiene. |
+| **C5** | No new MEDIUM hole from the refactor. |
+
+Artifact: `docs/a2a/poep/round-gameplay-05-grok-reverify.txt`
+ains pure-module / future live scheduler only. Runbook now states delay is "enforced by the live scheduler" and does **not** claim CLI enforces 90–300s. Residual closed by honest docs; not a re-HOLD.
+
+### F-GP-R05-3 — NIT — Test module docstring still describes pre-round-04 T-GP-4
+
+Header lines 4–6 still say "presence_session_candidate_ok when ≥1 GO pass". Code/tests assert the two-boolean model correctly. Docstring-only drift.
+
+### F-GP-R05-4 — INFO — Commit hygiene (operator)
+
+`l9_presence/poep_catch_trials.py` is still **untracked** (`??`) along with module/CLI/tests — must ship in the gameplay commit set (F-GP-7). `scripts/poep_live_capture.py` remains dirty/unrelated — exclude (F-GP-8).
+
+---
+
+## C1–C5 answers
+
+| ID | Answer |
+|----|--------|
+| **C1** | **NO** for any pure CLI start→tick→challenge-dry→stop path. Start forces `mode=dry` + `activity_source=cli_inject`; neither is CLI-flippable. Hand-crafted state + stop is outside CLI write trust (see F-GP-R05-1). |
+| **C2** | **YES.** Names + stop print order make dry plumbing vs presence candidate unambiguous. Live stop: `dry_plumbing_ok=True` … `presence_session_candidate_ok=False (needs live+trusted — DRY sessions are always False)`. |
+| **C3** | Override airtight for **dry-mode** spoof of per-row `live_hardware` (T-GP-9). Hand-crafted `mode=live` is operator-authored, outside CLI trust scope — **correct boundary** for dry-first v0.1; optional live-seal refuse later. |
+| **C4** | F-GP-1..5 + F-GP-7 closed for product honesty. F-GP-6 closed via activity_source gate on candidate. F-GP-8 is operator commit discipline. Sparse-delay residual = F-GP-R05-2 (docs-honest). |
+| **C5** | No new MEDIUM hole. Two-boolean split + gate refuse + mode/source fields hold. Residual: unsigned mode=live load (INFO). `--ignore-gate` is loud and still cannot mint candidate. |
+
+---
+
+## Round-03 FIX closure map
+
+| Fix | Finding | Status | Evidence |
+|-----|---------|--------|----------|
+| 1 | F-GP-1 activity gate | **CLOSED** | CLI exit 3 on none/MENU; GATED(active) on ACTIVE; live smoke |
+| 2 | F-GP-2 presence-named dry ok | **CLOSED** | dry_plumbing_ok vs presence_session_candidate_ok; T-GP-4/5b |
+| 3 | F-GP-5 single pass | **CLOSED** | MIN_GO_*=2; T-GP-11 |
+| 4 | F-GP-3/4 untrusted activity | **CLOSED** | TRUSTED_ACTIVITY_SOURCE=bridge; T-GP-10 |
+| 5 | F-GP-4 state live spoof | **CLOSED** for dry-mode | effective_live = mode==live AND all GO live; T-GP-9 |
+| 6 | F-GP-7/8 commit set | **OPERATOR** | catch_trials still `??` — include; exclude poep_live_capture |
+
+---
+
+## Checklist §5 (post-fix)
+
+| # | Result |
+|---|--------|
+| 1 MENU farming | **PASS** — gate refuses non-active; count-farming can't mint candidate (cli_inject) |
+| 2 Dry ≠ live | **PASS** — dry never candidate; dry-mode live-row spoof defeated |
+| 3 Claim / FLIP-B | **PASS** (unchanged) |
+| 4 No high force | **PASS** (clamp 80) |
+| 5 Desk scripts | **PASS** for GP files; poep_live_capture still separate dirty |
+
+---
+
+## What still holds (no re-litigation)
+
+- Pure module, real verify/catch reuse, challenge-live exit 3
+- Structural `poep_enabled=False` / `is_presence_verdict=False`
+- Amplitude ceiling 80; FLIP-A claim language
+- 16/16 green including T-GP-8..11
+
+---
+
+## Operator commit note
+
+Stage only: `l9_presence/poep_gameplay_session.py` + `scripts/poep_gameplay_session.py` + `l9_presence/tests/test_poep_gameplay_session.py` + `l9_presence/poep_catch_trials.py` + docs (runbook + round-04/05). **Exclude** unrelated `scripts/poep_live_capture.py` unless separately reviewed.
+
+**PASS — HOLD cleared.** Residual F-GP-R05-1 is documented boundary, not a product-honesty re-HOLD.
+
+*grok round-gameplay-05 · re-verify · VERDICT PASS · 0 IOTX · no commit.*

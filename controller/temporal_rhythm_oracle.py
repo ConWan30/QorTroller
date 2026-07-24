@@ -218,8 +218,21 @@ class TemporalRhythmOracle:
         Intervals are appended to per-button deques:
           _cross_intervals  — Cross (X)
           _intervals        — R2 (shared with push_frame path)
+
+        Timestamp resolution (2026-07-22 L5 timing-exposure investigation,
+        docs/a2a/l5-timing-exposure-investigation/findings.md): prefers
+        snap.timestamp_ms — the real per-frame HID-collection time, stamped by
+        dualshock_integration.py's _stamp_frame_collection_times() (the same
+        C-fail-4 fix L2B/L2C already use) — falling back to time.monotonic()
+        only when absent. Before this fix, every call unconditionally used
+        call-time monotonic(), which collapsed real per-frame timing toward a
+        few-ms cluster whenever dualshock_integration.py processed an
+        already-collected ~1s batch in its tight for-snap-in-frames loop —
+        empirically confirmed to distort CV/entropy/quantization in the
+        bot-like direction on identical, realistic press timing.
         """
-        now_wall = _time.monotonic() * 1000.0  # ms absolute timestamp
+        ts = getattr(snap, "timestamp_ms", None)
+        now_wall = float(ts) if ts is not None else _time.monotonic() * 1000.0  # ms absolute timestamp
 
         buttons = int(getattr(snap, "buttons", 0))
         r2 = int(getattr(snap, "r2_trigger", 0))

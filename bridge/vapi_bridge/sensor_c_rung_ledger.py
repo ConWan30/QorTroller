@@ -30,9 +30,12 @@ Honesty rails:
     confirms via separate ceremony, not via Sensor C.
   - Gate list is FROZEN per cycle (no dynamic discovery); externalization
     + amendment is a v0.2 cycle decision.
-  - Sensor C v0.1 does NOT model durability/fragility of LIVE gates (e.g.
-    G1.6 MFG CA is LIVE-by-existence but single-copy per F-DECON-3.2).
-    LIVE-FRAGILE state deferred to v0.2 per D-HWFL-9.
+  - LIVE-FRAGILE (fragility axis) shipped at v0.1.3 (Cycle 8) — G1.6 carried
+    it while the F-DECON-3.2 single-copy software-CA SPOF persisted. v0.1.4
+    (2026-07-17) demoted G1.6 back to LIVE via two-part root-fix evidence
+    (INV-MFG-003 sealed + override registry deployed); reverting either
+    artifact re-demotes honestly. (The original v0.1 header deferred
+    LIVE-FRAGILE to v0.2 per D-HWFL-9 — superseded by the Cycle 8 ship.)
 """
 from __future__ import annotations
 
@@ -122,21 +125,65 @@ def _verify_g1_5_reference_device_registered(repo_root: Path) -> tuple[GateState
 
 
 def _verify_g1_6_mfg_ca_file_present(repo_root: Path) -> tuple[GateState, str]:
-    """ManufacturerRootCA file at canonical path (~/.vapi/...). Checks
-    existence only — does NOT read contents (key material).
+    """ManufacturerRootCA root of trust.
 
-    Returns LIVE-FRAGILE (not LIVE) per HWFL-1 Cycle 8 / Sensor C v0.1.3
-    because the underlying pattern carries a structural single-point-of-
-    failure per F-DECON-3.2. Demotion to plain LIVE requires the SPOF
-    pattern to be eliminated (not merely operationally mitigated).
-    Per-incident operational detail lives in
-    `docs/disaster-recovery-runbook.private.md` (gitignored).
+    Sensor C v0.1.4 (2026-07-17) — F-DECON-3.2 ROOT-FIX detection via a
+    two-part cross-artifact check (D-HWFL-22 pattern, same as G2.7):
+      (a) INV-MFG-003 present in .github/INVARIANTS_ALLOWLIST.json — the
+          operator's tamper-evident governance seal over the LIVE
+          birth-cert override registry, AND
+      (b) VAPIDeviceBirthCertUpdateRegistry recorded addr-shaped in
+          contracts/deployed-addresses.json — the deploy record.
+    BOTH present => LIVE: the root of trust is the non-exportable HSM key
+    (the live device verifies VALID under it via the override); the
+    software CA file is cold-retained forensic-only and its existence is
+    no longer load-bearing. Either artifact MISSING => pre-v0.1.4
+    behavior byte-identical (LIVE-FRAGILE while the software CA file
+    exists) — reverting the seal or the deploy record re-demotes the
+    ledger honestly. Exception => UNVERIFIABLE, never LIVE.
+
+    Pre-root-fix fallback checks file existence only — does NOT read
+    contents (key material). It returned LIVE-FRAGILE (not LIVE) per
+    HWFL-1 Cycle 8 / Sensor C v0.1.3 because the pattern carried a
+    structural single-point-of-failure per F-DECON-3.2. Per-incident
+    operational detail lives in `docs/disaster-recovery-runbook.private.md`
+    (gitignored).
 
     Verifier file paths intentionally NOT echoed into the evidence
     string per F-CYCLE8-1 (sanitization rider) — the public-repo
     ledger artifacts must not reproduce operator-private filenames.
     Test T12 regression-asserts the evidence excludes the CA filename.
     """
+    try:
+        allowlist_path = repo_root / ".github" / "INVARIANTS_ALLOWLIST.json"
+        deployed_path = repo_root / "contracts" / "deployed-addresses.json"
+        hsm_root_landed = False
+        if allowlist_path.exists() and deployed_path.exists():
+            allowlist = json.loads(allowlist_path.read_text(encoding="utf-8"))
+            deployed = json.loads(deployed_path.read_text(encoding="utf-8"))
+            addr = str(deployed.get("VAPIDeviceBirthCertUpdateRegistry", ""))
+            hsm_root_landed = (
+                "INV-MFG-003" in allowlist
+                and addr.startswith("0x")
+                and len(addr) == 42
+            )
+        if hsm_root_landed:
+            return (
+                GateState.LIVE,
+                "MFG Root CA root of trust is HSM-backed — F-DECON-3.2 root fix "
+                "landed 2026-07-16/17: birth-cert override registry deployed "
+                "(deployed-addresses.json) + INV-MFG-003 governance-sealed in the "
+                "PV-CI allowlist (both machine-checked here). The ceremony record "
+                "(audits/mfg-ca-hsm-readiness-and-path-a-2026-07-16.md) attests "
+                "the live device VALID under the HSM root — attested by that "
+                "artifact, not re-verified by this sensor. Software CA file "
+                "cold-retained forensic-only per the migration runbook — "
+                "existence no longer load-bearing.",
+            )
+    except Exception as exc:  # noqa: BLE001 — fail-open: UNVERIFIABLE, never LIVE
+        return GateState.UNVERIFIABLE, f"G1.6 HSM-root evidence check errored: {exc!r}"
+
+    # Pre-root-fix fallback — byte-identical to Sensor C v0.1.3 (Cycle 8/9).
     ca_path = Path.home() / ".vapi" / "qortroller_foundation_mfg_ca.json"
     if ca_path.exists():
         return (
@@ -283,9 +330,9 @@ _CANONICAL_GATES: tuple[GateDef, ...] = (
     GateDef(1, "G1.5", "First reference device registered on-chain",
             None, "verify_g1_5_reference_device",
             "CLAUDE.md Path A Arc 1 — tx 0x68f6cf49… block 44028531"),
-    GateDef(1, "G1.6", "ManufacturerRootCA file present at canonical path",
+    GateDef(1, "G1.6", "ManufacturerRootCA root of trust present (HSM-backed post root-fix; file pre-fix)",
             None, "verify_g1_6_mfg_ca_present",
-            "docs/path-a-manufacturing-spec.md §1 reference-impl honesty stamp"),
+            "docs/path-a-manufacturing-spec.md §1 + docs/path-a-mfg-ca-hsm-migration.md"),
     GateDef(1, "G1.7", "SecureElementBackend honesty rail intact",
             None, "verify_g1_7_secure_element_honesty",
             "Path A Arc 1 SecureElementBackend stub (raises NotImplementedError)"),
@@ -355,6 +402,7 @@ class RungLedger:
     cycle_date: str          # YYYY-MM-DD
     generated_at: str        # ISO-8601 UTC
     results: list[GateResult]
+    repo_root: Path | None = None  # set by assemble_ledger; located the OA data file
 
     def state_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -387,13 +435,11 @@ class RungLedger:
             "Machine-readable companion: `audits/rung-gate-ledger-latest.json`.\n"
         )
 
-        # Standing OPERATOR-ACTION box (R4 / nag-once-per-cycle).
-        lines.append("\n## Standing OPERATOR-ACTION box (loop never auto-touches)\n")
-        lines.append("- [ ] **OA-1** Back up MFG Root CA canonical file (path per `docs/disaster-recovery-runbook.private.md`). F-DECON-3.2 interim mitigation. Highest-leverage 5-min action.")
-        lines.append("- [ ] **OA-2** Create `docs/disaster-recovery-runbook.private.md` with full AWS KMS ARNs.")
-        lines.append("- [ ] **OA-3** IAM scope-down on bridge/.env AWS keys → `KMS:Sign` + `KMS:GetPublicKey` on the two specific key ARNs.")
-        lines.append("- [ ] **OA-4** Long-term: HSM-backed ManufacturerRootCA + device re-issuance.")
-        lines.append("")
+        # Standing OPERATOR-ACTION box — rendered from the single operator-attested
+        # source (audits/operator_actions.json) shared with Sensor B. The loop
+        # renders; it never attests. (HWFL-1 2026-07-17 — killed the dual hardcode.)
+        from .operator_actions import render_operator_actions
+        lines.append(render_operator_actions(self.repo_root))
 
         counts = self.state_counts()
         lines.append("\n## State summary\n")
@@ -466,6 +512,7 @@ def assemble_ledger(repo_root: Path, *, cycle: int, cycle_date: str | None = Non
         cycle_date=date,
         generated_at=now_utc,
         results=results,
+        repo_root=repo_root,
     )
 
 

@@ -1,0 +1,54 @@
+I'll verify the Sensor-C G1.6 demote against the shipped code, tests, and the five hammer questions—findings first, then SHIP/FIX.Running the Sensor C suite and checking residual edge cases.# A2A r29 — Sensor-C G1.6 demote verify
+
+**Branch:** `feat/l9-consistency-adversarial-harness`  
+**Empirical:** 13/13 Sensor C tests pass · real-repo G1.6=`LIVE` · distribution 5 LIVE / 0 LIVE-FRAGILE / 1 LIVE-PARTIAL / 3 HW / 12 DORMANT / 1 BLOCKED-EXT · no CA-filename leak in evidence
+
+---
+
+## Findings (severity order)
+
+| # | Sev | Finding |
+|---|-----|---------|
+| F1 | LOW (honesty) | LIVE evidence prose claims *"live device verifies VALID under the HSM root"* — **not machine-checked**. Verifier only sees allowlist key + deploy addr. Narrative residue, not a state bug. |
+| F2 | LOW (coverage) | T13 pins seal-absent+deploy-present → LIVE_FRAGILE, but **not** the symmetric deploy-absent+seal-present case. Both-required is implemented; half-tested. |
+| F3 | INFO | OA-1 / OA-4 still say interim backup + "long-term HSM" while root fix is done. Stale by design this pass. |
+| F4 | INFO | Module header still says *"LIVE-FRAGILE deferred to v0.2"* (pre-Cycle-8 prose). Doc drift only. |
+
+**No CRITICAL/HIGH. No path to spurious LIVE found.**
+
+---
+
+## Hammer answers
+
+### H1 — Right proxy? Env gap acceptable?
+**Yes.** Proxy matches D-HWFL-22 / G2.7: two **repo-committed, CI-digest-pinned** artifacts (`INV-MFG-003` in allowlist + addr-shaped `VAPIDeviceBirthCertUpdateRegistry`). That is the structural claim "root-fix pattern landed," not "this process is currently signing via KMS."
+
+`MFG_CA_BACKEND` rollback in gitignored `.env` **can** leave G1.6 `LIVE` while runtime is software — **acceptable under Cycle-8 Option A**: ledger tracks software/governance pattern, not operator runtime state. Operational rollback is an OA/process concern, not Sensor C's job. Reverting the seal or deploy record re-demotes to LIVE_FRAGILE/UNVERIFIABLE.
+
+### H2 — Spurious LIVE paths?
+**None.**
+- Outer `try` on HSM path → any parse/IO error → `UNVERIFIABLE` (never falls through to LIVE).
+- `hsm_root_landed` requires **both** `"INV-MFG-003" in allowlist` **and** `0x` + len 42 (same shape as G1.4).
+- Missing either file → `hsm_root_landed=False` → pre-v0.1.4 CA-existence fallback only.
+- Real allowlist is a top-level dict; key membership is correct.
+- Addr is not hex-validated char-by-char (same as G1.4) — fail-closed on length/prefix only; not a LIVE forge vector in practice.
+
+### H3 — Tests?
+**Solid; one hole.**
+- T13: empty+CA → LIVE_FRAGILE; seal missing+deploy → LIVE_FRAGILE; both → LIVE; bad JSON → UNVERIFIABLE; no artifacts+no CA → UNVERIFIABLE. Exception rail pinned.
+- `monkeypatch.setattr(Path, "home", …)` is pytest-scoped — **no leak**.
+- Vacuous risk: only the missing symmetric both-required case (F2). Not vacuous on exception or LIVE path.
+
+### H4 — Sanitization?
+**Holds.** LIVE evidence + GateDef + Cycle 18 artifact: no `qortroller_foundation_mfg_ca*`. T9 (full markdown) + T12 (G1.6 evidence) still forbid those tokens. Filename remains only in private path construction / test fixtures — correct.
+
+### H5 — OA box now?
+**Right call to defer.** Demote scope is the earned state flip; OA rewrite is a Cycle 9-style sanitization/status pass. Flag for next cycle (mark OA-1/OA-4 done or reframe to residual DR/IAM), do not block this ship.
+
+---
+
+## Verdict
+
+# **SHIP**
+
+Root-fix demote is earned, machine-checkable, fail-open on error, sanitization rails intact, tests green. F1–F4 are non-blocking notes for a follow-up cycle (evidence prose honesty + T13 symmetric case + OA-1/OA-4 refresh + header docstring).

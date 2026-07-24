@@ -1,0 +1,86 @@
+I'll read the open brief and the bridge/L3 ring modules, then answer A–F as forward adversarial design before Claude builds.Next I'll inspect the fire path, Phase-D hook, and challenge_live contract so A/E/F rest on real code paths.# POEP-HID-RING r02 — FORWARD steer (adversarial)
+
+Rails accepted: zero spend · sealed L3/gp-identity modules byte-untouched · `poep_enabled` / L6B enablement **not** flipped · bridge additive+gated · PV-CI 184 · no FROZEN/228B/Solidity.
+
+**Gating separation (D, load-bearing):**  
+Ring runs under **`l6b_enabled`** (operator corpus campaign). **`poep_enabled` stays False.**  
+`SYNCHRONIZED_CONTROLLER` = session-liveness **CANDIDATE** (`advances_poep_enabled=False` machine field).  
+Same fires grow usable Edge reflexes toward N≥50 — the **earn-enablement vehicle**, not an enablement flip.
+
+---
+
+## A. Serving model
+
+**VERDICT: (i) HTTP + client `BridgeFireCaptureAdapter` — FIRST increment.**  
+**Why:** Phase-D `_poep_runner_inputs` is **read-only CCO→status wiring** (`build_poep_runner_inputs`), not a session owner; in-process (ii) pulls sealed `challenge_live` / identity orchestration into dualshock hot code and multiplies blast radius. HTTP mirrors existing operator routes, keeps sealed stack outside the bridge, and unit-tests with a fake HTTP surface.
+
+---
+
+## B. Nonce-binding
+
+**VERDICT: Thread nonce into `_l6b_pending`; exclusive single-slot; reject concurrent arm.**  
+**Why:** One `_l6b_pending` dict already serializes probes; without `nonce` + match-on-complete, an auto-tick probe or prior result can alias onto a GO. Commitment stays on the **sealed** path (`poep_commitment` from measured features + nonce) — do **not** invent a new bridge commitment path if `resolve_poep_commitment` is not a real nonce-bind primitive (cco Phase-D is status/telemetry, not the live challenge binder).
+
+---
+
+## C. Reflex → ImuWindow
+
+**VERDICT: Reuse L3 mapping verbatim.**  
+**Why:** No clean peak → `latency_ms=0` + **measured** `peak_lsb`; never band-fill; adapter returns RAW features only; sealed `verify_live_response` owns the verdict.
+
+---
+
+## D. Gating separation
+
+**VERDICT: CONFIRMED — campaign/candidate mode without enablement flips.**  
+**Why:** Endpoint fail-closes when `l6b_enabled=False` and/or `POEP_LIVE_FIRE_ENABLED≠1`; responses must never set `poep_enabled=True` or claim enablement; `SYNCHRONIZED` remains candidate-only.
+
+---
+
+## E. Blast radius (PoAC / event loop)
+
+**VERDICT: Gated additive fire is safe IF arm/fire match L6b delivery and HTTP never owns the capture loop.**  
+**Why:** Existing `send_l6b_probe` already uses `asyncio.to_thread(_sync_write)` — fire stays off the ingestion thread. **Break path:** HTTP handler that busy-waits 350ms of capture, re-scores IMU, or does HID write on the uvicorn loop → stalls PoAC session loop.  
+**Shape:** `POST` **arms** pending (nonce, amp) + schedules the same `to_thread` fire path the interval dispatch uses; **completion happens in the session loop** when `frames_remaining≤0` (buffers already fill there); HTTP **awaits a Future/event** set by that completion (or poll-GET), never re-reads HID and never runs tight sleep-spin on the loop.
+
+---
+
+## F. Break attempts (fabrication / overclaim)
+
+| Attack | Outcome if built right |
+|--------|-------------------------|
+| Client synthesizes `ImuWindow` | `live_hardware` only from `FireResult.real_hardware`; adapter sets True **only** when bridge body says fire wrote |
+| Endpoint “success” with no write | `fired=False`, `real_hardware=False` on pre-write abort / gate fail / no driver |
+| Band-filled latency | Forbidden; bridge scores only; 0 latency = honest fail-verify |
+| Stale/auto L6b result as challenge | Complete only if `pending.nonce == request.nonce`; else refuse |
+| Replay window | One-shot consume of result stash (mirror L3 pop); second poll → miss |
+| `activity_source=bridge` alone | Insufficient — sealed path still needs `all(GO.live_hardware)` on real fires |
+| HTTP returns client-supplied features | Reject; bridge measures from pre/post buffers only |
+| Concurrent second fire | `409` while pending occupied |
+
+**VERDICT: No honest SYNCHRONIZED without a real bridge fire** if rails above hold; weakest seam is client trusting HTTP 200 without `real_hardware`/`nonce`/`fired` fields — pin that in adapter + tests.
+
+---
+
+## Build shape Claude should take (tight)
+
+1. **Bridge (additive):** method on transport e.g. `request_poep_nonce_probe(nonce, amplitude)` → fail-closed gates → arm `_l6b_pending` with `nonce` + existing pre snapshot → `await send_l6b_probe` (to_thread) → register Future; on existing completion block, if nonce present, pack `{latency_ms, peak_lsb, precursor, t_fire_ns, nonce, real_hardware:true}` and resolve Future.  
+2. **Endpoint:** `POST /operator/poep/fire` (full operator key), dual-gate, clamp amp to gameplay LOW band, **no** rewrite of session loop body beyond shared arm/complete path.  
+3. **Client:** `BridgeFireCaptureAdapter` = L3 shape (fused-behind-split); activity from real `GET /bridge/capture-health`; feeds sealed `run_session_identity_attach`.  
+4. **Do not:** expand Phase-D into a session runner; touch sealed modules; flip flags; accept client IMU; block event loop on capture.
+
+---
+
+## r03 FIX list (pre-registered)
+
+1. Sealed modules edited (`poep_gameplay_live`, session, did_sync, controller_presence, rig adapter, `_fire_probe_silent`) → **FIX**  
+2. Fire/HID on event loop or capture busy-wait in HTTP → **FIX**  
+3. Fabricated/band-filled/client-supplied reflex accepted → **FIX**  
+4. `poep_enabled` / L6B enablement flipped or `advances_poep_enabled` implied True → **FIX**  
+5. Nonce mismatch / concurrent pending alias / result reuse → **FIX**  
+6. Endpoint works when `l6b_enabled=False` without hard refuse → **FIX**  
+7. In-process session ownership via Phase-D instead of HTTP first increment → **FIX** (scope)  
+8. PV-CI / FROZEN / 228B / Solidity / spend → **FIX**  
+9. Client adapter not unit-tested with fake bridge; endpoint not harness-tested → **FIX**
+
+**Bottom line for Claude:** ship **HTTP arm + session-loop complete + client adapter** first. Leave in-bridge PoEP session runner for a later arc if ever needed. That is the lowest-blast-radius path to honest `SYNCHRONIZED_CONTROLLER` under single-HID real play.

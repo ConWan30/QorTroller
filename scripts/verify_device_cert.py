@@ -8,7 +8,12 @@ the gamer is using actually matches an on-chain manufacturer attestation.
 
 Three checks (all must pass for VALID):
 
-  1. cert ECDSA-P256 sig verifies against its claimed issuer_pubkey_hex
+  1. cert ECDSA-P256 sig verifies against its claimed issuer_pubkey_hex,
+     AND the device-key binding holds. Binding is CHAIN-FIRST (mint/verify
+     split, A2A round-26): for a registered device the authoritative check is
+     SHA-256(compressed cert pubkey) == devices[deviceId].pubkeyHash on VMDR
+     (grandfathers pre-canon registrations like 581a836c). Offline /
+     unregistered falls back to the DEVICE_ID_CANON_v1 keccak best-effort.
   2. SHA-256(canonical_bytes_full) matches the on-chain birthCertHash
      (chain-anchored cert integrity)
   3. VAPIManufacturerDeviceRegistry.isActive(deviceId) is TRUE on-chain
@@ -16,13 +21,16 @@ Three checks (all must pass for VALID):
 
 Exit codes:
   0 = VALID            (all 3 checks pass)
-  1 = INVALID          (sig fails, hash mismatch, or revoked)
+  1 = INVALID          (sig fails, binding fails, hash mismatch, or revoked)
   2 = NOT_REGISTERED   (cert exists but no on-chain record)
   3 = ERROR            (env / file / RPC failure — operator action required)
 
 Pure-local mode (no chain calls):
-  --offline            Skip the on-chain checks. Only cert sig + format checks.
-                       Returns VALID-OFFLINE / INVALID-OFFLINE.
+  --offline            Skip the on-chain checks. Cert sig + canon best-effort
+                       binding only. Returns VALID-OFFLINE / INVALID-OFFLINE.
+                       A registered pre-canon device honestly reads
+                       INVALID-OFFLINE here — only the chain binding can
+                       validate it (never assume offline pass).
 """
 from __future__ import annotations
 
@@ -67,13 +75,6 @@ def main():
         print(f"ERROR: cert deserialize failed: {exc}", file=sys.stderr)
         sys.exit(3)
 
-    # ── Check 1: cert sig ────────────────────────────────────────────────────
-    sig_ok, sig_reason = verify_cert(cert)
-    print(f"  cert sig         : {'OK' if sig_ok else 'FAIL — ' + sig_reason}")
-    if not sig_ok:
-        print(f"\nVERDICT: INVALID  ({sig_reason})")
-        sys.exit(1)
-
     # Cert details for the operator
     print(f"  device_id        : 0x{cert.device_id_hex}")
     print(f"  controller_model : {cert.controller_model}")
@@ -89,10 +90,20 @@ def main():
     print(f"  expected on-chain birthCertHash: 0x{expected_hash.hex()}")
 
     if args.offline:
-        print("\nVERDICT: VALID-OFFLINE  (cert sig OK; on-chain checks skipped)")
+        # ── Check 1 (offline): sig + canon best-effort binding ──────────────
+        sig_ok, sig_reason = verify_cert(cert)
+        print(f"  cert sig+binding : {'OK (binding: CANON offline best-effort)' if sig_ok else 'FAIL — ' + sig_reason}")
+        if not sig_ok:
+            if "mismatch" in sig_reason:
+                print("  NOTE: a VMDR-registered device is authoritatively bound by its "
+                      "on-chain pubkeyHash — re-run WITHOUT --offline for the chain check.")
+            print(f"\nVERDICT: INVALID-OFFLINE  ({sig_reason})")
+            sys.exit(1)
+        print("\nVERDICT: VALID-OFFLINE  (cert sig + canon binding OK; on-chain checks skipped)")
         sys.exit(0)
 
-    # ── Checks 2 + 3: on-chain ───────────────────────────────────────────────
+    # ── On-chain reads FIRST: the device binding is chain-first for registered
+    #    devices, so the VMDR record (incl. pubkeyHash) is fetched before check 1.
     rpc_url = os.getenv("IOTEX_RPC_URL", "https://babel-api.testnet.iotex.io")
     registry_addr = os.getenv("MANUFACTURER_DEVICE_REGISTRY_ADDRESS", "")
     if not registry_addr:
@@ -132,18 +143,63 @@ def main():
         device_id_bytes = bytes.fromhex(cert.device_id_hex)
         registered_flag = contract.functions.registered(device_id_bytes).call()
         if not registered_flag:
+            # Unregistered: binding falls back to mint-shape canon best-effort.
+            sig_ok, sig_reason = verify_cert(cert)
+            print(f"  cert sig+binding : {'OK (binding: CANON — device not registered)' if sig_ok else 'FAIL — ' + sig_reason}")
+            if not sig_ok:
+                print(f"\nVERDICT: INVALID  ({sig_reason})")
+                sys.exit(1)
             print("  on-chain         : NOT REGISTERED")
             print("\nVERDICT: NOT_REGISTERED  (cert sig OK, but no on-chain attestation)")
             sys.exit(2)
         active = contract.functions.isActive(device_id_bytes).call()
         record = contract.functions.devices(device_id_bytes).call()
+        on_chain_pubkey_hash = bytes(record[0])
         on_chain_birth_cert_hash = bytes(record[5])
     except Exception as exc:  # noqa: BLE001 — surface for operator
         print(f"ERROR: on-chain read failed: {exc}", file=sys.stderr)
         sys.exit(3)
 
+    # ── Check 1: cert sig + AUTHORITATIVE chain binding (registered device) ──
+    sig_ok, sig_reason = verify_cert(
+        cert, on_chain_pubkey_hash_hex=on_chain_pubkey_hash.hex(),
+    )
+    print(f"  cert sig+binding : {'OK (binding: CHAIN pubkeyHash 0x' + on_chain_pubkey_hash.hex()[:16] + '…)' if sig_ok else 'FAIL — ' + sig_reason}")
+    if not sig_ok:
+        print(f"\nVERDICT: INVALID  ({sig_reason})")
+        sys.exit(1)
+
     print(f"  on-chain         : registered={registered_flag} active={active}")
-    print(f"  on-chain hash    : 0x{on_chain_birth_cert_hash.hex()}")
+    print(f"  VMDR hash        : 0x{on_chain_birth_cert_hash.hex()}")
+
+    # Path A: when a birth-cert override registry is wired, the EFFECTIVE hash is
+    # currentBirthCertHash (OVERRIDE-then-VMDR).
+    #   - env UNSET  → legacy VMDR-only (fail-open for unmigrated tooling). CORRECT.
+    #   - env SET + read OK → use effective hash.
+    #   - env SET + read FAIL → ERROR exit 3 (fail-CLOSED). Do NOT fall back to the
+    #     raw VMDR hash: after HSM re-anchor, that would silently re-accept a
+    #     software-signed cert that the override is meant to supersede.
+    override_addr = os.getenv("BIRTH_CERT_UPDATE_REGISTRY_ADDRESS", "").strip()
+    if override_addr:
+        try:
+            OVR_ABI = [{"name": "currentBirthCertHash", "type": "function", "stateMutability": "view",
+                        "inputs": [{"name": "deviceId", "type": "bytes32"}],
+                        "outputs": [{"type": "bytes32"}]}]
+            ovr = w3.eth.contract(address=w3.to_checksum_address(override_addr), abi=OVR_ABI)
+            effective = bytes(ovr.functions.currentBirthCertHash(device_id_bytes).call())
+            if effective != on_chain_birth_cert_hash:
+                print(f"  override hash    : 0x{effective.hex()}  (OVERRIDE-then-VMDR)")
+            on_chain_birth_cert_hash = effective
+        except Exception as exc:  # noqa: BLE001 — fail-CLOSED when override is configured
+            print(
+                f"ERROR: BIRTH_CERT_UPDATE_REGISTRY_ADDRESS is set but override read failed "
+                f"({exc}). Refusing to fall back to VMDR raw hash (would accept stale "
+                f"software cert after HSM re-anchor). Fix RPC/address or unset the env.",
+                file=sys.stderr,
+            )
+            sys.exit(3)
+
+    print(f"  effective hash   : 0x{on_chain_birth_cert_hash.hex()}")
 
     if on_chain_birth_cert_hash != expected_hash:
         print(f"\nVERDICT: INVALID  (birthCertHash mismatch — cert content "

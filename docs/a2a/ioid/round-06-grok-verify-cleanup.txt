@@ -1,0 +1,123 @@
+I'll verify the three Inc-C cleanup fixes adversarially—starting with the deploy script, recovery salvage, and encoding/`_load_deployed` changes.Sibling agent-NFT deploy still uses `1n`; next I'll inspect that, the recovery path, and the address/encoding test surface.Confirming ethers status typing and scanning for other platform-default `read_text` hazards on the same JSON.# Inc-C CLEANUP verify — findings first
+
+**Scope:** `deploy-vapi-gamer-controller-nft.js`, `recover-inca-init.js`, `_load_deployed` + addresses/test encoding.  
+**Live fact treated as given:** NFT `0x93b77eB6…` init recovered, project 1021, mapped, `CONTROLLER_TOKEN_ID=1`.
+
+---
+
+## F1 — `Number(receipt.status) !== 1` is the correct fix (and dual-safe)
+
+**Root cause confirmed.** ethers v6 returns `receipt.status` as a **number**. In JS:
+
+| compare | result |
+|--------|--------|
+| `1 !== 1n` | `true` (always “fail”) |
+| `Number(1) !== 1` | `false` (pass) |
+| `Number(1n) !== 1` | `false` (also pass if a provider ever hands bigint) |
+
+So `Number(x.status) !== 1` is correct **and** more robust than bare `!== 1` (which still false-fails if status is ever bigint).
+
+**Completeness inside the deploy script:** all three write receipts are fixed:
+
+- deploy (L93–95)
+- initialize (L100–102)
+- configureMinter (L107–109)
+
+**View smoke uses of bigint are correct** (`total !== 0n`, `allowance !== BigInt(...)`). Do not “fix” those to `Number`.
+
+**Miss inside this file (doc-only, non-blocking):** L19 NatSpec still says `receipt.status === 1n`. Live path is fixed; comment still teaches the bug class.
+
+---
+
+## F2 — Other `status !== 1n` compares: **not in the cleanup surface, still live in the precedent script**
+
+Repo scan of `status !== 1n` / `=== 1n` on receipts:
+
+| file | state |
+|------|--------|
+| `deploy-vapi-gamer-controller-nft.js` | **fixed** (3× `Number(...)`) |
+| `recover-inca-init.js` | **fixed** (2× `Number(...)`) |
+| `deploy-vapi-operator-agent-nft.js` | **still 3× `status !== 1n`** (L100, L131, L158) |
+| `recover-vapi-operator-agent-nft.js` | `!== 1` (number; OK for current ethers; weaker than `Number`) |
+
+The agent NFT deploy is the scar this ceremony copied. Same false-positive can recur on any future re-run of that script. **Out of Inc-C cleanup blast radius**, but it is the real residual landmine if you asked “any other missed?”
+
+No other Inc-C ceremony scripts still use receipt `1n` status compares.
+
+---
+
+## F3 — `recover-inca-init.js` adversarial: front-run / TOCTOU / idempotency
+
+### Front-run safety
+
+OZ upgradeable `initialize()` is first-caller-wins; there is **no** atomic “claim if unowned” from a JS script.
+
+| scenario | behavior |
+|----------|----------|
+| Owner already non-bridge | **ABORT** (L48–50) — correct “front-ran / compromised → redeploy” |
+| Owner bridge | SKIP init; only configureMinter if needed |
+| Owner zero → race lost to attacker | our `initialize` reverts → `Number(status)!==1` throws → **no** configureMinter, **no** addresses write |
+| Owner zero → we win | init → minter config → smoke → write |
+
+**TOCTOU** between `owner()` read and broadcast is real and **unclosable** without on-chain patterns that don’t exist here. Residual is operator-economic (failed gas / must redeploy), not silent corruption. Header documents this; smoke + write-only-on-clean-smoke are correct.
+
+`configureMinter` is `onlyOwner`. Attacker who front-ran init cannot be made minter by this script; re-run hits the non-bridge ABORT.
+
+### Idempotency
+
+- init: only if `owner === ZeroAddress`
+- minter: only if `!isMinter || allowance < MINTER_ALLOWANCE`
+- re-run after clean recovery: both SKIP paths; smoke still passes; addresses rewrite is harmless
+
+Minor inconsistency (not a bug): deploy smoke requires **exact** allowance; recover smoke allows **≥** `MINTER_ALLOWANCE`. Appropriate for salvage.
+
+### Status checks
+
+Both write receipts use `Number(...status) !== 1`. Smoke keeps bigint views (`total !== 0n`). Good.
+
+### Write path encoding
+
+`JSON.stringify(a, null, 2)` + current note text is pure ASCII. Does not reintroduce cp1252-hostile bytes **with current note content**. If someone later pastes smart quotes into the wiring note template, Node will emit raw UTF-8 again — Python side is now defended by `encoding="utf-8"`.
+
+---
+
+## F4 — `_load_deployed` + addresses + test
+
+| claim | check |
+|-------|--------|
+| only call site of bare default read | `_load_deployed` is the sole `DEPLOYED_ADDRESSES.read_text` path in that script; both call sites go through it |
+| fix | `read_text(encoding="utf-8")` — correct for Windows `PYTHONUTF8=0` / cp1252 |
+| `deployed-addresses.json` | pure ASCII (`ascii_only True`, `0x9d_count 0`); NFT key `0x93b77eB6D8F9e12A801aC06b81bb6E37b7dcdE55` |
+| test | `test_real_deployed_addresses_nft_now_live` expects that address + `encoding="utf-8"` |
+
+Confirmed under `PYTHONUTF8=0`: `bridge/tests/test_controller_ceremony.py` → **38 passed** (`PYTHONPATH=bridge`).  
+JS: `node --check` clean on both scripts.
+
+---
+
+## F5 — Non-findings (closed)
+
+- No residual `1n` receipt compares in the three cleanup targets.
+- Recovery is not a trust bypass for a foreign owner.
+- Fail-open write of `deployed-addresses` after a bad status does not happen (throw before write).
+- Re-deploy guard on the main deploy script still refuses overwrite when the key exists.
+
+---
+
+# VERDICT: **PASS**
+
+The three live Inc-C bugs are fixed correctly and completely **on the ceremony path**:
+
+1. **Deploy status** — `Number(status) !== 1` is the right fix; all three write receipts covered; view bigints left alone.  
+2. **Recover salvage** — gates, front-run ABORT, race fail-safe, init/minter idempotency, status checks, smoke-then-write are sound under adversarial review.  
+3. **UTF-8 load** — required on Windows; sole site fixed; addresses restored to pure ASCII; live NFT test updated.
+
+### Residuals (non-blocking for this cleanup; track separately)
+
+| sev | item |
+|-----|------|
+| LOW | Stale NatSpec L19 in controller deploy still says `=== 1n` |
+| MED (latent) | `deploy-vapi-operator-agent-nft.js` still has three `status !== 1n` checks — same bug class if that script is ever re-fired |
+| DOC | Older ioID scope docs still prescribe `status===1n` |
+
+**No FIX required to accept the Inc-C CLEANUP commit.** Optional follow-up (not part of this verdict): patch agent NFT deploy to `Number(status) !== 1` + refresh the NatSpec/docs so the bug class is fully retired.

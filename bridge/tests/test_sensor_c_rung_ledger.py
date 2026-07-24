@@ -54,13 +54,14 @@ def test_t_sensor_c_4_live_repo_assemble_succeeds():
 
 
 def test_t_sensor_c_5_live_repo_verifier_gates_are_live():
-    """The 4 fully-LIVE verifier-backed gates (G1.4, G1.5, G1.7, G2.1) pass
-    on the real repo. G1.6 is verifier-backed but resolves to LIVE-FRAGILE
-    (Cycle 8 v0.1.3 — F-DECON-3.2 SPOF) — asserted separately by T12.
+    """The 5 fully-LIVE verifier-backed gates (G1.4, G1.5, G1.6, G1.7, G2.1)
+    pass on the real repo. G1.6 re-joined the LIVE set at Sensor C v0.1.4
+    (2026-07-17): the F-DECON-3.2 root fix landed — override registry
+    deployed + INV-MFG-003 sealed — demote detail asserted by T12.
     G2.7 is verifier-backed but resolves to LIVE-PARTIAL — asserted by T11."""
     ledger = assemble_ledger(REPO_ROOT, cycle=8)
     by_id = {r.gate.gate_id: r for r in ledger.results}
-    for gid in ("G1.4", "G1.5", "G1.7", "G2.1"):
+    for gid in ("G1.4", "G1.5", "G1.6", "G1.7", "G2.1"):
         assert by_id[gid].state == GateState.LIVE, (
             f"{gid} expected LIVE on real repo, got {by_id[gid].state.value} "
             f"(evidence: {by_id[gid].evidence})"
@@ -111,10 +112,12 @@ def test_t_sensor_c_8_json_serializes_and_validates_schema():
 
 
 def test_t_sensor_c_9_markdown_operator_action_box_present_and_sanitized():
-    """OA-1..OA-4 nag-once-per-cycle rail renders into every ledger doc
-    AND (HWFL-1 Cycle 9 / F-CYCLE9-1 sanitization) the rendered markdown
-    MUST NOT contain operator-private filename tokens. Positive content
-    assertions verify the sanitized OA-1 text shape."""
+    """OA-1..OA-4 box renders into every ledger doc AND (HWFL-1 Cycle 9 /
+    F-CYCLE9-1) the markdown stays sanitized. Since HWFL-1 2026-07-17 the box is
+    rendered from the shared operator-attested source (single source of truth);
+    this test asserts STRUCTURE + sanitization + the shared-render substring,
+    NOT specific attestation prose (which the operator is free to change)."""
+    from bridge.vapi_bridge.operator_actions import render_operator_actions
     ledger = assemble_ledger(REPO_ROOT, cycle=9)
     md = ledger.to_markdown()
     # Box presence — required markers (filename intentionally absent).
@@ -127,23 +130,22 @@ def test_t_sensor_c_9_markdown_operator_action_box_present_and_sanitized():
             f"Sensor C ledger markdown leaked operator-private token {tok!r} into "
             f"public artifact — violates F-CYCLE9-1 sanitization rail."
         )
-    # Positive content for sanitized OA-1.
-    assert "MFG Root CA canonical file" in md
-    assert "docs/disaster-recovery-runbook.private.md" in md
-    assert "F-DECON-3.2" in md
+    # Single-source proof: the ledger's box IS the shared renderer output.
+    assert render_operator_actions(REPO_ROOT).strip() in md
 
 
-def test_t_sensor_c_12_g1_6_live_fragile_plus_evidence_sanitization():
-    """G1.6 returns LIVE-FRAGILE on the real repo (Cycle 8 v0.1.3) — full
-    evidence (CA file exists) BUT structural F-DECON-3.2 SPOF persists.
-    Plus regression assertion (F-CYCLE8-1 sanitization rider): evidence
-    string MUST NOT contain the CA filename — operator-private filenames
-    do not belong in public-repo ledger artifacts."""
+def test_t_sensor_c_12_g1_6_live_post_root_fix_plus_evidence_sanitization():
+    """G1.6 returns LIVE on the real repo (Sensor C v0.1.4, 2026-07-17): the
+    F-DECON-3.2 ROOT FIX landed — HSM-backed CA + birth-cert override
+    registry in deployed-addresses.json + INV-MFG-003 sealed in the PV-CI
+    allowlist (both repo-committed artifacts checked by the two-part
+    verifier). Regression assertion (F-CYCLE8-1 sanitization rider) is
+    RETAINED: evidence string MUST NOT contain the CA filename."""
     ledger = assemble_ledger(REPO_ROOT, cycle=8)
     by_id = {r.gate.gate_id: r for r in ledger.results}
     g1_6 = by_id["G1.6"]
-    assert g1_6.state == GateState.LIVE_FRAGILE, (
-        f"G1.6 expected LIVE_FRAGILE on real repo (Cycle 8 v0.1.3), "
+    assert g1_6.state == GateState.LIVE, (
+        f"G1.6 expected LIVE on real repo (v0.1.4 root-fix evidence present), "
         f"got {g1_6.state.value} (evidence: {g1_6.evidence})"
     )
     # F-CYCLE8-1 sanitization rider — evidence MUST NOT echo the CA filename
@@ -155,10 +157,89 @@ def test_t_sensor_c_12_g1_6_live_fragile_plus_evidence_sanitization():
             f"ledger artifact — violates F-CYCLE8-1 sanitization rider. "
             f"Full evidence: {g1_6.evidence!r}"
         )
-    # Positive content checks — the new evidence should reference F-DECON-3.2
-    # and the private runbook for full operational detail.
+    # Positive content checks — root-fix evidence names the finding, the HSM
+    # root, and both machine-checkable artifacts.
+    assert "F-DECON-3.2" in g1_6.evidence
+    assert "HSM" in g1_6.evidence
+    assert "INV-MFG-003" in g1_6.evidence
+    assert "deployed-addresses.json" in g1_6.evidence
+
+
+def test_t_sensor_c_13_g1_6_fallback_re_demotes_without_root_fix_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """v0.1.4 honesty rail: absent EITHER root-fix artifact, G1.6 falls back
+    to the pre-v0.1.4 behavior byte-identically — LIVE-FRAGILE while the
+    software CA file exists, UNVERIFIABLE when it does not. Reverting the
+    seal or the deploy record re-demotes the ledger; never spurious LIVE.
+    Hermetic: Path.home is monkeypatched so the operator machine's real
+    ~/.vapi never leaks into the test."""
+    fake_home = tmp_path / "home"
+    (fake_home / ".vapi").mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: fake_home))
+
+    # (1) Empty repo (no allowlist, no deploy record) + CA file present
+    #     -> LIVE-FRAGILE (the pre-root-fix state).
+    (fake_home / ".vapi" / "qortroller_foundation_mfg_ca.json").write_text(
+        "{}", encoding="utf-8"
+    )
+    ledger = assemble_ledger(tmp_path, cycle=99)
+    g1_6 = next(r for r in ledger.results if r.gate.gate_id == "G1.6")
+    assert g1_6.state == GateState.LIVE_FRAGILE
     assert "F-DECON-3.2" in g1_6.evidence
     assert "disaster-recovery-runbook.private.md" in g1_6.evidence
+
+    # (2) Allowlist present but INV-MFG-003 removed (seal reverted) + deploy
+    #     record present -> STILL falls back (two-part rule: BOTH required).
+    gh = tmp_path / ".github"
+    contracts = tmp_path / "contracts"
+    gh.mkdir()
+    contracts.mkdir()
+    (gh / "INVARIANTS_ALLOWLIST.json").write_text(
+        '{"INV-MFG-001": {"digest": "aa"}}', encoding="utf-8"
+    )
+    (contracts / "deployed-addresses.json").write_text(
+        '{"VAPIDeviceBirthCertUpdateRegistry": "0x31030C8F4d805bC73e2c49D935eD0FB6a12987a5"}',
+        encoding="utf-8",
+    )
+    ledger2 = assemble_ledger(tmp_path, cycle=99)
+    g1_6_b = next(r for r in ledger2.results if r.gate.gate_id == "G1.6")
+    assert g1_6_b.state == GateState.LIVE_FRAGILE  # seal absent -> no LIVE
+
+    # (2b) Symmetric (round-29 F2): seal PRESENT but deploy record ABSENT
+    #      -> STILL falls back. Both artifacts required, in both directions.
+    (gh / "INVARIANTS_ALLOWLIST.json").write_text(
+        '{"INV-MFG-003": {"digest": "bb"}}', encoding="utf-8"
+    )
+    (contracts / "deployed-addresses.json").unlink()
+    ledger2b = assemble_ledger(tmp_path, cycle=99)
+    g1_6_b2 = next(r for r in ledger2b.results if r.gate.gate_id == "G1.6")
+    assert g1_6_b2.state == GateState.LIVE_FRAGILE  # deploy record absent -> no LIVE
+
+    # (3) Both artifacts present and well-formed -> LIVE (the v0.1.4 demote).
+    (contracts / "deployed-addresses.json").write_text(
+        '{"VAPIDeviceBirthCertUpdateRegistry": "0x31030C8F4d805bC73e2c49D935eD0FB6a12987a5"}',
+        encoding="utf-8",
+    )
+    ledger3 = assemble_ledger(tmp_path, cycle=99)
+    g1_6_c = next(r for r in ledger3.results if r.gate.gate_id == "G1.6")
+    assert g1_6_c.state == GateState.LIVE
+    assert "INV-MFG-003" in g1_6_c.evidence
+
+    # (4) Malformed deploy-record JSON -> UNVERIFIABLE (exception rail),
+    #     never LIVE, never a silent fallback that hides the corruption.
+    (contracts / "deployed-addresses.json").write_text("{not json", encoding="utf-8")
+    ledger4 = assemble_ledger(tmp_path, cycle=99)
+    g1_6_d = next(r for r in ledger4.results if r.gate.gate_id == "G1.6")
+    assert g1_6_d.state == GateState.UNVERIFIABLE
+
+    # (5) No root-fix evidence + CA file ABSENT -> UNVERIFIABLE (pre-fix rule).
+    (gh / "INVARIANTS_ALLOWLIST.json").unlink()
+    (contracts / "deployed-addresses.json").unlink()
+    (fake_home / ".vapi" / "qortroller_foundation_mfg_ca.json").unlink()
+    ledger5 = assemble_ledger(tmp_path, cycle=99)
+    g1_6_e = next(r for r in ledger5.results if r.gate.gate_id == "G1.6")
+    assert g1_6_e.state == GateState.UNVERIFIABLE
 
 
 def test_t_sensor_c_11_g2_7_two_part_verifier_honesty_rail(tmp_path: Path):

@@ -1,0 +1,43 @@
+{
+  "schema": "vapi-operator-actions-v1",
+  "note": "Statuses are OPERATOR attestations. The HWFL-1 sensors (Sensor C ledger + Sensor B watch) render this box via bridge/vapi_bridge/operator_actions.py; they never write or infer a status. To change an attestation, edit this file. Sanitization (F-CYCLE8-1/9-1): keep CA filenames, raw AWS ARNs, and home-directory key paths OUT of this file.",
+  "attested_source": "F-DECON-3.2 HSM arc 2026-07-16/17 (commits b558bdec -> 74c864c8 -> 816b4d81 -> bb11a0bb)",
+  "items": [
+    {
+      "id": "OA-1",
+      "text": "Back up / protect the MFG Root CA canonical file (path per docs/disaster-recovery-runbook.private.md).",
+      "status": "moot",
+      "attested_date": "2026-07-17",
+      "attested_by": "operator",
+      "attested_note": "Retired on both axes: the interim-backup secrecy rationale was already lost to public git history (F-CYCLE9-1), AND the F-DECON-3.2 root fix landed, so the software CA is now cold-retained forensic-only, not a live signer.",
+      "machine_hint": {"kind": "doc_pointer", "ref": "Sensor-C G1.6 (LIVE post root-fix)"}
+    },
+    {
+      "id": "OA-2",
+      "text": "Maintain docs/disaster-recovery-runbook.private.md with the full AWS KMS ARNs (gitignored companion).",
+      "status": "done",
+      "attested_date": "2026-07-17",
+      "attested_by": "operator",
+      "attested_note": "Private companion exists locally; the loop existence-checks only and never reads its contents.",
+      "machine_hint": {"kind": "path_exists", "ref": "docs/disaster-recovery-runbook.private.md"}
+    },
+    {
+      "id": "OA-3",
+      "text": "Scope the bridge/.env AWS IAM keys down to KMS:Sign + KMS:GetPublicKey on the specific key ARNs.",
+      "status": "open",
+      "attested_date": "2026-07-17",
+      "attested_by": "operator",
+      "attested_note": "There are now THREE keys (Sentry secp256k1 + Guardian secp256k1 + MFG Root CA P-256 alias). The 2026-07-16 ceremony proved the bridge IAM user can Sign with the CA key and that CreateKey is denied; full least-privilege policy is verifiable only in the operator's AWS console. CA isolation is enforced at the kms_client alias map (agents hold no MFG alias), not at the IAM principal — so the scope-down remains a real, open hardening step.",
+      "machine_hint": {"kind": "none"}
+    },
+    {
+      "id": "OA-4",
+      "text": "Long-term: HSM-backed ManufacturerRootCA + live-device re-issuance (the F-DECON-3.2 root fix).",
+      "status": "done",
+      "attested_date": "2026-07-17",
+      "attested_by": "operator",
+      "attested_note": "Fired 2026-07-16/17: AWS KMS P-256 HSM CA live, override registry deployed (0x31030C8F...), device 581a836c re-anchored and VALID under the HSM root, INV-MFG-003 governance-sealed (PV-CI 184), Sensor-C G1.6 demoted to LIVE.",
+      "machine_hint": {"kind": "doc_pointer", "ref": "audits/mfg-ca-hsm-readiness-and-path-a-2026-07-16.md"}
+    }
+  ]
+}
