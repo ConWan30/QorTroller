@@ -285,13 +285,17 @@ def test_t_cfss_int_9_sweep_id_deterministic():
     assert s3 != s1
 
 
-# ---- T-CFSS-INT-10: CONTRADICTION_RULES count is 29 ------------------
+# ---- T-CFSS-INT-10: CONTRADICTION_RULES count is 30 ------------------
 
 def test_t_cfss_int_10_total_rule_count():
-    """Pin the FSCA contradiction rule count at 28 (29 → 28 on 2026-05-16
+    """Pin the FSCA contradiction rule count at 30 (29 → 28 on 2026-05-16
     after H-1 Option B dropped VPM_MANIFEST_HASH_DRIFT per architectural-
     mismatch finding — rule was checking a relationship the production
-    design never honored). Catches accidental rule additions/removals
-    at PR time."""
+    design never honored; 28 → 30 by later, undated rule additions —
+    CI-debt fix 2026-07-24, docs/a2a/ci-debt/backlog.md: this file pins
+    the same CONTRADICTION_RULES count as bridge/tests/test_coherence_rule_loader.py,
+    independently, and had drifted the same way; that file was already
+    reconciled to 30 earlier this session, this one was not). Catches
+    accidental rule additions/removals at PR time."""
     from vapi_bridge.fleet_signal_coherence_agent import CONTRADICTION_RULES
-    assert len(CONTRADICTION_RULES) == 28
+    assert len(CONTRADICTION_RULES) == 30
