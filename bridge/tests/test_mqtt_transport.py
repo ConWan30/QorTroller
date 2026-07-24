@@ -71,7 +71,15 @@ class TestMqttTransport(unittest.IsolatedAsyncioTestCase):
             received.append((raw, source))
 
         transport = self._get_transport(on_record)
-        msg = _make_message(b"\xaa" * POAC_SIZE, topic="vapi/poac/device1")
+        # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): mqtt_topic_prefix (set to
+        # "vapi/poac" in _get_transport) is itself 2 segments, and _TOPIC_SUFFIX_RE
+        # (= ^(poac|status)/[0-9a-fA-F]{1,64}$) requires a SEPARATE "poac"/"status"
+        # message-type segment plus a hex device-id after it -- so the full valid shape
+        # is "vapi/poac" (prefix) + "/poac/<hex>" (type+id), "poac" appearing twice by
+        # design (outer = protocol namespace, inner = message-type discriminator).
+        # "device1"/"my_device"/"dev{i}" were both the wrong shape (missing the inner
+        # poac/status segment) AND non-hex -- always rejected, never a real regression.
+        msg = _make_message(b"\xaa" * POAC_SIZE, topic="vapi/poac/poac/deadbeef")
         await transport._handle_message(msg)
 
         self.assertEqual(len(received), 1)
@@ -85,12 +93,13 @@ class TestMqttTransport(unittest.IsolatedAsyncioTestCase):
             received.append(source)
 
         transport = self._get_transport(on_record)
-        msg = _make_message(b"\x00" * POAC_SIZE, topic="vapi/poac/my_device")
+        # CI-debt fix 2026-07-24: same topic-shape requirement as test_1 above.
+        msg = _make_message(b"\x00" * POAC_SIZE, topic="vapi/poac/poac/cafebabe")
         await transport._handle_message(msg)
 
         self.assertEqual(len(received), 1)
         self.assertIn("mqtt:", received[0])
-        self.assertIn("vapi/poac/my_device", received[0])
+        self.assertIn("vapi/poac/poac/cafebabe", received[0])
 
     async def test_3_100_byte_payload_not_forwarded(self):
         """100-byte payload → callback NOT invoked (too short)."""
@@ -184,8 +193,9 @@ class TestMqttTransport(unittest.IsolatedAsyncioTestCase):
             received.append(raw)
 
         transport = self._get_transport(on_record)
+        # CI-debt fix 2026-07-24: same topic-shape requirement as test_1/test_2 above.
         for i in range(5):
-            msg = _make_message(bytes([i]) * POAC_SIZE, topic=f"vapi/poac/dev{i}")
+            msg = _make_message(bytes([i]) * POAC_SIZE, topic=f"vapi/poac/poac/{i:02x}")
             await transport._handle_message(msg)
 
         self.assertEqual(len(received), 5)
