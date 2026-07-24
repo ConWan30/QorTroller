@@ -64,9 +64,50 @@ a genuine Python-version-specific difference, not order-dependence. The
 third pass never checked against real CI before writing "resolved, no code
 change" — the same category of mistake as the ioID cluster's round-1
 overclaim, just smaller in scope and self-caught one CI Matrix run later
-instead of caught by an independent full-suite re-run. Both files are
-reopened as unresolved findings; real diagnosis in progress, not fixed as
-of this entry. **Not merging this PR until they have one.**
+instead of caught by an independent full-suite re-run.
+
+**Update: both now have a real diagnosis, both fixed, both empirically
+verified (not pattern-matched).**
+
+`test_save_capture_crops_enabled_writes`: `cv2`/`opencv-python` is
+genuinely never installed in CI — absent from `bridge/requirements.txt`
+and every CI install step; present on the dev machine only as a
+transitive dependency of `rapidocr`/`windows-capture` (`pip show
+opencv-python` → `Required-by: rapidocr, windows-capture`). The function
+under test (`save_crop_bounded`, `l9_presence/killfeed_cv.py:79`) fails
+open by design when `cv2` is unavailable — returns `None`, per its own
+docstring — so this surfaced as a wrong-value assertion, not an
+`ImportError`. The same test *file* already has the correct
+`pytest.importorskip("cv2")` convention on a different test two tests
+earlier; this one was simply missed. Fixed by applying the same guard.
+**Related, deliberately not fixed here:** at least 7 files in this suite
+guard on `cv2` the same way, meaning the dense-capture/killfeed-corpus
+feature these tests exercise is silently skipped in CI entirely, every
+run, and has been since `cv2` was never added as a real dependency —
+worth a `opencv-python-headless` addition to actually exercise this code
+path in CI, but that's a bigger, riskier change (new system-level
+dependency, ripples across all 7 files, unknown what else surfaces once
+they stop skipping) than belongs in a targeted CI-debt fix. Named here,
+not attempted.
+
+`test_read_node_config_failclosed_on_secret` +
+`test_node_state_first_proof_pending_path_b`: `scripts/qortroller.py::
+read_node_config()` does `import tomllib` — Python 3.11+ stdlib only
+(PEP 680) — inside a `try` that also catches "config file is malformed"
+via a broad `except Exception: pass`. On Python 3.10, the `import`
+itself raises `ModuleNotFoundError`, caught by that same broad except,
+so the function silently returns defaults without ever parsing the file
+— the secret-shaped-key fail-closed check never runs, and any test
+relying on the actual file content being read sees stale defaults
+instead. Fixed with the standard `tomli`-on-`<3.11` fallback
+(`bridge/requirements.txt` gets a `python_version`-marked dependency).
+**Verified by actually forcing the failure mode locally** (monkeypatched
+`__import__` to raise `ModuleNotFoundError` on `tomllib` specifically,
+simulating Python 3.10 on this Python 3.13 dev machine) rather than
+trusting that the standard fallback idiom would work — confirmed the
+`ValueError` fires correctly and `compute_node_state` reads the real
+file content via the `tomli` path, for both tests, before considering
+this closed.
 
 `test_uvc_source.py`
 was investigated — no fragile/version-sensitive assertions found on
@@ -434,11 +475,11 @@ cv2/OpenCV Linux-vs-Windows behavior on the synthetic-frame pipeline —
 still not root-caused to a specific cause, but no longer just a theory;
 confirmed real and CI-blocking.
 
-`test_qortroller_cli.py` (2) and
-`test_qortroller_retina_capture.py` (1) — **REOPENED** (see the
-correction earlier in this file — wrongly marked resolved in the third
-pass on Windows-only evidence; real diagnosis in progress, tracked as its
-own task, not fixed as of this entry).
+`test_qortroller_cli.py` (2) and `test_qortroller_retina_capture.py` (1)
+were reopened, then closed for real — see the fourth-pass correction
+earlier in this file for the full account (wrongly marked resolved on
+Windows-only evidence, then given an actual diagnosis and an
+empirically-verified fix, commit `81a830b1`).
 
 ## Methodology note
 
