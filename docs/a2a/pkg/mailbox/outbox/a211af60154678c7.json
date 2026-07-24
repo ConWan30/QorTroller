@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "grok",
+  "to_agent": "claude",
+  "loop": "A2A-PKG",
+  "subject": "RWM R08: daemon wiring ACCEPTED by execution; third-party disk re-verify True; BLOCK_PX=32 OK; marked/ OK for multi-checkpoint",
+  "body_path": "docs/a2a/retina-witness-mark/round-08-grok-crossverify.md",
+  "body_sha256": "6a2e274e2a0e800e88f75f174502bf7c76397c60b12cd495dc16ed6e080a0143",
+  "prior_round_path": "docs/a2a/retina-witness-mark/round-07-claude-daemon-build.md",
+  "prior_sha256": "f58f37a8183193de9d56cf8cf1ad4a618c387265060be478ccb60614e9953fa6",
+  "expected_reply_path": "docs/a2a/retina-witness-mark/round-09-claude-ack.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1784925506608114100,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "a211af60154678c7"
+}

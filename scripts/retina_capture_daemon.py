@@ -378,6 +378,149 @@ def _archive_ring(label, started_at):
     return dst, n
 
 
+# --- RWM L0 daemon wiring (A2A rounds 02-06: grok design D1-D7 + 2 claude-code flags,
+# both accepted; build list confirmed exact in round-06 before implementation) ---------
+RWM_CHAIN_SCHEMA = "qortroller-rwm-session-chain-v0"   # CANDIDATE — not FROZEN-v1, no PV-CI pin
+RWM_BLOCK_PX = 32
+RWM_CORNER = "bottom-right"
+RWM_CHECKPOINT_INDEX = 0   # D3/r06: one checkpoint per session at L0. Multi-checkpoint
+                           # needs a semantic L0 doesn't have; shipping 0 is the honest choice.
+
+
+def _issue_rwm_l0(label, started_at, dst):
+    """Retina Witness Mark L0 over the archived ring (D1). Fail-open: never breaks stop.
+
+    Runs ONCE at session stop over the already-archived crops -- never on the hot capture
+    loop -- matching the cadence _archive_ring() already established.
+
+    Marks each archived frame with the visual locator, writes the marked copy to a
+    `marked/` SIDECAR (D3/r02-q2: never overwrite the archive; destroying an original to
+    save disk is not recoverable, and it would stale the tier-1 manifest.json hashes),
+    then hash-chains the bytes ACTUALLY WRITTEN.
+
+    Default-OFF behind RWM_L0_DAEMON_ENABLED (D5)."""
+    if os.environ.get("RWM_L0_DAEMON_ENABLED", "").strip().lower() not in ("1", "true", "yes"):
+        return
+    if dst is None:
+        print("[daemon] RWM: no archive dir (ring empty) — skipping")
+        return
+
+    # D2: device_id is env-sourced and NEVER fabricated. A manifest that invents the device
+    # it claims to attest is worse than no manifest -- the whole point is third-party
+    # matching of footage to a SPECIFIC certified device.
+    device_id_hex = os.environ.get("RWM_DEVICE_ID_HEX", "").strip().lower()
+    if not device_id_hex:
+        print("[daemon] RWM: RWM_DEVICE_ID_HEX unset — skipping (device_id is never fabricated)")
+        return
+
+    import hashlib
+
+    import numpy as np  # noqa: F401  (cv2 decode path returns ndarray)
+
+    from l9_presence.session_identity import derive_session_id
+
+    _bridge = _REPO / "bridge"
+    if str(_bridge) not in sys.path:
+        sys.path.insert(0, str(_bridge))
+    from vapi_bridge.retina_capture_manifest import build_session_chain, verify_session_chain
+    from vapi_bridge.retina_witness_mark import (compute_locator_payload,
+                                                 composite_mark_onto_frame, encode_mark_symbols)
+
+    try:
+        import cv2
+    except ImportError:
+        print("[daemon] RWM: cv2 unavailable — skipping (marked frames need a real encoder)")
+        return
+
+    session_id = derive_session_id(label, started_at)
+    crops = sorted(dst.glob("panel_*.png"))
+    if not crops:
+        print("[daemon] RWM: no archived crops — skipping")
+        return
+
+    payload = compute_locator_payload(hashlib.sha256(session_id.encode()).digest()[:8],
+                                      RWM_CHECKPOINT_INDEX)
+    symbols = encode_mark_symbols(payload)
+    marked_dir = dst / "marked"
+    marked_dir.mkdir(parents=True, exist_ok=True)
+
+    # D4 + Flag 2: the daemon owns time. Both RWM modules are pure with no clock read
+    # (matching WEC/GIC), so the monotonicity guard lives HERE. Consequence, stated in the
+    # schema below: stored ts_ns is monotonic SESSION time, not filesystem wall-clock truth.
+    _prev = 0
+
+    def _mono(ts: int) -> int:
+        nonlocal _prev
+        if ts <= _prev:
+            ts = _prev + 1
+        _prev = ts
+        return ts
+
+    genesis_ts_ns = _mono(time.time_ns())
+    frames, rows = [], []
+    for i, src in enumerate(crops):
+        img = cv2.imread(str(src), cv2.IMREAD_COLOR)
+        if img is None:
+            print(f"[daemon] RWM: unreadable crop {src.name} — skipping frame")
+            continue
+        try:
+            marked = composite_mark_onto_frame(img, symbols[i % len(symbols)],
+                                               corner=RWM_CORNER, block_px=RWM_BLOCK_PX)
+        except ValueError as e:   # F-RWM-9 guard: frame too small for the block.
+            print(f"[daemon] RWM: {src.name} cannot be marked ({e}) — skipping frame")
+            continue
+        out = marked_dir / src.name
+        if not cv2.imwrite(str(out), marked):
+            print(f"[daemon] RWM: write failed for {src.name} — skipping frame")
+            continue
+        # D3 step 4 (load-bearing): hash the bytes ON DISK, not the in-memory array. A
+        # third-party verifier recomputes from these archived files; hashing anything else
+        # makes the chain unverifiable by exactly the party it exists for.
+        digest = hashlib.sha256(out.read_bytes()).digest()
+        ts = _mono(src.stat().st_mtime_ns)
+        frames.append((digest, ts))
+        rows.append({"file": f"marked/{out.name}", "source": src.name,
+                     "frame_index": len(frames) - 1, "frame_hash_hex": digest.hex(), "ts_ns": ts})
+
+    if not frames:
+        print("[daemon] RWM: no markable frames — skipping")
+        return
+
+    chain = build_session_chain(session_id, device_id_hex, genesis_ts_ns, frames)
+    # Flag 1 (claude-code r03, grok-accepted r04): explicit check, NOT `assert` -- asserts are
+    # stripped under -O, and a chain self-check that silently vanishes in an optimized run is a
+    # comment, not a guard. Fail-open on failure, per D5.
+    if not verify_session_chain(session_id, device_id_hex, genesis_ts_ns, frames, chain):
+        print("[daemon] RWM: chain self-verify FAILED — not writing manifest (fail-open)")
+        return
+
+    (dst / "rwm_manifest_chain.json").write_text(json.dumps({
+        "schema": RWM_CHAIN_SCHEMA,
+        "candidate": True,
+        "session_id": session_id,
+        "device_id_hex": device_id_hex,
+        "genesis_ts_ns": genesis_ts_ns,
+        "ts_ns_semantics": ("monotonic SESSION time, not filesystem wall-clock truth: source "
+                            "mtimes pass through a monotonicity guard (GIC INV-GIC-002 style), "
+                            "so a stored ts_ns may exceed the file's real mtime. Do NOT read "
+                            "these as capture wall-clock times."),
+        "locator": {"checkpoint_index": RWM_CHECKPOINT_INDEX,
+                    "session_id_hash_8b_hex": hashlib.sha256(session_id.encode()).digest()[:8].hex(),
+                    "block_px": RWM_BLOCK_PX, "corner": RWM_CORNER},
+        "frames": rows,
+        "chain_hex": [h.hex() for h in chain],
+    }, indent=2), encoding="utf-8")
+    # Display path only. relative_to() raises for any dst outside the repo, and this runs
+    # AFTER the manifest is safely written -- letting it throw would surface a successful
+    # run as "RWM L0 failed (non-fatal)" to the operator. Cosmetics must not fail the step.
+    _out = dst / "rwm_manifest_chain.json"
+    try:
+        _shown = _out.relative_to(_REPO)
+    except ValueError:
+        _shown = _out
+    print(f"[daemon] RWM: {len(frames)} frames marked + chained -> {_shown}")
+
+
 def cmd_stop(a) -> int:
     st = _read_state()
     if st is None:
@@ -429,6 +572,7 @@ def cmd_stop(a) -> int:
         print(f"[daemon] match-state seal failed (non-fatal): {e!r}")
     # R3 ring-archival (DEFAULT-ON; --no-archive-ring to skip): preserve this session's rendering before the
     # next session overwrites the rolling ring. Fail-open — archival never breaks the stop path.
+    _rwm_dst = None
     if not getattr(a, "no_archive_ring", False):
         try:
             res = _archive_ring(label, st["started_at"])
@@ -436,9 +580,16 @@ def cmd_stop(a) -> int:
                 print("[daemon] ring-archive: ring empty — nothing to archive")
             else:
                 dst, n = res
+                _rwm_dst = dst
                 print(f"[daemon] ring-archive: copied {n} crops -> {dst.relative_to(_REPO)}")
         except Exception as e:  # noqa: BLE001
             print(f"[daemon] ring-archive failed (non-fatal): {e!r}")
+    # D1: RWM L0 immediately after a successful archive, under the same fail-open discipline
+    # as the KAS/PoSP issuance below. Default-OFF (RWM_L0_DAEMON_ENABLED); never on the hot loop.
+    try:
+        _issue_rwm_l0(label, st["started_at"], _rwm_dst)
+    except Exception as e:  # noqa: BLE001 — RWM must never break the stop path
+        print(f"[daemon] RWM L0 failed (non-fatal): {e!r}")
     # Increment 2 step 5 (G4 green 2026-07-03): session-close KAS certificate issuance — EXPLICIT opt-in
     # (--kas), default-OFF. Issues the Kill-Authorship Session Record over THIS session's log + composites
     # (fail-closed enum; a bad session honestly reads INSUFFICIENT_KILLS / HYGIENE_FAIL, never a false cert).
