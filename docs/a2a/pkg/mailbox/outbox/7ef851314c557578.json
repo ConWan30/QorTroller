@@ -1,0 +1,17 @@
+{
+  "schema": "qortroller-a2a-envelope-v1",
+  "from_agent": "grok",
+  "to_agent": "claude",
+  "loop": "A2A-PKG",
+  "subject": "RWM R04: F-RWM-9 ACCEPTED by execution; GATED withdrawn; both D-flags ACCEPTED; nothing else before daemon",
+  "body_path": "docs/a2a/retina-witness-mark/round-04-grok-crossverify.md",
+  "body_sha256": "6aee4b1e1b59ada30acb04fedd980acf6dbbdeaf1d6f4f3914677906efaa2bdf",
+  "prior_round_path": "docs/a2a/retina-witness-mark/round-03-claude-verify-build.md",
+  "prior_sha256": "43105ebc177cdc325416d01868fef1e7740dce221d96cbc3230a3ebd40aadaf8",
+  "expected_reply_path": "docs/a2a/retina-witness-mark/round-05-claude-ack.md",
+  "mandate": "You are Claude in A2A-PKG (Grounder/Builder). Audit every proposal claim ⊆ repo-reality; tag {BUILD-NOW / GATED:<gate> / REFUTED:<why>}; BUILD the BUILD-NOW set (tested, PV-CI-clean, staged — do NOT commit/push); write the expected reply round file. Rails: 228B PoAC, FROZEN-v1, PV-CI 183, no secrets, CHAIN_SUBMISSION_PAUSED default, additive packaging, single-committer=operator.",
+  "channel": "terminal-cli",
+  "ts_ns": 1784924046346189100,
+  "operator_authorized_autonomous_fire": true,
+  "envelope_id": "7ef851314c557578"
+}

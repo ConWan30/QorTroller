@@ -130,6 +130,23 @@ def encode_mark_symbols(
     return out
 
 
+def _validate_block_px(block_px: int, h: int, w: int) -> None:
+    """Fail-closed bounds check shared by the paint and sample paths (F-RWM-9).
+
+    Both sides must agree on what a valid block is, or encode/decode desynchronize:
+    a block the painter accepts but the sampler reads from a different pixel is a
+    silent corruption, not a loud failure. Keeping the rule in one function is what
+    keeps them symmetric.
+    """
+    if not isinstance(block_px, int) or isinstance(block_px, bool) or block_px <= 0:
+        raise ValueError(f"block_px must be a positive int, got {block_px!r}")
+    if block_px > h or block_px > w:
+        raise ValueError(
+            f"block_px={block_px} does not fit in frame {h}x{w} "
+            f"(max {min(h, w)}) -- would wrap to the whole frame, see F-RWM-9"
+        )
+
+
 def composite_mark_onto_frame(
     frame, symbol: tuple[int, int, int], *, corner: str = "bottom-right", block_px: int = 32
 ):
@@ -147,9 +164,25 @@ def composite_mark_onto_frame(
 
     Returns:
         A new array of the same shape/dtype as `frame`, with the block painted.
+
+    Raises:
+        ValueError: on an unknown `corner`, or when `block_px` is not a positive
+            integer that fits inside the frame (see F-RWM-9 note below).
     """
     out = frame.copy()
     h, w = out.shape[0], out.shape[1]
+    # F-RWM-9 (grok round-02, independently reproduced): without this guard,
+    # block_px > min(h, w) makes `h - block_px` NEGATIVE, and numpy reads a
+    # negative slice start as "from the end" -- so out[-16:16] on a 16x16 frame
+    # silently paints the ENTIRE frame instead of a corner block, with no error.
+    # Probed directly: 16x16 frame + block_px=32 -> 256/256 pixels painted.
+    # A locator that silently covers the whole frame is not a locator, and the
+    # pre-existing tests never caught it because they all use safe sizes.
+    # Fail CLOSED here rather than fail-open: this is a pure library function, so
+    # the honest contract is "reject input I cannot mark correctly." The daemon
+    # edge is the right place to decide whether that's fatal or skippable, and it
+    # cannot make that decision if this function quietly returns a wrong frame.
+    _validate_block_px(block_px, h, w)
     if corner == "bottom-right":
         y0, y1, x0, x1 = h - block_px, h, w - block_px, w
     elif corner == "bottom-left":
@@ -169,8 +202,19 @@ def composite_mark_onto_frame(
 def _sample_mark_color(
     frame, *, corner: str = "bottom-right", block_px: int = 32
 ) -> tuple[int, int, int]:
-    """Read back the mark color from a frame's marked corner (center pixel of the block)."""
+    """Read back the mark color from a frame's marked corner (center pixel of the block).
+
+    Raises:
+        ValueError: on an unknown `corner`, or a `block_px` that doesn't fit the
+            frame -- same F-RWM-9 guard as the paint path, deliberately symmetric.
+    """
     h, w = frame.shape[0], frame.shape[1]
+    # F-RWM-9: mirror of the paint-side guard. Sampling has the same negative-index
+    # exposure (h - block_px // 2 goes negative for an oversized block, silently
+    # reading a pixel from the opposite edge), and the two paths MUST reject the
+    # same inputs or a frame could be painted and then read back at a different
+    # location -- decoding a wrong-but-plausible symbol instead of failing.
+    _validate_block_px(block_px, h, w)
     if corner == "bottom-right":
         cy, cx = h - block_px // 2, w - block_px // 2
     elif corner == "bottom-left":

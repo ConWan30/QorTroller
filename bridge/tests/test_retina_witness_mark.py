@@ -163,3 +163,43 @@ def test_composite_mark_all_corners():
 
 def test_domain_tag_is_the_declared_candidate_tag():
     assert DOMAIN_TAG == b"VAPI-RETINA-WITNESS-MARK-v1"
+
+
+# --- F-RWM-9 (grok round-02, independently reproduced by claude-code) ---
+# Oversized block_px made `h - block_px` negative, and numpy reads a negative
+# slice start as "from the end" -> the whole frame got painted/sampled silently.
+# Pre-fix probe: 16x16 frame + block_px=32 -> 256/256 pixels painted, no raise.
+
+
+def test_composite_rejects_block_px_larger_than_frame():
+    """The exact pre-fix silent-whole-frame-paint case, now fail-closed."""
+    small = np.zeros((16, 16, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="does not fit in frame"):
+        composite_mark_onto_frame(small, DEFAULT_PALETTE[0], block_px=32)
+
+
+def test_sample_rejects_block_px_larger_than_frame():
+    """Sampling must reject exactly what painting rejects — asymmetry here would
+    let a frame be painted at one location and read back at another."""
+    from vapi_bridge.retina_witness_mark import _sample_mark_color
+
+    small = np.zeros((16, 16, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="does not fit in frame"):
+        _sample_mark_color(small, block_px=32)
+
+
+def test_composite_rejects_non_positive_block_px():
+    frame = _blank_frame()
+    for bad in (0, -1, -32):
+        with pytest.raises(ValueError, match="positive int"):
+            composite_mark_onto_frame(frame, DEFAULT_PALETTE[0], block_px=bad)
+
+
+def test_composite_accepts_block_px_exactly_frame_size():
+    """Boundary: a block the exact size of the frame is degenerate but well-defined
+    (it does not wrap), so it must be ACCEPTED — the guard rejects wrapping, not
+    edge cases."""
+    small = np.zeros((16, 16, 3), dtype=np.uint8)
+    marked = composite_mark_onto_frame(small, DEFAULT_PALETTE[0], block_px=16)
+    assert marked.shape == small.shape
+    assert tuple(int(v) for v in marked[8, 8][:3]) == DEFAULT_PALETTE[0]
