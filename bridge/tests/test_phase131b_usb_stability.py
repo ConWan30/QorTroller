@@ -117,3 +117,38 @@ def test_6_schema_version_1315_present():
         row = cur.fetchone()
     assert row is not None, "schema_versions must have entry with phase=1315"
     assert row[0] == "usb_reconnect"
+
+
+def test_7_usb_stability_status_endpoint_returns_real_data():
+    """CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): GET /agent/usb-stability-status
+    used to 500 with NameError on every real call (undefined nodes_configured/_nodes_healthy/
+    _emulator_mode/_latencies/_health_log/_t132 -- orphaned from a different endpoint by the
+    2026-06-19 agent_misc split, never caught because no test exercised the HTTP route
+    itself, only the Store layer). This is the missing regression test."""
+    from unittest.mock import MagicMock
+    from vapi_bridge.operator_api import create_operator_app
+    from starlette.testclient import TestClient
+
+    store = _make_store()
+    store.insert_usb_reconnect_log(
+        device_address="aabbccddeeff1234",
+        disconnect_reason="hid_feedback_timeout",
+        consecutive_fb_timeouts=6,
+        ps5_compat_mode_active=False,
+        session_id="test-session-7",
+    )
+    cfg = MagicMock()
+    cfg.operator_api_key = "test-key"
+    cfg.rate_limit_per_minute = 60
+    cfg.ps5_compat_mode = True
+
+    app = create_operator_app(cfg=cfg, store=store)
+    client = TestClient(app)
+    resp = client.get("/agent/usb-stability-status?api_key=test-key")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["ps5_compat_mode"] is True
+    assert body["disconnect_count"] == 1
+    assert "last_disconnect_ts" in body
+    assert "entries" in body and len(body["entries"]) == 1
+    assert "timestamp" in body
