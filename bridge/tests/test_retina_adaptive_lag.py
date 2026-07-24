@@ -6,8 +6,19 @@ search window when the measured Remote Play lag nears the ceiling.
 """
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
 from types import SimpleNamespace
+
+# CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): this file imports
+# vapi_bridge.qortroller_retina_capture but never put bridge/ on sys.path itself,
+# so it only worked when collected after some other file had already done so
+# (order-dependent -- passes in a full-suite run, fails standalone with
+# ModuleNotFoundError: No module named 'vapi_bridge'). l9_presence imports above
+# it are unaffected since that package sits at repo root, already on sys.path
+# via conftest/rootdir.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def test_oracle_lag_window_backward_compatible_and_tunable():
@@ -35,6 +46,11 @@ def test_tune_widens_oracle_lag_window_when_lag_near_ceiling():
     rgc._source = WgcFrameSource(rgc.core, "x")
     rgc.started = True
     rgc._governor = AdaptiveCaptureGovernor(CaptureControls())
+    # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): __new__() bypasses
+    # __init__, so _capture_enabled is never set; tune() -> save_capture_crops()
+    # reads it unconditionally. False matches this test's own "no Windows capture
+    # in CI" intent -- it's testing lag-window tuning, not capture-crop saving.
+    rgc._capture_enabled = False
 
     # steady 60fps frame cadence so the governor passes the "steady video" priority and reaches the lag rule
     base = time.time() * 1000.0
@@ -62,4 +78,5 @@ def test_tune_noop_with_too_few_frames():
     rgc._source = WgcFrameSource(rgc.core, "x")
     rgc.started = True
     rgc._governor = AdaptiveCaptureGovernor(CaptureControls())
+    rgc._capture_enabled = False  # see comment in the test above
     assert rgc.tune() is None  # no frames yet -> safe no-op
