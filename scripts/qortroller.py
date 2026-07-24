@@ -328,7 +328,16 @@ def read_node_config(path: Path = _NODE_TOML) -> dict:
     """node.toml -> dict over defaults. Fail-open to defaults; fail-CLOSED on secret-shaped keys."""
     cfg = dict(_DEFAULTS)
     try:
-        import tomllib
+        # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): tomllib is stdlib on
+        # Python 3.11+ only. On 3.10, `import tomllib` raised ModuleNotFoundError,
+        # which the broad `except Exception: pass` below silently swallowed as if the
+        # config file itself were unreadable -- the function returned defaults without
+        # ever parsing the file, so the secret-shaped-key fail-closed check never ran.
+        # tomli (the standard backport) is now an explicit Python<3.11 dependency.
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib
         if path.exists():
             loaded = tomllib.loads(path.read_text(encoding="utf-8"))
             bad = [k for k in loaded if secret_shaped(k)]

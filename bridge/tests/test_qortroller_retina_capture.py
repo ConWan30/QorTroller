@@ -170,6 +170,16 @@ def test_killfeed_authorship_wired_spectated(monkeypatch):
 
 # --- Dense panel-crop capture (calibration corpus) — gating + bounded write ---
 def test_save_capture_crops_enabled_writes(tmp_path):
+    # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): cv2/opencv-python is not
+    # declared in bridge/requirements.txt or installed by CI -- it's only present on
+    # this dev machine as a transitive dependency of rapidocr/windows-capture. This
+    # test's save_capture_crops() call goes through l9_presence.killfeed_cv.
+    # save_crop_bounded(), which imports cv2 internally and fails OPEN (returns None,
+    # by design, per its own docstring) when cv2 is unavailable -- so on real CI this
+    # assertion failed with path=None, not an ImportError. Same convention this file
+    # already uses at line ~116 for a different cv2-dependent test; this one was
+    # simply missed.
+    pytest.importorskip("cv2")
     from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", capture_enabled=True, capture_dir=str(tmp_path),
                             capture_max=10, panel_roi="0.0,0.28,0.32,0.67")

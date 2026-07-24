@@ -30,6 +30,15 @@ uvicorn[standard]>=0.27.0
 # Configuration
 python-dotenv>=1.0.0
 
+# TOML parsing for scripts/qortroller.py::read_node_config(). tomllib is stdlib on
+# Python 3.11+ only (PEP 680); this CI matrix explicitly tests 3.10 too, so the
+# Python<3.11 fallback needs to actually be installed, not just referenced in a
+# try/except. Without it, `import tomllib` raises ModuleNotFoundError on 3.10,
+# silently caught by read_node_config()'s fail-open "unreadable config" handler --
+# the function returns defaults without ever parsing the file, which is a different
+# failure mode than "config file is malformed" masquerading as the same one.
+tomli>=2.0.1; python_version < "3.11"
+
 # AWS KMS (Phase O0 Section 6.3 — operator agent signing per Pass 2C Section 12)
 boto3>=1.34.0
 
