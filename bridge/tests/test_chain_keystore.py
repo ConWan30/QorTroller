@@ -92,10 +92,21 @@ def test_validate_env_source_with_key_passes():
 
 @pytest.mark.needs_env
 def test_validate_env_source_without_key_fails():
-    """validate() reports BRIDGE_PRIVATE_KEY error when source='env' and key is empty."""
+    """validate() reports BRIDGE_PRIVATE_KEY error when source='env' and key is empty
+    AND live enforcement is active (AGENT_DRY_RUN=false).
+
+    CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): this test predates
+    validate()'s dry-run-aware guard (config.py ~3792-3800) -- in the default
+    dry_run mode, a missing key is correctly NOT an error (chain writes are
+    advisory/skipped, so no real key is needed); the check only fires once
+    live enforcement is explicitly turned on. Without AGENT_DRY_RUN=false this
+    test was exercising the dry-run "no error expected" path while asserting
+    the opposite.
+    """
     cfg = _make_config(
         BRIDGE_PRIVATE_KEY_SOURCE="env",
         BRIDGE_PRIVATE_KEY="",
+        AGENT_DRY_RUN="false",
     )
     errors = cfg.validate()
     assert any("BRIDGE_PRIVATE_KEY" in e for e in errors)
