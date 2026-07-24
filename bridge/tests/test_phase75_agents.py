@@ -34,17 +34,25 @@ for _mod in ["web3", "web3.exceptions", "eth_account", "eth_account.signers.loca
     if _mod not in sys.modules:
         sys.modules[_mod] = types.ModuleType(_mod)
 
-# Stub SDK to avoid path issues in bridge test context
-_sdk_stub = types.ModuleType("sdk")
-_sdk_vapi_stub = types.ModuleType("sdk.vapi_sdk")
-sys.modules.setdefault("sdk", _sdk_stub)
-sys.modules.setdefault("sdk.vapi_sdk", _sdk_vapi_stub)
+# Stub SDK -- scoped to this import block only, then removed. sys.modules is
+# process-global; leaving these stubs in place broke `from sdk.wmp_derived import ...`
+# in every WMP test file collected later in the same pytest run (CI-only -- CI's
+# alphabetical collection always reaches this file before the wmp ones).
+_sdk_was_present = "sdk" in sys.modules
+_sdk_vapi_was_present = "sdk.vapi_sdk" in sys.modules
+sys.modules.setdefault("sdk", types.ModuleType("sdk"))
+sys.modules.setdefault("sdk.vapi_sdk", types.ModuleType("sdk.vapi_sdk"))
 
 from vapi_bridge.store import Store
 from vapi_bridge.session_adjudicator_validator import (
     SessionAdjudicatorValidationAgent,
     _rule_fallback,
 )
+
+if not _sdk_vapi_was_present:
+    del sys.modules["sdk.vapi_sdk"]
+if not _sdk_was_present:
+    del sys.modules["sdk"]
 
 
 def _make_store():

@@ -19,7 +19,7 @@ import time
 import numpy as np
 
 _R2_ONSET = 20            # R2 value (0-255) that marks press onset
-_trapz = getattr(np, "trapezoid", getattr(np, "trapz"))
+_trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz  # np.trapz deprecated -> trapezoid
 
 
 def extract_force_features(traj: list) -> dict:
