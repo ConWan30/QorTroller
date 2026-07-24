@@ -133,13 +133,22 @@ def test_get_threat_forecast_accuracy_with_pir(tmp_store):
 # ---------------------------------------------------------------------------
 
 def test_protocol_maturity_weights_v2():
-    """_WEIGHTS dict in ProtocolMaturityScoringAgent sums to 1.0 and has 8 entries."""
+    """_WEIGHTS dict in ProtocolMaturityScoringAgent sums to 1.0 and has 9 entries.
+
+    CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): bumped 8->9 and added the
+    pmi_component assertion. Phase 195 added a 9th component (Protocol Metabolism
+    Index) and rebalanced the other 8 weights to fit -- documented in the module
+    docstring and per-weight changelog comments ("reduced Phase 195"). This test
+    was written for the Phase 191 TSP snapshot and never updated for the later,
+    intentional Phase 195 rebalance.
+    """
     from bridge.vapi_bridge.protocol_maturity_scoring_agent import _WEIGHTS
-    assert len(_WEIGHTS) == 8, f"Expected 8 components, got {len(_WEIGHTS)}"
+    assert len(_WEIGHTS) == 9, f"Expected 9 components, got {len(_WEIGHTS)}"
     total = sum(_WEIGHTS.values())
     assert abs(total - 1.0) < 1e-9, f"Weights sum to {total}, expected 1.0"
     assert "threat_forecast_accuracy_component" in _WEIGHTS
     assert "biometric_stationarity_component" in _WEIGHTS
+    assert "pmi_component" in _WEIGHTS
 
 
 # ---------------------------------------------------------------------------
@@ -164,11 +173,16 @@ def test_run_scoring_includes_tsp_components(tmp_store, mock_cfg):
 # ---------------------------------------------------------------------------
 
 def test_maturity_score_v2_formula(tmp_store, mock_cfg):
-    """maturity_score uses 8-component v2 weights (0.20+0.20+0.15+0.12+0.12+0.10+0.07+0.04=1.0)."""
+    """maturity_score uses 9-component v3 weights (Phase 195 PMI rebalance, sums to 1.0).
+
+    CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): added the pmi_component
+    entry + reader patch. Same staleness as test_protocol_maturity_weights_v2 above
+    -- written for the Phase 191 8-component snapshot, not updated for Phase 195.
+    """
     from bridge.vapi_bridge.protocol_maturity_scoring_agent import ProtocolMaturityScoringAgent, _WEIGHTS
     agent = ProtocolMaturityScoringAgent(cfg=mock_cfg, store=tmp_store, bus=None)
 
-    # Patch all 8 component readers to known values
+    # Patch all 9 component readers to known values
     components = {
         "separation_component":               0.80,
         "chain_integrity_component":          0.90,
@@ -178,6 +192,7 @@ def test_maturity_score_v2_formula(tmp_store, mock_cfg):
         "enrollment_component":               0.40,
         "threat_forecast_accuracy_component": 0.65,
         "biometric_stationarity_component":   0.55,
+        "pmi_component":                      0.45,
     }
     expected = round(sum(components[k] * w for k, w in _WEIGHTS.items()), 6)
 
@@ -189,6 +204,7 @@ def test_maturity_score_v2_formula(tmp_store, mock_cfg):
     agent._enrollment_component               = lambda: components["enrollment_component"]
     agent._threat_forecast_accuracy_component = lambda: components["threat_forecast_accuracy_component"]
     agent._biometric_stationarity_component   = lambda: components["biometric_stationarity_component"]
+    agent._pmi_component                      = lambda: components["pmi_component"]
 
     result = agent._run_scoring()
     assert abs(result["maturity_score"] - expected) < 1e-5, (
