@@ -145,13 +145,17 @@ def test_controller_nft_abi_mint_is_only_writer():
 def test_transfer_topic0_is_canonical_erc721():
     # keccak256("Transfer(address,address,uint256)")
     import sys
-    from unittest.mock import MagicMock
-    # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): same web3/eth_account
-    # poisoning class as test_controller_ioid_registration.py -- this test needs a REAL
-    # Web3.keccak, not whatever MagicMock an earlier-collected file may have left in
-    # sys.modules (eth_account too: web3 imports eth_account.datastructures internally).
-    for _mod_name in ("web3", "eth_account"):
-        if isinstance(sys.modules.get(_mod_name), MagicMock):
+    # CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md), round 2: the first version
+    # of this guard (isinstance(..., MagicMock) on just the two top-level keys) missed
+    # two real poisoning classes found under full-suite collection -- see the longer
+    # comment in test_controller_ioid_registration.py for the full root-cause writeup.
+    # Short version: some files stub web3 with a genuine types.ModuleType + a bolted-on
+    # stub class (not a MagicMock, isinstance() never catches it), and many files poison
+    # individual dotted submodules (web3.exceptions, web3.main, ...) that survive a del
+    # of just the two bare top-level keys. Purge the whole namespace tree unconditionally.
+    for _mod_name in list(sys.modules):
+        if (_mod_name == "web3" or _mod_name.startswith("web3.")
+                or _mod_name == "eth_account" or _mod_name.startswith("eth_account.")):
             del sys.modules[_mod_name]
     from web3 import Web3
     assert TRANSFER_TOPIC0 == "0x" + Web3.keccak(text="Transfer(address,address,uint256)").hex().removeprefix("0x")

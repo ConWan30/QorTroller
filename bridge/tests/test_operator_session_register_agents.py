@@ -31,6 +31,19 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+# CI-debt fix 2026-07-24 (docs/a2a/ci-debt/backlog.md): same web3/eth_account
+# namespace-poisoning class as test_controller_ioid_registration.py (full writeup
+# there) -- many other test files stub web3/eth_account (whole-namespace ModuleType
+# stubs and/or individual dotted-submodule pollution), and this file's own production
+# import (bridge.scripts.operator_session_register_agents, which itself does `from
+# eth_account import Account` at module level) needs a REAL eth_account. Purge the
+# whole eth_account namespace tree plus the production module's cache entry so both
+# get freshly re-imported clean, regardless of collection order.
+for _mod_name in list(sys.modules):
+    if (_mod_name == "eth_account" or _mod_name.startswith("eth_account.")
+            or _mod_name == "bridge.scripts.operator_session_register_agents"):
+        del sys.modules[_mod_name]
+
 from eth_account import Account
 from eth_hash.auto import keccak
 
