@@ -1,15 +1,30 @@
-# Retina Witness Mark — scope (NOT built, NOT authorized to build)
+# Retina Witness Mark — scope (D-RWM-1 RESOLVED: Path A. Implementation plan pending, no code yet.)
 
-**Status: HOLD (2026-07-23, external review via Claude.ai).** The design as
-originally written below has a confirmed BLOCK-severity flaw (F-RWM-1) — the
-"cryptographically ties the footage to that session" claim is false as
-specified. The scoping *discipline* (ground on real infrastructure, propose
-CANDIDATE not FROZEN, no code without authorization) is validated as
-correct; the specific design needs a fork decision before any build
-authorization is possible. See **§ Review findings** and **§ D-RWM-1** below
-— added findings-forward, original text preserved (not rewritten), matching
-this project's established `[SUPERSEDED-...]` convention for corrected
-claims. No code written, no production file touched, do not build.
+**Status: D-RWM-1 RESOLVED — Path A (2026-07-23, operator decision via the
+claude-ai⇄claude-code A2A loop).** Operator: *"I agree with the logical
+recommendations provided"* — adopting the reviewer's full recommendation
+set: **Path A as L0 of the NOV ladder → NOV-3 → NOV-2 → NOV-1**, each layer
+opened only after the prior layer's live verification passes. Path B
+(device-signed, SE-dependent) is banked behind the Path-A-Arc-2 hardware
+gate, not abandoned — see § D-RWM-1 below for the still-valid fork writeup.
+
+RWM Path A now becomes "L0" in a larger sequence (see
+`docs/a2a/retina-witness-mark-ladder/` for NOV-3/NOV-2/NOV-1, opened only
+once L0 ships and live-verifies). **Still no code written, no production
+file touched.** Per the A2A protocol's own explicit next step ("r05 is your
+implementation plan for review before any code"), the next deliverable is an
+implementation plan for Path A specifically — not code, and not yet
+authorized to become code without a further explicit go-ahead.
+
+The design as originally written below had a confirmed BLOCK-severity flaw
+(F-RWM-1) — the "cryptographically ties the footage to that session" claim
+was false as specified. The scoping *discipline* (ground on real
+infrastructure, propose CANDIDATE not FROZEN, no code without authorization)
+was validated as correct throughout; the specific design needed the fork
+decision now resolved above. See **§ Review findings** and **§ D-RWM-1**
+below — added findings-forward, original text preserved (not rewritten),
+matching this project's established `[SUPERSEDED-...]` convention for
+corrected claims.
 
 ~~**Status:** scoping only. No code written, no production file touched. This
 is a new-primitive proposal, not a bug fix — a different risk/effort class
@@ -196,44 +211,62 @@ archive-time stamping with the current chain-head proves "no earlier than"
 (a freshness floor), not "depicts gameplay at" that chain position. State
 this explicitly in any future revision.
 
-## Decision D-RWM-1 (operator's to resolve — both paths presented, neither built)
+## Decision D-RWM-1 — RESOLVED: Path A
 
-**Path A — demote the claim.** The mark becomes a locator tag ("footage
-claims session X, chain position Y"), paired with a signed per-frame-hash
-manifest for pristine-archive tamper-evidence; the mark alone is an honest
-breadcrumb on transcoded copies, not a tamper-evidence proof. Cheap,
-buildable on current infrastructure, requires rewriting the verification
-story to match what it actually proves.
+**Path A — demote the claim (CHOSEN).** The mark becomes a locator tag
+("footage claims session X, chain position Y"), paired with a signed
+per-frame-hash manifest for pristine-archive tamper-evidence; the mark alone
+is an honest breadcrumb on transcoded copies, not a tamper-evidence proof by
+itself. Cheap, buildable on current infrastructure. The verification story
+in § Proposed design above is corrected accordingly in the implementation
+plan (`docs/a2a/retina-witness-mark/l0-implementation-plan.md`, sibling to
+this doc) rather
+than rewritten in place here, per the findings-forward convention.
 
-**Path B — earn the original claim.** The mark encodes a device-signed value
-over `chain_head || window_index || perceptual_hash(window)` — unforgeable
+Per the reviewer's r02 stacking analysis (independently checked and
+confirmed, see LANE RWM r05 disposition): NOV-3 (ledger-native dispute
+escrow) consumes L0's manifest almost whole — its "new surface" may reduce
+to wiring the already-shipped `sdk/wmp_disclosure.py` selective-disclosure
+primitive to PoAC-segment claims, not building a new reveal protocol. That
+sizing belongs in the L0 plan, not resolved here.
+
+**Path B — earn the original claim (BANKED, not abandoned).** The mark
+would encode a device-signed value over
+`chain_head || window_index || perceptual_hash(window)` — unforgeable
 (requires the device's private key), transcoding-tolerant (perceptual, not
-exact-pixel, hash). A ~512-bit signature implies a rolling ~17s stamp
-cadence at lightbar-precedent symbol density. The secure element is the
-natural signer, which makes this Path-A-Arc-2-adjacent — it banks next to
-the ATECC hardware arc rather than shipping standalone.
+exact-pixel, hash). The secure element is the natural signer, which ties
+this to the Path A Arc 2 hardware gate — it stays banked there, not
+abandoned; the encode/decode/composite channel built for Path A carries
+forward unchanged if/when Path B is revisited (confirmed via file:line
+check in LANE RWM r05: `encode_mark_symbols`/`decode_mark_from_frames`/
+`composite_mark_onto_frame` are payload-agnostic by construction).
 
-**Status: unresolved, operator's decision.** Open questions 1-2 below
-(palette size, refresh cadence) are premature until D-RWM-1 resolves — Path
-B changes both the bit budget and the cadence math entirely, so sizing them
-against the original (now-superseded) design would be wasted work.
+**Status: RESOLVED 2026-07-23.** Operator: *"I agree with the logical
+recommendations provided"* (adopting Path A + the L0→NOV-3→NOV-2→NOV-1
+ladder + true-merge posture for `main`, via the claude-ai⇄claude-code A2A
+loop). Open questions 1-2 below are no longer premature — they're now live
+inputs to the L0 implementation plan.
 
 ## Open questions for the operator
 
-1. ~~**Palette size / symbol count**~~ — **PREMATURE, deferred to post-D-RWM-1.**
-2. ~~**Refresh cadence**~~ — **PREMATURE, deferred to post-D-RWM-1.**
+1. **Palette size / symbol count** — now live for Path A specifically (no
+   longer needs to accommodate Path B's larger signature payload). Addressed
+   in the L0 implementation plan, not finally decided here.
+2. **Refresh cadence** — same status, addressed in the L0 implementation
+   plan.
 3. **Where exactly in the archive path this hooks in** — needs a closer read
    of the U1 session-archive manifest code (`retina_capture_daemon.py`) than
-   this scoping pass did, to pick the precise integration point without
-   assuming its current shape. Still relevant under either path.
+   this scoping pass did. Addressed in the L0 implementation plan.
 4. **Live verification plan** — like every prior primitive built this
    session, this would need a real rig pass once built (real capture card,
-   real archived footage, independent decode) before being trusted — not
-   scoped here, a later step, and would need the standing "ask before rig
-   sessions" go-ahead when it comes up. Still relevant under either path.
+   real archived footage, independent decode) before being trusted — still a
+   later step, still needs the standing "ask before rig sessions" go-ahead
+   when it comes up.
 
 ## Ceiling
 
-This document only. No code written. No production file touched. Not
-authorized to build without further operator direction. **Current state:
-HOLD pending D-RWM-1.**
+This document only (plus the companion L0 implementation plan, also
+doc-only). No code written. No production file touched. Not authorized to
+build without a further, explicit, separate go-ahead after the
+implementation plan is reviewed. **Current state: D-RWM-1 RESOLVED (Path A);
+implementation plan next; still no code.**
