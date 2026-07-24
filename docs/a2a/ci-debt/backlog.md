@@ -69,6 +69,33 @@ DAG test above: named here, not bundled into the general backlog, operator
 decides whether the document gets sourced and committed or the CLAUDE.md
 anchor claim gets amended.
 
+**`bridge/tests/test_daemon_health_monitor.py::test_detect_firmware_drift_on_live_repo`**
+(found during the second pass, 2026-07-24) — the most security-relevant
+finding in this pass. The test asserts `detect_device_id_firmware_drift(REPO_ROOT)
+is False`, with its own comment claiming "F-FW-2-DRIFT seam CLOSED: atca_signer.c
+was rewritten to keccak256(65B SEC1 pubkey) per DEVICE_ID_CANON_v1 / F-KEY-1
+(no on-chip serial concat, no legacy SHA-256(pubkey||serial) formula)". The
+live check returns `True` (drift detected) instead. Traced to the actual
+firmware source, not a stale-comment false positive: `bridge/firmware/
+joypad-os/src/qortroller/atca_signer.c`'s `_compute_device_id()` (lines
+92-110) is real, live firmware code that genuinely still computes
+`SHA-256(pubkey[64B] || serial[9B])` via the ATECC chip's on-chip SHA engine
+(`atcab_sha(...)`) — the exact superseded formula the test's comment claims
+was removed. Checked whether the submodule pointer is simply stale before
+concluding this: `git log HEAD..origin/main` and `HEAD..origin/HEAD` inside
+the `joypad-os` submodule both return empty — the currently-pinned commit
+(`40d24274`) is already at that repo's own upstream tip. This is not a
+stale-pointer problem; the claimed firmware rewrite does not appear to
+have been implemented in the firmware repository at all, despite being
+documented as done. Not touched: rewriting cryptographic device-identity
+firmware C code is well outside safe, mechanical CI-debt scope, and the
+`joypad-os` submodule is a separate repository (`ConWan30/joypad-os`) I
+have no standing authorization to push changes to. Named here for the
+operator's direct attention, not bundled into the general backlog or
+marked skip -- an assertion that a security-relevant firmware rewrite
+landed, when it apparently didn't, is exactly the kind of gap that
+shouldn't get quietly suppressed by loosening the test.
+
 ## Reclassified during D-OPS-2 (was going to be marked "missing artifact",
 ## turned out to need real investigation instead)
 
@@ -160,10 +187,12 @@ governor into these tests rather than relying on the lazy-construction
 fallback path -- not attempted, would need its own verification pass.
 
 **Remaining individual items, no shared pattern identified:**
-`test_daemon_health_monitor.py::test_detect_firmware_drift_on_live_repo`
-(1 — this repo's local `bridge/firmware/joypad-os` submodule is in a
-modified state per `git status`; plausibly local-state-sensitive, not
-confirmed), `test_dag_r07_forge.py` (3), `test_fix_d_feedback_timeout.py`
+`test_dag_r07_forge.py` (3 — investigated: passes standalone and in every
+locally-reproducible broad-context combination tried, including running
+after files known to leave process-global side effects; could not
+reproduce the CI failure on this Windows dev machine, plausibly a genuine
+Windows-vs-Linux difference, same caveat class as the HID/XInput cluster
+but not confirmed with the same certainty), `test_fix_d_feedback_timeout.py`
 (1), `test_operator_session_register_agents.py` (2),
 `test_phase140_probe_comparison.py::test_2_probe_comparison_conflicts_with_session_type`
 (1), `test_phase191_tsp.py` (2), `test_qortroller_cli.py` (2),
