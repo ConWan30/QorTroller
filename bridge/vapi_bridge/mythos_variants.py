@@ -908,6 +908,12 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
     b"VAPI-SEL-v0",                   # A2A-STEWARD-EVOLVE (2026-07-16) — steward_sel.py, Steward
                                       # Evolution Ledger (external-label graduation); candidate,
                                       # NOT FROZEN-v1, no governance seal, self-declared in-module
+    b"VAPI-RWM-MANIFEST-GENESIS-v1",  # RWM L0 (2026-07-24) — retina_capture_manifest.py, hash-chained
+                                      # per-session frame manifest genesis tag; CANDIDATE per D-RWM-1
+                                      # Path A, LANE RWM PASS at r10; not FROZEN-v1, no governance seal
+    b"VAPI-RETINA-WITNESS-MARK-v1",   # RWM L0 (2026-07-24) — retina_witness_mark.py, non-cryptographic
+                                      # visual locator mark domain tag; CANDIDATE per D-RWM-1 Path A,
+                                      # LANE RWM PASS at r10; not FROZEN-v1, no governance seal
 })
 
 
