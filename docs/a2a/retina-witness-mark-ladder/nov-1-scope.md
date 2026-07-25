@@ -70,9 +70,7 @@ created_ts_ns
 **Stranger verify:** recompute leaf from media + metadata; check membership under root
 via full sorted list (v0.a, still large) **or** Merkle path (v0.b, portable).
 
-**v0 ship target (plan lock):** start with **v0.a pack-local media + existing SD-1
-root** (no archive_dir required for verify) as the minimum stranger path; **v0.b
-Merkle** as same-phase if tests stay small, else NOV-1.1.
+**Shipped:** v0.a SD-1 + **v0.b / NOV-1.1 Merkle** (`merkle_inline_media_v0`) both live.
 
 ---
 

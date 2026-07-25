@@ -15,7 +15,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED + HOLD** 2026-07-24/25 — inert until env flags; see `l0-live-verify-2026-07-24.md` + grok R10 spot-check |
 | **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT (CANDIDATE)** 2026-07-25 — module + CLI + tests; offline only; operator GO granted sole-agent sequence; dogfood on live_01/live_05 |
 | **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT (CANDIDATE)** 2026-07-25 — bind + checkpoint inventory + SHARE postcard; dogfood on live_01 |
-| **NOV-1** | Portable stranger-verify dispute pack | **BUILT (CANDIDATE)** 2026-07-25 — pack-local media + SD-1 root; archive-free verify; operator GO |
+| **NOV-1** | Portable stranger-verify dispute pack | **BUILT (CANDIDATE)** 2026-07-25 — sd1 + **NOV-1.1 merkle** modes; archive-free verify |
 
 ## L0 hold posture (do not auto-advance)
 
@@ -30,7 +30,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Panel crop de-dup | `save_capture_crops` skips write when `_panel_ts` unchanged (F-RWM-FROZEN; live_04/05/06) |
 | NOV-3 code | does **not** couple to `cmd_stop` |
 | NOV-2 | `scripts/rwm_nov2_cli.py` bind/checkpoints/share; pure modules under `bridge/vapi_bridge/rwm_*.py` |
-| NOV-1 | `scripts/rwm_nov1_cli.py` build/verify; `rwm_stranger_pack.py` |
+| NOV-1 | `scripts/rwm_nov1_cli.py build --mode sd1_inline_media_v0\|merkle_inline_media_v0` |
 
 ## NOV-3 ship surface
 

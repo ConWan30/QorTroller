@@ -25,6 +25,8 @@ _REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO / "bridge"))
 
 from vapi_bridge.rwm_stranger_pack import (  # noqa: E402
+    MODE_MERKLE,
+    MODE_SD1,
     StrangerPackError,
     build_stranger_pack,
     verify_stranger_pack,
@@ -62,6 +64,7 @@ def _cmd_build(a: argparse.Namespace) -> int:
             _parse_reveal(a.reveal),
             a.reason,
             case_id=a.case_id or "",
+            mode=a.mode,
         )
     except StrangerPackError as e:
         print(f"BUILD FAIL: {e}", file=sys.stderr)
@@ -73,9 +76,13 @@ def _cmd_build(a: argparse.Namespace) -> int:
     out = _abs(a.out) if a.out else _REPO / "audits" / f"rwm_stranger_{(a.case_id or 'pack')}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(pack, indent=2), encoding="utf-8")
+    extra = ""
+    if pack.get("mode") == MODE_MERKLE:
+        extra = f" merkle={str(pack.get('merkle_root', ''))[:16]}…"
+        extra += " (no full leaf_hashes)"
     print(
-        f"BUILD OK: root={pack['commitment_root'][:16]}… "
-        f"revealed={len(pack['revealed'])} set_size={pack['set_size']} -> {out}"
+        f"BUILD OK: mode={pack['mode']} root={pack['commitment_root'][:16]}… "
+        f"revealed={len(pack['revealed'])} set_size={pack['set_size']}{extra} -> {out}"
     )
     return 0
 
@@ -107,6 +114,12 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--reveal", required=True, help="comma frame indices")
     b.add_argument("--reason", required=True)
     b.add_argument("--case-id", default="")
+    b.add_argument(
+        "--mode",
+        default=MODE_SD1,
+        choices=[MODE_SD1, MODE_MERKLE],
+        help=f"sd1 = full leaf list (default); merkle = NOV-1.1 log-N proofs",
+    )
     b.add_argument("--out", default=None)
     b.set_defaults(func=_cmd_build)
 

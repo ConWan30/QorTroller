@@ -1,10 +1,11 @@
 # NOV-1 — Portable stranger-verify dispute pack · implementation plan
 
-**Status: BUILT (CANDIDATE) 2026-07-25** under operator GO.  
+**Status: BUILT (CANDIDATE) 2026-07-25** under operator GO + PROCEED NOV-1.1.  
 Companion: `nov-1-scope.md`. Ladder: `README.md`. Prior: NOV-2 BUILT (`78c0b1c8`).
 
 **Shipped:** `bridge/vapi_bridge/rwm_stranger_pack.py` · `scripts/rwm_nov1_cli.py` ·
-`bridge/tests/test_rwm_nov1.py` (T1–T5). Offline only; archive-free verify.
+`bridge/tests/test_rwm_nov1.py` (T1–T5 + merkle suite).  
+Modes: `sd1_inline_media_v0` (full leaf list) · `merkle_inline_media_v0` (log-N proofs, no full leaf list).
 
 ---
 

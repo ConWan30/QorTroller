@@ -16,9 +16,12 @@ pytest.importorskip("cv2")
 import cv2  # noqa: E402
 
 from vapi_bridge.rwm_stranger_pack import (  # noqa: E402
+    MODE_MERKLE,
+    MODE_SD1,
     SCHEMA,
     StrangerPackError,
     build_stranger_pack,
+    verify_merkle_inclusion,
     verify_stranger_pack,
 )
 
@@ -95,3 +98,48 @@ def test_t5_module_is_offline_only():
     assert "requests" not in src
     assert "http.client" not in src
     assert "socket" not in src
+
+
+# --- NOV-1.1 Merkle mode ---
+
+def test_merkle_build_verify_archive_free(tmp_path):
+    arch = tmp_path / "a"
+    _seed_l0(arch, n=8)
+    pack = build_stranger_pack(
+        arch, [0, 3, 7], "tournament dispute: merkle sample", mode=MODE_MERKLE
+    )
+    assert pack["mode"] == MODE_MERKLE
+    assert "leaf_hashes" not in pack
+    assert pack.get("merkle_root")
+    assert all("inclusion_proof" in r for r in pack["revealed"])
+    r = verify_stranger_pack(pack)
+    assert r["ok"] is True, r
+
+
+def test_merkle_bit_flip_proof_fails(tmp_path):
+    arch = tmp_path / "a"
+    _seed_l0(arch, n=6)
+    pack = build_stranger_pack(
+        arch, [0, 2], "tournament dispute: merkle sample", mode=MODE_MERKLE
+    )
+    proof = pack["revealed"][0]["inclusion_proof"]
+    if proof:
+        h = proof[0]["hash"]
+        proof[0]["hash"] = ("00" if h[:2] != "00" else "ff") + h[2:]
+    r = verify_stranger_pack(pack)
+    assert r["ok"] is False
+
+
+def test_merkle_smaller_than_sd1_payload(tmp_path):
+    """Merkle pack omits full leaf list — wins at larger N (commitment surface)."""
+    import json
+
+    arch = tmp_path / "a"
+    _seed_l0(arch, n=64)  # small N: proof overhead can exceed; N=64 favors merkle
+    sd1 = build_stranger_pack(arch, [0, 32], "tournament dispute: size compare", mode=MODE_SD1)
+    mer = build_stranger_pack(arch, [0, 32], "tournament dispute: size compare", mode=MODE_MERKLE)
+    for p in (sd1, mer):
+        for r in p["revealed"]:
+            r["marked_png_b64"] = ""
+    assert "leaf_hashes" in sd1 and "leaf_hashes" not in mer
+    assert len(json.dumps(mer)) < len(json.dumps(sd1))
