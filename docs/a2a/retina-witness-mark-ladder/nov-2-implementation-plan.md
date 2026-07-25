@@ -1,10 +1,12 @@
 # NOV-2 — Cross-primitive session bind + multi-checkpoint locator · implementation plan
 
-**Status: PLAN DRAFTED (design-only) 2026-07-25** — needs operator GO before code.  
+**Status: BUILT (CANDIDATE) 2026-07-25** under operator GO.  
 Companion: `nov-2-scope.md`. Ladder: `README.md`. Prior: NOV-3 BUILT (`073819da`).
 
-This is the D1 deliverable named in `nov-2-scope.md`. Same discipline as
-`nov-3-implementation-plan.md` and L0’s `l0-implementation-plan.md`.
+**Shipped surface:** `bridge/vapi_bridge/rwm_session_bind.py` ·
+`rwm_checkpoint_inventory.py` · `rwm_share_postcard.py` ·
+`scripts/rwm_nov2_cli.py` · `bridge/tests/test_rwm_nov2.py` (T1–T10).
+Still offline-only; no stop-path hook; no FROZEN/PV-CI pin.
 
 ---
 

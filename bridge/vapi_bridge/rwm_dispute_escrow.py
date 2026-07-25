@@ -273,6 +273,22 @@ def verify_escrow(
         else:
             _chk("archive_optional", True, "no archive_dir — hash-only package verify")
 
+        # NOV-2 additive: optional session_bind (absent = backward-compat)
+        sb = escrow.get("session_bind")
+        if sb is not None:
+            from vapi_bridge.rwm_session_bind import verify_bind
+
+            br = verify_bind(sb, archive_dir=archive_dir)
+            _chk("session_bind_verify", br["ok"], "nested bind package re-checks")
+            # If bind_ok declared false, package is still structurally valid but
+            # stewards must not treat cross-primitive as proven — check still ok.
+            if br.get("bind_ok") is False and sb.get("bind_kind") not in (None, "none", ""):
+                _chk(
+                    "session_bind_not_ok",
+                    True,
+                    "bind_ok=false — treat as L0/NOV-3 only (informational pass)",
+                )
+
     except Exception as e:  # noqa: BLE001 — report as failed check
         _chk("exception", False, repr(e)[:200])
         return {"ok": False, "checks": checks}

@@ -14,7 +14,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 |-------|------|--------|
 | **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED + HOLD** 2026-07-24/25 — inert until env flags; see `l0-live-verify-2026-07-24.md` + grok R10 spot-check |
 | **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT (CANDIDATE)** 2026-07-25 — module + CLI + tests; offline only; operator GO granted sole-agent sequence; dogfood on live_01/live_05 |
-| **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **PLAN DRAFTED** 2026-07-25 — `nov-2-scope.md` + `nov-2-implementation-plan.md` (no code until operator GO) |
+| **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT (CANDIDATE)** 2026-07-25 — bind + checkpoint inventory + SHARE postcard; offline CLI; operator GO |
 | **NOV-1** | *(not opened)* | gated on NOV-2 live-verify |
 
 ## L0 hold posture (do not auto-advance)
@@ -28,7 +28,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Live watch | `scripts/rwm_live_session_watch.py` — first-crop `eye_check_prompt` + mid-session `frozen_ring_alert` (default ≥10 identical recent crops; `--diversity-alert-at N`) |
 | Mark size | default 32; optional `RWM_BLOCK_PX` env / `bridge/.env` (invalid → default) |
 | NOV-3 code | does **not** couple to `cmd_stop` |
-| NOV-2 | plan drafted — bind + checkpoint inventory + SHARE postcard; offline only; GO to code |
+| NOV-2 | `scripts/rwm_nov2_cli.py` bind/checkpoints/share; pure modules under `bridge/vapi_bridge/rwm_*.py` |
 
 ## NOV-3 ship surface
 

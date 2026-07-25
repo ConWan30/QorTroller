@@ -1,10 +1,10 @@
 # NOV-2 — Cross-primitive session bind + multi-checkpoint locator (scope)
 
-**Status: SCOPE OPEN + PLAN DRAFTED (design-only)** (2026-07-25).  
-Implementation plan: `nov-2-implementation-plan.md` — **operator GO required before code**.  
-**Prior gate:** NOV-3 BUILT (CANDIDATE) + dogfood escrow against `cfb_rwm_live_01` / live_05 / live_06.  
-**Parent:** Path A RWM ladder (`README.md`).  
-**Not yet opened:** NOV-1.
+**Status: BUILT (CANDIDATE)** (2026-07-25). Operator GO granted.  
+Implementation plan: `nov-2-implementation-plan.md`.  
+**Shipped:** `rwm_session_bind.py` · `rwm_checkpoint_inventory.py` · `rwm_share_postcard.py` ·
+`scripts/rwm_nov2_cli.py` · `bridge/tests/test_rwm_nov2.py`. Offline only; no stop-path.  
+**Prior gate:** NOV-3 BUILT + dogfood. **Not yet opened:** NOV-1.
 
 ---
 
