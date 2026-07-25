@@ -12,7 +12,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 
 | Layer | Name | Status |
 |-------|------|--------|
-| **L0** | RWM Path A — locator + per-frame hash chain sidecar | **DIVERSE CITE CLOSED** — `live_10` N=367 unique=367 + locator PASS; see `l0-live-session-live10-2026-07-25.md` (live_07/08 frozen OBS/menu; live_09 de-dup hold) |
+| **L0** | RWM Path A — locator + per-frame hash chain sidecar | **RWM diversity win** — `live_10` N=367 unique=100% + locator PASS (**not** L9 continuum win; ~92% REPLAY_OR_RELAY); see `l0-live-session-live10-2026-07-25.md` |
 | **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT + DOGFOOD** — preferred: **live_10 diverse** (`ladder-dogfood-live10-2026-07-25.md`); also live_07 (frozen historical) |
 | **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT + DOGFOOD** — live_10 preferred; live_07 historical |
 | **NOV-1** | Portable stranger-verify dispute pack | **BUILT + DOGFOOD** — sd1 + **NOV-1.1 merkle** on live_10 (archive-free); live_07 historical |
@@ -23,7 +23,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 |------|--------|
 | Primitives + F-RWM-9 + daemon wiring | on `main` |
 | Default | **inert** — `RWM_L0_DAEMON_ENABLED` default false; needs `true` + `RWM_DEVICE_ID_HEX` |
-| Live evidence | `cfb_rwm_live_01` (1076 frames, ~50% unique) preferred over `live_04` (frozen ring) |
+| Live evidence | **`live_10` preferred for RWM diversity** (N=367 unique=100%); do **not** cite live_10 as L9 continuum success; live_07/08 = FROZEN_RING historical |
 | Post-check | `scripts/rwm_post_session_check.py` (includes unique-panel diversity INFO / `--strict-diversity`) |
 | Live watch | `scripts/rwm_live_session_watch.py` — first-crop `eye_check_prompt` + mid-session `frozen_ring_alert` (default ≥10 identical recent crops; `--diversity-alert-at N`) |
 | Mark size | default 32; optional `RWM_BLOCK_PX` env / `bridge/.env` (invalid → default) |
