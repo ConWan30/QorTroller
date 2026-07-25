@@ -863,6 +863,11 @@ class RetinaGameCapture:
         # fresh timestamp → hundreds of byte-identical PNGs (false FROZEN_RING / ring bloat).
         # De-dup on panel stash ts (same key as maybe_flush_burst_crop).
         self._last_capture_save_ts = None
+        # F-RWM-FROZEN-CONTENT (live_07/08): UVC advances panel_ts every frame while the ROI
+        # pixels stay identical (static play-call menu, frozen OBS, static HUD). ts-only de-dup
+        # still wrote N=447 byte-identical crops. Also de-dup on SHA-256 of the panel BGR.
+        self._last_capture_content_sha256 = None
+        self._content_dedup_logged = False
         self.started = False
         # Trigger-gated INLINE authorship (advisory; default-off). PURE monitor holds the R2-window +
         # single-flight decision; the anchor + classify + persist happen off the event loop (see
@@ -1266,7 +1271,13 @@ class RetinaGameCapture:
         written, or None. This produces the corpus the killfeed authorship detector must be calibrated on.
 
         F-RWM-FROZEN: skip write when _panel_ts is unchanged since the last successful save — otherwise
-        tune() re-materializes the same stash under new filenames (live_04/05/06 false FROZEN_RING)."""
+        tune() re-materializes the same stash under new filenames (live_04/05/06 false FROZEN_RING).
+
+        F-RWM-FROZEN-CONTENT (live_07/08): also skip when the panel BGR SHA-256 matches the last
+        successful save, even if panel_ts advanced (static play-call menu / frozen feed still
+        emits a new UVC frame timestamp every tick). Ring growth then stalls until the picture
+        changes — the honest mid-session signal for a frozen source.
+        """
         if not self._capture_enabled:
             return None
         bgr = getattr(self._source, "_panel_bgr", None)
@@ -1276,11 +1287,27 @@ class RetinaGameCapture:
         if panel_ts is not None and panel_ts == self._last_capture_save_ts:
             return None
         try:
+            import hashlib
+
+            import numpy as np
+
+            content_sha = hashlib.sha256(np.ascontiguousarray(bgr).tobytes()).hexdigest()
+            if (self._last_capture_content_sha256 is not None
+                    and content_sha == self._last_capture_content_sha256):
+                if not self._content_dedup_logged:
+                    self._content_dedup_logged = True
+                    log.warning(
+                        "RetinaGameCapture: panel content unchanged across new frame ts "
+                        "(F-RWM-FROZEN-CONTENT) — skipping duplicate crop writes until pixels change. "
+                        "Eye-check UVC/OBS: static play-call menu or frozen feed produces FROZEN_RING."
+                    )
+                return None
             from l9_presence.killfeed_cv import save_crop_bounded
             path = save_crop_bounded(self._capture_dir, "panel", bgr, max_files=self._capture_max)
             if path:
                 self._capture_n += 1
                 self._last_capture_save_ts = panel_ts
+                self._last_capture_content_sha256 = content_sha
             if path and not self._capture_logged:
                 self._capture_logged = True
                 log.info("RetinaGameCapture: dense panel-crop capture ON -> %s (ring max=%d)",

@@ -48,9 +48,14 @@ content diversity did not.
 | Multi-frame live content diversity | still need non-frozen session (live_01-class unique ratio when available) |
 | Pipeline dogfood (escrow/stranger) | live_07 ladder dogfood still valid on frozen content |
 
-## Root cause (ops, not RWM math)
+## Root cause (ops + capture de-dup gap)
 
-UVC #2 delivered a stable still (or de-duped identical panel ROI) for the whole session.
-RWM chain math is correct on that still. Next diverse attempt: eye-check **moving**
-preview on index 2 before start; use `rwm_live_session_watch.py` mid-session for
-`frozen_ring_alert`.
+Eye-check of a sample panel (`docs/_live08_frozen_panel_sample.png`, local): the crop is a
+**static CFB play-call menu** (“DEFENSE, PICK A PLAY!” / EDGE BLITZ 3) for the whole
+~12.5 min window — not in-play field motion. UVC still advanced `panel_ts` every frame,
+so ts-only de-dup (F-RWM-FROZEN) wrote 447 byte-identical PNGs.
+
+RWM chain math is correct on that still. Follow-ups:
+1. **Ops:** only accumulate while **in-play** (not play-select menu); eye-check first crop.
+2. **Code (F-RWM-FROZEN-CONTENT):** content-hash de-dup in `save_capture_crops` so identical
+   BGR across new frame ts does not bloat the ring (shipped after this session).

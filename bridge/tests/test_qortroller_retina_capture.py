@@ -228,6 +228,24 @@ def test_save_capture_crops_dedup_same_panel_ts(tmp_path):
     assert len(list(tmp_path.glob("panel_*.png"))) == 2
 
 
+def test_save_capture_crops_dedup_same_content_new_ts(tmp_path):
+    """F-RWM-FROZEN-CONTENT (live_07/08): new UVC frame ts + identical BGR must not bloat ring."""
+    pytest.importorskip("cv2")
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", capture_enabled=True, capture_dir=str(tmp_path),
+                            capture_max=10, panel_roi="0.0,0.28,0.32,0.67")
+    rgc._source._panel_bgr = np.full((20, 30, 3), 42, np.uint8)
+    rgc._source._panel_ts = 1000.0
+    assert rgc.save_capture_crops() is not None
+    rgc._source._panel_ts = 2000.0  # new frame clock, same pixels
+    assert rgc.save_capture_crops() is None
+    assert len(list(tmp_path.glob("panel_*.png"))) == 1
+    rgc._source._panel_ts = 3000.0
+    rgc._source._panel_bgr = np.full((20, 30, 3), 99, np.uint8)  # pixels change
+    assert rgc.save_capture_crops() is not None
+    assert len(list(tmp_path.glob("panel_*.png"))) == 2
+
+
 # --- LOOP 2 composite-driven death trigger (the 97b86b3c sibling fix; wired in _log_composite) ---
 
 def _mk_death_capture(tmp_path):

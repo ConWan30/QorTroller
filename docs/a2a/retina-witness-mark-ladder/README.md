@@ -27,7 +27,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Post-check | `scripts/rwm_post_session_check.py` (includes unique-panel diversity INFO / `--strict-diversity`) |
 | Live watch | `scripts/rwm_live_session_watch.py` — first-crop `eye_check_prompt` + mid-session `frozen_ring_alert` (default ≥10 identical recent crops; `--diversity-alert-at N`) |
 | Mark size | default 32; optional `RWM_BLOCK_PX` env / `bridge/.env` (invalid → default) |
-| Panel crop de-dup | `save_capture_crops` skips write when `_panel_ts` unchanged (F-RWM-FROZEN; live_04/05/06) |
+| Panel crop de-dup | `save_capture_crops` skips when `_panel_ts` unchanged **or** panel BGR SHA-256 unchanged (F-RWM-FROZEN + F-RWM-FROZEN-CONTENT; live_04–08) |
 | NOV-3 code | does **not** couple to `cmd_stop` |
 | NOV-2 | `scripts/rwm_nov2_cli.py` bind/checkpoints/share; pure modules under `bridge/vapi_bridge/rwm_*.py` |
 | NOV-1 | `scripts/rwm_nov1_cli.py build --mode sd1_inline_media_v0\|merkle_inline_media_v0` |
