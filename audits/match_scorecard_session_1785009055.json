@@ -1,0 +1,278 @@
+{
+  "schema": "qortroller-match-scorecard-v1",
+  "label": "session_1785009055",
+  "pack": "observer-only",
+  "ts": 1785010656,
+  "session_bind": {
+    "status": "OK",
+    "session_id": "fabe241501b04c50087eb4a13266b7254499e4bcfa8a043435c97017da2d8fc5",
+    "surfaces": {
+      "kas": "fabe241501b04c50087eb4a13266b7254499e4bcfa8a043435c97017da2d8fc5",
+      "posp": "fabe241501b04c50087eb4a13266b7254499e4bcfa8a043435c97017da2d8fc5",
+      "v3": null
+    },
+    "may_claim": "all bound surfaces share one session_id",
+    "must_not_claim": [
+      "artifacts from different sessions joined as one match"
+    ]
+  },
+  "node_id": {
+    "value": {
+      "node_id": "01a574e7ca7f2b4f4be8fe1ef40b309a693303b61f662525ee1fd30e557143e5",
+      "node_id_short": "01a574e7ca7f",
+      "device_id_hex": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "first_session_id": "proof_drill_20260713_1843_1783986208",
+      "domain": "QORTROLLER-NODE-v0"
+    },
+    "source": "DERIVED",
+    "may_claim": "node_id is DERIVED offline from device_id (on-chain device identity) + birth first_session_id; recomputable by any verifier with the preimage inputs",
+    "must_not_claim": [
+      "node_id is on-chain / minted / registered as a separate identity",
+      "decentralized-verified node (requires leg-2 W3bstream attestation)",
+      "VMDR registered the node_id (VMDR registered the DEVICE; node_id is derived)",
+      "contribution ledger anchored (leg-3 is operator-fired, not automatic)",
+      "new FROZEN-v1 commitment family"
+    ]
+  },
+  "fields": {
+    "kas_verdict": {
+      "value": "HYGIENE_FAIL",
+      "source": "MEASURED",
+      "may_claim": "KAS verdict AS-IS for this session",
+      "must_not_claim": [
+        "upgraded to AUTHORED_SESSION",
+        "SYNCHRONIZED authorship"
+      ]
+    },
+    "authored_kills": {
+      "value": 0,
+      "source": "MEASURED",
+      "may_claim": "KAS-measured authored kill count (R2-bound path)",
+      "must_not_claim": [
+        "kills you scored on the scoreboard",
+        "ground-truth kill count"
+      ]
+    },
+    "posp_verdict": {
+      "value": "SYNCHRONIZED",
+      "source": "MEASURED",
+      "may_claim": "PoSP verdict AS-IS (SYNCHRONIZED/PARTIAL_SURFACES/UNVERIFIABLE)",
+      "must_not_claim": [
+        "rounded up to SYNCHRONIZED"
+      ]
+    },
+    "fusion_n_id_verified": {
+      "value": 142,
+      "source": "MEASURED",
+      "may_claim": "NQPV fusion rows id-verified this session",
+      "must_not_claim": [
+        "proof of humanity alone"
+      ]
+    },
+    "v3_n_events": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "RETINA-STATE-v3 event count when record present",
+      "must_not_claim": [
+        "absence means capture failed (honest-null is valid)"
+      ]
+    },
+    "v3_commitment": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "v3 commitment prefix-joinable to local preimage",
+      "must_not_claim": [
+        "on-chain anchor without separate registry proof"
+      ]
+    },
+    "archive_crop_count": {
+      "value": 164,
+      "source": "MEASURED",
+      "may_claim": "archive crop count from session manifest",
+      "must_not_claim": [
+        "liveness without freshness class"
+      ]
+    },
+    "killfeed_rows_seen": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "OCR killfeed rows observed (any killer) \u2014 presence of feed activity",
+      "must_not_claim": [
+        "operator kills scored",
+        "recall denominator",
+        "your kill count"
+      ]
+    },
+    "witnessed_own_kills": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "distinct exact-canon own-killer victims OBSERVED on the feed (HARD-1 exact token)",
+      "must_not_claim": [
+        "AUTHORED kills",
+        "causally bound to your trigger",
+        "kills scored"
+      ]
+    },
+    "bound_own_kills": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "R2-window bound own-kills when persisted",
+      "must_not_claim": [
+        "witnessed count",
+        "authored count"
+      ]
+    },
+    "observation_verdict": {
+      "value": null,
+      "source": "DERIVED",
+      "may_claim": "WITNESSED_SESSION product tier when observed but AUTHORED not earned (scorecard-only; NOT the KAS commitment)",
+      "must_not_claim": [
+        "a KAS verdict",
+        "upgraded AUTHORED",
+        "rides the KAS commitment bytes"
+      ]
+    },
+    "topology": {
+      "topology": "DUAL_CONNECTION_USB_PC",
+      "authorship_reachable": "WITNESSED_ONLY",
+      "reason": "R2 onsets not visible on capture-PC HID (ts_source=wall_fallback); AUTHORED needs USB-only-to-PS5 or a PoEP presence path",
+      "source": "DERIVED",
+      "may_claim": "capture topology inferred from KAS hygiene ts_source",
+      "must_not_claim": [
+        "a network/pairing readout",
+        "authorship credit"
+      ]
+    },
+    "kills_scored": {
+      "value": null,
+      "source": "OPERATOR-REPORTED",
+      "may_claim": "kills scored not supplied this run",
+      "must_not_claim": [
+        "reported=0 as default",
+        "we counted your kills"
+      ]
+    },
+    "recall": {
+      "status": "UNSCORED",
+      "authored": {
+        "value": 0,
+        "source": "MEASURED",
+        "may_claim": "KAS-measured authored kill count (R2-bound path)",
+        "must_not_claim": [
+          "kills you scored on the scoreboard",
+          "ground-truth kill count"
+        ]
+      },
+      "reported": {
+        "value": null,
+        "source": "OPERATOR-REPORTED",
+        "may_claim": "kills scored not supplied this run",
+        "must_not_claim": [
+          "reported=0 as default",
+          "we counted your kills"
+        ]
+      },
+      "ratio": {
+        "value": null,
+        "source": "ABSENT",
+        "may_claim": "recall unscored until operator reports D",
+        "must_not_claim": [
+          "deferred_authored",
+          "killfeed_rows_seen",
+          "fabricated_zero",
+          "c33_cluster_count",
+          "recall=0%"
+        ]
+      },
+      "display": "authored 0 / reported UNSCORED"
+    },
+    "birth": {
+      "value": {
+        "first_session_id": "proof_drill_20260713_1843_1783986208",
+        "path": "A",
+        "node_id": "01a574e7ca7f2b4f4be8fe1ef40b309a693303b61f662525ee1fd30e557143e5",
+        "device_id_hex": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"
+      },
+      "source": "MEASURED",
+      "may_claim": "node birth receipt state when present on this host; node_id DERIVED when device_id known",
+      "must_not_claim": [
+        "this match minted birth unless first_session_id matches",
+        "node_id is on-chain"
+      ]
+    },
+    "node_id": {
+      "value": {
+        "node_id": "01a574e7ca7f2b4f4be8fe1ef40b309a693303b61f662525ee1fd30e557143e5",
+        "node_id_short": "01a574e7ca7f",
+        "device_id_hex": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+        "first_session_id": "proof_drill_20260713_1843_1783986208",
+        "domain": "QORTROLLER-NODE-v0"
+      },
+      "source": "DERIVED",
+      "may_claim": "node_id is DERIVED offline from device_id (on-chain device identity) + birth first_session_id; recomputable by any verifier with the preimage inputs",
+      "must_not_claim": [
+        "node_id is on-chain / minted / registered as a separate identity",
+        "decentralized-verified node (requires leg-2 W3bstream attestation)",
+        "VMDR registered the node_id (VMDR registered the DEVICE; node_id is derived)",
+        "contribution ledger anchored (leg-3 is operator-fired, not automatic)",
+        "new FROZEN-v1 commitment family"
+      ]
+    },
+    "dogfood": {
+      "value": null,
+      "source": "ABSENT",
+      "may_claim": "PKG dogfood friction log (operator-filled) when present",
+      "must_not_claim": [
+        "automatic proof of zero friction"
+      ]
+    },
+    "false_authorship_language": {
+      "may": [
+        "A2/A3 structural guards CLOSED (exact-token killer match + leftmost-killer death path)",
+        "authored kills are R2-bound on the KAS path (design invariant of the authorship chain)",
+        "zero-false-read *design*: this scorecard never invents authored kills from OCR alone"
+      ],
+      "must_not": [
+        "zero false-authorship proven this match",
+        "0 false positives proven",
+        "100% accurate authorship",
+        "false-authorship rate = 0",
+        "precision = 100%"
+      ],
+      "source": "DERIVED",
+      "may_claim": "structural guards + design invariants only",
+      "must_not_claim": [
+        "zero false-authorship proven this match",
+        "0 false positives proven",
+        "100% accurate authorship",
+        "false-authorship rate = 0",
+        "precision = 100%"
+      ]
+    }
+  },
+  "dignity": {
+    "tone": "honest_null",
+    "notes": [
+      "authored=0 is a legitimate observation (no R2-bound authored kills this session), not a player failure",
+      "recall UNSCORED: denominator is operator-only; declining or omitting D is valid"
+    ]
+  },
+  "refuted_overclaims": [
+    "c33_cluster_count",
+    "decentralized_verified_node_pre_leg2",
+    "deferred_authored",
+    "fabricated_zero",
+    "killfeed_rows_seen",
+    "node_id_minted",
+    "node_id_on_chain",
+    "vmdr_registered_node_id"
+  ],
+  "rails": {
+    "no_poac_edit": true,
+    "no_frozen_edit": true,
+    "no_secrets": true,
+    "source_tags_required": true,
+    "session_id_bound": true,
+    "node_id_derived_not_minted": true
+  }
+}
