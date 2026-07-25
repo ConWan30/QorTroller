@@ -2,9 +2,14 @@
 """Autonomous watcher: poll active RWM capture until stop, then post-check.
 
 Prints one JSON line per event (line-buffered). Exits after stop+check.
+
+Mid-session honesty:
+  - eye_check_prompt: first new panel crop path so operator can open it (live_05 lesson)
+  - frozen_ring_alert: after diversity_alert_at crops, unique recent content == 1
 """
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -30,6 +35,15 @@ def _crop_count() -> int:
     return sum(1 for _ in _CROPS.glob("panel_*.png"))
 
 
+def _newest_panel() -> Path | None:
+    if not _CROPS.is_dir():
+        return None
+    files = list(_CROPS.glob("panel_*.png"))
+    if not files:
+        return None
+    return max(files, key=lambda p: p.stat().st_mtime)
+
+
 def _newest_archive_for(label: str, started_at: int) -> Path | None:
     if not _ARCHIVE.is_dir():
         return None
@@ -44,7 +58,32 @@ def _newest_archive_for(label: str, started_at: int) -> Path | None:
     return cands[-1] if cands else None
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description="Watch active RWM capture; mid-session diversity alerts")
+    ap.add_argument(
+        "--diversity-alert-at",
+        type=int,
+        default=10,
+        help="After this many panel crops, unique==1 over recent sample triggers frozen_ring_alert (default 10)",
+    )
+    ap.add_argument(
+        "--sample-limit",
+        type=int,
+        default=20,
+        help="How many most-recent crops to hash for the diversity probe (default 20)",
+    )
+    ap.add_argument(
+        "--interval-s",
+        type=float,
+        default=15.0,
+        help="Poll interval seconds (default 15)",
+    )
+    args = ap.parse_args(argv)
+
+    diversity_alert_at = max(1, int(args.diversity_alert_at))
+    sample_limit = max(2, int(args.sample_limit))
+    interval_s = max(1.0, float(args.interval_s))
+
     if not _STATE.is_file():
         _emit({"event": "no_active_session", "state": str(_STATE)})
         return 2
@@ -59,34 +98,51 @@ def main() -> int:
         "started_at": started_at,
         "pid": pid,
         "port": st.get("port"),
-        "interval_s": 15,
+        "interval_s": interval_s,
+        "diversity_alert_at": diversity_alert_at,
+        "sample_limit": sample_limit,
     })
 
-    # Mid-session diversity: after this many crops, unique==1 → FROZEN_RING alert
-    # so the operator can retarget source without finishing a useless session.
-    diversity_alert_at = 20
     diversity_alerted = False
+    eye_check_emitted = False
     last_n = _crop_count()
     last_report = time.time()
     _emit({"event": "ring_baseline", "panel_count": last_n, "diversity_alert_at": diversity_alert_at})
 
     while _STATE.is_file():
-        time.sleep(15)
+        time.sleep(interval_s)
         n = _crop_count()
         now = time.time()
+
+        # First-crop eye-check: emit absolute path once so operator can open the PNG
+        # before finishing a frozen/menu ROI session (live_04/05 class).
+        if not eye_check_emitted and n > 0:
+            newest = _newest_panel()
+            if newest is not None:
+                eye_check_emitted = True
+                _emit({
+                    "event": "eye_check_prompt",
+                    "panel_count": n,
+                    "path": str(newest.resolve()),
+                    "detail": (
+                        "OPEN this crop now — confirm it shows live gameplay (not menu/static UI). "
+                        "If frozen or wrong ROI, retarget UVC/source before session ends."
+                    ),
+                })
+
         if n != last_n or (now - last_report) >= 60:
             evt = {
                 "event": "ring_progress",
                 "panel_count": n,
                 "delta": n - last_n,
-                "elapsed_s": int(now - last_report) if n == last_n else 15,
+                "elapsed_s": int(now - last_report) if n == last_n else int(interval_s),
             }
-            # Cheap diversity probe: hash last 20 crops only
+            # Cheap diversity probe: hash last sample_limit crops only
             if n >= 5:
                 try:
                     sys.path.insert(0, str(_REPO / "bridge"))
                     from vapi_bridge.rwm_panel_diversity import panel_stats_for_dir
-                    stats = panel_stats_for_dir(_CROPS, sample_limit=20)
+                    stats = panel_stats_for_dir(_CROPS, sample_limit=sample_limit)
                     evt["unique_recent"] = stats["unique"]
                     evt["unique_label"] = stats["label"]
                     if (
@@ -99,8 +155,9 @@ def main() -> int:
                             "event": "frozen_ring_alert",
                             "panel_count": n,
                             "unique_recent": stats["unique"],
+                            "diversity_alert_at": diversity_alert_at,
                             "detail": (
-                                "last-20 panel crops are byte-identical — retarget UVC/ROI "
+                                f"last-{sample_limit} panel crops are byte-identical — retarget UVC/ROI "
                                 "or unpause game; session will FROZEN_RING at stop"
                             ),
                         })

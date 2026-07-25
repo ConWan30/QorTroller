@@ -13,8 +13,8 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Layer | Name | Status |
 |-------|------|--------|
 | **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED + HOLD** 2026-07-24/25 — inert until env flags; see `l0-live-verify-2026-07-24.md` + grok R10 spot-check |
-| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT (CANDIDATE)** 2026-07-25 — module + CLI + tests; offline only; operator GO granted sole-agent sequence |
-| **NOV-2** | *(not opened)* | gated on NOV-3 live/dogfood use |
+| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT (CANDIDATE)** 2026-07-25 — module + CLI + tests; offline only; operator GO granted sole-agent sequence; dogfood on live_01/live_05 |
+| **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **SCOPE OPEN** 2026-07-25 — design-only: `nov-2-scope.md` (no code until plan + GO) |
 | **NOV-1** | *(not opened)* | gated on NOV-2 live-verify |
 
 ## L0 hold posture (do not auto-advance)
@@ -25,9 +25,10 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Default | **inert** — `RWM_L0_DAEMON_ENABLED` default false; needs `true` + `RWM_DEVICE_ID_HEX` |
 | Live evidence | `cfb_rwm_live_01` (1076 frames, ~50% unique) preferred over `live_04` (frozen ring) |
 | Post-check | `scripts/rwm_post_session_check.py` (includes unique-panel diversity INFO / `--strict-diversity`) |
-| Live watch | `scripts/rwm_live_session_watch.py` — mid-session `frozen_ring_alert` after ≥20 identical crops |
+| Live watch | `scripts/rwm_live_session_watch.py` — first-crop `eye_check_prompt` + mid-session `frozen_ring_alert` (default ≥10 identical recent crops; `--diversity-alert-at N`) |
 | Mark size | default 32; optional `RWM_BLOCK_PX` env / `bridge/.env` (invalid → default) |
 | NOV-3 code | does **not** couple to `cmd_stop` |
+| NOV-2 | scope only — no production hook until implementation plan GO |
 
 ## NOV-3 ship surface
 

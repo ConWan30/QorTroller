@@ -72,3 +72,38 @@ def test_rwm_block_px_invalid_falls_back(monkeypatch):
     assert d._rwm_block_px() == 32
     monkeypatch.setattr(d, "_env_or_bridge_dotenv", lambda k: "0" if k == "RWM_BLOCK_PX" else "")
     assert d._rwm_block_px() == 32
+
+
+def test_watcher_argparse_defaults():
+    """Import watcher CLI helpers without requiring an active daemon state."""
+    import importlib.util
+
+    path = _REPO / "scripts" / "rwm_live_session_watch.py"
+    spec = importlib.util.spec_from_file_location("rwm_live_session_watch", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # no active session → exit 2 with structured event (not a crash)
+    rc = mod.main(["--diversity-alert-at", "10", "--sample-limit", "20"])
+    assert rc == 2
+
+
+def test_watcher_newest_panel(tmp_path, monkeypatch):
+    import importlib.util
+    import time
+
+    path = _REPO / "scripts" / "rwm_live_session_watch.py"
+    spec = importlib.util.spec_from_file_location("rwm_live_session_watch2", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    monkeypatch.setattr(mod, "_CROPS", tmp_path)
+    assert mod._newest_panel() is None
+    (tmp_path / "panel_0001.png").write_bytes(b"a")
+    time.sleep(0.02)
+    (tmp_path / "panel_0002.png").write_bytes(b"b")
+    newest = mod._newest_panel()
+    assert newest is not None
+    assert newest.name == "panel_0002.png"
