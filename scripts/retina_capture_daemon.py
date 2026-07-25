@@ -577,6 +577,46 @@ def _issue_rwm_l0(label, started_at, dst):
     print(f"[daemon] RWM: {len(frames)} frames marked + chained -> {_shown}")
 
 
+def _issue_session_continuum(label, started_at, dst) -> None:
+    """Post-L0 session continuum postcard (fail-open). Compose optical + optional stack surfaces.
+
+    Default-ON when ``dst/rwm_manifest_chain.json`` exists, unless
+    ``RWM_CONTINUUM_DAEMON_ENABLED`` is explicitly false/0/no.
+    Surfaces (never fabricated):
+      - ioID: CONTINUUM_IOID_JSON | archive/ioid.json | audits/ioid_edge_live_ceremony.json | default Edge
+      - PoEP: CONTINUUM_POEP_JSON | archive/poep_live_summary.json | audits/poep_live_summary_<sid16>.json
+      - NOV-2 bind kind=none auto when L0 re-verifies
+    Writes archive/session_continuum.json + audits/rwm_continuum_<label>_<stamp>.json.
+    """
+    enabled = _env_or_bridge_dotenv("RWM_CONTINUUM_DAEMON_ENABLED").lower()
+    if enabled in ("0", "false", "no", "off"):
+        return
+    if dst is None:
+        return
+    d = Path(dst)
+    if not (d / "rwm_manifest_chain.json").is_file():
+        return
+
+    _bridge = _REPO / "bridge"
+    if str(_bridge) not in sys.path:
+        sys.path.insert(0, str(_bridge))
+    if str(_REPO) not in sys.path:
+        sys.path.insert(0, str(_REPO))
+
+    from vapi_bridge.rwm_session_continuum import issue_continuum_after_l0
+
+    cont = issue_continuum_after_l0(d, label=label, stamp=started_at, auto_nov2_bind=True)
+    if cont is None:
+        print("[daemon] continuum: skipped (L0 missing/unverifiable or compose failed)")
+        return
+    print(
+        f"[daemon] continuum: {cont.get('verdict')} "
+        f"optical={cont.get('optical_rwm')} identity={cont.get('identity_bound')} "
+        f"presence={cont.get('presence_candidate')} stack={cont.get('stack_cited')} "
+        f"-> session_continuum.json"
+    )
+
+
 def cmd_stop(a) -> int:
     st = _read_state()
     if st is None:
@@ -646,6 +686,13 @@ def cmd_stop(a) -> int:
         _issue_rwm_l0(label, st["started_at"], _rwm_dst)
     except Exception as e:  # noqa: BLE001 — RWM must never break the stop path
         print(f"[daemon] RWM L0 failed (non-fatal): {e!r}")
+    # Session continuum composition (RWM × U1 × optional ioID/PoEP/stack) — fail-open, post-L0.
+    # Default-ON when L0 manifest exists; set RWM_CONTINUUM_DAEMON_ENABLED=false to skip.
+    # Never fabricates presence_session_candidate_ok; loads CONTINUUM_POEP_JSON / archive sidecar only.
+    try:
+        _issue_session_continuum(label, st["started_at"], _rwm_dst)
+    except Exception as e:  # noqa: BLE001 — continuum must never break the stop path
+        print(f"[daemon] session continuum failed (non-fatal): {e!r}")
     # Increment 2 step 5 (G4 green 2026-07-03): session-close KAS certificate issuance — EXPLICIT opt-in
     # (--kas), default-OFF. Issues the Kill-Authorship Session Record over THIS session's log + composites
     # (fail-closed enum; a bad session honestly reads INSUFFICIENT_KILLS / HYGIENE_FAIL, never a false cert).

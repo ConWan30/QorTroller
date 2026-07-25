@@ -4,15 +4,18 @@
     python scripts/rwm_session_continuum_cli.py build \\
       --archive retina_kf_archive/<label>_<stamp> \\
       [--label cfb_rwm_live_10] [--stamp 1784953588] \\
-      [--session-display cfb_rwm_live_10_1784953588] \\
       [--ioid path.json] [--poep path.json] \\
-      [--nov2-bind path.json] [--escrow path.json] \\
-      [--posp path.json] [--kas path.json] \\
+      [--mint-sim-live-poep] [--poep-out audits/poep_live_summary_....json] \\
+      [--auto-nov2-bind] \\
       [--out audits/rwm_continuum_....json]
 
     python scripts/rwm_session_continuum_cli.py verify \\
       --continuum audits/rwm_continuum_....json \\
-      [--archive retina_kf_archive/...]   # optional re-load optical plane
+      [--archive retina_kf_archive/...]
+
+--mint-sim-live-poep: mint a sealed summarize_live_session presence_summary with the
+live-simulator fire path (real_hardware=True). MECHANISM dogfood for SYNCHRONIZED_CONTINUUM
+— not a claim that the optical capture co-ran dual-connect PoEP under play.
 
 Exit: 0 ok · 1 fail · 2 usage.
 Offline only. No upload. No chain spend. CANDIDATE composition only.
@@ -30,8 +33,11 @@ sys.path.insert(0, str(_REPO))
 
 from vapi_bridge.rwm_session_continuum import (  # noqa: E402
     ContinuumError,
+    SIM_LIVE_POEP_CEILING,
+    SYNCHRONIZED_CONTINUUM,
     build_continuum_from_archive,
     load_rwm_surface,
+    mint_sealed_sim_live_poep_summary,
     verify_continuum,
 )
 from l9_presence.session_continuum import build_session_continuum  # noqa: E402
@@ -44,6 +50,16 @@ def _abs(p: str | Path) -> Path:
     return path
 
 
+def _resolve_archive(p: str) -> Path | None:
+    archive = _abs(p)
+    if archive.is_dir():
+        return archive
+    alt = Path(r"C:\Users\Contr\vapi-pebble-prototype") / p
+    if alt.is_dir():
+        return alt
+    return None
+
+
 def _write(out: Path, obj: dict) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(obj, indent=2), encoding="utf-8")
@@ -51,15 +67,40 @@ def _write(out: Path, obj: dict) -> None:
 
 
 def _cmd_build(a: argparse.Namespace) -> int:
-    archive = _abs(a.archive)
-    if not archive.is_dir():
-        # also try main-repo sibling path for worktree dogfood
-        alt = Path(r"C:\Users\Contr\vapi-pebble-prototype") / a.archive
-        if alt.is_dir():
-            archive = alt
-        else:
-            print(f"archive not found: {archive}", file=sys.stderr)
-            return 2
+    archive = _resolve_archive(a.archive)
+    if archive is None:
+        print(f"archive not found: {a.archive}", file=sys.stderr)
+        return 2
+
+    poep_src = _abs(a.poep) if a.poep else None
+
+    if a.mint_sim_live_poep:
+        print("CEILING:", SIM_LIVE_POEP_CEILING)
+        try:
+            rwm = load_rwm_surface(archive, require_verified=not a.allow_unverified_l0)
+            pkg = mint_sealed_sim_live_poep_summary(
+                device_id=rwm["device_id_hex"],
+                session_id=rwm["session_id"],
+            )
+        except ContinuumError as e:
+            print(f"MINT FAIL: {e}", file=sys.stderr)
+            return 1
+        poep_out = _abs(a.poep_out) if a.poep_out else (
+            _REPO / "audits" / f"poep_live_summary_{rwm['session_id'][:16]}_sim.json"
+        )
+        _write(poep_out, pkg)
+        # also drop next to archive so daemon stop can pick it up on re-issue
+        try:
+            _write(archive / "poep_live_summary.json", pkg)
+        except OSError as e:
+            print(f"archive poep sidecar skip: {e!r}")
+        poep_src = poep_out
+        print(
+            f"minted presence_session_candidate_ok="
+            f"{pkg['presence_summary'].get('presence_session_candidate_ok')} "
+            f"session={rwm['session_id'][:16]}…"
+        )
+
     try:
         cont = build_continuum_from_archive(
             archive,
@@ -67,12 +108,13 @@ def _cmd_build(a: argparse.Namespace) -> int:
             stamp=a.stamp,
             session_display=a.session_display,
             ioid=_abs(a.ioid) if a.ioid else None,
-            poep_live=_abs(a.poep) if a.poep else None,
+            poep_live=poep_src,
             nov2_bind=_abs(a.nov2_bind) if a.nov2_bind else None,
             escrow=_abs(a.escrow) if a.escrow else None,
             posp=_abs(a.posp) if a.posp else None,
             kas=_abs(a.kas) if a.kas else None,
             require_l0_verified=not a.allow_unverified_l0,
+            auto_nov2_bind=bool(a.auto_nov2_bind),
         )
     except ContinuumError as e:
         print(f"BUILD FAIL: {e}", file=sys.stderr)
@@ -86,11 +128,12 @@ def _cmd_build(a: argparse.Namespace) -> int:
     )
     print(f"session_id={cont.get('session_id')}")
     print(f"device_id={(cont.get('device_id') or '')[:16]}…")
+    if a.mint_sim_live_poep and cont["verdict"] == SYNCHRONIZED_CONTINUUM:
+        print("SYNCHRONIZED_CONTINUUM reached (mechanism dogfood — see claim_ceiling)")
     if a.out:
         _write(_abs(a.out), cont)
     else:
         print(json.dumps(cont, indent=2))
-    # soft structural verify
     vr = verify_continuum(cont)
     if not vr["ok"]:
         print(f"VERIFY WARN structural: {vr}", file=sys.stderr)
@@ -112,16 +155,15 @@ def _cmd_verify(a: argparse.Namespace) -> int:
         print(f"  [{mark}] {c['name']}" + (f" — {c['note']}" if c.get("note") else ""))
 
     if a.archive:
-        archive = _abs(a.archive)
-        if not archive.is_dir():
-            alt = Path(r"C:\Users\Contr\vapi-pebble-prototype") / a.archive
-            archive = alt if alt.is_dir() else archive
+        archive = _resolve_archive(a.archive)
+        if archive is None:
+            print(f"archive not found: {a.archive}", file=sys.stderr)
+            return 2
         try:
             rwm = load_rwm_surface(archive, require_verified=True)
         except ContinuumError as e:
             print(f"L0 FAIL: {e}", file=sys.stderr)
             return 1
-        # rebuild from live optical + stored optional surfaces
         rebuilt = build_session_continuum(
             device_id=cont.get("device_id") or rwm["device_id_hex"],
             session_id=cont.get("session_id") or rwm["session_id"],
@@ -135,11 +177,10 @@ def _cmd_verify(a: argparse.Namespace) -> int:
             (cont.get("rwm") or {}).get("l0_chain_tip_hex") or ""
         )
         print(f"L0 re-verify ok tip_match={tip_match} rebuilt={rebuilt.verdict}")
-        if not tip_match or rebuilt.verdict != cont.get("verdict"):
-            # tip mismatch is hard fail; verdict drift with richer surfaces is soft warn
-            if not tip_match:
-                print("FAIL: L0 tip mismatch vs continuum package", file=sys.stderr)
-                return 1
+        if not tip_match:
+            print("FAIL: L0 tip mismatch vs continuum package", file=sys.stderr)
+            return 1
+        if rebuilt.verdict != cont.get("verdict"):
             print(
                 f"WARN: rebuilt verdict {rebuilt.verdict} != package {cont.get('verdict')}"
             )
@@ -178,7 +219,14 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--session-display", default=None)
     b.add_argument("--ioid", default=None)
     b.add_argument("--poep", default=None)
+    b.add_argument(
+        "--mint-sim-live-poep",
+        action="store_true",
+        help="mint sealed sim-live presence_summary (mechanism dogfood → SYNCHRONIZED)",
+    )
+    b.add_argument("--poep-out", default=None, help="where to write minted PoEP package")
     b.add_argument("--nov2-bind", default=None)
+    b.add_argument("--auto-nov2-bind", action="store_true")
     b.add_argument("--escrow", default=None)
     b.add_argument("--posp", default=None)
     b.add_argument("--kas", default=None)

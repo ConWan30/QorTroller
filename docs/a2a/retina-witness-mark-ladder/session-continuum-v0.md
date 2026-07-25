@@ -78,17 +78,45 @@ Archive: `cfb_rwm_live_10_1784953588` (N=367 diverse panels; Edge `581a836c…`)
 | L0 + U1 display only | `OPTICAL_SESSION` | optical join alone |
 | L0 + U1 + ioID ceremony | **`OPTICAL_IDENTITY`** | real Edge + tokenId 498 |
 | L0 + U1 + ioID + NOV-2 none-bind | **`OPTICAL_IDENTITY`** + `stack_cited=true` | stack does **not** mint SYNCHRONIZED |
+| L0 + U1 + ioID + **sealed sim-live PoEP** + NOV-2 | **`SYNCHRONIZED_CONTINUUM`** | mechanism dogfood — see ceiling below |
 
-Artifacts: `audits/rwm_continuum_LIVE10.json`, `audits/rwm_continuum_LIVE10_stack.json`,
+```text
+python scripts/rwm_session_continuum_cli.py build \
+  --archive retina_kf_archive/cfb_rwm_live_10_1784953588 \
+  --label cfb_rwm_live_10 --stamp 1784953588 \
+  --ioid audits/ioid_edge_live_ceremony.json \
+  --mint-sim-live-poep --auto-nov2-bind \
+  --out audits/rwm_continuum_LIVE10_SYNCHRONIZED.json
+```
+
+**Honesty ceiling on SYNCHRONIZED dogfood:** `--mint-sim-live-poep` runs the **sealed**
+`summarize_live_session` path with a `real_hardware=True` fire simulator (same bar as
+gp-identity `test_live_simulator_reaches_synchronized`). Candidate bits are never
+hand-assigned. This proves continuum composition can reach `SYNCHRONIZED_CONTINUUM` when a
+live-hardware fire summary co-joins the RWM `session_id` + Edge `device_id`. It is **not**
+a claim that live_10 co-ran dual-connect PoEP under real play. `poep_enabled` stays False.
+
+Artifacts: `audits/rwm_continuum_LIVE10*.json`, `audits/poep_live_summary_LIVE10_sim.json`,
 `audits/rwm_bind_LIVE10.json`, `audits/ioid_edge_live_ceremony.json` (public ids only).
+
+## Daemon stop emit (fail-open)
+
+After RWM L0 at `cmd_stop`, `_issue_session_continuum` composes a postcard when
+`rwm_manifest_chain.json` exists:
+
+- Default-ON; set `RWM_CONTINUUM_DAEMON_ENABLED=false` to skip
+- Surfaces never fabricated: `CONTINUUM_IOID_JSON` / `CONTINUUM_POEP_JSON` / archive sidecars
+- Writes `archive/session_continuum.json` + `audits/rwm_continuum_<label>_<stamp>.json`
+- Fail-open: exceptions never break stop (same discipline as RWM L0 / KAS / PoSP)
 
 ## Explicit non-claims
 
-- Does **not** advance `poep_enabled` / `L6B_ENABLED` / presence candidate mint
+- Does **not** advance `poep_enabled` / `L6B_ENABLED` / mint presence without sealed summarize
 - Does **not** mutate 228B PoAC wire or FROZEN-v1 formulas
-- Does **not** couple to daemon stop-path (fail-open composition remains offline)
+- Daemon continuum is fail-open composition only — never blocks stop
 - Does **not** prove re-encode, Path B device signatures, or stranger re-encode proof
 - `stack_cited` is **not** a shortcut to `SYNCHRONIZED_CONTINUUM`
+- sim-live PoEP mint is **mechanism dogfood**, not dual-connect play proof
 
 ## Rails
 

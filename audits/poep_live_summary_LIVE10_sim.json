@@ -1,0 +1,76 @@
+{
+  "schema": "qortroller-poep-live-summary-package-v0",
+  "candidate": true,
+  "mechanism": "sealed_summarize_live_session+sim_real_hardware_fire",
+  "claim_ceiling": "MECHANISM dogfood only: presence_summary is produced by the sealed summarize_live_session path with a real_hardware=True fire simulator (same path as test_live_simulator_reaches_synchronized). It proves SYNCHRONIZED_CONTINUUM is reachable when a live-hardware fire summary co-joins the RWM session_id + device_id. It is NOT a claim that a particular optical RWM capture co-ran dual-connect PoEP under real play. poep_enabled stays False.",
+  "presence_summary": {
+    "schema": "qortroller-poep-gameplay-session-v0.1",
+    "session_id": "a33d240badbeb69bfef8d67609dbba1ee1c77f78395b0737fe281f3939152abe",
+    "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+    "player_label": "P1",
+    "t_start_ns": 1000000000,
+    "t_stop_ns": null,
+    "topology_note": "dual-connect: USB->PC challenge+IMU, BT->console play (operator topology)",
+    "mode": "live",
+    "activity_source": "bridge",
+    "n_activity_samples": 2,
+    "gameplay_active_fraction": 1.0,
+    "gameplay_active_fraction_floor": 0.5,
+    "n_go_issued": 2,
+    "min_go_issued": 2,
+    "n_go_verify_pass": 2,
+    "min_go_verify_pass": 2,
+    "n_nogo": 0,
+    "n_nogo_human_fa": 0,
+    "human_fa_rate": null,
+    "human_fa_budget": 0.05,
+    "gates": {
+      "go_ok": true,
+      "nogo_ok": true,
+      "activity_ok": true
+    },
+    "effective_live": true,
+    "live_hardware": true,
+    "activity_trusted": true,
+    "dry_plumbing_ok": true,
+    "presence_session_candidate_ok": true,
+    "poep_enabled": false,
+    "is_presence_verdict": false,
+    "flip": "FLIP-A (host-trusted); NOT FLIP-B (anti-compromised-PC)",
+    "claim": "FLIP-A host-trusted session liveness: sparse live nonce-bound challenges during active play. NOT identity, NOT anti-compromised-PC (FLIP-B). poep_enabled stays False.",
+    "live_seal_valid": true
+  },
+  "identity_attach": {
+    "schema": "qortroller-poep-session-identity-attach-v0",
+    "controller_presence_verdict": "SYNCHRONIZED_CONTROLLER",
+    "identity": {
+      "did_subject": "gamer_wallet",
+      "did_names_silicon": false,
+      "owner_did": "did:io:0x0cf36db57fc4680bcdfc65d1aff96993c57a4692",
+      "ioid_token_id": 498,
+      "tba_address": "0xFCee237789FA91a141781aFB574ADAbcA2660e7b",
+      "registration_tx": "0xab4d041b8ffeab257178e04dddd69e1033912766842803e0386c3640468e9b1f",
+      "device_to_owner_link": {
+        "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+        "vmdr_pubkey_hash": "0x235a2c04de3319661dd637ad296e37b59c23b0fe1f78509965f77bc5d9247802",
+        "controller_nft": "0x93b77eB6D8F9e12A801aC06b81bb6E37b7dcdE55",
+        "controller_nft_token_id": 1,
+        "tba_address": "0xFCee237789FA91a141781aFB574ADAbcA2660e7b"
+      },
+      "link_hops": [
+        "device_pubkey_hash",
+        "controller_nft",
+        "tba",
+        "owner_did"
+      ],
+      "custody_seal_v02": {
+        "seal": "640482b34492615e44d0089350d2a45fed0664476506667524ebc94607bc3b08",
+        "domain": "QORTROLLER-POEP-GAMEPLAY-LIVESEAL-v0.2-CANDIDATE",
+        "note": "NFT/TBA custody epoch bookkeeping - NOT a liveness or presence signal"
+      }
+    }
+  },
+  "advances_poep_enabled": false,
+  "advances_presence_session_candidate": false,
+  "advisory": true
+}

@@ -154,3 +154,76 @@ def test_refuse_broken_l0(tmp_path):
     marked[0].write_bytes(b"not-a-png")
     with pytest.raises(ContinuumError):
         load_rwm_surface(arch, require_verified=True)
+
+
+def test_normalize_poep_from_attach_envelope():
+    from vapi_bridge.rwm_session_continuum import normalize_poep_surface
+
+    ps = normalize_poep_surface(
+        {
+            "schema": "qortroller-poep-session-identity-attach-v0",
+            "presence_summary": {
+                "presence_session_candidate_ok": True,
+                "device_id": DEVICE,
+                "session_id": "ab" * 32,
+            },
+        }
+    )
+    assert ps["presence_session_candidate_ok"] is True
+    assert ps["device_id"] == DEVICE
+
+
+def test_mint_sim_live_reaches_synchronized(tmp_path):
+    from vapi_bridge.rwm_session_continuum import (
+        mint_sealed_sim_live_poep_summary,
+    )
+
+    arch = tmp_path / "a"
+    _seed_l0(arch)
+    surf = load_rwm_surface(arch)
+    # seed uses test DEVICE, not live Edge — mint with matching device + session
+    pkg = mint_sealed_sim_live_poep_summary(
+        device_id=surf["device_id_hex"],
+        session_id=surf["session_id"],
+        ioid_identity={
+            "owner_did": "did:io:0xtest",
+            "ioid_token_id": 1,
+            "tba_address": "0xTBA",
+            "registration_tx": "0xreg",
+            "vmdr_pubkey_hash": "0x" + "11" * 32,
+            "controller_nft": "0xNFT",
+            "controller_nft_token_id": 1,
+        },
+    )
+    assert pkg["presence_summary"]["presence_session_candidate_ok"] is True
+    cont = build_continuum_from_archive(
+        arch,
+        label="cont_test",
+        stamp=1_700_000_200,
+        ioid={
+            "token_id": 1,
+            "did": "did:io:0xtest",
+            "tba": "0xTBA",
+            "registered_device_id": DEVICE,
+        },
+        poep_live=pkg,
+    )
+    assert cont["verdict"] == SYNCHRONIZED_CONTINUUM
+    assert cont["optical_rwm"] and cont["identity_bound"] and cont["presence_candidate"]
+
+
+def test_issue_continuum_after_l0_writes_sidecar(tmp_path, monkeypatch):
+    from vapi_bridge import rwm_session_continuum as rsc
+
+    arch = tmp_path / "a"
+    _seed_l0(arch)
+    audits = tmp_path / "audits"
+    audits.mkdir()
+    monkeypatch.setattr(rsc, "_REPO", tmp_path)
+    cont = rsc.issue_continuum_after_l0(
+        arch, label="cont_test", stamp=1_700_000_200, auto_nov2_bind=True
+    )
+    assert cont is not None
+    assert cont["optical_rwm"] is True
+    assert (arch / "session_continuum.json").is_file()
+    assert (audits / "rwm_continuum_cont_test_1700000200.json").is_file()
