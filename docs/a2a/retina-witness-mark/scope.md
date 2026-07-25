@@ -17,9 +17,9 @@ session `cfb_rwm_live_01` (1076 frames; post-session check EXIT 0; locator
 decoded through OBS path). Gate record:
 `docs/a2a/retina-witness-mark-ladder/l0-live-verify-2026-07-24.md`.
 **NOV-3 is BUILT (CANDIDATE)** — see ladder `nov-3-scope.md` + implementation
-plan. **NOV-2 scope is OPEN (design-only):**
-`docs/a2a/retina-witness-mark-ladder/nov-2-scope.md` (no code until plan +
-operator GO). NOV-1 remains gated.
+plan. **NOV-2 plan is DRAFTED (design-only):**
+`docs/a2a/retina-witness-mark-ladder/nov-2-scope.md` +
+`nov-2-implementation-plan.md` (no code until operator GO). NOV-1 remains gated.
 
 ~~**Still no code written, no production file touched.** Per the A2A protocol's own explicit next step ("r05 is your
 implementation plan for review before any code"), the next deliverable is an
