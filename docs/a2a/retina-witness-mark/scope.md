@@ -16,10 +16,9 @@ once L0 ships and live-verifies).
 session `cfb_rwm_live_01` (1076 frames; post-session check EXIT 0; locator
 decoded through OBS path). Gate record:
 `docs/a2a/retina-witness-mark-ladder/l0-live-verify-2026-07-24.md`.
-**NOV-3 is BUILT (CANDIDATE)** — see ladder `nov-3-scope.md` + implementation
-plan. **NOV-2 is BUILT (CANDIDATE)** — bind + checkpoint inventory + SHARE
-postcard; offline CLI `scripts/rwm_nov2_cli.py`. **NOV-1 scope + plan DRAFTED**
-(`nov-1-scope.md` / `nov-1-implementation-plan.md`) — code needs GO.
+**NOV-3 / NOV-2 / NOV-1 are BUILT (CANDIDATE)** — full Path A ladder offline
+surface: L0 live-verify + escrow + bind/checkpoints/share + stranger pack.
+Merkle compression remains NOV-1.1.
 
 ~~**Still no code written, no production file touched.** Per the A2A protocol's own explicit next step ("r05 is your
 implementation plan for review before any code"), the next deliverable is an

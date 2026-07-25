@@ -1,10 +1,9 @@
 # NOV-1 — Portable stranger-verify dispute pack (scope)
 
-**Status: SCOPE OPEN + PLAN DRAFTED (design-only for full build)** (2026-07-25).  
+**Status: BUILT (CANDIDATE)** (2026-07-25). Operator GO on plan granted.  
 Implementation plan: `nov-1-implementation-plan.md`.  
-**Prior gate:** NOV-2 BUILT + dogfood on `live_01` (checkpoints/bind/share).  
-**Parent:** Path A RWM ladder (`README.md`).  
-**Crown of the L0→NOV-3→NOV-2→NOV-1 ladder.**
+**Shipped:** `rwm_stranger_pack.py` · `scripts/rwm_nov1_cli.py` · `test_rwm_nov1.py`.  
+**Prior gate:** NOV-2 BUILT + dogfood. **Parent:** Path A RWM ladder (`README.md`).
 
 ---
 
