@@ -2165,7 +2165,7 @@ async def mythos_claude_md_curation(
 
     char_count = len(text)
 
-    # Check 1: oversize
+    # Check 1: oversize (above warn threshold — actionable prune needed)
     if char_count > warn_chars:
         findings.append(MythosFindingResult(
             variant="claude_md_curation",
@@ -2185,6 +2185,35 @@ async def mythos_claude_md_curation(
             file_path="CLAUDE.md",
             frozen_region=False,
             fix_authority_tier=2,
+            evidence_sources=["CLAUDE.md"],
+        ))
+
+    # Check 1b: over target but under warn (drift is happening — information only,
+    # no prune mandated yet). The original variant only signalled above warn_chars,
+    # which left a 40k-char silent zone between target_chars and warn_chars where
+    # a file already over the 60k aspirational target reported zero findings. This
+    # finding makes drift visible early so it doesn't quietly accumulate to a
+    # 100k+ crisis. LOW severity to match the existing OVERSIZE posture.
+    if target_chars < char_count <= warn_chars:
+        findings.append(MythosFindingResult(
+            variant="claude_md_curation",
+            severity="LOW",
+            description=(
+                f"CLAUDE.md is {char_count:,} chars — over the {target_chars:,} "
+                f"aspirational target but under the {warn_chars:,} warn threshold. "
+                "No prune required yet; surface so the trend is visible."
+            ),
+            recommended_fix=(
+                "Informational only. If more NOTEs are added this arc, prefer "
+                "archiving an older inline NOTE to wiki/phases/ rather than growing "
+                "the file past the target."
+            ),
+            coherence_id=_coherence_id(
+                "claude_md_curation", f"over_target:{char_count // 10_000}"
+            ),
+            file_path="CLAUDE.md",
+            frozen_region=False,
+            fix_authority_tier=3,  # read-only — information only, no fix demanded
             evidence_sources=["CLAUDE.md"],
         ))
 

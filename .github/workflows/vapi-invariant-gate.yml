@@ -16,6 +16,9 @@ on:
       - "bridge/vapi_bridge/ioswarm_consensus_aggregator.py"
       - "contracts/circuits/PitlSessionProof.circom"
       - ".github/INVARIANTS_ALLOWLIST.json"
+      - "CLAUDE.md"
+      - "bridge/vapi_bridge/mythos_variants.py"
+      - "scripts/check_claude_md_curation.py"
   pull_request:
     paths:
       - "bridge/vapi_bridge/codec.py"
@@ -30,6 +33,9 @@ on:
       - "bridge/vapi_bridge/ioswarm_consensus_aggregator.py"
       - "contracts/circuits/PitlSessionProof.circom"
       - ".github/INVARIANTS_ALLOWLIST.json"
+      - "CLAUDE.md"
+      - "bridge/vapi_bridge/mythos_variants.py"
+      - "scripts/check_claude_md_curation.py"
   workflow_dispatch:
 
 jobs:
@@ -52,6 +58,14 @@ jobs:
 
       - name: Run invariant gate
         run: python scripts/vapi_invariant_gate.py
+
+      - name: CLAUDE.md curation gate
+        # Surfaces mythos_claude_md_curation findings in CI logs.
+        # Default is report-only (exit 0 on findings); does NOT block PRs — the
+        # current CLAUDE.md is ~74k chars, between the 60k target and 100k warn.
+        # Promote to `--strict` once an editorial prune pass lands the file
+        # under 60k; see docs/a2a/ci-debt/backlog.md fifth-pass section.
+        run: python scripts/check_claude_md_curation.py
 
       - name: Report (on failure)
         if: failure()

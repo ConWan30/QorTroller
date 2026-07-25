@@ -190,3 +190,63 @@ def test_t_mythos_cmd_7_closure_note_not_self_flagged():
         # Should NOT flag the closure NOTE as superseded (it IS the closure)
         superseded = [f for f in findings if "superseded NOTE" in f.description]
         assert superseded == []
+
+
+# ----- T-MYTHOS-CMD-8 -----------------------------------------------------
+
+def test_t_mythos_cmd_8_over_target_under_warn_informational():
+    """char_count in (target_chars, warn_chars] -> exactly one LOW OVER_TARGET
+    finding. Closes the silent 40k-char zone between the existing OVERSIZE
+    (above warn_chars) and a healthy-file no-op.
+
+    Added 2026-07-25: the original variant only signalled above warn_chars,
+    which meant a file at, say, 75k chars reported zero findings despite
+    already being 15k past the 60k aspirational target. This test pins
+    the new behaviour so the gap doesn't silently return.
+    """
+    from vapi_bridge.mythos_variants import mythos_claude_md_curation
+
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td)
+        # Make a file 75k chars long: above target (60k), under warn (100k)
+        (repo / "CLAUDE.md").write_text("# Test\n" + ("x" * 75_000), encoding="utf-8")
+
+        async def run():
+            return await mythos_claude_md_curation(
+                repo_root=repo,
+                target_chars=60_000,
+                warn_chars=100_000,
+            )
+
+        findings = asyncio.run(run())
+        over_target = [f for f in findings if "aspirational target" in f.description]
+        oversize = [f for f in findings if "warn threshold" in f.description and "aspirational target" not in f.description]
+
+        assert len(over_target) == 1, "exactly one OVER_TARGET finding expected in the 60k-100k band"
+        assert over_target[0].severity == "LOW"
+        assert over_target[0].variant == "claude_md_curation"
+        assert over_target[0].fix_authority_tier == 3, "OVER_TARGET is informational — read-only authority"
+        assert oversize == [], "no OVERSIZE finding should fire below warn_chars"
+
+
+def test_t_mythos_cmd_8b_no_over_target_at_or_below_target():
+    """char_count <= target_chars -> zero OVER_TARGET findings. Pins the
+    lower bound so a healthy post-prune CLAUDE.md stays silent.
+    """
+    from vapi_bridge.mythos_variants import mythos_claude_md_curation
+
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td)
+        (repo / "CLAUDE.md").write_text("# Test\n" + ("x" * 50_000), encoding="utf-8")
+
+        async def run():
+            return await mythos_claude_md_curation(
+                repo_root=repo,
+                target_chars=60_000,
+                warn_chars=100_000,
+            )
+
+        findings = asyncio.run(run())
+        over_target = [f for f in findings if "aspirational target" in f.description]
+        assert over_target == [], "no OVER_TARGET finding at or below target_chars"
+
