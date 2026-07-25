@@ -1,6 +1,7 @@
 # NOV-3 — Ledger-native dispute escrow (scope)
 
-**Status: SCOPE OPEN** (2026-07-24) — design-only until operator GO on an implementation plan.  
+**Status: SCOPE OPEN + PLAN DRAFTED** (2026-07-24) — implementation plan at
+`nov-3-implementation-plan.md` (plan-only; **code still needs explicit operator GO**).  
 **Prior gate:** L0 live-verify PASS — `l0-live-verify-2026-07-24.md`.  
 **Parent:** Path A RWM ladder (`README.md`).  
 **Not yet opened:** NOV-2, NOV-1.
@@ -112,4 +113,4 @@ created_ts_ns           issuance time (session-monotonic ok if stated)
 
 ---
 
-*Opened 2026-07-24 after L0 live-verify on `cfb_rwm_live_01`. Implementation plan is the next authorized deliverable — not code.*
+*Opened 2026-07-24 after L0 live-verify on `cfb_rwm_live_01`. Implementation plan drafted same day (`nov-3-implementation-plan.md`) — still not a build authorization.*

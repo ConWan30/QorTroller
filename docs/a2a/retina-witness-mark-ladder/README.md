@@ -13,7 +13,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Layer | Name | Status |
 |-------|------|--------|
 | **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED** 2026-07-24 — see `l0-live-verify-2026-07-24.md` |
-| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **SCOPE OPEN** — see `nov-3-scope.md` |
+| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **SCOPE OPEN + PLAN DRAFTED** — `nov-3-scope.md` · `nov-3-implementation-plan.md` (plan-only; build needs operator GO) |
 | **NOV-2** | *(not opened)* | gated on NOV-3 live-verify |
 | **NOV-1** | *(not opened)* | gated on NOV-2 live-verify |
 
