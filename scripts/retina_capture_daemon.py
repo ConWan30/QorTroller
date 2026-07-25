@@ -57,6 +57,31 @@ def _kill_tree(pid: int) -> None:
         pass
 
 
+def _env_or_bridge_dotenv(key: str) -> str:
+    """Process env wins if the key is present (even empty = explicit override).
+
+    Otherwise read ``bridge/.env`` the same way DB_PATH / TEMPORAL_BEACON_REGISTRY_ADDRESS
+    already do. ``cmd_stop`` is a *new* process — it does not inherit whatever the operator
+    shell exported at ``start`` time. Without this fallback, RWM_L0_DAEMON_ENABLED=true in
+    bridge/.env is silently ignored and _issue_rwm_l0 returns with no log line (observed on
+    the first live rig pass cfb_rwm_live_01, 2026-07-24).
+    """
+    if key in os.environ:
+        return os.environ[key].strip().strip('"').strip("'")
+    _dot_env = _REPO / "bridge" / ".env"
+    if not _dot_env.exists():
+        return ""
+    prefix = f"{key}="
+    try:
+        for _line in _dot_env.read_text(encoding="utf-8").splitlines():
+            _line = _line.strip()
+            if _line.startswith(prefix):
+                return _line.split("=", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        return ""
+    return ""
+
+
 def cmd_start(a) -> int:
     if _STATE.exists():
         st = json.loads(_STATE.read_text(encoding="utf-8"))
@@ -398,8 +423,14 @@ def _issue_rwm_l0(label, started_at, dst):
     save disk is not recoverable, and it would stale the tier-1 manifest.json hashes),
     then hash-chains the bytes ACTUALLY WRITTEN.
 
-    Default-OFF behind RWM_L0_DAEMON_ENABLED (D5)."""
-    if os.environ.get("RWM_L0_DAEMON_ENABLED", "").strip().lower() not in ("1", "true", "yes"):
+    Default-OFF behind RWM_L0_DAEMON_ENABLED (D5).
+
+    Flag + device_id resolve via _env_or_bridge_dotenv: process env if set, else bridge/.env.
+    Stop is a separate process from start — reading only os.environ silently no-ops a correctly
+    configured bridge/.env (cfb_rwm_live_01 live-pass finding, 2026-07-24).
+    """
+    enabled = _env_or_bridge_dotenv("RWM_L0_DAEMON_ENABLED").lower()
+    if enabled not in ("1", "true", "yes"):
         return
     if dst is None:
         print("[daemon] RWM: no archive dir (ring empty) — skipping")
@@ -408,7 +439,7 @@ def _issue_rwm_l0(label, started_at, dst):
     # D2: device_id is env-sourced and NEVER fabricated. A manifest that invents the device
     # it claims to attest is worse than no manifest -- the whole point is third-party
     # matching of footage to a SPECIFIC certified device.
-    device_id_hex = os.environ.get("RWM_DEVICE_ID_HEX", "").strip().lower()
+    device_id_hex = _env_or_bridge_dotenv("RWM_DEVICE_ID_HEX").lower()
     if not device_id_hex:
         print("[daemon] RWM: RWM_DEVICE_ID_HEX unset — skipping (device_id is never fabricated)")
         return

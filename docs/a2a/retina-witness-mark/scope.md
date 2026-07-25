@@ -10,11 +10,21 @@ gate, not abandoned — see § D-RWM-1 below for the still-valid fork writeup.
 
 RWM Path A now becomes "L0" in a larger sequence (see
 `docs/a2a/retina-witness-mark-ladder/` for NOV-3/NOV-2/NOV-1, opened only
-once L0 ships and live-verifies). **Still no code written, no production
-file touched.** Per the A2A protocol's own explicit next step ("r05 is your
+once L0 ships and live-verifies).
+
+**L0 STATUS UPDATE 2026-07-24:** L0 **shipped and live-verified** on rig
+session `cfb_rwm_live_01` (1076 frames; post-session check EXIT 0; locator
+decoded through OBS path). Gate record:
+`docs/a2a/retina-witness-mark-ladder/l0-live-verify-2026-07-24.md`.
+**NOV-3 scope is OPEN:**
+`docs/a2a/retina-witness-mark-ladder/nov-3-scope.md` (design-only until
+operator GO on an implementation plan). NOV-2/NOV-1 remain gated.
+
+~~**Still no code written, no production file touched.** Per the A2A protocol's own explicit next step ("r05 is your
 implementation plan for review before any code"), the next deliverable is an
 implementation plan for Path A specifically — not code, and not yet
-authorized to become code without a further explicit go-ahead.
+authorized to become code without a further explicit go-ahead.~~
+*(original hold line — superseded by L0 ship + live-verify above; kept for the record.)*
 
 The design as originally written below had a confirmed BLOCK-severity flaw
 (F-RWM-1) — the "cryptographically ties the footage to that session" claim

@@ -48,9 +48,11 @@ def _seed(dst: Path, n: int, size: int = 64) -> None:
 
 def _run(monkeypatch, dst: Path, *, enabled=True, device=DEVICE):
     d = _daemon()
+    # Process-env always set so tests never accidentally pick up the developer's real
+    # bridge/.env via _env_or_bridge_dotenv (present empty = explicit override).
     monkeypatch.setenv("RWM_L0_DAEMON_ENABLED", "true" if enabled else "")
     if device is None:
-        monkeypatch.delenv("RWM_DEVICE_ID_HEX", raising=False)
+        monkeypatch.setenv("RWM_DEVICE_ID_HEX", "")
     else:
         monkeypatch.setenv("RWM_DEVICE_ID_HEX", device)
     d._issue_rwm_l0("testlabel", 1700000000, dst)
@@ -88,6 +90,49 @@ def test_none_dst_is_safe(tmp_path, monkeypatch):
     monkeypatch.setenv("RWM_L0_DAEMON_ENABLED", "true")
     monkeypatch.setenv("RWM_DEVICE_ID_HEX", DEVICE)
     d._issue_rwm_l0("testlabel", 1700000000, None)   # must not raise
+
+
+def test_bridge_dotenv_fallback_when_process_env_unset(tmp_path, monkeypatch):
+    """Live-pass finding (cfb_rwm_live_01): stop is a new process; RWM_* only in bridge/.env
+    must still arm RWM. Process env absent -> read bridge/.env under _REPO."""
+    d = _daemon()
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "bridge").mkdir(parents=True)
+    (fake_repo / "bridge" / ".env").write_text(
+        "RWM_L0_DAEMON_ENABLED=true\n"
+        f"RWM_DEVICE_ID_HEX={DEVICE}\n",
+        encoding="utf-8",
+    )
+    arch = tmp_path / "arch"
+    _seed(arch, 3)
+    monkeypatch.setattr(d, "_REPO", fake_repo)
+    monkeypatch.delenv("RWM_L0_DAEMON_ENABLED", raising=False)
+    monkeypatch.delenv("RWM_DEVICE_ID_HEX", raising=False)
+    d._issue_rwm_l0("testlabel", 1700000000, arch)
+    assert (arch / "rwm_manifest_chain.json").exists()
+    rec = json.loads((arch / "rwm_manifest_chain.json").read_text(encoding="utf-8"))
+    assert rec["device_id_hex"] == DEVICE
+    assert len(rec["frames"]) == 3
+
+
+def test_process_env_empty_overrides_bridge_dotenv(tmp_path, monkeypatch):
+    """If the operator exports RWM_L0_DAEMON_ENABLED= (empty) in-process, that wins over
+    bridge/.env true — explicit process override, not silent re-enable from dotenv."""
+    d = _daemon()
+    fake_repo = tmp_path / "repo"
+    (fake_repo / "bridge").mkdir(parents=True)
+    (fake_repo / "bridge" / ".env").write_text(
+        "RWM_L0_DAEMON_ENABLED=true\n"
+        f"RWM_DEVICE_ID_HEX={DEVICE}\n",
+        encoding="utf-8",
+    )
+    arch = tmp_path / "arch"
+    _seed(arch, 3)
+    monkeypatch.setattr(d, "_REPO", fake_repo)
+    monkeypatch.setenv("RWM_L0_DAEMON_ENABLED", "")   # present but empty
+    monkeypatch.delenv("RWM_DEVICE_ID_HEX", raising=False)
+    d._issue_rwm_l0("testlabel", 1700000000, arch)
+    assert not (arch / "rwm_manifest_chain.json").exists()
 
 
 # --- 2. integration: chain builds, verifies, and detects tampering ---------------------
