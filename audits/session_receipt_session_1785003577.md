@@ -1,15 +1,14 @@
 ==============================================================
   QorTroller Session Receipt
 ==============================================================
-  Session : proof_drill_20260713_1843
+  Session : session_1785003577
   Pack    : observer-only
-  Date    : 2026-07-25 13:07
+  Date    : 2026-07-25 13:55
 --------------------------------------------------------------
-  KAS authorship  : HYGIENE_FAIL  authored=0  commit=f047708403679713...
-  PoSP presence   : SYNCHRONIZED  fusion_rows=12  retina_root=null
-  RETINA-STATE-v3 : present  n_events=10  commitment=b8ee957dd982c740...
-  stranger_verified: True
-  Archive         : 12 crops  schema=qortroller-session-archive-v1
+  KAS authorship  : HYGIENE_FAIL  authored=0  commit=932e0539903387e8...
+  PoSP presence   : (no record)
+  RETINA-STATE-v3 : honest-null (no conformant events captured)
+  Archive         : 242 crops  schema=qortroller-session-archive-v1
 --------------------------------------------------------------
   What you hold: a cryptographic pack a stranger can re-verify
   offline. Not a highlight reel. A presence+authorship receipt.
