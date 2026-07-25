@@ -1,12 +1,14 @@
 # NOV-3 — Ledger-native dispute escrow · implementation plan
 
-**Status: PLAN ONLY. No code written under this plan. Not authorized to build
-without operator GO.** Companion to `nov-3-scope.md` (scope open 2026-07-24)
-and L0 live-verify gate `l0-live-verify-2026-07-24.md`. Ladder index:
-`README.md`.
+**Status: BUILT (CANDIDATE) 2026-07-25** under operator GO (sole-agent sequence:
+L0 hold → NOV-3 implement → post-check diversity). Companion to `nov-3-scope.md`
+and L0 live-verify gate `l0-live-verify-2026-07-24.md`. Ladder index: `README.md`.
 
-This is the D1 deliverable named in `nov-3-scope.md` (“implementation plan
-reviewed — operator GO”). Same discipline as L0’s
+**Shipped surface:** `bridge/vapi_bridge/rwm_dispute_escrow.py` ·
+`scripts/rwm_dispute_escrow.py` · `bridge/tests/test_rwm_dispute_escrow.py`.
+Still offline-only; no stop-path hook; no FROZEN/PV-CI pin.
+
+This was the D1 plan deliverable named in `nov-3-scope.md`. Same discipline as L0’s
 `docs/a2a/retina-witness-mark/l0-implementation-plan.md`.
 
 ---

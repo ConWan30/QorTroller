@@ -1,7 +1,8 @@
 # NOV-3 — Ledger-native dispute escrow (scope)
 
-**Status: SCOPE OPEN + PLAN DRAFTED** (2026-07-24) — implementation plan at
-`nov-3-implementation-plan.md` (plan-only; **code still needs explicit operator GO**).  
+**Status: SCOPE OPEN + PLAN DRAFTED + CODE BUILT (CANDIDATE)** (2026-07-24/25).  
+Implementation plan: `nov-3-implementation-plan.md`. Operator GO granted 2026-07-25
+(sole-agent sequence). Ship: pure escrow module + offline CLI + tests.  
 **Prior gate:** L0 live-verify PASS — `l0-live-verify-2026-07-24.md`.  
 **Parent:** Path A RWM ladder (`README.md`).  
 **Not yet opened:** NOV-2, NOV-1.

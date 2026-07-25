@@ -15,6 +15,7 @@ Checks, in order of what matters:
   3. Originals byte-identical               (vs the tier-1 manifest.json _archive_ring wrote)
   4. Locator decodable on REAL frames       (expected to be imperfect on run 1 — see below)
   5. Geometry / block_px ratio              (RWM_BLOCK_PX=32 is untuned for real crops)
+  6. Content diversity (unique panel SHA-256 ratio) — freezes / static rings
 
 Exit 0 = every load-bearing check passed. Exit 1 = a real failure. Exit 2 = RWM
 didn't run (not a failure — just tells you which case you're in).
@@ -22,6 +23,10 @@ didn't run (not a failure — just tells you which case you're in).
 Check 4 is DIAGNOSTIC, not pass/fail. Palette and block_px calibration are
 D7-deferred; the first real-frame run is meant to MEASURE decode quality, not
 assert it. A failed decode here is data for the next round, not a broken build.
+
+Check 6 is DIAGNOSTIC by default (INFO) so a frozen ring can still pass chain
+math — but unique==1 is called out as FROZEN_RING. Pass --strict-diversity to
+promote unique_ratio==0 (or unique==1) to a load-bearing FAIL.
 """
 from __future__ import annotations
 
@@ -62,6 +67,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="RWM L0 post-session verification")
     ap.add_argument("--session-dir", default=None, help="explicit archive dir")
     ap.add_argument("--label", default=None, help="match newest dir starting with this label")
+    ap.add_argument(
+        "--strict-diversity",
+        action="store_true",
+        help="FAIL when original panel content is frozen (unique SHA-256 count == 1)",
+    )
     a = ap.parse_args()
 
     if a.session_dir:
@@ -203,6 +213,39 @@ def main() -> int:
                       f"({'plausible' if pct >= 4 else 'possibly too small to decode reliably'})")
     except Exception:  # noqa: BLE001
         pass
+
+    # --- 6. content diversity (frozen-ring detector) ---------------------------------
+    # Chain math can PASS on a static ring (every panel byte-identical). That is still
+    # a valid integrity proof of the pipeline, but it is NOT diverse live play.
+    # Spot-check protocol (R09/R10): measure unique SHA-256 of original panel_*.png.
+    if originals:
+        hashes = [_sha(p) for p in originals]
+        unique = len(set(hashes))
+        n = len(hashes)
+        ratio = unique / n if n else 0.0
+        if unique <= 1:
+            detail = (
+                f"unique_content={unique}/{n} (ratio={ratio:.1%}) — FROZEN_RING: all "
+                f"original panels share one content hash. Chain may still verify; do not "
+                f"cite as multi-frame live play. Eye-check capture source / OBS freeze."
+            )
+            if a.strict_diversity:
+                _line(BAD, "content diversity FROZEN_RING", detail)
+                failures += 1
+            else:
+                _line(INFO, "content diversity FROZEN_RING", detail)
+        elif ratio < 0.10:
+            _line(INFO, "content diversity low", (
+                f"unique_content={unique}/{n} (ratio={ratio:.1%}) — mostly repeated "
+                f"frames (menu/static/ring mix). Chain integrity independent."
+            ))
+        else:
+            _line(OK, "content diversity", (
+                f"unique_content={unique}/{n} (ratio={ratio:.1%}) — non-trivial "
+                f"frame variety"
+            ))
+    else:
+        _line(INFO, "content diversity skipped", "no original panel_*.png")
 
     print()
     if failures:

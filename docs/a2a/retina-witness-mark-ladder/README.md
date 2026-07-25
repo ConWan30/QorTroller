@@ -12,10 +12,43 @@ Each layer opens **only after** the prior layer’s live verification passes.
 
 | Layer | Name | Status |
 |-------|------|--------|
-| **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED** 2026-07-24 — see `l0-live-verify-2026-07-24.md` |
-| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **SCOPE OPEN + PLAN DRAFTED** — `nov-3-scope.md` · `nov-3-implementation-plan.md` (plan-only; build needs operator GO) |
-| **NOV-2** | *(not opened)* | gated on NOV-3 live-verify |
+| **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED + HOLD** 2026-07-24/25 — inert until env flags; see `l0-live-verify-2026-07-24.md` + grok R10 spot-check |
+| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT (CANDIDATE)** 2026-07-25 — module + CLI + tests; offline only; operator GO granted sole-agent sequence |
+| **NOV-2** | *(not opened)* | gated on NOV-3 live/dogfood use |
 | **NOV-1** | *(not opened)* | gated on NOV-2 live-verify |
+
+## L0 hold posture (do not auto-advance)
+
+| Item | State |
+|------|--------|
+| Primitives + F-RWM-9 + daemon wiring | on `main` |
+| Default | **inert** — `RWM_L0_DAEMON_ENABLED` default false; needs `true` + `RWM_DEVICE_ID_HEX` |
+| Live evidence | `cfb_rwm_live_01` (1076 frames, ~50% unique) preferred over `live_04` (frozen ring) |
+| Post-check | `scripts/rwm_post_session_check.py` (includes unique-panel diversity INFO / `--strict-diversity`) |
+| NOV-3 code | does **not** couple to `cmd_stop` |
+
+## NOV-3 ship surface
+
+| Path | Role |
+|------|------|
+| `bridge/vapi_bridge/rwm_dispute_escrow.py` | pure build/verify |
+| `scripts/rwm_dispute_escrow.py` | offline CLI |
+| `bridge/tests/test_rwm_dispute_escrow.py` | T1–T10 style suite |
+| schema | `qortroller-rwm-dispute-escrow-v0` CANDIDATE |
+
+```text
+python scripts/rwm_dispute_escrow.py build \
+  --archive retina_kf_archive/cfb_rwm_live_01_1784932933 \
+  --reveal 0,1,2,3 \
+  --reason "tournament dispute: sample frames" \
+  --case-id DEMO-001
+
+python scripts/rwm_dispute_escrow.py verify \
+  --escrow audits/rwm_escrow_DEMO-001.json \
+  --archive retina_kf_archive/cfb_rwm_live_01_1784932933
+```
+
+**Honest ceiling:** membership of L0 leaf hashes in a committed set + subset reveal. Not re-encode proof, not FROZEN, not on-chain, not stop-path.
 
 ## Rails (all ladder work)
 
@@ -33,5 +66,6 @@ Each layer opens **only after** the prior layer’s live verification passes.
 - `scripts/rwm_post_session_check.py --label cfb_rwm_live_01` → **EXIT 0**
   - chain re-verifies from disk
   - originals byte-identical
-  - locator decoded on **1076/1076** real frames (OBS pipeline path)
-- Process finding closed in-repo: `cmd_stop` now loads `RWM_*` via `_env_or_bridge_dotenv` (process env wins; else `bridge/.env`)
+  - locator decoded on real frames
+  - content diversity measured (non-frozen preferred)
+- Process finding closed in-repo: `cmd_stop` loads `RWM_*` via `_env_or_bridge_dotenv` (process env wins; else `bridge/.env`)
