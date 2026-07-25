@@ -25,6 +25,8 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Default | **inert** — `RWM_L0_DAEMON_ENABLED` default false; needs `true` + `RWM_DEVICE_ID_HEX` |
 | Live evidence | `cfb_rwm_live_01` (1076 frames, ~50% unique) preferred over `live_04` (frozen ring) |
 | Post-check | `scripts/rwm_post_session_check.py` (includes unique-panel diversity INFO / `--strict-diversity`) |
+| Live watch | `scripts/rwm_live_session_watch.py` — mid-session `frozen_ring_alert` after ≥20 identical crops |
+| Mark size | default 32; optional `RWM_BLOCK_PX` env / `bridge/.env` (invalid → default) |
 | NOV-3 code | does **not** couple to `cmd_stop` |
 
 ## NOV-3 ship surface

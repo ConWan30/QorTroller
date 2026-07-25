@@ -62,21 +62,51 @@ def main() -> int:
         "interval_s": 15,
     })
 
+    # Mid-session diversity: after this many crops, unique==1 → FROZEN_RING alert
+    # so the operator can retarget source without finishing a useless session.
+    diversity_alert_at = 20
+    diversity_alerted = False
     last_n = _crop_count()
     last_report = time.time()
-    _emit({"event": "ring_baseline", "panel_count": last_n})
+    _emit({"event": "ring_baseline", "panel_count": last_n, "diversity_alert_at": diversity_alert_at})
 
     while _STATE.is_file():
         time.sleep(15)
         n = _crop_count()
         now = time.time()
         if n != last_n or (now - last_report) >= 60:
-            _emit({
+            evt = {
                 "event": "ring_progress",
                 "panel_count": n,
                 "delta": n - last_n,
                 "elapsed_s": int(now - last_report) if n == last_n else 15,
-            })
+            }
+            # Cheap diversity probe: hash last 20 crops only
+            if n >= 5:
+                try:
+                    sys.path.insert(0, str(_REPO / "bridge"))
+                    from vapi_bridge.rwm_panel_diversity import panel_stats_for_dir
+                    stats = panel_stats_for_dir(_CROPS, sample_limit=20)
+                    evt["unique_recent"] = stats["unique"]
+                    evt["unique_label"] = stats["label"]
+                    if (
+                        not diversity_alerted
+                        and n >= diversity_alert_at
+                        and stats["frozen"]
+                    ):
+                        diversity_alerted = True
+                        _emit({
+                            "event": "frozen_ring_alert",
+                            "panel_count": n,
+                            "unique_recent": stats["unique"],
+                            "detail": (
+                                "last-20 panel crops are byte-identical — retarget UVC/ROI "
+                                "or unpause game; session will FROZEN_RING at stop"
+                            ),
+                        })
+                except Exception as e:  # noqa: BLE001 — never kill the watcher
+                    evt["diversity_error"] = repr(e)[:120]
+            _emit(evt)
             last_n = n
             last_report = now
 

@@ -406,10 +406,34 @@ def _archive_ring(label, started_at):
 # --- RWM L0 daemon wiring (A2A rounds 02-06: grok design D1-D7 + 2 claude-code flags,
 # both accepted; build list confirmed exact in round-06 before implementation) ---------
 RWM_CHAIN_SCHEMA = "qortroller-rwm-session-chain-v0"   # CANDIDATE — not FROZEN-v1, no PV-CI pin
-RWM_BLOCK_PX = 32
+RWM_BLOCK_PX_DEFAULT = 32  # placeholder until live-rig calibration (D7); overridable via env
 RWM_CORNER = "bottom-right"
 RWM_CHECKPOINT_INDEX = 0   # D3/r06: one checkpoint per session at L0. Multi-checkpoint
                            # needs a semantic L0 doesn't have; shipping 0 is the honest choice.
+
+
+def _rwm_block_px() -> int:
+    """Resolve mark block size: process env / bridge/.env RWM_BLOCK_PX, else default 32.
+
+    Invalid values fall back to default (fail-open for stop path). Live-rig may tune this
+    without a code change; palette calibration remains D7-deferred.
+    """
+    raw = _env_or_bridge_dotenv("RWM_BLOCK_PX").strip()
+    if not raw:
+        return RWM_BLOCK_PX_DEFAULT
+    try:
+        v = int(raw)
+    except ValueError:
+        print(f"[daemon] RWM: RWM_BLOCK_PX={raw!r} not an int — using default {RWM_BLOCK_PX_DEFAULT}")
+        return RWM_BLOCK_PX_DEFAULT
+    if v <= 0:
+        print(f"[daemon] RWM: RWM_BLOCK_PX={v} non-positive — using default {RWM_BLOCK_PX_DEFAULT}")
+        return RWM_BLOCK_PX_DEFAULT
+    return v
+
+
+# Back-compat alias for tests/importers that still reference the constant name.
+RWM_BLOCK_PX = RWM_BLOCK_PX_DEFAULT
 
 
 def _issue_rwm_l0(label, started_at, dst):
@@ -488,6 +512,7 @@ def _issue_rwm_l0(label, started_at, dst):
         return ts
 
     genesis_ts_ns = _mono(time.time_ns())
+    block_px = _rwm_block_px()
     frames, rows = [], []
     for i, src in enumerate(crops):
         img = cv2.imread(str(src), cv2.IMREAD_COLOR)
@@ -496,7 +521,7 @@ def _issue_rwm_l0(label, started_at, dst):
             continue
         try:
             marked = composite_mark_onto_frame(img, symbols[i % len(symbols)],
-                                               corner=RWM_CORNER, block_px=RWM_BLOCK_PX)
+                                               corner=RWM_CORNER, block_px=block_px)
         except ValueError as e:   # F-RWM-9 guard: frame too small for the block.
             print(f"[daemon] RWM: {src.name} cannot be marked ({e}) — skipping frame")
             continue
@@ -537,7 +562,7 @@ def _issue_rwm_l0(label, started_at, dst):
                             "these as capture wall-clock times."),
         "locator": {"checkpoint_index": RWM_CHECKPOINT_INDEX,
                     "session_id_hash_8b_hex": hashlib.sha256(session_id.encode()).digest()[:8].hex(),
-                    "block_px": RWM_BLOCK_PX, "corner": RWM_CORNER},
+                    "block_px": block_px, "corner": RWM_CORNER},
         "frames": rows,
         "chain_hex": [h.hex() for h in chain],
     }, indent=2), encoding="utf-8")

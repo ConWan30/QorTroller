@@ -218,12 +218,12 @@ def main() -> int:
     # Chain math can PASS on a static ring (every panel byte-identical). That is still
     # a valid integrity proof of the pipeline, but it is NOT diverse live play.
     # Spot-check protocol (R09/R10): measure unique SHA-256 of original panel_*.png.
+    from vapi_bridge.rwm_panel_diversity import panel_content_stats
+
     if originals:
-        hashes = [_sha(p) for p in originals]
-        unique = len(set(hashes))
-        n = len(hashes)
-        ratio = unique / n if n else 0.0
-        if unique <= 1:
+        stats = panel_content_stats(originals)
+        unique, n, ratio = stats["unique"], stats["n"], stats["ratio"]
+        if stats["frozen"]:
             detail = (
                 f"unique_content={unique}/{n} (ratio={ratio:.1%}) — FROZEN_RING: all "
                 f"original panels share one content hash. Chain may still verify; do not "
