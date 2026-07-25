@@ -594,4 +594,78 @@ to produce a trustworthy pass/fail tally needs `git submodule update --init
 --recursive` and whatever compile/build steps CI runs before pytest (see
 the Hardhat-ordering fix earlier in this pass) as a precondition, not an
 afterthought — otherwise a clean-looking run can be quietly wrong in the
-one direction (false pass) that's hardest to notice.
+same way this backlog's round-1 ioID claim was wrong.
+
+## Update, fifth pass — firmware-submodule init as a fresh-clone entry point (2026-07-25)
+
+Independent engineering pass on branch `feat/ci-debt-firmware-invariants`
+(off `main` at `2d2b9097`, not built on the `fix/ci-debt-backlog` history).
+Scope: address the fact that a fresh clone of `main` with no prior
+submodule init fails the PV-CI gate with two FILE NOT FOUND violations
+(`INV-FIRMWARE-001/002`), even though CI never sees this because every
+.github/workflows/*.yml file runs `git submodule update --init
+bridge/firmware/joypad-os` before the gate. The local-developer path
+had no equivalent entry point.
+
+Three paired fixes, two commits:
+
+1. **Orphan gitlink removal** (commit `955d5e76`, follows the `e0e30143` /
+   `2a0c70c8` precedent): removed `.claude/worktrees/agent-ae6505a9` from
+   the index (160000 gitlink, no `.gitmodules` entry, introduced by
+   `0b573ac9` autoresearch cycle). Unblocks `git submodule update --init
+   --recursive` on a fresh clone of `main`. This is the *third* instance of
+   the same failure mode; the autoresearch cycle that introduces these
+   gitlinks appears to recur and would benefit from a guard rail at the
+   point where `autoresearch` writes agent worktrees (out of scope for this
+   pass).
+
+2. **`make init` target + gate hint** (commit `55bff79c`): new
+   `Makefile` `init` target mirrors the CI init step exactly — `git
+   submodule update --init bridge/firmware/joypad-os` (targeted, not
+   --recursive, for the same reason #1 exists). `scripts/vapi_invariant_gate.py`
+   `run_gate()` now parses `.gitmodules` and emits an actionable hint
+   pointing at `make init` (or the direct submodule command) when a missing
+   invariant-file path lives inside a registered submodule — instead of the
+   bare `FILE NOT FOUND`. README's "Run the bridge locally" block now leads
+   with `make init` so a fresh clone gets the right one-line setup step.
+
+**Verification (what was actually run, not what is believed):**
+- Gate present submodule → PASS, 184 invariants.
+- Gate with submodule removed → fires the new actionable hint, names the
+  submodule path, points to `make init` / the direct command.
+- Submodule restored via the documented command → gate PASS 184/184 again.
+- Dependent imports unaffected: `bridge/tests/test_phase223_pv_ci.py`,
+  `test_phase224.py`, `test_phase225.py` → 24 passed in 35.89s. py_compile OK.
+- Recent-activity sweep (20 new `bridge/tests/test_*.py` files added since
+  2026-07-13 — all of them postdating this branch's `9d44ed44` ancestor):
+  **209 passed, 6 warnings in 14.20s, zero failures**. Warnings are
+  intentional dev-only `SoftwareIdentityBackend plaintext-private-key`
+  UserWarnings, not failures. **The recent-activity conversation is clean.**
+
+**NOT verified (honest ceiling):**
+- Full bridge suite (~6462 collected) not run; only the gate-script
+  dependents and the recent-activity sweep above.
+- CI matrix (Python 3.10/3.11/3.12 × Node 18/20 × Rust) not run from here.
+- Other feature branches not swept for sibling orphan gitlinks; only
+  this branch's index was cleaned. The autoresearch cycle that introduced
+  them runs across multiple branches (the precedent commits are on
+  different branches too).
+- `make` itself is not installed in the maintainer's git-bash environment
+  (Windows); the `init` target was exercised via the underlying
+  `git submodule update --init bridge/firmware/joypad-os` command directly.
+
+**Structural finding worth flagging (not in scope of this pass to fix):**
+`origin/fix/ci-debt-backlog` is 1,445 commits ahead of `main` and 1,417
+commits behind — it has diverged by ~280 net commits and never merged.
+Everything this backlog records as "fixed on this branch" lives on that
+fork; nothing here has reached `main`. That means a fresh clone of `main`
+today still carries every "open" backlog item this document writes
+about plus the whole 280-commit drift between the two, *plus* everything
+in the ~280 new commits that the ci-debt branch has never seen. Merging
+(or explicitly choosing not to merge) `fix/ci-debt-backlog` is the
+real close-out for most of what this backlog records; the fifth-pass
+work above is a small-portion drop-in fix on `main` directly, scoped
+fresh to that branch because the firmware-submodule fresh-clone failure
+is one of the few things that hits every new contributor to `main`
+regardless of whether the full ci-debt history ever lands.
+
