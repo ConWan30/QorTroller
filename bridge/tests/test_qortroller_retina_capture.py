@@ -208,6 +208,26 @@ def test_save_capture_crops_disabled_is_noop(tmp_path):
     assert list(tmp_path.glob("panel_*.png")) == []
 
 
+def test_save_capture_crops_dedup_same_panel_ts(tmp_path):
+    """F-RWM-FROZEN: tune() must not re-write identical stash under new filenames."""
+    pytest.importorskip("cv2")
+    from bridge.vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", capture_enabled=True, capture_dir=str(tmp_path),
+                            capture_max=10, panel_roi="0.0,0.28,0.32,0.67")
+    rgc._source._panel_bgr = np.zeros((20, 30, 3), np.uint8)
+    rgc._source._panel_ts = 1000.0
+    p1 = rgc.save_capture_crops()
+    assert p1 is not None
+    p2 = rgc.save_capture_crops()
+    assert p2 is None  # same panel_ts -> de-dup
+    assert len(list(tmp_path.glob("panel_*.png"))) == 1
+    rgc._source._panel_ts = 2000.0
+    rgc._source._panel_bgr = np.full((20, 30, 3), 7, np.uint8)
+    p3 = rgc.save_capture_crops()
+    assert p3 is not None
+    assert len(list(tmp_path.glob("panel_*.png"))) == 2
+
+
 # --- LOOP 2 composite-driven death trigger (the 97b86b3c sibling fix; wired in _log_composite) ---
 
 def _mk_death_capture(tmp_path):

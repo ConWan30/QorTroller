@@ -18,7 +18,8 @@ decoded through OBS path). Gate record:
 `docs/a2a/retina-witness-mark-ladder/l0-live-verify-2026-07-24.md`.
 **NOV-3 is BUILT (CANDIDATE)** — see ladder `nov-3-scope.md` + implementation
 plan. **NOV-2 is BUILT (CANDIDATE)** — bind + checkpoint inventory + SHARE
-postcard; offline CLI `scripts/rwm_nov2_cli.py`. NOV-1 remains gated.
+postcard; offline CLI `scripts/rwm_nov2_cli.py`. **NOV-1 scope + plan DRAFTED**
+(`nov-1-scope.md` / `nov-1-implementation-plan.md`) — code needs GO.
 
 ~~**Still no code written, no production file touched.** Per the A2A protocol's own explicit next step ("r05 is your
 implementation plan for review before any code"), the next deliverable is an

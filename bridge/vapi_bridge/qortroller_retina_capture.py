@@ -859,6 +859,10 @@ class RetinaGameCapture:
         self._capture_n = 0
         self._capture_logged = False
         self._last_burst_flush_ts = None     # RP-2c Fix B: de-dup key for window-gated flushes
+        # F-RWM-FROZEN (live_04/05/06): tune() re-saved the same _panel_bgr every ~1s with a
+        # fresh timestamp → hundreds of byte-identical PNGs (false FROZEN_RING / ring bloat).
+        # De-dup on panel stash ts (same key as maybe_flush_burst_crop).
+        self._last_capture_save_ts = None
         self.started = False
         # Trigger-gated INLINE authorship (advisory; default-off). PURE monitor holds the R2-window +
         # single-flight decision; the anchor + classify + persist happen off the event loop (see
@@ -1259,16 +1263,24 @@ class RetinaGameCapture:
         """Dense corpus capture: if enabled, write the latest stashed left-panel crop (kill-feed + roster)
         to a bounded ring of PNGs for offline review/anchor-extraction. Called from the throttled tune()
         tick (file I/O off the WGC frame callback). Fail-open: cv2/dir issues -> no-op. Returns the path
-        written, or None. This produces the corpus the killfeed authorship detector must be calibrated on."""
+        written, or None. This produces the corpus the killfeed authorship detector must be calibrated on.
+
+        F-RWM-FROZEN: skip write when _panel_ts is unchanged since the last successful save — otherwise
+        tune() re-materializes the same stash under new filenames (live_04/05/06 false FROZEN_RING)."""
         if not self._capture_enabled:
             return None
         bgr = getattr(self._source, "_panel_bgr", None)
         if bgr is None:
             return None
+        panel_ts = getattr(self._source, "_panel_ts", None)
+        if panel_ts is not None and panel_ts == self._last_capture_save_ts:
+            return None
         try:
             from l9_presence.killfeed_cv import save_crop_bounded
             path = save_crop_bounded(self._capture_dir, "panel", bgr, max_files=self._capture_max)
-            self._capture_n += 1 if path else 0
+            if path:
+                self._capture_n += 1
+                self._last_capture_save_ts = panel_ts
             if path and not self._capture_logged:
                 self._capture_logged = True
                 log.info("RetinaGameCapture: dense panel-crop capture ON -> %s (ring max=%d)",
