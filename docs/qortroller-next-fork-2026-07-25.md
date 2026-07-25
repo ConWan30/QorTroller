@@ -18,7 +18,7 @@ unique=100%, locator PASS). It is **not** an L9 continuum win (~6.5% LIVE_COUPLE
 | Fork | Work | Readiness | Main evidence | Risk if chosen next |
 |------|------|-----------|---------------|---------------------|
 | **A** | L9 continuum engineering (center ROI, device ts, lag measure) | **Partial** — RGC path exists; measured continuum weak | live_10: 6/92 LIVE_COUPLED, 85/92 REPLAY_OR_RELAY, coupling mean ~0.07, `wall_fallback` only; left-panel ROI `0.0,0.28,0.32,0.67` is RWM-strong / continuum-weak (`l0-live-session-live10-2026-07-25.md`) | Scope creep into full PoEP or tournament gates; overclaim LIVE after one ROI tweak without lag proof |
-| **B** | PoEP / single-HID SYNCHRONIZED under real play | **Partial / blocked** — adapters + HID ring built; flags off | CLAUDE hard rules: `poep_enabled` / `L6B` operator-gated; topology crux (dual-writer vs bridge-owned ring); N≥50 usable Edge-reflex is met as corpus gate but enablement still operator seal | Flipping flags without campaign discipline; false SYNCHRONIZED without `real_hardware`; HID/PS5 dual-connect regressions |
+| **B** | PoEP / single-HID SYNCHRONIZED under real play | **Partial / blocked** — adapters + HID ring built; **L6B already ON** | CLAUDE hard rules (2026-07-24 reconcile): `L6B_ENABLED=true` operator seal 2026-07-18 after usable N met (220 usable / 197 independent on Edge); **`poep_enabled` stays False** independently; SYNCHRONIZED under real play still topology-blocked (single-HID bridge fire path / dual-connect seam); campaign mode is process-scoped only | Claiming SYNCHRONIZED_CONTROLLER without `real_hardware` + topology; conflating L6B-ON with poep_enabled; dual-connect HID regressions |
 | **C** | Tournament preflight / TGE sequencing on AIT + gates | **Partial** — AIT defensibility path advanced; multi-gate preflight exists | CLAUDE/Agents: AIT all_pairs>1 + per-player N≥10 defensibility; staged graduation; many P0 conditions; still testnet + `CHAIN_SUBMISSION_PAUSED` posture | Premature TGE narrative while L9 continuum and AUTHORED seams still open; spend/activation mistakes |
 | **D** | Pause product-ops; grant / docs / packaging | **Ready anytime** — no code dependency | Product + DePIN node + RWM ladder already dogfoodable; public-repo hygiene in place | Stalling measured continuum/TGE gaps; docs drift if ops continue offline without brief |
 
@@ -34,9 +34,9 @@ unique=100%, locator PASS). It is **not** an L9 continuum win (~6.5% LIVE_COUPLE
 
 ### B — PoEP / single-HID SYNCHRONIZED under real play
 
-- **Readiness:** Partial/blocked. Bridge fire+IMU ring and adapters exist as mechanism; product flags stay fail-closed.
-- **Evidence:** CLAUDE PoEP/L6B hard rules; HID-ring / dual-connect notes; presence fusion CANDIDATE compose-not-conflate.
-- **Risk:** Operator-unsafe flag flips; claiming SYNCHRONIZED_CONTROLLER without real pad fire topology.
+- **Readiness:** Partial/blocked. Bridge fire+IMU ring and adapters exist as mechanism. **Split flags:** `L6B_ENABLED=true` already sealed (2026-07-18; corpus gate met); **`poep_enabled=False`** still independent — presence protocol not auto-on. SYNCHRONIZED under real play remains topology-blocked, not “waiting for L6B seal.”
+- **Evidence:** CLAUDE hard rule (L6B ON after usable 220/197; poep_enabled stays False); `bridge/.env` `L6B_ENABLED=true`; HID-ring / dual-connect notes; presence fusion CANDIDATE compose-not-conflate.
+- **Risk:** Claiming SYNCHRONIZED_CONTROLLER without real pad fire topology; treating L6B-ON as if PoEP live protocol were on.
 
 ### C — Tournament preflight / TGE sequencing
 
@@ -60,7 +60,7 @@ unique=100%, locator PASS). It is **not** an L9 continuum win (~6.5% LIVE_COUPLE
 
 1. **Measured gap after a forensic win.** live_10 closed diverse RWM; continuum is the adjacent claim customers will confuse with “live proof,” and the data already shows REPLAY dominance.
 2. **Unblocks honest product language.** Separating RWM vs L9 in docs is done; engineering A makes a *future* continuum cite possible without touching PoEP flags or TGE.
-3. **B is higher risk / more operator seal.** PoEP SYNCHRONIZED under real play needs deliberate L6B/campaign decisions and HID topology discipline.
+3. **B is higher risk / topology-bound.** L6B is already sealed ON; remaining work is `poep_enabled` / campaign / single-HID SYNCHRONIZED under real play — not another L6B enablement decision.
 4. **C depends on multi-gate honesty.** TGE sequencing is premature as *the* next build while continuum is unexplained and chain pause is correct default.
 5. **D is valid but freezes the wrong moment.** Packaging can run *in parallel later*; the ranking pick for *next engineering* is A.
 
@@ -75,7 +75,7 @@ unique=100%, locator PASS). It is **not** an L9 continuum win (~6.5% LIVE_COUPLE
 3. **Offline lag/ROI report:** script or RGC export over an existing session log/archive that tabulates LIVE vs REPLAY rates + lag histogram + ts_source (drive real shipped functions in tests).
 4. **Ops gate for analysis:** document “only score continuum on in-play stick motion windows,” not play-call UI (ops criterion in the report, not a new biometric flag).
 
-**Out of slice:** PoEP enablement, L6B flip, tournament commit-activation, mainnet, FROZEN-v1 pins, claiming continuum win on live_10.
+**Out of slice:** `poep_enabled` flips / SYNCHRONIZED under-play topology work (fork B), tournament commit-activation, mainnet, FROZEN-v1 pins, claiming continuum win on live_10. (L6B is already ON — not an A-slice or B-unblock item.)
 
 **Slice “done” means:** dual-ROI/config + lag source tagging + offline continuum report + tests on real functions; **not** “LIVE_COUPLED majority on a new capture” (that is a later validation session).
 
@@ -96,7 +96,8 @@ unique=100%, locator PASS). It is **not** an L9 continuum win (~6.5% LIVE_COUPLE
 |------|-----|
 | `docs/a2a/retina-witness-mark-ladder/l0-live-session-live10-2026-07-25.md` | RWM win vs RGC continuum numbers |
 | `docs/a2a/retina-witness-mark-ladder/README.md` | Ladder L0–NOV-1 status; live_10 preferred for RWM diversity |
-| `CLAUDE.md` | AIT / PoEP / L6B hard rules; chain pause; product/DePIN standing |
+| `CLAUDE.md` | AIT; L6B sealed ON (2026-07-18) vs `poep_enabled` False; chain pause; product/DePIN standing |
+| `bridge/.env` (local, not committed) | Confirmed `L6B_ENABLED=true` |
 | `retina_kf_archive/cfb_rwm_live_10_1784953588` (local) | panel count 367 re-check |
 
 ---
