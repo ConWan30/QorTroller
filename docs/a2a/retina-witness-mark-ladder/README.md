@@ -2,6 +2,8 @@
 
 **Opened:** 2026-07-24 (operator GO after first live L0 pass on `cfb_rwm_live_01`).
 
+**Next-fork ranking (A–D):** see `docs/qortroller-next-fork-2026-07-25.md` — recommended next engineering fork **A** (L9 continuum instrument slice); live_10 remains RWM diversity cite only, not continuum win.
+
 Per `docs/a2a/retina-witness-mark/scope.md` (D-RWM-1 Path A):
 
 ```text
