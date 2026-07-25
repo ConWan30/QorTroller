@@ -1,0 +1,58 @@
+{
+  "schema": "qortroller-session-continuum-v0",
+  "verdict": "OPTICAL_IDENTITY",
+  "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+  "session_id": "a33d240badbeb69bfef8d67609dbba1ee1c77f78395b0737fe281f3939152abe",
+  "session_display": "cfb_rwm_live_10_1784953588",
+  "optical_rwm": true,
+  "session_join": true,
+  "device_join": true,
+  "identity_bound": true,
+  "presence_candidate": false,
+  "stack_cited": true,
+  "rwm": {
+    "session_id": "a33d240badbeb69bfef8d67609dbba1ee1c77f78395b0737fe281f3939152abe",
+    "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+    "l0_chain_tip_hex": "e787060870f9f27ce056b8e3ae2370c965682b28a91660a7f5a18870c1db39f5",
+    "l0_verified": true,
+    "n_frames": 367,
+    "schema": "qortroller-rwm-session-chain-v0",
+    "id_verified": true
+  },
+  "ioid": {
+    "token_id": 498,
+    "did": "did:io:0x0cf36db57fc4680bcdfc65d1aff96993c57a4692",
+    "tba": "0xFCee237789FA91a141781aFB574ADAbcA2660e7b",
+    "registered_device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+    "id_verified": true
+  },
+  "poep_live": {
+    "presence_session_candidate_ok": false,
+    "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+    "session_id": "a33d240badbeb69bfef8d67609dbba1ee1c77f78395b0737fe281f3939152abe",
+    "live_seal": null,
+    "id_verified": true
+  },
+  "stack": {
+    "nov2_bind": {
+      "session_id": "a33d240badbeb69bfef8d67609dbba1ee1c77f78395b0737fe281f3939152abe",
+      "ok": true,
+      "l0_chain_tip_hex": "e787060870f9f27ce056b8e3ae2370c965682b28a91660a7f5a18870c1db39f5",
+      "bind_kind": "none"
+    }
+  },
+  "notes": [
+    "u1: session_display re-derives session_id (U1 join held)",
+    "poep_live: presence_session_candidate_ok is not True \u2014 presence_candidate stays False",
+    "non-claim: optical_rwm does NOT imply presence_session_candidate_ok",
+    "non-claim: stack_cited (bind/escrow/posp/kas) does NOT OR-merge into SYNCHRONIZED_CONTINUUM",
+    "non-claim: composition does not advance poep_enabled, L6B_ENABLED, or FROZEN seal"
+  ],
+  "advances_poep_enabled": false,
+  "advances_l6b_enabled": false,
+  "advances_presence_session_candidate": false,
+  "advisory": true,
+  "candidate": true,
+  "created_ts_ns": 1784966257929178100,
+  "archive_dir": "C:\\Users\\Contr\\vapi-pebble-prototype\\retina_kf_archive\\cfb_rwm_live_10_1784953588"
+}
