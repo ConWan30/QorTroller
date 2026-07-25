@@ -186,10 +186,24 @@ def step5_send_challenge(dev) -> tuple[bool, float]:
         return False, 0.0
 
     try:
+        from pydualsense import TriggerModes
+    except ImportError:
+        _print_step(5, "Send challenge", False,
+                    "pydualsense.enums.TriggerModes not available in this "
+                    "pydualsense version — run: pip install -U pydualsense. "
+                    "Re-run with --skip-challenge to skip steps 5-7.")
+        return False, 0.0
+
+    try:
         ds = pydualsense()
         ds.init()
-        # RIGID_LIGHT: mode=1, forces=[128, 128, 0, 0, 0, 0, 0]
-        ds.triggerR.setMode(1)
+        # RIGID_LIGHT: TriggerModes.Rigid (formerly raw mode=1 in older
+        # pydualsense). All other call sites in this repo (bridge/controller/
+        # l6_trigger_driver.py, l9_presence/poep_force.py, dualshock_emulator)
+        # already use the TriggerModes enum; this brings the pre-flight gate
+        # in line. The "mode=1" docstring preserves the protocol-level profile
+        # identifier used in challenge_profiles.py; the enum just wraps it.
+        ds.triggerR.setMode(TriggerModes.Rigid)
         for i, f in enumerate([128, 128, 0, 0, 0, 0, 0]):
             ds.triggerR.setForce(i, f)
         challenge_ts = time.monotonic()
