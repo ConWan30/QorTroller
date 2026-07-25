@@ -78,23 +78,34 @@ Archive: `cfb_rwm_live_10_1784953588` (N=367 diverse panels; Edge `581a836c…`)
 | L0 + U1 display only | `OPTICAL_SESSION` | optical join alone |
 | L0 + U1 + ioID ceremony | **`OPTICAL_IDENTITY`** | real Edge + tokenId 498 |
 | L0 + U1 + ioID + NOV-2 none-bind | **`OPTICAL_IDENTITY`** + `stack_cited=true` | stack does **not** mint SYNCHRONIZED |
-| L0 + U1 + ioID + **sealed sim-live PoEP** + NOV-2 | **`SYNCHRONIZED_CONTINUUM`** | mechanism dogfood — see ceiling below |
+| L0 + U1 + ioID + **sealed sim-live PoEP** + NOV-2 | **`SYNCHRONIZED_CONTINUUM`** | mechanism dogfood |
+| L0 + U1 + ioID + **bridge dual-connect live PoEP** | **`SYNCHRONIZED_CONTINUUM`** | **play-attested** when real fires mint candidate |
 
 ```text
+# Mechanism dogfood (no rig)
 python scripts/rwm_session_continuum_cli.py build \
   --archive retina_kf_archive/cfb_rwm_live_10_1784953588 \
   --label cfb_rwm_live_10 --stamp 1784953588 \
   --ioid audits/ioid_edge_live_ceremony.json \
   --mint-sim-live-poep --auto-nov2-bind \
   --out audits/rwm_continuum_LIVE10_SYNCHRONIZED.json
+
+# PLAY-ATTESTED dual-connect (operator rig — USB laptop + BT PS5 + bridge ring)
+POEP_LIVE_FIRE_ENABLED=1 python scripts/rwm_continuum_dual_connect_live.py \
+  --archive retina_kf_archive/cfb_rwm_live_10_1784953588 \
+  --label cfb_rwm_live_10 --stamp 1784953588 \
+  --ioid audits/ioid_edge_live_ceremony.json \
+  --wait-active-s 60 --require-candidate \
+  --out audits/rwm_continuum_LIVE10_PLAY_ATTESTED.json
 ```
 
-**Honesty ceiling on SYNCHRONIZED dogfood:** `--mint-sim-live-poep` runs the **sealed**
-`summarize_live_session` path with a `real_hardware=True` fire simulator (same bar as
-gp-identity `test_live_simulator_reaches_synchronized`). Candidate bits are never
-hand-assigned. This proves continuum composition can reach `SYNCHRONIZED_CONTINUUM` when a
-live-hardware fire summary co-joins the RWM `session_id` + Edge `device_id`. It is **not**
-a claim that live_10 co-ran dual-connect PoEP under real play. `poep_enabled` stays False.
+**Honesty ceilings:**
+- `--mint-sim-live-poep` — mechanism only (`real_hardware=True` simulator). Not play-attested.
+- `--mint-bridge-live-poep` / `rwm_continuum_dual_connect_live.py` — **play-attested** when the
+  bridge confirms real nonce-bound fires and sealed summarize mints
+  `presence_session_candidate_ok`. Single-HID ring: activity + fire + IMU from one reader.
+  Does **not** flip `poep_enabled`. Preferred co-session: run mid-daemon so
+  `archive/poep_live_summary.json` lands before stop continuum emit.
 
 Artifacts: `audits/rwm_continuum_LIVE10*.json`, `audits/poep_live_summary_LIVE10_sim.json`,
 `audits/rwm_bind_LIVE10.json`, `audits/ioid_edge_live_ceremony.json` (public ids only).

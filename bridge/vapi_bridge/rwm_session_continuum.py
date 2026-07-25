@@ -48,6 +48,7 @@ __all__ = [
     "normalize_ioid_surface",
     "build_continuum_from_archive",
     "mint_sealed_sim_live_poep_summary",
+    "mint_bridge_live_poep_summary",
     "issue_continuum_after_l0",
     "verify_continuum",
     "build_session_continuum",
@@ -70,6 +71,15 @@ SIM_LIVE_POEP_CEILING = (
     "synchronized). It proves SYNCHRONIZED_CONTINUUM is reachable when a live-hardware fire "
     "summary co-joins the RWM session_id + device_id. It is NOT a claim that a particular "
     "optical RWM capture co-ran dual-connect PoEP under real play. poep_enabled stays False."
+)
+
+BRIDGE_LIVE_POEP_CEILING = (
+    "PLAY-ATTESTED (dual-connect bridge single-HID ring): presence_summary comes from sealed "
+    "summarize_live_session after real POST /operator/poep/fire probes on the RUNNING bridge "
+    "(BridgeFireCaptureAdapter). activity/PCC attested by the SAME bridge reader. "
+    "SYNCHRONIZED_CONTINUUM is a session-liveness CANDIDATE only when presence_session_candidate_ok "
+    "is True from real fires — never synthesized. Does NOT flip poep_enabled / L6B. Requires "
+    "POEP_LIVE_FIRE_ENABLED=1 + bridge l6b_enabled + dual-connect play (USB laptop + BT PS5)."
 )
 
 
@@ -250,6 +260,167 @@ def mint_sealed_sim_live_poep_summary(
         "candidate": True,
         "mechanism": "sealed_summarize_live_session+sim_real_hardware_fire",
         "claim_ceiling": SIM_LIVE_POEP_CEILING,
+        "presence_summary": ps,
+        "identity_attach": {
+            "schema": artifact.get("schema"),
+            "controller_presence_verdict": (artifact.get("controller_presence") or {}).get(
+                "verdict"
+            ),
+            "identity": artifact.get("identity"),
+        },
+        "advances_poep_enabled": False,
+        "advances_presence_session_candidate": False,
+        "advisory": True,
+    }
+
+
+def mint_bridge_live_poep_summary(
+    *,
+    device_id: str,
+    session_id: str,
+    ioid_identity: Optional[dict] = None,
+    player_label: str = "P1",
+    n_go: int = 2,
+    amplitude: int = 60,
+    bridge_url: str = "http://localhost:8080",
+    api_key: str = "",
+    fire_timeout_s: float = 25.0,
+    wait_active_s: float = 45.0,
+    poll_s: float = 1.0,
+    require_candidate: bool = False,
+    post_fire: Any = None,
+    activity_fetcher: Any = None,
+    pcc_sampler: Any = None,
+    health_fetcher: Any = None,
+    process_nonce: str | None = None,
+    t_start_ns: int | None = None,
+) -> dict[str, Any]:
+    """Mint presence_summary via dual-connect bridge single-HID ring (play-attested path).
+
+    Default: real HTTP to POST /operator/poep/fire + capture-health. Inject post_fire /
+    activity / pcc for unit tests (never fabricates real_hardware=True in production path).
+
+    When require_candidate=False (default), returns package even if candidate_ok is False
+    (honest IDENTITY-only join). When True, raises ContinuumError if candidate not minted.
+    """
+    import os
+    import secrets
+    import time as _time
+
+    from l9_presence.poep_gameplay_live import real_hid_fire_available
+    from l9_presence.poep_gameplay_session import (
+        ChallengeKind,
+        LOW_AMPLITUDE_FORCE_DEFAULT,
+        LOW_AMPLITUDE_FORCE_MAX,
+    )
+    from l9_presence.poep_session_identity_run import run_session_identity_attach
+
+    dev = (device_id or "").strip().lower().removeprefix("0x")
+    sid = (session_id or "").strip().lower()
+    if len(dev) != 64 or len(sid) != 64:
+        raise ContinuumError(
+            "mint_bridge_live_poep_summary needs 32-byte hex device + session_id"
+        )
+
+    amp = int(amplitude) if amplitude else LOW_AMPLITUDE_FORCE_DEFAULT
+    amp = max(1, min(amp, LOW_AMPLITUDE_FORCE_MAX))
+
+    ioid = ioid_identity or {
+        "owner_did": DEFAULT_IOID_CEREMONY["did"],
+        "ioid_token_id": DEFAULT_IOID_CEREMONY["token_id"],
+        "tba_address": DEFAULT_IOID_CEREMONY["tba"],
+        "registration_tx": "0xab4d041b8ffeab257178e04dddd69e1033912766842803e0386c3640468e9b1f",
+        "vmdr_pubkey_hash": "0x235a2c04de3319661dd637ad296e37b59c23b0fe1f78509965f77bc5d9247802",
+        "controller_nft": "0x93b77eB6D8F9e12A801aC06b81bb6E37b7dcdE55",
+        "controller_nft_token_id": 1,
+    }
+
+    # Production path: require env gate + real adapter unless injectables provided (tests).
+    if post_fire is None:
+        if not real_hid_fire_available():
+            raise ContinuumError(
+                "bridge-live mint requires POEP_LIVE_FIRE_ENABLED=1 "
+                "(and bridge l6b_enabled + dual-connect play)"
+            )
+        from l9_presence.poep_bridge_fire_adapter import make_bridge_fire_adapter
+
+        key = api_key or os.environ.get("OPERATOR_API_KEY", "")
+        adapter = make_bridge_fire_adapter(
+            bridge_url=bridge_url, api_key=key, timeout_s=fire_timeout_s
+        )
+        fire_fn = adapter.fire_fn
+        imu_fn = adapter.imu_capture_fn
+    else:
+        from l9_presence.poep_bridge_fire_adapter import BridgeFireCaptureAdapter
+
+        adapter = BridgeFireCaptureAdapter(post_fire=post_fire)
+        fire_fn = adapter.fire_fn
+        imu_fn = adapter.imu_capture_fn
+
+    if activity_fetcher is None or pcc_sampler is None or health_fetcher is None:
+        # Import CLI helpers for capture-health (same reader as fire)
+        import importlib.util
+
+        cli_path = _REPO / "scripts" / "poep_session_identity_attach.py"
+        spec = importlib.util.spec_from_file_location(
+            "poep_session_identity_attach_cli", cli_path
+        )
+        if spec is None or spec.loader is None:
+            raise ContinuumError("cannot load poep_session_identity_attach helpers")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        key = api_key or os.environ.get("OPERATOR_API_KEY", "")
+        if health_fetcher is None:
+            health_fetcher = lambda: mod._fetch_capture_health_raw(bridge_url, key)
+        if activity_fetcher is None:
+            activity_fetcher = mod._make_bridge_health_fetcher(
+                bridge_url, key, "activity"
+            )
+        if pcc_sampler is None:
+            pcc_sampler = mod._make_bridge_health_fetcher(bridge_url, key, "pcc")
+        if wait_active_s > 0 and post_fire is None:
+            ok = mod.wait_for_active_gameplay(
+                health_fetcher=health_fetcher,
+                wait_s=wait_active_s,
+                poll_s=max(0.05, float(poll_s)),
+            )
+            if not ok:
+                raise ContinuumError(
+                    f"bridge-live preflight timeout: no ACTIVE_GAMEPLAY within {wait_active_s}s"
+                )
+
+    plan = [
+        (ChallengeKind.GO, secrets.token_hex(16)) for _ in range(max(2, int(n_go)))
+    ]
+    artifact = run_session_identity_attach(
+        device_id=dev,
+        player_label=player_label,
+        t_start_ns=int(t_start_ns if t_start_ns is not None else _time.time_ns()),
+        process_nonce=process_nonce or secrets.token_hex(16),
+        challenge_plan=plan,
+        fire_fn=fire_fn,
+        imu_capture_fn=imu_fn,
+        activity_fetcher=activity_fetcher,
+        pcc_sampler=pcc_sampler,
+        ioid_identity=ioid,
+        session_id=sid,
+        include_custody_seal=True,
+        amplitude=amp,
+    )
+    ps = artifact.get("presence_summary") or {}
+    candidate = bool(ps.get("presence_session_candidate_ok"))
+    if require_candidate and not candidate:
+        raise ContinuumError(
+            "bridge-live path did not mint presence_session_candidate_ok "
+            f"(dry={ps.get('dry_plumbing_ok')} live={ps.get('effective_live')} "
+            f"live_hardware={ps.get('live_hardware')} activity={ps.get('activity_source')})"
+        )
+    return {
+        "schema": "qortroller-poep-live-summary-package-v0",
+        "candidate": True,
+        "mechanism": "bridge_single_hid_ring+sealed_summarize_live_session",
+        "play_attested": candidate,
+        "claim_ceiling": BRIDGE_LIVE_POEP_CEILING,
         "presence_summary": ps,
         "identity_attach": {
             "schema": artifact.get("schema"),

@@ -32,11 +32,13 @@ sys.path.insert(0, str(_REPO / "bridge"))
 sys.path.insert(0, str(_REPO))
 
 from vapi_bridge.rwm_session_continuum import (  # noqa: E402
+    BRIDGE_LIVE_POEP_CEILING,
     ContinuumError,
     SIM_LIVE_POEP_CEILING,
     SYNCHRONIZED_CONTINUUM,
     build_continuum_from_archive,
     load_rwm_surface,
+    mint_bridge_live_poep_summary,
     mint_sealed_sim_live_poep_summary,
     verify_continuum,
 )
@@ -74,22 +76,55 @@ def _cmd_build(a: argparse.Namespace) -> int:
 
     poep_src = _abs(a.poep) if a.poep else None
 
-    if a.mint_sim_live_poep:
-        print("CEILING:", SIM_LIVE_POEP_CEILING)
+    if a.mint_sim_live_poep and a.mint_bridge_live_poep:
+        print("use only one of --mint-sim-live-poep / --mint-bridge-live-poep", file=sys.stderr)
+        return 2
+
+    if a.mint_sim_live_poep or a.mint_bridge_live_poep:
         try:
             rwm = load_rwm_surface(archive, require_verified=not a.allow_unverified_l0)
-            pkg = mint_sealed_sim_live_poep_summary(
-                device_id=rwm["device_id_hex"],
-                session_id=rwm["session_id"],
-            )
         except ContinuumError as e:
-            print(f"MINT FAIL: {e}", file=sys.stderr)
+            print(f"L0 FAIL: {e}", file=sys.stderr)
             return 1
-        poep_out = _abs(a.poep_out) if a.poep_out else (
-            _REPO / "audits" / f"poep_live_summary_{rwm['session_id'][:16]}_sim.json"
-        )
+        if a.mint_sim_live_poep:
+            print("CEILING:", SIM_LIVE_POEP_CEILING)
+            try:
+                pkg = mint_sealed_sim_live_poep_summary(
+                    device_id=rwm["device_id_hex"],
+                    session_id=rwm["session_id"],
+                )
+            except ContinuumError as e:
+                print(f"MINT FAIL: {e}", file=sys.stderr)
+                return 1
+            default_poep_name = f"poep_live_summary_{rwm['session_id'][:16]}_sim.json"
+        else:
+            print("CEILING:", BRIDGE_LIVE_POEP_CEILING)
+            print(
+                "[dual-connect] USB Edge→laptop + BT→PS5; bridge holds pad; "
+                "POEP_LIVE_FIRE_ENABLED=1 + l6b_enabled required. Waiting ACTIVE_GAMEPLAY…"
+            )
+            try:
+                import os
+
+                pkg = mint_bridge_live_poep_summary(
+                    device_id=rwm["device_id_hex"],
+                    session_id=rwm["session_id"],
+                    n_go=max(2, int(a.challenges)),
+                    amplitude=int(a.amplitude),
+                    bridge_url=a.bridge_url,
+                    api_key=a.api_key or os.environ.get("OPERATOR_API_KEY", ""),
+                    fire_timeout_s=float(a.fire_timeout),
+                    wait_active_s=float(a.wait_active_s),
+                    poll_s=float(a.poll_s),
+                    require_candidate=bool(a.require_candidate),
+                )
+            except ContinuumError as e:
+                print(f"MINT FAIL: {e}", file=sys.stderr)
+                return 1
+            default_poep_name = f"poep_live_summary_{rwm['session_id'][:16]}_bridge.json"
+
+        poep_out = _abs(a.poep_out) if a.poep_out else (_REPO / "audits" / default_poep_name)
         _write(poep_out, pkg)
-        # also drop next to archive so daemon stop can pick it up on re-issue
         try:
             _write(archive / "poep_live_summary.json", pkg)
         except OSError as e:
@@ -98,6 +133,7 @@ def _cmd_build(a: argparse.Namespace) -> int:
         print(
             f"minted presence_session_candidate_ok="
             f"{pkg['presence_summary'].get('presence_session_candidate_ok')} "
+            f"play_attested={pkg.get('play_attested')} "
             f"session={rwm['session_id'][:16]}…"
         )
 
@@ -128,8 +164,14 @@ def _cmd_build(a: argparse.Namespace) -> int:
     )
     print(f"session_id={cont.get('session_id')}")
     print(f"device_id={(cont.get('device_id') or '')[:16]}…")
-    if a.mint_sim_live_poep and cont["verdict"] == SYNCHRONIZED_CONTINUUM:
-        print("SYNCHRONIZED_CONTINUUM reached (mechanism dogfood — see claim_ceiling)")
+    if cont["verdict"] == SYNCHRONIZED_CONTINUUM:
+        if a.mint_bridge_live_poep:
+            print(
+                "SYNCHRONIZED_CONTINUUM reached (PLAY-ATTESTED dual-connect bridge ring — "
+                "see claim_ceiling)"
+            )
+        elif a.mint_sim_live_poep:
+            print("SYNCHRONIZED_CONTINUUM reached (mechanism dogfood — see claim_ceiling)")
     if a.out:
         _write(_abs(a.out), cont)
     else:
@@ -224,7 +266,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="mint sealed sim-live presence_summary (mechanism dogfood → SYNCHRONIZED)",
     )
+    b.add_argument(
+        "--mint-bridge-live-poep",
+        action="store_true",
+        help="dual-connect PLAY-ATTESTED mint via bridge single-HID ring (POST /operator/poep/fire)",
+    )
     b.add_argument("--poep-out", default=None, help="where to write minted PoEP package")
+    b.add_argument("--bridge-url", default="http://localhost:8080")
+    b.add_argument("--api-key", default="", help="operator key (default OPERATOR_API_KEY env)")
+    b.add_argument("--fire-timeout", type=float, default=25.0)
+    b.add_argument("--wait-active-s", type=float, default=45.0)
+    b.add_argument("--poll-s", type=float, default=1.0)
+    b.add_argument("--amplitude", type=int, default=60)
+    b.add_argument("--challenges", type=int, default=2)
+    b.add_argument(
+        "--require-candidate",
+        action="store_true",
+        help="fail if bridge-live did not mint presence_session_candidate_ok",
+    )
     b.add_argument("--nov2-bind", default=None)
     b.add_argument("--auto-nov2-bind", action="store_true")
     b.add_argument("--escrow", default=None)

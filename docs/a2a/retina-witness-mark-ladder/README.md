@@ -16,7 +16,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT + DOGFOOD** — preferred: **live_10 diverse** (`ladder-dogfood-live10-2026-07-25.md`); also live_07 (frozen historical) |
 | **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT + DOGFOOD** — live_10 preferred; live_07 historical |
 | **NOV-1** | Portable stranger-verify dispute pack | **BUILT + DOGFOOD** — sd1 + **NOV-1.1 merkle** on live_10 (archive-free); live_07 historical |
-| **CONTINUUM** | RWM × U1 × ioID × PoEP × stack composition | **BUILT + DOGFOOD** — `OPTICAL_IDENTITY` + **`SYNCHRONIZED_CONTINUUM`** (sim-live PoEP) on live_10; daemon fail-open emit on stop; see `session-continuum-v0.md` |
+| **CONTINUUM** | RWM × U1 × ioID × PoEP × stack composition | **BUILT** — sim-live SYNCHRONIZED dogfood + **dual-connect bridge-live path** (`rwm_continuum_dual_connect_live.py`) for play-attested SYNCHRONIZED; daemon fail-open emit; see `session-continuum-v0.md` |
 
 ## L0 hold posture (do not auto-advance)
 
@@ -55,6 +55,13 @@ python scripts/rwm_session_continuum_cli.py build \
   --ioid audits/ioid_edge_live_ceremony.json \
   --mint-sim-live-poep --auto-nov2-bind \
   --out audits/rwm_continuum_LIVE10_SYNCHRONIZED.json
+
+# PLAY-ATTESTED dual-connect (operator: Edge USB+BT, bridge up, POEP_LIVE_FIRE_ENABLED=1)
+POEP_LIVE_FIRE_ENABLED=1 python scripts/rwm_continuum_dual_connect_live.py \
+  --archive retina_kf_archive/cfb_rwm_live_10_1784953588 \
+  --label cfb_rwm_live_10 --stamp 1784953588 \
+  --wait-active-s 60 --require-candidate \
+  --out audits/rwm_continuum_LIVE10_PLAY_ATTESTED.json
 ```
 
 Daemon stop (post-L0, fail-open): writes `archive/session_continuum.json` when L0 exists;

@@ -212,6 +212,78 @@ def test_mint_sim_live_reaches_synchronized(tmp_path):
     assert cont["optical_rwm"] and cont["identity_bound"] and cont["presence_candidate"]
 
 
+def test_mint_bridge_live_play_attested_with_fake_ring(tmp_path):
+    """Injected post_fire confirms real_hardware — sealed path can mint candidate (play-attested shape)."""
+    from vapi_bridge.rwm_session_continuum import mint_bridge_live_poep_summary
+
+    arch = tmp_path / "a"
+    _seed_l0(arch)
+    surf = load_rwm_surface(arch)
+    t_fire = 5_000_000_000
+
+    def _post_fire(amplitude: int, nonce: str) -> dict:
+        return {
+            "fired": True,
+            "real_hardware": True,
+            "nonce": nonce,
+            "t_fire_ns": t_fire,
+            "latency_ms": 220.0,
+            "peak_lsb": 2800.0,
+            "precursor_gap_ms": 4.0,
+        }
+
+    pkg = mint_bridge_live_poep_summary(
+        device_id=surf["device_id_hex"],
+        session_id=surf["session_id"],
+        post_fire=_post_fire,
+        activity_fetcher=lambda: {"gameplay_context": "ACTIVE_GAMEPLAY"},
+        pcc_sampler=lambda: {
+            "capture_state": "NOMINAL",
+            "host_state": "EXCLUSIVE_USB",
+        },
+        health_fetcher=lambda: {},
+        wait_active_s=0,
+        require_candidate=True,
+        ioid_identity={
+            "owner_did": "did:io:0xtest",
+            "ioid_token_id": 1,
+            "tba_address": "0xTBA",
+            "registration_tx": "0xreg",
+            "vmdr_pubkey_hash": "0x" + "11" * 32,
+            "controller_nft": "0xNFT",
+            "controller_nft_token_id": 1,
+        },
+    )
+    assert pkg["mechanism"].startswith("bridge_single_hid")
+    assert pkg["play_attested"] is True
+    assert pkg["presence_summary"]["presence_session_candidate_ok"] is True
+    cont = build_continuum_from_archive(
+        arch,
+        label="cont_test",
+        stamp=1_700_000_200,
+        ioid={
+            "token_id": 1,
+            "did": "did:io:0xtest",
+            "tba": "0xTBA",
+            "registered_device_id": DEVICE,
+        },
+        poep_live=pkg,
+    )
+    assert cont["verdict"] == SYNCHRONIZED_CONTINUUM
+
+
+def test_mint_bridge_live_refuses_without_env_when_no_inject(monkeypatch):
+    from vapi_bridge.rwm_session_continuum import mint_bridge_live_poep_summary
+
+    monkeypatch.delenv("POEP_LIVE_FIRE_ENABLED", raising=False)
+    with pytest.raises(ContinuumError, match="POEP_LIVE_FIRE_ENABLED"):
+        mint_bridge_live_poep_summary(
+            device_id=DEVICE,
+            session_id="ab" * 32,
+            wait_active_s=0,
+        )
+
+
 def test_issue_continuum_after_l0_writes_sidecar(tmp_path, monkeypatch):
     from vapi_bridge import rwm_session_continuum as rsc
 
