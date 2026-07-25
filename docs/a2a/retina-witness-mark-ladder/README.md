@@ -12,10 +12,10 @@ Each layer opens **only after** the prior layer’s live verification passes.
 
 | Layer | Name | Status |
 |-------|------|--------|
-| **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED + HOLD** 2026-07-24/25 — inert until env flags; see `l0-live-verify-2026-07-24.md` + grok R10 spot-check |
-| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT (CANDIDATE)** 2026-07-25 — module + CLI + tests; offline only; operator GO granted sole-agent sequence; dogfood on live_01/live_05 |
-| **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT (CANDIDATE)** 2026-07-25 — bind + checkpoint inventory + SHARE postcard; dogfood on live_01 |
-| **NOV-1** | Portable stranger-verify dispute pack | **BUILT (CANDIDATE)** 2026-07-25 — sd1 + **NOV-1.1 merkle** modes; archive-free verify |
+| **L0** | RWM Path A — locator + per-frame hash chain sidecar | **LIVE-VERIFIED** — pure-session auto-RWM on `live_07` (135 frames); see `l0-live-session-live07-2026-07-25.md` + `l0-live-verify-2026-07-24.md` |
+| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT + DOGFOOD** — live_01/05/07; pure-session ladder note `ladder-dogfood-live07-2026-07-25.md` |
+| **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT + DOGFOOD** — bind + checkpoints + SHARE on live_07 |
+| **NOV-1** | Portable stranger-verify dispute pack | **BUILT + DOGFOOD** — sd1 + **NOV-1.1 merkle** archive-free verify on live_07 |
 
 ## L0 hold posture (do not auto-advance)
 
