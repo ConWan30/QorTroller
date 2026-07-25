@@ -13,9 +13,9 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | Layer | Name | Status |
 |-------|------|--------|
 | **L0** | RWM Path A — locator + per-frame hash chain sidecar | **DIVERSE CITE CLOSED** — `live_10` N=367 unique=367 + locator PASS; see `l0-live-session-live10-2026-07-25.md` (live_07/08 frozen OBS/menu; live_09 de-dup hold) |
-| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT + DOGFOOD** — live_01/05/07; pure-session ladder note `ladder-dogfood-live07-2026-07-25.md` |
-| **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT + DOGFOOD** — bind + checkpoints + SHARE on live_07 |
-| **NOV-1** | Portable stranger-verify dispute pack | **BUILT + DOGFOOD** — sd1 + **NOV-1.1 merkle** archive-free verify on live_07 |
+| **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT + DOGFOOD** — preferred: **live_10 diverse** (`ladder-dogfood-live10-2026-07-25.md`); also live_07 (frozen historical) |
+| **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT + DOGFOOD** — live_10 preferred; live_07 historical |
+| **NOV-1** | Portable stranger-verify dispute pack | **BUILT + DOGFOOD** — sd1 + **NOV-1.1 merkle** on live_10 (archive-free); live_07 historical |
 
 ## L0 hold posture (do not auto-advance)
 
