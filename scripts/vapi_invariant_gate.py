@@ -1799,7 +1799,32 @@ def run_gate(report_only: bool = False, proposal_type: str = "protocol") -> int:
 
     for r in results:
         if not r["file_found"]:
-            failures.append(f"{r['id']} — FILE NOT FOUND: {r['file']}")
+            # Surface a likely-cause hint when the missing path lives inside a
+            # known git submodule. The most common fresh-clone failure mode is
+            # INV-FIRMWARE-001/002 firing "FILE NOT FOUND" because
+            # bridge/firmware/joypad-os was never `git submodule update --init`'d
+            # locally — its files exist in the submodule, not the superproject,
+            # so they're absent until that step runs. CI runs the init step in
+            # .github/workflows/*.yml; this guards the local-developer path.
+            rel = r["file"]
+            hint = ""
+            try:
+                gm = (REPO_ROOT / ".gitmodules").read_text(encoding="utf-8")
+                submodule_paths = [
+                    ln.split("=", 1)[1].strip()
+                    for ln in gm.splitlines()
+                    if ln.strip().startswith("path")
+                ]
+                if any(rel == sp or rel.startswith(sp + "/") for sp in submodule_paths):
+                    hint = (
+                        f"\n    hint: '{rel}' lives inside a git submodule that "
+                        f"appears uninitialized. Run `make init` (or "
+                        f"`git submodule update --init bridge/firmware/joypad-os`) "
+                        f"to restore its files."
+                    )
+            except OSError:
+                pass
+            failures.append(f"{r['id']} — FILE NOT FOUND: {r['file']}{hint}")
             continue
         if not r["pattern_matched"]:
             failures.append(

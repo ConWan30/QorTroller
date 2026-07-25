@@ -238,6 +238,10 @@ Headline contracts to inspect on IoTeX testnet explorer (chain ID 4690):
 ### Run the bridge locally
 
 ```bash
+# Initialize git submodules first (required by the invariant gate — INV-FIRMWARE-001/002
+# pin files inside the bridge/firmware/joypad-os submodule). One-time per fresh clone.
+make init
+
 # Bridge (Python asyncio)
 cd bridge
 pip install -r requirements.txt

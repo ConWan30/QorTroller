@@ -11,14 +11,35 @@ SDK_TESTS    = sdk/tests/
 HW_TESTS     = tests/hardware/
 EXTRA_IGNORE = --ignore=bridge/tests/test_e2e_simulation.py
 
-.PHONY: help test test-bridge test-sdk test-contracts test-hardware test-e2e test-all \
+.PHONY: help init test test-bridge test-sdk test-contracts test-hardware test-e2e test-all \
         lint lint-py lint-sol coverage capture docs clean
 
 # ---------------------------------------------------------------------------
 # Default target
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Setup — required before any test / invariant-gate run on a fresh clone.
+# The invariant gate (scripts/vapi_invariant_gate.py) pins INV-FIRMWARE-001/002
+# against files inside the bridge/firmware/joypad-os submodule; without this
+# step those files are absent and the gate fails with "FILE NOT FOUND" on a
+# clean clone. CI does the equivalent in .github/workflows/*.yml.
+#
+# Note: --recursive is intentionally avoided. .claude/worktrees/ has been
+# hit twice in this repo's history by stray agent-worktree gitlinks (commits
+# 0b573ac9 / cea509e6) that have no .gitmodules URL, which makes
+# `--init --recursive` fail outright. Targeted init avoids that poison path.
+# ---------------------------------------------------------------------------
+init:
+	@echo "=== Initializing git submodules ==="
+	@git submodule update --init bridge/firmware/joypad-os
+	@echo "Submodules ready. You can now run: make test  |  python scripts/vapi_invariant_gate.py"
+
 help:
 	@echo "VAPI Project Makefile"
+	@echo ""
+	@echo "Setup targets:"
+	@echo "  make init            Initialize git submodules (required before invariant gate / tests)"
 	@echo ""
 	@echo "Test targets:"
 	@echo "  make test            Run all non-hardware tests (bridge + sdk)"
