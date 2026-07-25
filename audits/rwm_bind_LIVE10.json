@@ -1,0 +1,16 @@
+{
+  "schema": "qortroller-rwm-session-bind-v0",
+  "candidate": true,
+  "session_id": "a33d240badbeb69bfef8d67609dbba1ee1c77f78395b0737fe281f3939152abe",
+  "l0_chain_tip_hex": "e787060870f9f27ce056b8e3ae2370c965682b28a91660a7f5a18870c1db39f5",
+  "bind_kind": "none",
+  "poac_tip_hex": "",
+  "gic_tip_hex": "",
+  "bind_proof": {
+    "poac_source": "",
+    "gic_source": "",
+    "algorithm": "sha256-hex-eq-v0"
+  },
+  "bind_ok": true,
+  "created_ts_ns": 1784961756251398500
+}

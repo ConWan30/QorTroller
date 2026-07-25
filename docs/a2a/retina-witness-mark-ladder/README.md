@@ -16,6 +16,7 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | **NOV-3** | Ledger-native dispute escrow (selective disclosure over L0 leaves) | **BUILT + DOGFOOD** — preferred: **live_10 diverse** (`ladder-dogfood-live10-2026-07-25.md`); also live_07 (frozen historical) |
 | **NOV-2** | Cross-primitive session bind + multi-checkpoint locator | **BUILT + DOGFOOD** — live_10 preferred; live_07 historical |
 | **NOV-1** | Portable stranger-verify dispute pack | **BUILT + DOGFOOD** — sd1 + **NOV-1.1 merkle** on live_10 (archive-free); live_07 historical |
+| **CONTINUUM** | RWM × U1 × ioID × PoEP × stack composition | **BUILT + DOGFOOD** — `OPTICAL_IDENTITY` on live_10 + Edge ioID; see `session-continuum-v0.md` |
 
 ## L0 hold posture (do not auto-advance)
 
@@ -31,6 +32,21 @@ Each layer opens **only after** the prior layer’s live verification passes.
 | NOV-3 code | does **not** couple to `cmd_stop` |
 | NOV-2 | `scripts/rwm_nov2_cli.py` bind/checkpoints/share; pure modules under `bridge/vapi_bridge/rwm_*.py` |
 | NOV-1 | `scripts/rwm_nov1_cli.py build --mode sd1_inline_media_v0\|merkle_inline_media_v0` |
+| CONTINUUM | `scripts/rwm_session_continuum_cli.py build/verify` — multi-bit RWM↔stack postcard |
+
+## Session continuum (post-ladder composition)
+
+Binds verified L0 optical into the rest of QorTroller on the shared U1 `session_id` +
+Edge `device_id` join keys (REFERENCE-AND-BIND; CANDIDATE). Detail:
+`session-continuum-v0.md`.
+
+```text
+python scripts/rwm_session_continuum_cli.py build \
+  --archive retina_kf_archive/cfb_rwm_live_10_1784953588 \
+  --label cfb_rwm_live_10 --stamp 1784953588 \
+  --ioid audits/ioid_edge_live_ceremony.json \
+  --out audits/rwm_continuum_LIVE10.json
+```
 
 ## NOV-3 ship surface
 
