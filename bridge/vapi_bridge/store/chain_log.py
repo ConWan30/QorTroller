@@ -6,7 +6,10 @@ centralized in _core.py._init_schema per D-DECON-2.
 """
 from __future__ import annotations
 
+import logging
 import time
+
+log = logging.getLogger(__name__)
 
 
 class ChainLogMixin:
@@ -737,8 +740,12 @@ class ChainLogMixin:
                         entry.get("ts_ns", 0),
                     ),
                 )
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as exc:
+            # fail-open by design (detection cycle must not crash), but never silent
+            log.error(
+                "insert_coherence_entry failed for %s: %s",
+                entry.get("coherence_id", "?"), exc, exc_info=True,
+            )
         return entry["coherence_id"]
 
     def get_open_coherence_entries(
@@ -780,8 +787,11 @@ class ChainLogMixin:
             d["resolved"] = bool(d["resolved"])
             try:
                 d["agents_involved"] = _json.loads(d["agents_involved"])
-            except Exception:
-                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+            except ValueError as exc:
+                log.warning(
+                    "malformed agents_involved JSON for coherence_id=%s: %s",
+                    d.get("coherence_id"), exc,
+                )
             result.append(d)
         return result
 
@@ -849,8 +859,10 @@ class ChainLogMixin:
                     "WHERE coherence_id=?",
                     (ts, resolved_by, coherence_id),
                 )
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as exc:
+            log.error(
+                "mark_coherence_resolved failed for %s: %s", coherence_id, exc, exc_info=True
+            )
 
     def mark_coherence_promoted(self, coherence_id: str, wif_id: str) -> None:
         """Mark a coherence entry as promoted to a WIF entry."""
@@ -861,8 +873,10 @@ class ChainLogMixin:
                     "WHERE coherence_id=?",
                     (wif_id, coherence_id),
                 )
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as exc:
+            log.error(
+                "mark_coherence_promoted failed for %s: %s", coherence_id, exc, exc_info=True
+            )
 
     def upsert_coherence_fingerprint(self, rule_name: str, failure_mode: str) -> None:
         """Insert or increment occurrence_count for rule_name in coherence_fingerprint_log.
@@ -896,8 +910,10 @@ class ChainLogMixin:
                     "WHERE rule_name = ?",
                     (now, failure_mode, N_PROMOTE_THRESHOLD, rule_name),
                 )
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as exc:
+            log.error(
+                "upsert_coherence_fingerprint failed for rule %s: %s", rule_name, exc, exc_info=True
+            )
 
     def get_coherence_fingerprint_status(self) -> dict:
         """Return summary of coherence_fingerprint_log for GET /agent/coherence-fingerprint-status.
