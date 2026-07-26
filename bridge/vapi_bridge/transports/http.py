@@ -15,6 +15,7 @@ Endpoints:
 
 import asyncio
 import hashlib as _hashlib
+import hmac as _hmac
 import json
 import logging
 import math as _math
@@ -347,7 +348,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         x_api_key = request.headers.get("x-api-key", "")
         if not cfg.operator_api_key:
             return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
-        if x_api_key != cfg.operator_api_key:
+        if not _hmac.compare_digest(x_api_key, cfg.operator_api_key):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         body = await request.json()
         applied, rejected = [], []
@@ -384,7 +385,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         x_api_key = request.headers.get("x-api-key", "")
         if not cfg.operator_api_key:
             return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
-        if x_api_key != cfg.operator_api_key:
+        if not _hmac.compare_digest(x_api_key, cfg.operator_api_key):
             store.log_operator_action("/operator/passport", "", _api_key_hash(x_api_key),
                                       client_ip, 401, "unauthorized")
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -455,7 +456,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         x_api_key = request.headers.get("x-api-key", "")
         if not cfg.operator_api_key:
             return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
-        if x_api_key != cfg.operator_api_key:
+        if not _hmac.compare_digest(x_api_key, cfg.operator_api_key):
             store.log_operator_action("/operator/passport/issue", "", _api_key_hash(x_api_key),
                                       client_ip, 401, "unauthorized")
             return JSONResponse({"error": "unauthorized"}, status_code=401)
@@ -941,7 +942,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         x_api_key = request.headers.get("x-api-key", "")
         if not cfg.operator_api_key:
             return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
-        if x_api_key != cfg.operator_api_key:
+        if not _hmac.compare_digest(x_api_key, cfg.operator_api_key):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         body      = await request.json()
         device_id = body.get("device_id", "")
@@ -991,7 +992,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         x_api_key = request.headers.get("x-api-key", "")
         if not cfg.operator_api_key:
             return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
-        if x_api_key != cfg.operator_api_key:
+        if not _hmac.compare_digest(x_api_key, cfg.operator_api_key):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         body = await request.json()
         if "dry_run" not in body:

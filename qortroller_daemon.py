@@ -26,7 +26,7 @@ Architecture:
 Usage:
   python qortroller_daemon.py
 
-  Listens on 0.0.0.0:8080 by default.
+  Listens on 127.0.0.1:8080 by default (override with DAEMON_HOST/DAEMON_PORT).
   Requires: pip install uvicorn
   Depends: QUICKSILVER_API_KEY in bridge/.env or environment.
 """
@@ -106,6 +106,9 @@ REPO_ROOT = os.path.abspath(os.path.dirname(__file__))
 # DAEMON_PORT takes precedence so bridge/.env HTTP_PORT (for the bridge process)
 # doesn't collide with the daemon when both run simultaneously.
 PORT = int(os.environ.get("DAEMON_PORT", os.environ.get("HTTP_PORT", 8080)))
+# Loopback by default: the daemon exposes tool execution (shell, file writes,
+# bridge operator calls). Binding a wider interface must be an explicit choice.
+HOST = os.environ.get("DAEMON_HOST", "127.0.0.1")
 MAX_TOOL_ITERATIONS = 80  # raised from 20 — large-file tasks (paginate 18K-line _core.py + analyze + propose + test) need many read calls. Kimi K2.7 256K context tolerates the deeper loop.
 TOOL_TIMEOUT = 15
 
@@ -117,6 +120,15 @@ QUICKSILVER_API_URL = "https://api.quicksilverpro.io/v1/chat/completions"
 QUICKSILVER_MODEL = os.environ.get("QUICKSILVER_MODEL", "claude-sonnet-4-6")
 
 OPERATOR_API_KEY = os.environ.get("OPERATOR_API_KEY", "")
+# Browser origins allowed to call the daemon. Wildcard CORS would let any page
+# the operator visits drive the brain (and therefore the tool layer).
+ALLOWED_ORIGINS = tuple(
+    o.strip() for o in os.environ.get(
+        "DAEMON_ALLOWED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:5174,http://127.0.0.1:5174",
+    ).split(",") if o.strip()
+)
 # Bridge public API (26 endpoints, no auth) — used for public-facing queries
 BRIDGE_BASE_URL = os.environ.get("VAPI_BRIDGE_URL", "http://localhost:8000")
 # Bridge operator API (241 endpoints, x-api-key required) — all rich protocol state
@@ -3666,27 +3678,37 @@ async def _read_body(receive) -> bytes:
     return body
 
 
-async def _send_json(send, data: dict, status: int = 200):
-    """Send a JSON response."""
+async def _send_json(send, data: dict, status: int = 200, origin: str = ""):
+    """Send a JSON response, echoing CORS headers only for allowed origins."""
     body = json.dumps(data).encode("utf-8")
+    headers = [
+        [b"content-type", b"application/json"],
+        [b"content-length", str(len(body)).encode()],
+    ]
+    if origin and origin in ALLOWED_ORIGINS:
+        headers += [
+            [b"access-control-allow-origin", origin.encode()],
+            [b"access-control-allow-headers", b"content-type, x-api-key"],
+            [b"access-control-allow-methods", b"GET, POST, OPTIONS"],
+            [b"vary", b"Origin"],
+        ]
     await send({
         "type": "http.response.start",
         "status": status,
-        "headers": [
-            [b"content-type", b"application/json"],
-            [b"content-length", str(len(body)).encode()],
-            [b"access-control-allow-origin", b"*"],
-            [b"access-control-allow-headers", b"content-type, x-api-key"],
-            [b"access-control-allow-methods", b"GET, POST, OPTIONS"],
-        ],
+        "headers": headers,
     })
     await send({"type": "http.response.body", "body": body})
 
 
 def _check_auth(headers: dict) -> Optional[str]:
-    """Return error message if auth fails, None if OK."""
+    """Return error message if auth fails, None if OK.
+
+    Fail-closed: an unset OPERATOR_API_KEY denies privileged requests rather
+    than granting them, so a misconfigured deployment cannot expose the tool
+    layer (shell execution, file writes) to unauthenticated callers.
+    """
     if not OPERATOR_API_KEY:
-        return None
+        return "OPERATOR_API_KEY not configured — privileged endpoints disabled"
     key = headers.get("x-api-key", "")
     if key and hmac.compare_digest(key, OPERATOR_API_KEY):
         return None
@@ -3720,16 +3742,21 @@ async def app(scope, receive, send):
         dv = v.decode("utf-8", errors="ignore") if isinstance(v, bytes) else v
         decoded_headers[dk.lower()] = dv
 
+    origin = decoded_headers.get("origin", "")
+
+    async def _reply(data: dict, status: int = 200):
+        await _send_json(send, data, status, origin)
+
     # ── CORS preflight ────────────────────────────────────────────────────
     if method == "OPTIONS":
-        await _send_json(send, {"ok": True})
+        await _reply({"ok": True})
         return
 
     # ── GET /health ───────────────────────────────────────────────────────
     if path == "/health" and method == "GET":
         brain = _get_brain()
         status_data = brain.memory.get_status()
-        await _send_json(send, {
+        await _reply({
             "status": "ok",
             "mode": "qortroller-daemon-hive-mind",
             "version": DAEMON_VERSION,
@@ -3744,7 +3771,7 @@ async def app(scope, receive, send):
     if path == "/status" and method == "GET":
         brain = _get_brain()
         status_data = brain.memory.get_status()
-        await _send_json(send, {
+        await _reply({
             "daemon_version": DAEMON_VERSION,
             "app_name": APP_NAME,
             "app_version": APP_VERSION,
@@ -3785,7 +3812,7 @@ async def app(scope, receive, send):
         else:
             messages = brain.memory.get_all_messages(limit=limit)
 
-        await _send_json(send, {
+        await _reply({
             "messages": messages,
             "count": len(messages),
             "since_id": since_id,
@@ -3800,19 +3827,19 @@ async def app(scope, receive, send):
         try:
             req = json.loads(body)
         except json.JSONDecodeError:
-            await _send_json(send, {"detail": "Invalid JSON"}, status=400)
+            await _reply({"detail": "Invalid JSON"}, status=400)
             return
 
         user_text = req.get("message", "").strip()
         if not user_text:
-            await _send_json(send, {"detail": "'message' field is required"}, status=400)
+            await _reply({"detail": "'message' field is required"}, status=400)
             return
 
         # Process through the brain
         brain = _get_brain()
         result = await brain.process_message(user_text)
 
-        await _send_json(send, result)
+        await _reply(result)
         return
 
     # ── POST /chat/ping ───────────────────────────────────────────────────
@@ -3822,13 +3849,13 @@ async def app(scope, receive, send):
         try:
             req = json.loads(body)
         except json.JSONDecodeError:
-            await _send_json(send, {"detail": "Invalid JSON"}, status=400)
+            await _reply({"detail": "Invalid JSON"}, status=400)
             return
 
         user_text = req.get("message", "").strip()
         brain = _get_brain()
         msg_id = brain.memory.add_message("user", user_text)
-        await _send_json(send, {
+        await _reply({
             "response": f"Message received (id={msg_id}). Start the daemon for AI processing.",
             "message_id": msg_id,
             "type": "stored",
@@ -3839,35 +3866,26 @@ async def app(scope, receive, send):
     if path == "/agent/local-host/execute" and method == "POST":
         auth_err = _check_auth(decoded_headers)
         if auth_err:
-            # Also check api_key query param
-            qs = scope.get("query_string", b"").decode("utf-8", errors="ignore")
-            qp = {}
-            for part in qs.split("&"):
-                if "=" in part:
-                    k, _, v = part.partition("=")
-                    qp[k] = v
-            api_key = decoded_headers.get("x-api-key", "") or qp.get("api_key", "")
-            if OPERATOR_API_KEY and (not api_key or not hmac.compare_digest(api_key, OPERATOR_API_KEY)):
-                await _send_json(send, {"detail": "Invalid API key"}, status=403)
-                return
+            await _reply({"detail": auth_err}, status=403)
+            return
 
         body = await _read_body(receive)
         try:
             req = json.loads(body)
         except json.JSONDecodeError:
-            await _send_json(send, {"detail": "Invalid JSON"}, status=400)
+            await _reply({"detail": "Invalid JSON"}, status=400)
             return
 
         tool_name = req.get("tool", "")
         tool_args = req.get("arguments", {})
         brain = _get_brain()
         result = brain._execute_tool(tool_name, tool_args)
-        await _send_json(send, {"result": result})
+        await _reply({"result": result})
         return
 
     # ── GET /tools (info about available tools) ──────────────────────────
     if path == "/tools" and method == "GET":
-        await _send_json(send, {
+        await _reply({
             "available_tools": [
                 {
                     "name": "read_file",
@@ -4114,7 +4132,7 @@ async def app(scope, receive, send):
         return
 
     # ── 404 ───────────────────────────────────────────────────────────────
-    await _send_json(send, {"detail": f"Not found: {method} {path}"}, status=404)
+    await _reply({"detail": f"Not found: {method} {path}"}, status=404)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4138,12 +4156,12 @@ def main():
     print(f"  {APP_NAME} v{APP_VERSION} — Hive Mind Central Brain")
     print(f"  DAEMON:  {DAEMON_VERSION}")
     print("=" * 60)
-    print(f"  Port        : {PORT}")
+    print(f"  Bind        : {HOST}:{PORT}")
     print(f"  LLM Model   : {QUICKSILVER_MODEL}")
     print(f"  LLM Key     : {'OK (configured)' if QUICKSILVER_API_KEY else 'MISSING (NOT SET)'}")
     print(f"  Memory DB   : {SQLITE_DB_PATH}")
     print(f"  Bridge URL  : {BRIDGE_BASE_URL}")
-    print(f"  Auth        : {'ENABLED' if OPERATOR_API_KEY else 'DISABLED (dev mode)'}")
+    print(f"  Auth        : {'ENABLED' if OPERATOR_API_KEY else 'NOT CONFIGURED (privileged endpoints refuse requests)'}")
     print(f"  Repo root   : {REPO_ROOT}")
     print()
     print(f"  Endpoints:")
@@ -4155,7 +4173,7 @@ def main():
     print(f"    POST /agent/local-host/execute — Direct tool execution")
     print("=" * 60)
 
-    uvicorn.run(app, host="0.0.0.0", port=PORT, log_level="info")
+    uvicorn.run(app, host=HOST, port=PORT, log_level="info")
 
 
 if __name__ == "__main__":

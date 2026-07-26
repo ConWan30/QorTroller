@@ -24,7 +24,7 @@ Usage:
     python vapi-dualshock-companion.py
 
     # Or with uvicorn directly:
-    uvicorn vapi-dualshock-companion:app --host 0.0.0.0 --port 8080 --reload
+    uvicorn vapi-dualshock-companion:app --host 127.0.0.1 --port 8080
 """
 
 import asyncio
@@ -649,7 +649,6 @@ async def dashboard():
     """Main dashboard — Phase 31 modernized VAPI intelligence surface."""
     bridge_url_js = BRIDGE_URL
     bridge_device_js = BRIDGE_DEVICE_ID
-    bridge_key_js = BRIDGE_API_KEY
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -855,7 +854,8 @@ async def dashboard():
 <script>
 const BRIDGE_URL = '{bridge_url_js}';
 const BRIDGE_DEVICE_ID = '{bridge_device_js}';
-const BRIDGE_API_KEY = '{bridge_key_js}';
+// The bridge operator key never reaches the browser; agent calls are proxied
+// through this app's /api/bridge/agent endpoint, which holds the key server-side.
 
 // ── WebSocket ──
 const ws = new WebSocket(`ws://${{location.host}}/ws`);
@@ -957,43 +957,19 @@ function agentChat() {{
       this.messages.push({{ role: 'user', content: msg }});
       this.scrollToBottom();
 
-      // Try SSE streaming via bridge
-      if (BRIDGE_URL && BRIDGE_API_KEY) {{
-        this.streaming = true; this.currentText = '';
-        const url = BRIDGE_URL + '/operator/agent/stream?' +
-          new URLSearchParams({{ session_id: this.sessionId, message: msg, api_key: BRIDGE_API_KEY }});
-        const es = new EventSource(url);
-        es.onmessage = (e) => {{
-          try {{
-            const ev = JSON.parse(e.data);
-            if (ev.type === 'text_delta') {{ this.currentText += ev.text; this.scrollToBottom(); }}
-            else if (ev.type === 'tool_start') {{ this.messages.push({{ role: 'tool', content: 'Querying ' + ev.tool + '...' }}); }}
-            else if (ev.type === 'done') {{
-              if (this.currentText) this.messages.push({{ role: 'assistant', content: this.currentText }});
-              this.currentText = ''; this.streaming = false; es.close(); this.scrollToBottom();
-            }}
-            else if (ev.type === 'error') {{
-              this.messages.push({{ role: 'assistant', content: '⚠ ' + (ev.message || 'Agent error') }});
-              this.streaming = false; es.close();
-            }}
-          }} catch(e2) {{}}
-        }};
-        es.onerror = () => {{ this.streaming = false; es.close(); }};
-      }} else {{
-        // Fallback: POST /api/bridge/agent via companion proxy
-        this.streaming = true;
-        try {{
-          const r = await fetch('/api/bridge/agent', {{
-            method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{ session_id: this.sessionId, message: msg }})
-          }});
-          const d = await r.json();
-          this.messages.push({{ role: 'assistant', content: d.response || JSON.stringify(d) }});
-        }} catch(e) {{
-          this.messages.push({{ role: 'assistant', content: '⚠ Bridge unreachable: ' + e.message }});
-        }}
-        this.streaming = false; this.scrollToBottom();
+      // Agent calls go through the companion proxy (server holds the bridge key)
+      this.streaming = true;
+      try {{
+        const r = await fetch('/api/bridge/agent', {{
+          method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{ session_id: this.sessionId, message: msg }})
+        }});
+        const d = await r.json();
+        this.messages.push({{ role: 'assistant', content: d.response || JSON.stringify(d) }});
+      }} catch(e) {{
+        this.messages.push({{ role: 'assistant', content: '⚠ Bridge unreachable: ' + e.message }});
       }}
+      this.streaming = false; this.scrollToBottom();
     }}
   }};
 }}
@@ -1350,8 +1326,8 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "vapi-dualshock-companion:app",
-        host="0.0.0.0",
-        port=8080,
-        reload=True,
+        host=os.environ.get("COMPANION_HOST", "127.0.0.1"),
+        port=int(os.environ.get("COMPANION_PORT", "8080")),
+        reload=os.environ.get("COMPANION_RELOAD", "") == "1",
         log_level="info",
     )

@@ -35,7 +35,13 @@ app = FastAPI(title="VAPI Webhook Receiver", version="1.0.0-phase20")
 # Config
 # ---------------------------------------------------------------------------
 
-WEBHOOK_SECRET: str = os.environ.get("VAPI_WEBHOOK_SECRET", "change-me-in-production")
+WEBHOOK_SECRET: str = os.environ.get("VAPI_WEBHOOK_SECRET", "")
+if not WEBHOOK_SECRET:
+    raise RuntimeError(
+        "VAPI_WEBHOOK_SECRET is not set — refusing to start with a guessable "
+        "signing secret. Generate one with: python -c \"import secrets; "
+        "print(secrets.token_hex(32))\""
+    )
 VAPI_BRIDGE_URL: str = os.environ.get("VAPI_BRIDGE_URL", "http://localhost:8080/v1")
 
 # In-memory dedup set — replace with Redis/DB in production
@@ -275,4 +281,5 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 9000))
     log.info(f"Starting VAPI webhook server on port {port}")
-    uvicorn.run("webhook_server:app", host="0.0.0.0", port=port, reload=True)
+    host = os.environ.get("HOST", "127.0.0.1")
+    uvicorn.run("webhook_server:app", host=host, port=port)

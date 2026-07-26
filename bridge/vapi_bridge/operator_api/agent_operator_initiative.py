@@ -5,6 +5,7 @@ Register-function split per audits/decon-store-map.md agent_operator_initiative 
 from __future__ import annotations
 
 import asyncio
+import hmac
 import logging
 import time
 from pathlib import Path
@@ -577,7 +578,9 @@ def register_agent_operator_initiative_routes(
             policy bundle without waiting for real agent activity
           - Generate baseline shadow log entries for FSCA rule validation
         """
-        if api_key != cfg.operator_api_key:
+        if not cfg.operator_api_key:
+            raise HTTPException(status_code=503, detail="operator_api_key not configured")
+        if not hmac.compare_digest(api_key, cfg.operator_api_key):
             raise HTTPException(status_code=403, detail="invalid api_key")
         if len(reason.strip()) < 10:
             raise HTTPException(
