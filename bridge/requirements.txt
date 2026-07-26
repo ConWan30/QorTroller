@@ -67,6 +67,13 @@ pytest-asyncio>=0.23.0
 # Core is numpy-only; the heavy [yolo]/[dino]/[vjepa] extras are card-gated (NOT installed here).
 trio-retina>=0.3.0
 
+# Dual-Lobe Causal-Coherence framework (optional, fail-open design)
+# MediaPipe for CPU-optimized optical flow & motion tracking (Screen Lobe)
+# ONNX Runtime for CPU-optimized trajectory-authenticity inference (Trio-Retina bridge)
+# Both are optional dependencies - code gracefully degrades if unavailable
+mediapipe>=0.10.0; python_version >= "3.10"
+onnxruntime>=1.16.0; python_version >= "3.10"
+
 # Parallel test execution — Store.__init__ runs a 370-statement SQLite
 # migration per test; tests already isolated via tempfile.mkdtemp(); using
 # `pytest -n auto` cuts the full bridge suite from ~3h35m to ~1h05m

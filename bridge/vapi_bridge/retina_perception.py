@@ -2,6 +2,10 @@
 
 Pure orchestration over ``retina_controller_embedder``; persistence via Store.
 Default OFF — ``retina_perception_enabled=False`` until operator enables.
+
+ENHANCED: ONNX Runtime + OpenVINO CPU-optimized inference bridge integration.
+Dual-Lobe Causal-Coherence framework adds Thread C isolation for trajectory-authenticity
+model inference, resolving F-HW-1 throughput bottleneck and event-loop starvation.
 """
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ from .retina_controller_embedder import (
 )
 from .retina_events_root import EVENTS_ROOT_SCHEME_POSEIDON_V1, EVENTS_ROOT_SCHEME_SHA256_V1
 from .retina_state_commitment import EventsRootScheme, compute_retina_state_commitment
+from .retina_onnx_bridge import ONNXInferenceSession, create_onnx_bridge
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +47,10 @@ class RetinaPerceptionResult:
     ts_ns: int = 0
     events: list[dict[str, Any]] = field(default_factory=list)
     error: str = ""
+    # Enhanced fields for Dual-Lobe framework
+    onnx_inference_enabled: bool = False
+    onnx_latency_ms: float = 0.0
+    onnx_trajectory_features: Optional[str] = None  # JSON-serialized features
 
 
 def _snap_dict(obj: Any) -> dict[str, Any]:
@@ -78,6 +87,8 @@ def run_controller_perception(
     dynamics_horizon: int = DEFAULT_DYNAMICS_HORIZON,
     record_hash_hex: str = "",
     events_root_scheme: EventsRootScheme = EVENTS_ROOT_SCHEME_SHA256_V1,
+    onnx_bridge: Optional[ONNXInferenceSession] = None,
+    l0_poll_rate_hz: float = 1000.0,
 ) -> RetinaPerceptionResult:
     """Encode the trailing HID window; fail-open when disabled or buffer short."""
     ts_ns = time.time_ns()
@@ -107,6 +118,38 @@ def run_controller_perception(
             events,
             events_root_scheme=events_root_scheme,
         )
+        
+        # Enhanced: ONNX Runtime inference with Thread C isolation
+        onnx_enabled = False
+        onnx_latency = 0.0
+        onnx_features = None
+        
+        if onnx_bridge is not None:
+            # Update L0 poll rate for Thread C safety monitoring
+            onnx_bridge.update_l0_poll_rate(l0_poll_rate_hz)
+            
+            # Run trajectory-authenticity inference in Thread C
+            onnx_result = onnx_bridge.run_trajectory_inference(
+                chunk, 
+                use_thread_c=True
+            )
+            
+            onnx_enabled = onnx_result.error == ""
+            onnx_latency = onnx_result.latency_ms
+            
+            if onnx_enabled and onnx_result.trajectory_features is not None:
+                # Serialize features to JSON for result (fail-open on serialization error)
+                try:
+                    import numpy as np
+                    onnx_features = json.dumps(
+                        onnx_result.trajectory_features.tolist(),
+                        separators=(",", ":")
+                    )
+                except Exception:
+                    onnx_features = None
+            elif onnx_result.error:
+                log.debug(f"ONNX inference failed (expected if model unavailable): {onnx_result.error}")
+        
         return RetinaPerceptionResult(
             enabled=True,
             source_id=source_id,
@@ -118,6 +161,9 @@ def run_controller_perception(
             state_commitment_hex=commitment,
             ts_ns=ts_ns,
             events=events,
+            onnx_inference_enabled=onnx_enabled,
+            onnx_latency_ms=onnx_latency,
+            onnx_trajectory_features=onnx_features,
         )
     except Exception as exc:
         log.warning("retina perception fail-open: %s", exc)

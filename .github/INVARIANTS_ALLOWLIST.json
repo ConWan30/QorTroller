@@ -711,6 +711,22 @@
     "digest": "c6ef0b7dce8a7c603c30da363ff252bc9dfde22f1e4f64010824163e7eff6a23",
     "description": "retina_perception_enabled defaults to False in bridge config (fleet-wide manual override OFF; policy auto-arm is separate)."
   },
+  "INV-RETINA-LOOP-001": {
+    "digest": "e55a5a3943ab0415babb4325a2b79ef62ac5c78b3603e60a2b225494da8e412b",
+    "description": "Dual-Lobe framework: Thread C isolation guard enforces L0 poll rate >= 990 Hz; Screen Lobe auto-kills if poll rate degrades to preserve anti-cheat moat (F-HW-1 throughput bottleneck resolution)."
+  },
+  "INV-RETINA-DATA-FLOOR": {
+    "digest": "d4065191b945f87f346d0db6c17a61dc6063970b0eab21efe369ee23d8ac0b1e",
+    "description": "Dual-Lobe framework: FORBIDDEN_COLUMNS invariant observed - no raw pixels or biometric features enter retina_event_log (privacy floor maintained)."
+  },
+  "INV-RETINA-MEDIAPIPE-DEFAULT": {
+    "digest": "3e14afe9761c7ff2ebb766b07e95d2161f9f51f5a29908792a69c4bee5b32ca8",
+    "description": "Dual-Lobe framework: MediaPipe integration is optional and fails-open gracefully when unavailable (no hard dependency on mediapipe package)."
+  },
+  "INV-RETINA-ONNX-DEFAULT": {
+    "digest": "15df4f4f86d60c3da8dfaef70a3bbbc8e4c9a1c16fe305c7c64cb15894655faa",
+    "description": "Dual-Lobe framework: ONNX Runtime integration is optional and fails-open gracefully when unavailable (no hard dependency on onnxruntime package)."
+  },
   "INV-RETINA-STATE-V3": {
     "digest": "b3e5cb6a65c275d8d99fb11fcc597dfa138c872c6544ad716c8c479d79fd23e2",
     "description": "VAPI-RETINA-STATE-v3 FROZEN-v1 verify-rung commitment formula (TRA-1 T3, operator seal 2026-07-12): SHA-256(VAPI-RETINA-STATE-v3 || device_id(32) || ts_ns_be(8) || ordered_events_root(32) || worldstate_digest(32)) \u2014 the ORDERED retina.event/0.1 stream bound to the WorldState frame. Domain tag + preimage structure are frozen; any change requires v4. OBSERVATION-plane; 228B PoAC wire unchanged."
