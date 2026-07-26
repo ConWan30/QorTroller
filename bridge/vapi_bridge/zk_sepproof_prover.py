@@ -59,11 +59,16 @@ import json
 import logging
 import os
 import struct
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional, Sequence, Tuple
+
+from .groth16_wire import (
+    encode_proof as _encode_proof,
+    run_node as _run_node,
+    run_snarkjs as _run_snarkjs,
+)
 
 log = logging.getLogger(__name__)
 
@@ -468,46 +473,5 @@ class ZKSepProofProver:
             )
 
 
-# ── Proof encoding (matches Phase 26 PITLProver wire format) ────────────────
-
-def _encode_proof(proof_json: dict) -> bytes:
-    """Encode snarkjs proof.json → 256-byte ABI wire format."""
-    def to_bytes32(v) -> bytes:
-        n = int(v, 16) if str(v).startswith(("0x", "0X")) else int(v)
-        return n.to_bytes(32, "big")
-
-    buf = bytearray(PROOF_SIZE)
-    buf[0:32]    = to_bytes32(proof_json["pi_a"][0])
-    buf[32:64]   = to_bytes32(proof_json["pi_a"][1])
-    buf[64:96]   = to_bytes32(proof_json["pi_b"][0][0])
-    buf[96:128]  = to_bytes32(proof_json["pi_b"][0][1])
-    buf[128:160] = to_bytes32(proof_json["pi_b"][1][0])
-    buf[160:192] = to_bytes32(proof_json["pi_b"][1][1])
-    buf[192:224] = to_bytes32(proof_json["pi_c"][0])
-    buf[224:256] = to_bytes32(proof_json["pi_c"][1])
-    return bytes(buf)
-
-
-# ── Subprocess helpers (mirror PITLProver pattern) ───────────────────────────
-
-def _run_node(script: str, args: list, capture_to=None, cwd=None) -> None:
-    """Run a Node.js script, optionally capturing stdout to a file."""
-    cmd = ["node", script] + list(args)
-    if capture_to:
-        with Path(capture_to).open("w") as f:
-            r = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, cwd=cwd, check=False)
-    else:
-        r = subprocess.run(cmd, capture_output=True, cwd=cwd, check=False)
-    if r.returncode != 0:
-        stderr = r.stderr.decode(errors="replace") if r.stderr else ""
-        raise RuntimeError(f"Node.js helper failed: {stderr[:600]}")
-
-
-def _run_snarkjs(args: list, check: bool = True):
-    """Run snarkjs via npx."""
-    cmd = ["npx", "--yes", "snarkjs"] + args
-    r = subprocess.run(cmd, capture_output=True, check=False)
-    if check and r.returncode != 0:
-        stderr = r.stderr.decode(errors="replace") if r.stderr else ""
-        raise RuntimeError(f"snarkjs failed: {stderr[:600]}")
-    return r
+# Proof encoding and Node/snarkjs subprocess helpers now live in groth16_wire.py,
+# imported above as _encode_proof/_run_node/_run_snarkjs.
