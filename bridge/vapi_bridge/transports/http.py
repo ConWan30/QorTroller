@@ -247,8 +247,10 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     await asyncio.wait_for(ws.receive_text(), timeout=60.0)
                 except asyncio.TimeoutError:
                     break  # client silent 60s — close connection
-        except (WebSocketDisconnect, Exception):
-            pass
+        except WebSocketDisconnect:
+            log.debug("/ws/records client disconnected")
+        except Exception as _ws_exc:
+            log.warning("/ws/records stream failed: %s", _ws_exc, exc_info=True)
         finally:
             _ws_clients.discard(ws)
 
@@ -264,8 +266,10 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     await asyncio.wait_for(ws.receive_text(), timeout=60.0)
                 except asyncio.TimeoutError:
                     break
-        except (WebSocketDisconnect, Exception):
-            pass
+        except WebSocketDisconnect:
+            log.debug("/ws/frames client disconnected")
+        except Exception as _ws_exc:
+            log.warning("/ws/frames stream failed: %s", _ws_exc, exc_info=True)
         finally:
             _ws_frame_clients.discard(ws)
 
@@ -582,8 +586,9 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                         "anomaly":    float(_thresh.get("l4_anomaly",    l4_anomaly)),
                         "continuity": float(_thresh.get("l4_continuity", l4_continuity)),
                     }]
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as _exc:
+            # fail-open: dashboard renders without live thresholds, but the cause is logged
+            log.warning("calibration_profile_live.json read failed: %s", _exc)
 
         # Phase 50: enrich threshold_history from store (overrides JSON file if records exist)
         try:
@@ -606,8 +611,8 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                         })
                 if _formatted:
                     threshold_history = _formatted
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as _exc:
+            log.warning("threshold_history enrichment failed: %s", _exc)
 
         calibration_block = {
             "l4_anomaly_threshold":    l4_anomaly,
@@ -659,8 +664,8 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     max(0.0, 1.0 - _l4d / max(l4_anomaly, 1.0)), 4
                 )
                 phg_block["component_scores"]["p_l5"] = round(min(_l5c, 1.0), 4)
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as _exc:
+            log.warning("phg_block query failed: %s", _exc)
 
         # ── l6 ────────────────────────────────────────────────────────
         _l6_counts: dict = {}
@@ -668,8 +673,8 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
             _l6_counts = store.count_l6_captures_by_profile(
                 player_id=getattr(cfg, "l6_capture_player_id", "")
             )
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as _exc:
+            log.warning("l6 capture-count query failed: %s", _exc)
 
         l6_block = {
             "enabled":             _l6_on,
@@ -709,8 +714,8 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         try:
             _pending_evts = store.read_unconsumed_events("calibration_intelligence_agent")
             phase50_block["calib_agent_events_pending"] = len(_pending_evts)
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as _exc:
+            log.warning("calibration agent event read failed: %s", _exc)
         try:
             _th_all = store.get_threshold_history(limit=100)
             phase50_block["threshold_history_count"] = len(_th_all)
@@ -720,8 +725,8 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     phase50_block["last_threshold_update_ts"] = (
                         _dt.datetime.fromtimestamp(float(_ts0), _dt.timezone.utc).isoformat().replace("+00:00", "Z")
                     )
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except Exception as _exc:
+            log.warning("threshold history query failed: %s", _exc)
 
         # ── game_profile (Phase 51) ──────────────────────────────────────
         _gp_id   = getattr(cfg, "game_profile_id", "") if cfg else ""
@@ -738,8 +743,8 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     _gp_l5   = list(_gp.l5_button_priority)
                     _gp_map  = dict(_gp.button_map)
                     _gp_l6p  = _gp.l6_passive_enabled
-            except Exception:
-                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+            except Exception as _exc:
+                log.warning("game profile %s load failed: %s", _gp_id, _exc)
 
         game_profile_block = {
             "active":        bool(_gp_id and _gp_name),
@@ -811,7 +816,10 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         for r in rows:
             try:
                 feats = _json.loads(r["pitl_l4_features"]) if r["pitl_l4_features"] else None
-            except Exception:
+            except ValueError as _exc:
+                log.warning(
+                    "malformed pitl_l4_features for record %s: %s", r["record_hash"], _exc
+                )
                 feats = None
             result.append({
                 "record_hash":  r["record_hash"],
@@ -834,8 +842,10 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     await asyncio.wait_for(ws.receive_text(), timeout=60.0)
                 except asyncio.TimeoutError:
                     continue  # keepalive — frontend sends no pings, that's fine
-        except (WebSocketDisconnect, Exception):
-            pass
+        except WebSocketDisconnect:
+            log.debug("/ws/twin/%s client disconnected", device_id)
+        except Exception as _ws_exc:
+            log.warning("/ws/twin/%s stream failed: %s", device_id, _ws_exc, exc_info=True)
         finally:
             _ws_twin_clients.get(device_id, set()).discard(ws)
             if not _ws_twin_clients.get(device_id):

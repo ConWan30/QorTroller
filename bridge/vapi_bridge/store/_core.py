@@ -36,6 +36,22 @@ from .retina import RetinaMixin
 
 log = logging.getLogger(__name__)
 
+
+def _ignore_duplicate_column(exc: Exception, context: str) -> None:
+    """Handle the failure of an idempotent ``ALTER TABLE ... ADD COLUMN``.
+
+    Re-adding an existing column is the expected no-op and stays silent. Any other
+    sqlite error (missing table, locked/corrupt DB, full disk) is surfaced: still
+    non-fatal so an already-migrated deployment keeps booting, but logged instead
+    of discarded. Non-sqlite failures are programming errors and propagate.
+    """
+    if not isinstance(exc, sqlite3.Error):
+        raise exc
+    if isinstance(exc, sqlite3.OperationalError) and "duplicate column name" in str(exc).lower():
+        return
+    log.error("schema migration %s failed: %s", context, exc)
+
+
 # Record submission status
 STATUS_PENDING = "pending"
 STATUS_BATCHED = "batched"
@@ -721,16 +737,16 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             # Add columns if missing (idempotent)
             try:
                 conn.execute("ALTER TABLE ioid_devices ADD COLUMN tba_address TEXT")
-            except Exception:
-                pass
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "ioid_devices")
             try:
                 conn.execute("ALTER TABLE ioid_devices ADD COLUMN ioid_token_id INTEGER DEFAULT 0")
-            except Exception:
-                pass
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "ioid_devices")
             try:
                 conn.execute("ALTER TABLE ioid_devices ADD COLUMN canonical INTEGER DEFAULT 0")
-            except Exception:
-                pass
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "ioid_devices")
             # Phase 56: tournament passport registry
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS tournament_passports (
@@ -840,8 +856,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             ):
                 try:
                     conn.execute(f"ALTER TABLE l6b_probe_log ADD COLUMN {_col} {_typ}")
-                except Exception:
-                    pass
+                except Exception as _mig_exc:
+                    _ignore_duplicate_column(_mig_exc, "l6b_probe_log")
             # F-L6B-CAL-005: read-only latency instrumentation (no classification impact)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS l6b_probe_diagnostic (
@@ -932,8 +948,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 conn.execute(
                     "ALTER TABLE agent_rulings ADD COLUMN ceremony_integrity TEXT DEFAULT NULL"
                 )
-            except Exception:
-                pass  # column already exists — safe to ignore
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "agent_rulings")
             # Phase 67: add reinstate columns to credential_enforcement (idempotent)
             for _col, _typedef in [
                 ("reinstated",    "INTEGER DEFAULT 0"),
@@ -943,8 +959,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(
                         f"ALTER TABLE credential_enforcement ADD COLUMN {_col} {_typedef}"
                     )
-                except Exception:
-                    pass  # column already exists — safe to ignore; fail-open: M-1 cleanup 2026-05-16
+                except Exception as _mig_exc:
+                    _ignore_duplicate_column(_mig_exc, "credential_enforcement")
             # Phase 69: Data Sovereignty + Oracle Publication tables
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS data_lineage (
@@ -1517,8 +1533,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(
                         f"ALTER TABLE per_device_epoch_overrides ADD COLUMN {_col119} {_def119}"
                     )
-                except Exception:
-                    pass  # Column already exists
+                except Exception as _mig_exc:
+                    _ignore_duplicate_column(_mig_exc, "per_device_epoch_overrides")
             # Phase 115: add epoch-window columns to vhp_dual_gate_log (idempotent)
             for _col115, _def115 in [
                 ("poad_age_seconds", "REAL NOT NULL DEFAULT -1"),
@@ -1528,8 +1544,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(
                         f"ALTER TABLE vhp_dual_gate_log ADD COLUMN {_col115} {_def115}"
                     )
-                except Exception:
-                    pass  # Column already exists; fail-open: M-1 cleanup 2026-05-16
+                except Exception as _mig_exc:
+                    _ignore_duplicate_column(_mig_exc, "vhp_dual_gate_log")
             # Phase 120 — Bluetooth Transport Foundation
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS bt_transport_log (
@@ -1743,8 +1759,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE tournament_preflight_log ADD COLUMN "
                     "touchpad_n_ok INTEGER NOT NULL DEFAULT 1"
                 )
-            except Exception:
-                pass  # Column already exists on databases migrated from Phase 127
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "tournament_preflight_log")
             # Phase 196: idempotent ALTER TABLE — add biometric_ttl_ok (WIF-035 P0 condition 9)
             # biometric_ttl_ok=1 when biometric_credential_ttl not expired AND renewal chain valid.
             try:
@@ -1752,8 +1768,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE tournament_preflight_log ADD COLUMN "
                     "biometric_ttl_ok INTEGER NOT NULL DEFAULT 1"
                 )
-            except Exception:
-                pass  # Column already exists
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "tournament_preflight_log")
             # Phase 197: idempotent ALTER TABLE — add all_pairs_p0_ok (P0 condition 10)
             # all_pairs_p0_ok=1 when all inter-player pairs have separation ratio >= 1.0.
             # Reads all_pairs_above_1 from separation_defensibility_log.
@@ -1763,8 +1779,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE tournament_preflight_log ADD COLUMN "
                     "all_pairs_p0_ok INTEGER NOT NULL DEFAULT 0"
                 )
-            except Exception:
-                pass  # Column already exists
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "tournament_preflight_log")
             # Phase 231: idempotent ALTER TABLE — add ait_defensibility_ok (P0 condition 11)
             # ait_defensibility_ok=1 when AIT all_pairs_above_1=True AND all players have >=10 sessions.
             # Closes the gap where all_pairs_p0_ok could be True with <10 sessions per player.
@@ -1774,8 +1790,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE tournament_preflight_log ADD COLUMN "
                     "ait_defensibility_ok INTEGER NOT NULL DEFAULT 0"
                 )
-            except Exception:
-                pass  # Column already exists; fail-open: M-1 cleanup 2026-05-16
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "tournament_preflight_log")
             # Phase 152: centroid_velocity_log — per-probe biometric fingerprint drift rate monitor.
             # Tracks separation ratio velocity between successive defensibility snapshots.
             # stagnant=True when velocity_per_day < PLATEAU_THRESHOLD (0.001 ratio/day).
@@ -1885,8 +1901,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE enrollment_guidance_log "
                     "ADD COLUMN cov_regime_status TEXT NOT NULL DEFAULT 'unknown'"
                 )
-            except Exception:
-                pass  # Column already exists (Phase 157 migration already applied); fail-open: M-1 cleanup 2026-05-16
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "enrollment_guidance_log")
             # Phase 157: fleet_consensus_snapshot_log — FleetConsensusSnapshotAgent (agent #21)
             # Stores PoFC (Proof of Fleet Consensus) cryptographic snapshots.
             # pfc_hash = SHA-256(sorted_verdicts_json | separation_ratio_str | ts_ns_str)
@@ -2047,8 +2063,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE separation_ratio_registry_log"
                     " ADD COLUMN n_consented INTEGER NOT NULL DEFAULT 0"
                 )
-            except sqlite3.OperationalError:
-                pass  # Column already exists
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "separation_ratio_registry_log")
             # Phase 168: add bootstrap CI columns to separation_ratio_snapshots (idempotent).
             # ci_lower/ci_upper: 95% CI bounds from bootstrap resampling (--bootstrap-n flag).
             # n_bootstrap: number of resamples used; 0 = CI not computed for this snapshot.
@@ -2062,8 +2078,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(
                         f"ALTER TABLE separation_ratio_snapshots ADD COLUMN {_col168} {_type168}"
                     )
-                except sqlite3.OperationalError:
-                    pass  # Column already exists
+                except Exception as _mig_exc:
+                    _ignore_duplicate_column(_mig_exc, "separation_ratio_snapshots")
             # Phase 173: separation_ratio_recovery_log — SeparationRatioRecoveryAgent (agent #23).
             # Detects P1 temporal non-stationarity (converging downward ratio trend) and
             # recommends recovery actions (P1 re-enrollment, age weighting, more sessions).
@@ -2432,15 +2448,15 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(
                         f"ALTER TABLE protocol_maturity_log ADD COLUMN {_col191} REAL NOT NULL DEFAULT {_default191}"
                     )
-                except Exception:
-                    pass  # column already exists
+                except Exception as _mig_exc:
+                    _ignore_duplicate_column(_mig_exc, "protocol_maturity_log")
             # Phase 195: idempotent migration — add PMI component column
             try:
                 conn.execute(
                     "ALTER TABLE protocol_maturity_log ADD COLUMN pmi_component REAL NOT NULL DEFAULT 1.0"
                 )
-            except Exception:
-                pass  # column already exists; fail-open: M-1 cleanup 2026-05-16
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "protocol_maturity_log")
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_maturity_created
                 ON protocol_maturity_log(created_at DESC)
@@ -2698,8 +2714,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 conn.execute(
                     "ALTER TABLE fleet_coherence_log ADD COLUMN on_chain_confirmed INTEGER NOT NULL DEFAULT 0"
                 )
-            except Exception:
-                pass  # Column already exists on upgraded DBs — safe to ignore; fail-open: M-1 cleanup 2026-05-16
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "fleet_coherence_log")
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS coherence_fingerprint_log (
                     id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2881,8 +2897,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 conn.execute(
                     "ALTER TABLE epistemic_consensus_log ADD COLUMN swarm_score REAL NOT NULL DEFAULT 0.0"
                 )
-            except Exception:
-                pass  # Column already exists; fail-open: M-1 cleanup 2026-05-16
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "epistemic_consensus_log")
             # Phase 86: Synthetic session corpus (isolated — never touches ruling_validation_log)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS synthetic_sessions (
@@ -2907,8 +2923,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 conn.execute(
                     "ALTER TABLE ruling_validation_log ADD COLUMN divergence_reason TEXT"
                 )
-            except Exception:
-                pass  # Column already exists — no-op; fail-open: M-1 cleanup 2026-05-16
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "ruling_validation_log")
             # Phase 89: Protocol Intelligence Reports
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS protocol_intelligence_reports (
@@ -3459,16 +3475,16 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(
                         f"ALTER TABLE invariant_gate_log ADD COLUMN {_col224} {_def224}"
                     )
-                except Exception:
-                    pass  # column already exists — idempotent
+                except Exception as _mig_exc:
+                    _ignore_duplicate_column(_mig_exc, "invariant_gate_log")
 
             try:
                 conn.execute(
                     "ALTER TABLE protocol_coherence_log "
                     "ADD COLUMN allowlist_hash TEXT NOT NULL DEFAULT ''"
                 )
-            except Exception:
-                pass  # idempotent
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "protocol_coherence_log")
 
             # Phase 227: add governance_provenance_hash column (idempotent)
             try:
@@ -3476,8 +3492,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE protocol_coherence_log "
                     "ADD COLUMN governance_provenance_hash TEXT NOT NULL DEFAULT ''"
                 )
-            except Exception:
-                pass  # idempotent
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "protocol_coherence_log")
 
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS allowlist_change_log (
@@ -3501,8 +3517,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE invariant_gate_log "
                     "ADD COLUMN governance_provenance_hash TEXT NOT NULL DEFAULT ''"
                 )
-            except Exception:
-                pass  # idempotent
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "invariant_gate_log")
 
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS governance_provenance_chain (
@@ -3527,8 +3543,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE invariant_gate_log "
                     "ADD COLUMN vhp_token_id TEXT NOT NULL DEFAULT ''"
                 )
-            except Exception:
-                pass  # idempotent
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "invariant_gate_log")
 
             # Phase 229: AIT (Active Isometric Trigger) separation log.
             # Stores per-run AIT separation analysis results so the bridge can
@@ -3597,8 +3613,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             try:
                 with self._conn() as conn:
                     conn.execute(_col_sql)
-            except Exception:
-                pass  # idempotent — column already exists
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, _col_sql)
 
         # Phase 235-DASH: per-player AIT feature means for live radar (idempotent)
         try:
@@ -3607,8 +3623,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ALTER TABLE ait_session_log "
                     "ADD COLUMN per_player_features_json TEXT NOT NULL DEFAULT '{}'"
                 )
-        except Exception:
-            pass  # idempotent — column already exists
+        except Exception as _mig_exc:
+            _ignore_duplicate_column(_mig_exc, "ait_session_log")
 
         # Phase 235-GAD: Gameplay Activity Discrimination (idempotent)
         for _col_sql in [
@@ -3618,8 +3634,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             try:
                 with self._conn() as conn:
                     conn.execute(_col_sql)
-            except Exception:
-                pass  # idempotent — column already exists
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, _col_sql)
         try:
             with self._conn() as conn:
                 conn.execute("""
@@ -3632,13 +3648,13 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                         created_at      REAL NOT NULL
                     )
                 """)
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for gameplay_classification_disagreements failed: %s", _mig_exc)
 
         # Phase B item ③ — iPACT-DePIN renewal-cadence commitment chain (idempotent)
         try:
             with self._conn() as conn:
-                conn.execute("""
+                conn.executescript("""
                     CREATE TABLE IF NOT EXISTS ipact_renewal_commitments (
                         id              INTEGER PRIMARY KEY AUTOINCREMENT,
                         device_id       TEXT    NOT NULL,
@@ -3655,8 +3671,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     CREATE INDEX IF NOT EXISTS idx_ipact_renewal_device
                         ON ipact_renewal_commitments(device_id, epoch_index);
                 """)
-        except Exception:
-            pass  # idempotent — table already exists
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for ipact_renewal_commitments failed: %s", _mig_exc)
 
         # Phase 241-APOP: Active Play Occupancy Proof shadow/hybrid audit log.
         try:
@@ -3679,8 +3695,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     CREATE INDEX IF NOT EXISTS idx_apop_created
                         ON active_play_occupancy_log(created_at DESC);
                 """)
-        except Exception:
-            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for active_play_occupancy_log failed: %s", _mig_exc)
 
         # Phase 236-CORPUS-SNAPSHOT: ZK-attested corpus snapshot table.
         # Sits below WEC and GIC in the chain stack. Each row binds the entire
@@ -3718,8 +3734,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (236, "corpus_snapshot_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for corpus_snapshot_log failed: %s", _mig_exc)
 
         # Phase 237-ZK-SEPPROOF: extend ait_session_log with centroids + cov_inv
         # so the bridge prover can reconstruct ZK witness inputs without re-running
@@ -3733,8 +3749,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             try:
                 with self._conn() as conn:
                     conn.execute(_col_sql)
-            except Exception:
-                pass  # idempotent — column already exists
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, _col_sql)
 
         # Phase 237-ZK-SEPPROOF: BIOMETRIC-SNAPSHOT-v1 anchor history.
         # Sixth FROZEN-v1 primitive in PATTERN-016 family.  Mirrors corpus_snapshot_log
@@ -3773,8 +3789,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (237, "biometric_snapshot_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for biometric_snapshot_log failed: %s", _mig_exc)
 
         # Phase 238-MARKETPLACE: LISTING-v1 anchor history.
         # Seventh FROZEN-v1 primitive in PATTERN-016 family.  Per-listing
@@ -3826,8 +3842,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (238, "marketplace_listing_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for marketplace_listing_log failed: %s", _mig_exc)
 
         # Phase 238 Step I — curator_listing_review_log table.
         # Append-only Curator review verdict ledger.  One row per Curator
@@ -3871,8 +3887,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (238, "curator_listing_review_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for curator_listing_review_log failed: %s", _mig_exc)
 
         # Phase O3-ZKBA-TRACK1 — Zero-Knowledge Biometric Artifact (ZKBA) log.
         # Tenth FROZEN-v1 primitive in PATTERN-017 family (pending VBDIP-0001
@@ -3919,8 +3935,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1100, "zkba_artifact_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for zkba_artifact_log failed: %s", _mig_exc)
 
         # Phase O4-VPM-INT B.0 — vpm_artifact_log table.
         # Records VPM artifacts (HTML + manifest sidecar pair) emitted by
@@ -3975,8 +3991,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1200, "vpm_artifact_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for vpm_artifact_log failed: %s", _mig_exc)
 
         # Phase O4-VPM-INT follow-up — cfss_lane_drift_log table.
         # Sink for findings from cfss_drift_sweeper.py (continuous Cedar
@@ -4018,8 +4034,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1210, "cfss_lane_drift_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for cfss_lane_drift_log failed: %s", _mig_exc)
 
         # Phase O1 C1 — operator_agent_activation_log table.
         # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
@@ -4058,8 +4074,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1001, "operator_agent_activation_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for operator_agent_activation_log failed: %s", _mig_exc)
 
         # Phase O1 C2 — operator_agent_shadow_log table.
         # Records every Cedar evaluation cycle in shadow mode:
@@ -4110,8 +4126,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1002, "operator_agent_shadow_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for operator_agent_shadow_log failed: %s", _mig_exc)
 
         # Phase O1 C3 — operator_agent_drift_log table.
         # Records drift findings from periodic operator-triggered sweeps:
@@ -4164,8 +4180,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1003, "operator_agent_drift_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for operator_agent_drift_log failed: %s", _mig_exc)
 
         # Phase O1-FRR — operator_initiative_advancement_log table.
         # Persists each fleet-readiness evaluation cycle from
@@ -4209,8 +4225,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1004, "operator_initiative_advancement_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for operator_initiative_advancement_log failed: %s", _mig_exc)
 
         # Phase O2-DRAFT-GENERATION (2026-05-10) — operator_agent_drafts table.
         # Persists each draft payload produced by an Operator Initiative agent
@@ -4257,8 +4273,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1005, "operator_agent_drafts", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for operator_agent_drafts failed: %s", _mig_exc)
 
         # Phase O5-MYTHOS-MINIMAL M.1 — mythos_finding_log + mythos_cadence_log.
         # Mythos variants (Phase O5 M.2) write findings here; the FSCA loop
@@ -4324,8 +4340,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1100, "mythos_finding_log+mythos_cadence_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for mythos_finding_log failed: %s", _mig_exc)
 
         # Phase 242-BT Stream 1 — BT-WITNESS v1 capability scaffolding.
         # Each row records one BT-WITNESS commitment computed by the LAN-tower
@@ -4372,8 +4388,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1101, "bt_witness_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for bt_witness_log failed: %s", _mig_exc)
 
         # Phase O5-MLGA Stage 2 — Mythos Live Gameplay Audit session log.
         # Each row persists one gameplay session's MLGA dataproof + the
@@ -4412,8 +4428,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (1102, "mlga_session_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for mlga_session_log failed: %s", _mig_exc)
 
         # Data Economy Arc 6/7 — PoSR session-recency open-beacon capture.
         # One row per session key (grind_session_id) recording the OPEN beacon
@@ -4442,8 +4458,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (2625, "posr_session_beacon", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for posr_session_beacon failed: %s", _mig_exc)
 
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
@@ -4485,8 +4501,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (238, "agent_commit_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for agent_commit_log failed: %s", _mig_exc)
 
         # Phase O0 Stream 3-prep Session 2 — PHYSICAL_DATA_ATTESTATION v1
         # (seventh and final FROZEN-v1 primitive). Per Pass 2C Section 4.2.
@@ -4535,8 +4551,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (239, "physical_data_attestation_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for physical_data_attestation_log failed: %s", _mig_exc)
 
         # Phase 236-WATCHDOG: Watchdog Event Chain (WEC) audit table.
         # Pairs with the GIC chain — GIC tracks cognitive-session continuity,
@@ -4573,8 +4589,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (236, "watchdog_event_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for watchdog_event_log failed: %s", _mig_exc)
 
         # Phase 239: gamer_readiness_log — GamerReadinessAgent (agent #39)
         try:
@@ -4602,8 +4618,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     " VALUES (?, ?, ?)",
                     (239, "gamer_readiness_log", time.time()),
                 )
-        except Exception:
-            pass  # idempotent
+        except sqlite3.Error as _mig_exc:
+            log.error("schema init for gamer_readiness_log failed: %s", _mig_exc)
 
     # --- Device operations ---
 
@@ -5099,7 +5115,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 for k, v in feats.items():
                     feature_sum[k] = feature_sum.get(k, 0.0) + float(v)
                 count += 1
-            except Exception:
+            except (ValueError, TypeError, AttributeError) as _feat_exc:
+                log.warning("skipping malformed pitl_l4_features row: %s", _feat_exc)
                 continue
 
         if count == 0:
@@ -7598,8 +7615,11 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                         "FROM data_provenance_dag WHERE node_id=?",
                         (current_id,),
                     ).fetchone()
-            except Exception:
-                break
+            except sqlite3.Error as _dag_exc:
+                # Truncated chains are misleading provenance — surface the read failure.
+                raise RuntimeError(
+                    f"provenance chain read failed at node {current_id}"
+                ) from _dag_exc
             if row is None:
                 break
             chain.append({
@@ -7793,8 +7813,11 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     created = _dt195.fromisoformat(str(r["created_at"]).replace(" ", "T"))
                     resolved = _dt195.fromisoformat(str(r["resolved_at"]).replace(" ", "T"))
                     hours_list.append((resolved - created).total_seconds() / 3600.0)
-                except Exception:
-                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+                except ValueError as _ts_exc:
+                    log.warning(
+                        "unparseable coherence timestamps (created_at=%r resolved_at=%r): %s",
+                        r["created_at"], r["resolved_at"], _ts_exc,
+                    )
 
             mean_hours = sum(hours_list) / len(hours_list) if hours_list else 0.0
             # pmi_score=1.0 when no ORPHAN history (healthy fleet) or fast resolution
@@ -8212,13 +8235,13 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         if "executed_at" not in existing_cols:
             try:
                 conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN executed_at REAL DEFAULT NULL")
-            except Exception:
-                pass  # fail-open: another process may have added column concurrently
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "operator_agent_drafts")
         if "executed_tx_hash" not in existing_cols:
             try:
                 conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN executed_tx_hash TEXT DEFAULT ''")
-            except Exception:
-                pass
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "operator_agent_drafts")
         # 2026-05-20 refusal-churn cap: terminally-refused drafts (no executor
         # route, or chain-cost action under a budget=0 agent) were re-fetched +
         # re-refused every executor cycle, accumulating 7k+ identical
@@ -8226,13 +8249,13 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         if "refused_at" not in existing_cols:
             try:
                 conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN refused_at REAL DEFAULT NULL")
-            except Exception:
-                pass  # idempotent migration: column already added in prior run
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "operator_agent_drafts")
         if "refusal_reason" not in existing_cols:
             try:
                 conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN refusal_reason TEXT DEFAULT ''")
-            except Exception:
-                pass  # idempotent migration: column already added in prior run
+            except Exception as _mig_exc:
+                _ignore_duplicate_column(_mig_exc, "operator_agent_drafts")
         conn.execute(
             "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at) "
             "VALUES (?, ?, ?)",
@@ -8943,8 +8966,13 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     (device_id, category, action, now, tx_hash, reason),
                 )
                 return cur.lastrowid or 0
-        except Exception:
-            return 0  # fail-open: event log is operational; ledger upsert is authoritative
+        except Exception as exc:
+            # fail-open: ledger upsert is authoritative, but a missing receipt must be visible
+            log.error(
+                "insert_consent_event failed (device=%s category=%s action=%s): %s",
+                device_id, category, action, exc,
+            )
+            return 0
 
     def get_consent_history(self, device_id: str, limit: int = 50) -> list[dict]:
         """Return the append-only consent event history for `device_id`,
@@ -8972,7 +9000,8 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     "ORDER BY ts DESC, id DESC LIMIT ?",
                     (device_id, limit),
                 ).fetchall()
-        except Exception:
+        except Exception as exc:
+            log.error("get_consent_history failed for device=%s: %s", device_id, exc)
             return []
         out: list[dict] = []
         for r in rows:
