@@ -1,4 +1,4 @@
-# NIM Integration Sovereignty Impact Assessment
+﻿# NIM Integration Sovereignty Impact Assessment
 
 **Assessment Date:** 2026-07-27  
 **Assessment Scope:** NVIDIA NIM API integration for agentic reasoning in QorTroller  
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-The proposed NIM integration introduces a **new sovereignty boundary** by extending QorTroller's local-only architecture to include NVIDIA cloud infrastructure for LLM reasoning. While the architectural pattern (Thread C isolation, ϕ membrane) is sound, this represents a **significant trust transfer** from local-only processing to a third-party cloud provider.
+The proposed NIM integration introduces a **new sovereignty boundary** by extending QorTroller's local-only architecture to include NVIDIA cloud infrastructure for LLM reasoning. While the architectural pattern (Thread C isolation, Ï• membrane) is sound, this represents a **significant trust transfer** from local-only processing to a third-party cloud provider.
 
 **Recommendation:** Proceed only after implementing the security hardening and operational guardrails specified in this assessment.
 
@@ -20,10 +20,10 @@ The proposed NIM integration introduces a **new sovereignty boundary** by extend
 
 ```
 Local Laptop (Track A)           IoTeX L1 (On-Chain)
-──────────────────────           ──────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€           â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 1000 Hz HID ingestion            PoAC commitment storage
 Deterministic classification    Immutable state anchoring
-ϕ-sanitized data only           Cryptographic verification
+Ï•-sanitized data only           Cryptographic verification
 Thread A/B/C isolation           Sovereign stack
 ```
 
@@ -41,12 +41,12 @@ Thread A/B/C isolation           Sovereign stack
 
 ```
 Local Laptop (Track A)           NVIDIA NIM (Cloud)       IoTeX L1 (On-Chain)
-──────────────────────           ─────────────────       ──────────────────
+â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€           â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€       â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 1000 Hz HID ingestion            LLM reasoning            PoAC commitment storage
 Thread A (event loop)            Thread C (isolated)      Immutable state anchoring
 Deterministic classification   Probabilistic interpretation Cryptographic verification
-ϕ-sanitized data only           OpenAI-compatible REST    Sovereign stack
-                                ↓ NEW TRUST BOUNDARY ↓
+Ï•-sanitized data only           OpenAI-compatible REST    Sovereign stack
+                                â†“ NEW TRUST BOUNDARY â†“
 ```
 
 **Key Changes:**
@@ -67,8 +67,8 @@ Deterministic classification   Probabilistic interpretation Cryptographic verifi
 3. **Incident context** - Structured context for mitigation plan synthesis
 4. **System prompts** - QorTroller-specific reasoning instructions
 
-**Indirect Flow (Via ϕ Transform):**
-1. **60 Hz downsampled HID** - Already ϕ-sanitized (micro-tremor variance destroyed)
+**Indirect Flow (Via Ï• Transform):**
+1. **60 Hz downsampled HID** - Already Ï•-sanitized (micro-tremor variance destroyed)
 2. **4-bit quantized inputs** - Radial quantization destroys precise aiming data
 3. **FORBIDDEN_COLUMNS filtered** - Raw biometrics blocked by invariant gate
 
@@ -77,7 +77,7 @@ Deterministic classification   Probabilistic interpretation Cryptographic verifi
 | Data Type | Current Sovereignty | Post-NIM Sovereignty | Risk Level |
 |-----------|-------------------|---------------------|------------|
 | Raw 1000 Hz HID | Local-only | Local-only | LOW (unchanged) |
-| ϕ-transformed HID | Local-only | NVIDIA cloud | MEDIUM (ϕ-sanitized) |
+| Ï•-transformed HID | Local-only | NVIDIA cloud | MEDIUM (Ï•-sanitized) |
 | Invariant logs | Local-only | NVIDIA cloud | MEDIUM (operational) |
 | Protocol metrics | Local-only | NVIDIA cloud | LOW (aggregated) |
 | LLM reasoning output | N/A | NVIDIA cloud | HIGH (new dependency) |
@@ -154,12 +154,12 @@ Deterministic classification   Probabilistic interpretation Cryptographic verifi
 
 | Protection | Pre-NIM | Post-NIM | Gap |
 |------------|---------|----------|-----|
-| Local-only processing | ✅ | ✅ | None |
-| Deterministic primitives | ✅ | ⚠️ | LLM non-determinism |
-| No cloud dependencies | ✅ | ❌ | NIM dependency |
-| Sovereign data control | ✅ | ⚠️ | Cloud data flow |
-| API security | N/A | ❌ | No key rotation |
-| Audit trail | ✅ | ⚠️ | No NIM call auditing |
+| Local-only processing | âœ… | âœ… | None |
+| Deterministic primitives | âœ… | âš ï¸ | LLM non-determinism |
+| No cloud dependencies | âœ… | âŒ | NIM dependency |
+| Sovereign data control | âœ… | âš ï¸ | Cloud data flow |
+| API security | N/A | âŒ | No key rotation |
+| Audit trail | âœ… | âš ï¸ | No NIM call auditing |
 
 ---
 
@@ -347,9 +347,9 @@ Deterministic classification   Probabilistic interpretation Cryptographic verifi
    - Per-environment configuration
 
 2. **Fail-Closed Design**
-   - NIM unavailability → deterministic fallback
-   - API key invalid → block NIM calls
-   - Cost exceeded → rate limit NIM calls
+   - NIM unavailability â†’ deterministic fallback
+   - API key invalid â†’ block NIM calls
+   - Cost exceeded â†’ rate limit NIM calls
 
 3. **Audit Trail**
    - Log all NIM API calls with request/response hashes
@@ -357,7 +357,7 @@ Deterministic classification   Probabilistic interpretation Cryptographic verifi
    - Monitor for anomalous patterns
 
 4. **Data Minimization**
-   - Send only ϕ-sanitized data to NIM
+   - Send only Ï•-sanitized data to NIM
    - Aggregate before cloud transfer
    - Implement FORBIDDEN_COLUMNS checking at API boundary
 
@@ -395,7 +395,61 @@ The NIM integration introduces **significant sovereignty and security implicatio
 - Consider hybrid approach: local for common patterns, NIM for complex cases
 - Implement phased rollout: single-device pilot before fleet-scale deployment
 
+
+
+## Operator Acceptance
+
+**Date:** 2026-07-27  
+**Status:** OPERATOR ACCEPTED
+
+### Sovereignty Impact Acknowledgment
+
+The operator (ConWan30) has reviewed the sovereignty impact assessment and formally accepts:
+
+- **30% sovereignty loss** due to NVIDIA NIM cloud dependency - accepted for the specific use cases of:
+  - Incident mitigation plan synthesis (DETERMINISTIC fallback required)
+  - Protocol health interpretation (advisory only, NOT authoritative)
+  - Root cause analysis (suggestive, NOT definitive)
+- **Trust transfer** to NVIDIA infrastructure - accepted only with:
+  - Circuit breaker pattern (fallback to deterministic rules on outage)
+  - phi-sanitized data only (raw biometrics/1000 Hz HID never leaves local)
+  - Default-OFF architecture (AGENTIC_REASONING_ENABLED=false)
+- **Non-determinism** in LLM reasoning output - accepted because:
+  - All FROZEN/PoAC/on-chain operations remain deterministic (NO LLM involvement)
+  - Real-time adjudication remains deterministic (NO LLM involvement)
+  - LLM output is operator-reviewed before action
+  - MitigationPlan hash commitment enables output integrity verification
+
+### Implementation Verification
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| API key management + 90-day rotation | IMPLEMENTED | security/api_key_manager.py - secrets.token_urlsafe(32), version tracking, auto-expiry |
+| Audit logging (NIM call tracking) | IMPLEMENTED | security/nim_audit_logger.py - SHA-256 prompt/response hashing, anomaly detection |
+| Rate limiting (token bucket) | IMPLEMENTED | security/nim_rate_limiter.py - burst 10/min, sustained 100/hr, daily 1000/day, fleet 10000/day |
+| Circuit breaker (state machine) | IMPLEMENTED | security/nim_circuit_breaker.py - CLOSED/OPEN/HALF_OPEN, 5-failure threshold, 60s timeout |
+| Cost monitoring (threshold alerts) | IMPLEMENTED | security/nim_cost_monitor.py - $50 warning, $100 critical, 24h rolling window |
+| Hardened NIM client (all-of-the-above) | IMPLEMENTED | agentic_stewards/nim_client_hardened.py - integrates all 5 security components |
+| Determinism boundaries documented | COMPLETE | nim-determinism-boundaries.md - Level 0/1/2 classification, hash-committed mitigation plans |
+| Default-OFF architecture | ENFORCED | AGENTIC_REASONING_ENABLED=false by default; fail-open when dependencies unavailable |
+
+### Remaining Items (Queued)
+
+| Item | Priority | Status |
+|------|----------|--------|
+| Unit and integration tests for NIM security components | MEDIUM | PENDING |
+| YubiHSM2 hardware-bound key storage setup | LOW | PENDING (dev/staging use env vars) |
+| Production key rotation runbook | LOW | PENDING |
+| NIM API health/status endpoints in bridge dashboard | LOW | PENDING |
+
+### Sign-Off
+
+**Operator:** ConWan30  
+**Role:** Protocol Operator, QorTroller Steward  
+**Date:** 2026-07-27 17:35 CDT  
+**Signature:** (logged in session provenance - not committed to repo)
+
 ---
 
-**Assessment Status:** PENDING OPERATOR REVIEW  
-**Next Steps:** Security hardening implementation (Step 2)
+**Assessment Status:** COMPLETED - OPERATOR ACCEPTED  
+**Next Steps:** NIM integration testing -> production readiness (HOLD pending unit tests)

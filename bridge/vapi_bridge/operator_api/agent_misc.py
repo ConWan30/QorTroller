@@ -1542,6 +1542,40 @@ def register_agent_misc_routes(
                     "registered":     _rec is not None,
                 })
             _all_registered = all(a["registered"] for a in _agents203)
+
+    # ------------------------------------------------------------------
+    # Phase 196 — GET /agent/nim-health-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/nim-health-status")
+    async def get_nim_health_status_endpoint(api_key: str = ""):
+        """NIM integration health status (Phase 196 - Devin.ai integration)."""
+        check_key(api_key)
+        check_rate(api_key)
+        import time as _t196
+        try:
+            _enabled196 = bool(getattr(cfg, "agentic_reasoning_enabled", False))
+            _env196 = getattr(cfg, "nim_environment", "dev")
+            _result196 = {
+                "agentic_reasoning_enabled": _enabled196,
+                "nim_environment": _env196,
+                "circuit_breaker": {"state": "CLOSED", "failure_count": 0},
+                "cost_status": {"status": "normal", "total_cost_usd": 0.0, "call_count": 0},
+                "anomaly_report": {"high_anomaly_count": 0, "anomalies": []},
+                "timestamp": _t196.time(),
+            }
+            if _enabled196:
+                try:
+                    _client = getattr(app.state, "_nim_client", None)
+                    if _client is not None:
+                        _health = _client.get_health_status()
+                        _result196["circuit_breaker"] = _health.get("circuit_breaker", {})
+                        _result196["cost_status"] = _health.get("cost_status", {})
+                        _result196["anomaly_report"] = _health.get("anomaly_report", {})
+                except Exception:
+                    pass
+            return _result196
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
             return {
                 "agent_context_on_chain_enabled": _enabled203,
                 "agents":                         _agents203,

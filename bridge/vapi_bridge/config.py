@@ -3728,6 +3728,38 @@ class Config:
     """Phase 193 — Publish to alert bus channel on MEDIUM coherence failures. Default False
     (advisory only — reduce noise; MEDIUM contradictions logged to wiki but not alerted)."""
 
+    # --- NIM / Agentic Reasoning (Phase 196 - Devin.ai integration) ---
+
+    agentic_reasoning_enabled: bool = field(
+        default_factory=lambda: _env("AGENTIC_REASONING_ENABLED", "false").lower() == "true"
+    )
+    """Phase 196 — Enable NVIDIA NIM agentic reasoning. Default-OFF (requires explicit opt-in)."""
+
+    nim_api_key: str = field(
+        default_factory=lambda: _env("NIM_API_KEY", "")
+    )
+    """Phase 196 — NVIDIA NIM API key. Required when AGENTIC_REASONING_ENABLED=true."""
+
+    nim_base_url: str = field(
+        default_factory=lambda: _env("NIM_BASE_URL", "https://api.nvidia.com/v1")
+    )
+    """Phase 196 — NVIDIA NIM base URL. Defaults to NVIDIA cloud API."""
+
+    nim_model: str = field(
+        default_factory=lambda: _env("NIM_MODEL", "llama-3-70b-instruct")
+    )
+    """Phase 196 — NVIDIA NIM model name. Defaults to Llama 3 70B Instruct."""
+
+    nim_timeout: float = field(
+        default_factory=lambda: float(_env("NIM_TIMEOUT", "30.0"))
+    )
+    """Phase 196 — NIM API call timeout in seconds. Default 30s."""
+
+    nim_environment: str = field(
+        default_factory=lambda: _env("NIM_ENVIRONMENT", "dev")
+    )
+    """Phase 196 — NIM environment label (dev/staging/prod). Used for audit logging."""
+
     def __post_init__(self) -> None:
         # L6B human-reflex MAX band clamp (frozen dataclass -> object.__setattr__). Production
         # ceiling is 280 ms (calibrated human voluntary-reaction upper bound). A wider
