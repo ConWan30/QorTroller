@@ -74,6 +74,13 @@ trio-retina>=0.3.0
 mediapipe>=0.10.0; python_version >= "3.10"
 onnxruntime>=1.16.0; python_version >= "3.10"
 
+# NIM Integration for agentic reasoning (optional, fail-open design)
+# OpenAI-compatible API client for NVIDIA NIM LLM inference
+# python-dotenv already required for configuration
+# Optional: yubihsm for hardware-bound API key storage (production)
+openai>=1.0.0; python_version >= "3.10"
+yubihsm>=3.0.0; python_version >= "3.10"
+
 # Parallel test execution — Store.__init__ runs a 370-statement SQLite
 # migration per test; tests already isolated via tempfile.mkdtemp(); using
 # `pytest -n auto` cuts the full bridge suite from ~3h35m to ~1h05m
