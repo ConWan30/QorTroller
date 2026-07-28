@@ -2588,7 +2588,7 @@ async def main():
         if args.exec:
             # One-shot mode
             response = await tui._process_message(args.exec)
-            print(response)
+            print(QorTrollerTUI._sanitize(response))
         elif args.mcp:
             # MCP server mode — placeholder
             print("MCP server mode not yet implemented")
