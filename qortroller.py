@@ -2500,6 +2500,83 @@ class QorTrollerTUI:
 #  MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ROUTER CLIENT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RouterClient:
+    """Router wrapper for the Engineering Assistant.
+
+    Preserves the self.llm.chat() interface the TUI expects.
+    Delegates to the bridge LLMRouter with task_class='assistant',
+    so the TUI class needs zero changes.
+
+    The router handles failover: QuickSilver → LOCAL → (NIM if allowed).
+    Honesty fields (backend, model, attempts, fallback_used) are
+    available on the RouteResult if needed.
+    """
+
+    def __init__(self):
+        self._router = None
+        self._init_router()
+
+    def _init_router(self):
+        try:
+            from bridge.vapi_bridge.llm_routing import LLMRouter
+            self._router = LLMRouter()
+        except Exception as exc:
+            logger.warning("RouterClient init failed: %s", exc)
+
+    @property
+    def configured(self) -> bool:
+        """True if at least one backend is configured."""
+        if not self._router:
+            return False
+        return any(
+            bk.configured() for bk in self._router._backends.values()
+        )
+
+    def chat(
+        self,
+        messages: list[dict],
+        tools: Optional[list[dict]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> dict:
+        """Send a chat completion through the router.
+
+        Matches the QuickSilverClient.chat() interface so the
+        TUI class doesn't need changes. Returns the same
+        OpenAI-shaped dict or {"error": "..."} on failure.
+        """
+        import asyncio
+
+        if not self._router:
+            return {"error": "LLM router not initialized"}
+
+        try:
+            result = asyncio.run(
+                self._router.route(
+                    task_class="assistant",
+                    messages=messages,
+                    tools=tools,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+            )
+        except Exception as exc:
+            logger.error("RouterClient.route() failed: %s", exc)
+            return {"error": str(exc)}
+
+        if result.success and result.content:
+            return {
+                "choices": [{"message": {"role": "assistant", "content": result.content}}],
+                "model": result.model,
+            }
+
+        return {"error": result.error or "LLM request failed"}
+
+
 async def main():
     """Entry point for the QorTroller Engineering Assistant."""
     import argparse
