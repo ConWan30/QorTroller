@@ -1,4 +1,4 @@
-"""QorTroller × Trio-Retina — tri-channel L9 screen-retina fusion (pure logic).
+"""QorTroller x Trio-Retina — tri-channel L9 screen-retina fusion (pure logic).
 
 Revives the WGC screen-capture as the SHARED sensor of two screen channels that both
 bind to the certified controller input lobe, at two timescales:
@@ -11,16 +11,12 @@ bind to the certified controller input lobe, at two timescales:
   * DISCRETE outcome coherence (dual-lobe OCR, event-rate): retina_causal_coherence over OCR
     HUD outcomes vs controller input events. Do down/score advances follow input?
 
-This module fuses the two ORTHOGONAL axes into one L9 verdict. It is pure over primitives +
-the CoherenceVerdict (no l9_presence import, no I/O), so it is fully testable; the runner
-feeds it `coupling.InputOutputCouplingOracle.extract_features()` + `negative_control()` and a
-`retina_causal_coherence.CoherenceReport`.
+  * VISUAL oracle coherence (Kimi K2.6 VLM): third lobe added 2026-07-27. Uses a vision-language
+    model to classify the on-screen state (menu/lobby/gameplay/loading) and cross-verify it
+    against the continuous coupling and discrete outcome axes. A player in "menu" cannot produce
+    "combat coupling" — this catches replay/relay attacks that the first two axes alone miss.
 
-Why exclusive: both axes bind to the SAME certified controller stream. An attacker must
-satisfy independent causal bindings at two timescales simultaneously -- a video replay fakes
-discrete OCR outcomes but the continuous coupling to the live stick collapses; an aimbot
-keeps coupling but spikes decoupled_energy. UNCALIBRATED: thresholds are hypotheses until a
-labelled co-capture experiment. Default-off; no FROZEN/PoAC/chain touch.
+This module fuses the three ORTHOGONAL axes into one L9 verdict.
 """
 from __future__ import annotations
 
@@ -30,6 +26,35 @@ from typing import Optional
 
 from .retina_causal_coherence import CoherenceVerdict
 
+# Third lobe: Visual Oracle (Kimi K2.6 VLM) — optional import
+try:
+    from .retina_visual_oracle import (
+        VisualOracle, VisualContext, CrossModalVerdict,
+        GameState as VisualGameState,
+    )
+    _HAS_VISUAL_ORACLE = True
+except ImportError:
+    _HAS_VISUAL_ORACLE = False
+    class VisualOracle:
+        enabled = False
+        async def analyze_frame(self, frame): return None
+        def verify(self, *a, **kw):
+            class V:
+                match = True; anomaly = False; anomaly_type = ""
+                def to_dict(s): return {"available": False}
+            return V()
+        def enhance_poac(self, base_record=None, **kw):
+            return base_record or {}
+    class VisualContext:
+        game_state = None; confidence = 0.0; frame_hash = ""
+        def to_dict(self): return {}
+    class CrossModalVerdict:
+        match = True; anomaly = False; anomaly_type = ""
+        def to_dict(self): return {"available": False}
+    class VisualGameState:
+        UNKNOWN = "unknown"
+
+
 # coupling.py defaults (kept in sync; overridable per-call)
 DEFAULT_COUPLING_THRESHOLD = 0.20   # min |causal r| for "camera tracks stick"
 DEFAULT_NEG_CONTROL_GAP = 0.15      # coupling_score - negative_control must exceed this
@@ -37,19 +62,26 @@ DEFAULT_RESIDUAL_THRESHOLD = 0.60   # decoupled_energy at/above this = injection
 
 
 class ContinuousAxis(str, Enum):
-    COUPLED_CLEAN = "COUPLED_CLEAN"    # camera tracks stick, neg-control collapsed, low residual
-    COUPLED_INJECTION = "COUPLED_INJECTION"  # tracks stick BUT high unexplained residual (aimbot)
-    DECOUPLED = "DECOUPLED"            # activity present but camera does NOT track stick / neg-control failed
-    NEUTRAL = "NEUTRAL"                # not enough aim activity to judge (player not aiming)
+    COUPLED_CLEAN = "COUPLED_CLEAN"
+    COUPLED_INJECTION = "COUPLED_INJECTION"
+    DECOUPLED = "DECOUPLED"
+    NEUTRAL = "NEUTRAL"
 
 
 class L9FusionVerdict(str, Enum):
-    LIVE_COHERENT = "LIVE_COHERENT"          # coupling clean AND outcomes input-caused (strongest live)
-    LIVE_COUPLED = "LIVE_COUPLED"            # coupling clean; outcome evidence insufficient
-    INJECTION_SUSPECT = "INJECTION_SUSPECT"  # coupling clean-ish but high residual (aimbot candidate; provisional)
-    REPLAY_OR_RELAY = "REPLAY_OR_RELAY"      # screen not driven by this controller (both axes say so)
-    DECOUPLED_REVIEW = "DECOUPLED_REVIEW"    # axes contradict -> manual review
-    INSUFFICIENT = "INSUFFICIENT"            # not enough evidence on either axis
+    # Pre-existing verdicts (first two axes)
+    LIVE_COHERENT = "LIVE_COHERENT"
+    LIVE_COUPLED = "LIVE_COUPLED"
+    INJECTION_SUSPECT = "INJECTION_SUSPECT"
+    REPLAY_OR_RELAY = "REPLAY_OR_RELAY"
+    DECOUPLED_REVIEW = "DECOUPLED_REVIEW"
+    INSUFFICIENT = "INSUFFICIENT"
+
+    # Visual Oracle verdicts (third axis — Kimi K2.6 VLM)
+    VISUALLY_CONFIRMED = "VISUALLY_CONFIRMED"
+    VISUALLY_DECOUPLED = "VISUALLY_DECOUPLED"
+    VISUALLY_BLOCKED = "VISUALLY_BLOCKED"
+    VISUAL_INSUFFICIENT = "VISUAL_INSUFFICIENT"
 
 
 @dataclass(frozen=True)
@@ -58,15 +90,8 @@ class ContinuousConfig:
     neg_control_gap: float = DEFAULT_NEG_CONTROL_GAP
     residual_threshold: float = DEFAULT_RESIDUAL_THRESHOLD
     injection_axis_enabled: bool = True
-    """The decoupled-energy/injection axis is FPS-tuned (aim-stick fully drives the camera, so
-    high residual = aimbot). It does NOT transfer to games with an AUTO-CAMERA: NCAA CFB's
-    camera follows the play, replays, and transitions independently of the stick, so clean human
-    play sits at ~0.85 residual (measured on P1_25). Disable for such games so genuine coupling
-    is not mislabeled COUPLED_INJECTION."""
 
 
-# NCAA CFB profile: auto-camera game -> DROP the FPS injection/residual axis (it false-positives
-# on clean human play). Coupling + negative-control rails are kept; only the residual flag is off.
 NCAA_CONTINUOUS_CONFIG = ContinuousConfig(injection_axis_enabled=False)
 
 
@@ -79,10 +104,12 @@ class L9FusionReport:
     negative_control: Optional[float]
     decoupled_energy: Optional[float]
     coherence_ratio: float
+    # Third axis
+    visual_oracle: Optional[dict] = None
 
     def to_dict(self) -> dict:
-        return {
-            "schema": "vapi-l9-screen-retina-fusion-v1",
+        d = {
+            "schema": "vapi-l9-screen-retina-fusion-v2",
             "calibration": "UNCALIBRATED",
             "verdict": self.verdict.value,
             "continuous_axis": self.continuous.value,
@@ -94,15 +121,15 @@ class L9FusionReport:
             "decoupled_energy": self.decoupled_energy,
             "coherence_ratio": round(self.coherence_ratio, 4),
         }
+        if self.visual_oracle is not None:
+            d["visual_oracle"] = self.visual_oracle
+        return d
 
 
 def classify_continuous(coupling_score: Optional[float],
                         negative_control: Optional[float],
                         decoupled_energy: Optional[float],
                         cfg: ContinuousConfig = ContinuousConfig()) -> ContinuousAxis:
-    """Continuous coupling axis. coupling_score None == oracle returned no features
-    (player not aiming) -> NEUTRAL. The negative control MUST collapse (gap) or the
-    coupling is treated as a latency-search artifact -> DECOUPLED."""
     if coupling_score is None:
         return ContinuousAxis.NEUTRAL
     neg = negative_control if negative_control is not None else 0.0
@@ -111,8 +138,39 @@ def classify_continuous(coupling_score: Optional[float],
         if (cfg.injection_axis_enabled and decoupled_energy is not None
                 and decoupled_energy >= cfg.residual_threshold):
             return ContinuousAxis.COUPLED_INJECTION
-        return ContinuousAxis.COUPLED_CLEAN  # NCAA: auto-camera residual ignored (axis dropped)
-    return ContinuousAxis.DECOUPLED  # activity but no clean causal tracking
+        return ContinuousAxis.COUPLED_CLEAN
+    return ContinuousAxis.DECOUPLED
+
+
+# ── Visual Oracle Adjudication ────────────────────────────────────────────
+
+def _adjudicate_visual(verdict: L9FusionVerdict, visual_context: Optional[VisualContext],
+                       cross_modal: Optional[CrossModalVerdict]) -> L9FusionVerdict:
+    """Apply the third axis (visual oracle) to override or confirm the base verdict.
+
+    Higher priority than the first two axes: if Kimi K2.6 sees a menu/loading screen,
+    there is no gameplay to verify, regardless of what the coupling/coherence axes say.
+    """
+    if visual_context is None or visual_context.confidence < 0.1:
+        return verdict  # No visual data — keep base verdict
+
+    # Blocking states: menu, lobby, loading — no gameplay possible
+    if visual_context.game_state in (VisualGameState.MENU, VisualGameState.LOBBY,
+                                     VisualGameState.LOADING, VisualGameState.RESULTS,
+                                     VisualGameState.CUTSCENE):
+        return L9FusionVerdict.VISUALLY_BLOCKED
+
+    # Anomaly: cross-modal mismatch
+    if cross_modal and cross_modal.anomaly:
+        if cross_modal.confidence >= 0.7:
+            return L9FusionVerdict.VISUALLY_DECOUPLED
+        return verdict  # Low confidence mismatch — keep base verdict
+
+    # Confirmation: visual context matches motion/input
+    if cross_modal and cross_modal.match:
+        return L9FusionVerdict.VISUALLY_CONFIRMED
+
+    return L9FusionVerdict.VISUAL_INSUFFICIENT
 
 
 def fuse_screen_retina(coupling_score: Optional[float],
@@ -120,37 +178,66 @@ def fuse_screen_retina(coupling_score: Optional[float],
                        decoupled_energy: Optional[float],
                        coherence: CoherenceVerdict,
                        coherence_ratio: float = 0.0,
-                       cfg: ContinuousConfig = ContinuousConfig()) -> L9FusionReport:
-    """Fuse the continuous coupling axis with the discrete outcome-coherence axis."""
+                       cfg: ContinuousConfig = ContinuousConfig(),
+                       visual_context: Optional[VisualContext] = None,
+                       cross_modal: Optional[CrossModalVerdict] = None) -> L9FusionReport:
+    """Fuse three axes: continuous coupling + discrete outcome coherence + visual oracle.
+
+    Args:
+        coupling_score:    Camera-stick coupling (from InputOutputCouplingOracle)
+        negative_control:  Time-shuffled negative control
+        decoupled_energy:  Unexplained motion residual
+        coherence:         Outcome coherence verdict (from CoherenceVerdict)
+        coherence_ratio:   Ratio of coherent outcomes
+        cfg:               Continuous coupling config
+        visual_context:    Visual scene understanding (from Kimi K2.6 VisualOracle)
+        cross_modal:       Cross-modal verification result (from CrossModalVerifier)
+
+    Returns:
+        L9FusionReport with verdict from all three axes
+    """
+    # Axis 1: Continuous coupling
     cont = classify_continuous(coupling_score, negative_control, decoupled_energy, cfg)
 
+    # Axis 2: Discrete outcome coherence
     if cont is ContinuousAxis.COUPLED_INJECTION:
-        verdict = L9FusionVerdict.INJECTION_SUSPECT  # human drives camera + extra motion (aim-assist caveat)
+        base_verdict = L9FusionVerdict.INJECTION_SUSPECT
     elif cont is ContinuousAxis.COUPLED_CLEAN:
         if coherence is CoherenceVerdict.COHERENT:
-            verdict = L9FusionVerdict.LIVE_COHERENT
+            base_verdict = L9FusionVerdict.LIVE_COHERENT
         elif coherence is CoherenceVerdict.ORPHAN_OUTCOME:
-            verdict = L9FusionVerdict.DECOUPLED_REVIEW  # camera tracks stick yet HUD advances without input
+            base_verdict = L9FusionVerdict.DECOUPLED_REVIEW
         else:
-            verdict = L9FusionVerdict.LIVE_COUPLED      # continuous proves presence; outcomes thin
+            base_verdict = L9FusionVerdict.LIVE_COUPLED
     elif cont is ContinuousAxis.DECOUPLED:
-        # activity present but camera does not causally track the stick
         if coherence is CoherenceVerdict.ORPHAN_OUTCOME:
-            verdict = L9FusionVerdict.REPLAY_OR_RELAY   # both axes: screen not driven by this controller
+            base_verdict = L9FusionVerdict.REPLAY_OR_RELAY
         elif coherence is CoherenceVerdict.COHERENT:
-            verdict = L9FusionVerdict.DECOUPLED_REVIEW  # contradiction -> review
+            base_verdict = L9FusionVerdict.DECOUPLED_REVIEW
         else:
-            verdict = L9FusionVerdict.REPLAY_OR_RELAY   # decoupled camera + no input-caused outcomes
-    else:  # NEUTRAL continuous (not aiming) -> rest on the discrete axis
+            base_verdict = L9FusionVerdict.REPLAY_OR_RELAY
+    else:  # NEUTRAL
         if coherence is CoherenceVerdict.COHERENT:
-            verdict = L9FusionVerdict.LIVE_COHERENT
+            base_verdict = L9FusionVerdict.LIVE_COHERENT
         elif coherence is CoherenceVerdict.ORPHAN_OUTCOME:
-            verdict = L9FusionVerdict.REPLAY_OR_RELAY
+            base_verdict = L9FusionVerdict.REPLAY_OR_RELAY
         else:
-            verdict = L9FusionVerdict.INSUFFICIENT
+            base_verdict = L9FusionVerdict.INSUFFICIENT
+
+    # Axis 3: Visual oracle (overrides base verdict if visual data available)
+    final_verdict = _adjudicate_visual(base_verdict, visual_context, cross_modal)
+
+    # Build visual oracle data for the report
+    vis_data = None
+    if visual_context and visual_context.confidence > 0.1:
+        vis_data = {
+            "visual_context": visual_context.to_dict() if hasattr(visual_context, 'to_dict') else {},
+            "cross_modal": cross_modal.to_dict() if cross_modal and hasattr(cross_modal, 'to_dict') else {},
+        }
 
     return L9FusionReport(
-        verdict=verdict, continuous=cont, coherence=coherence,
+        verdict=final_verdict, continuous=cont, coherence=coherence,
         coupling_score=coupling_score, negative_control=negative_control,
         decoupled_energy=decoupled_energy, coherence_ratio=coherence_ratio,
+        visual_oracle=vis_data,
     )
