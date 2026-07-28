@@ -1,26 +1,30 @@
 """LLM routing infrastructure for QorTroller agentic reasoning.
 
-Provides router orchestration with QS (QuickSilver) + LOCAL (NIM) failover
-and comprehensive provenance tracking for all LLM calls.
+Provides a three-tier backend router (QuickSilver, NIM, LOCAL) with
+explicit policy, failover, and honesty fields on every response.
 """
+
 from __future__ import annotations
 
-from .router_orchestrator import (
-    LLMRouter,
-    RouterConfig,
-    LLMProvider,
-    RouterResult,
-    ProvenanceRecord
-)
-from .local_client import LocalLLMClient
-from .qs_client import QuickSilverClient
+from .router import LLMRouter
+from .types import RouteResult, ProvenanceRecord
+from .policy import RoutingPolicy, RoutingDecision, resolve_policy_from_env, LEVEL_0_TASKS
+from .health import HealthCache
+
+from .backends.quicksilver import QuickSilverBackend
+from .backends.nim import NimBackend
+from .backends.local import LocalBackend
 
 __all__ = [
     "LLMRouter",
-    "RouterConfig", 
-    "LLMProvider",
-    "RouterResult",
+    "RouteResult",
     "ProvenanceRecord",
-    "LocalLLMClient",
-    "QuickSilverClient"
+    "RoutingPolicy",
+    "RoutingDecision",
+    "resolve_policy_from_env",
+    "LEVEL_0_TASKS",
+    "QuickSilverBackend",
+    "NimBackend",
+    "LocalBackend",
+    "HealthCache",
 ]
