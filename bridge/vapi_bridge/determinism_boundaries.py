@@ -229,6 +229,10 @@ class LLMWithFallback:
             "fallback_pct": round(self._fallback_count / total * 100, 1) if total else 0.0,
         }
 
+    def get_stats(self) -> dict:
+        """Alias for stats() for backward compatibility."""
+        return self.stats()
+
 
 # ---------------------------------------------------------------------------
 # DeterminismMonitor (Section: Non-Determinism Monitoring)

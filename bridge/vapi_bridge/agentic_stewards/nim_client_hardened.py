@@ -25,6 +25,7 @@ from ..determinism_boundaries import (
     MitigationPlan,
     NIMModelConfig,
     commit_reasoning_output,
+    LLMWithFallback,
 )
 from ..security.api_key_manager import APIKeyManager
 from ..security.nim_audit_logger import NIMAuditLogger
@@ -263,77 +264,4 @@ incident_id, invariant, severity (INFO|WARNING|CRITICAL), root_cause, mitigation
             "circuit_breaker": self._circuit_breaker.get_state(),
             "cost_status": cost_status,
             "anomaly_report": self._audit_logger.get_anomaly_report(hours=24),
-        }
-
-
-class LLMWithFallback:
-    """Pattern for LLM calls with deterministic fallback.
-
-    Every LLM-dependent path follows:
-    1. Try LLM first (if enabled and available)
-    2. Fall back to deterministic rules
-    3. Ultimate fallback (default behavior)
-    """
-
-    def __init__(self, nim_client: HardenedNIMClient, fallback_rules: dict):
-        self._nim_client = nim_client
-        self._fallback_rules = fallback_rules
-        self._llm_count = 0
-        self._fallback_count = 0
-        self._default_count = 0
-
-    async def call_with_fallback(
-        self,
-        device_id: str,
-        context: str,
-        fallback_key: str,
-    ) -> Optional[str]:
-        """Call LLM with deterministic fallback."""
-        try:
-            result = await self._nim_client.generate_reasoning(device_id, context)
-            if result and self._validate_output(result):
-                self._llm_count += 1
-                return result
-        except Exception as exc:
-            log.warning("LLM call failed: %s — using fallback", exc)
-
-        fallback_result = self._fallback_rules.get(fallback_key)
-        if fallback_result:
-            self._fallback_count += 1
-            return fallback_result
-
-        self._default_count += 1
-        return json.dumps({"status": "defer", "reason": "no_fallback", "key": fallback_key})
-
-    def _validate_output(self, output: str) -> bool:
-        """Validate LLM output before accepting.
-
-        Guardrails:
-        - Non-empty, non-whitespace output
-        - Bounded length (32K max)
-        - Valid JSON when JSON format expected
-        """
-        if not output or not output.strip():
-            return False
-        if len(output) > 32768:
-            log.warning("LLM output exceeds 32K limit: %d chars", len(output))
-            return False
-        try:
-            parsed = json.loads(output)
-            if isinstance(parsed, dict):
-                return bool(parsed.get("incident_id") or parsed.get("status"))
-            return True
-        except (json.JSONDecodeError, ValueError):
-            return True
-
-    def stats(self) -> dict:
-        """Get LLM vs fallback usage statistics."""
-        total = self._llm_count + self._fallback_count + self._default_count
-        return {
-            "total_calls": total,
-            "llm_calls": self._llm_count,
-            "fallback_calls": self._fallback_count,
-            "default_calls": self._default_count,
-            "llm_pct": round(self._llm_count / total * 100, 1) if total else 0.0,
-            "fallback_pct": round(self._fallback_count / total * 100, 1) if total else 0.0,
         }
