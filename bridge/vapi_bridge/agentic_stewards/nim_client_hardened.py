@@ -60,9 +60,10 @@ class HardenedNIMClient:
     - Output validation (non-empty, bounded length, valid JSON when expected)
     """
 
-    def __init__(self, config: NIMConfig, store):
+    def __init__(self, config: NIMConfig, store, router=None):
         self._config = config
         self._store = store
+        self._router = router
 
         # Security components
         self._key_manager = APIKeyManager(env=config.environment)
@@ -231,7 +232,17 @@ incident_id, invariant, severity (INFO|WARNING|CRITICAL), root_cause, mitigation
 """
         prompt = f"INVARIANT: {invariant_id}\nLOG TAIL:\n{log_tail}\nProvide JSON Mitigation Plan."
 
-        result = await self.generate_reasoning(device_id, prompt, system_prompt)
+        if self._router is not None:
+            router_result = await self._router.route(
+                task_class="guardian_advisory",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            result = router_result.content if router_result.success else None
+        else:
+            result = await self.generate_reasoning(device_id, prompt, system_prompt)
         if not result:
             return None
 
