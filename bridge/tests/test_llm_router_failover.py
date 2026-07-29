@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
 from bridge.vapi_bridge.llm_routing.router import LLMRouter
 from bridge.vapi_bridge.llm_routing.policy import RoutingPolicy
@@ -81,7 +81,8 @@ def router():
     r._register(_make_backend("nim"))
     r._register(_make_backend("local"))
     # Rebuild health cache
-    r._health = type(r._health).__class__(cache_seconds=300)()
+    from bridge.vapi_bridge.llm_routing.health import HealthCache
+    r._health = HealthCache(cache_seconds=300)
     # Re-register in health cache
     for bid, bk in r._backends.items():
         r._health.register(bid, bk)
@@ -97,6 +98,7 @@ def router():
 class TestChainBuilding:
     """Chain assembly from policy + configured backends."""
 
+    @patch.dict("os.environ", {"QUICKSILVER_API_KEY": "sk-test", "LOCAL_LLM_ENABLED": "true"}, clear=False)
     def test_chain_primary_healthy(self):
         """Primary succeeds → chain=[quicksilver, local]."""
         r = LLMRouter(policy=RoutingPolicy(
@@ -106,6 +108,7 @@ class TestChainBuilding:
         assert "quicksilver" in chain
         assert "local" in chain
 
+    @patch.dict("os.environ", {"LOCAL_LLM_ENABLED": "true"}, clear=False)
     def test_chain_excludes_unconfigured(self):
         """Unconfigured backends are not in the chain."""
         r = LLMRouter()
@@ -115,6 +118,7 @@ class TestChainBuilding:
         for bid in chain:
             assert r._backends[bid].configured()
 
+    @patch.dict("os.environ", {"LOCAL_LLM_ENABLED": "true"}, clear=False)
     def test_chain_refuse_cloud(self):
         """refuse_cloud removes quicksilver and nim."""
         r = LLMRouter(policy=RoutingPolicy(
@@ -126,6 +130,7 @@ class TestChainBuilding:
         assert "nim" not in chain
         assert "local" in chain
 
+    @patch.dict("os.environ", {"QUICKSILVER_API_KEY": "sk-test", "LOCAL_LLM_ENABLED": "true"}, clear=False)
     def test_chain_excluded_backends(self):
         """excluded_backends removes specific backends."""
         r = LLMRouter(policy=RoutingPolicy(
@@ -142,6 +147,7 @@ class TestChainBuilding:
         chain = r._chain
         assert chain == ["local"]
 
+    @patch.dict("os.environ", {"QUICKSILVER_API_KEY": "sk-test", "LOCAL_LLM_ENABLED": "true", "NIM_API_KEY": "nvapi-test", "AGENTIC_REASONING_ENABLED": "true"}, clear=False)
     def test_chain_tertiary(self):
         """Tertiary slot is included if set."""
         r = LLMRouter(policy=RoutingPolicy(
@@ -418,13 +424,14 @@ class TestRouteResultHonesty:
         assert result.live is True
         assert result.success is True
 
+    @patch.dict("os.environ", {"QUICKSILVER_API_KEY": "sk-test", "LOCAL_LLM_ENABLED": "true"}, clear=False)
     @pytest.mark.asyncio
     async def test_failure_has_all_fields(self, router):
         """Failed route still has all honesty fields."""
-        router._backends["quicksilver"] = _make_backend("quicksilver", fail_on=0)
-        router._backends["local"] = _make_backend("local", fail_on=0)
-        router._health.register("quicksilver", router._backends["quicksilver"])
-        router._health.register("local", router._backends["local"])
+        # Make all backends fail so no backend can succeed
+        for bid in router._backends:
+            router._backends[bid] = _make_backend(bid, fail_on=0)
+            router._health.register(bid, router._backends[bid])
 
         result = await router.route(
             task_class="assistant",
