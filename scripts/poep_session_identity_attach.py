@@ -234,6 +234,12 @@ def main() -> int:
     mode.add_argument("--live", action="store_true",
                       help="operator rig path; requires POEP_LIVE_FIRE_ENABLED=1")
     ap.add_argument("--player", default="P1")
+    ap.add_argument(
+        "--session-id",
+        default=None,
+        dest="session_id",
+        help="optional U1 session_id (64-hex) to co-join RWM/daemon; default mints from player|device|t_start",
+    )
     ap.add_argument("--device-id", default=_DEV)
     ap.add_argument("--owner-did", default=_OWNER_DID)
     ap.add_argument("--ioid-token-id", type=int, default=498)
@@ -330,6 +336,7 @@ def main() -> int:
             "controller_nft": args.controller_nft,
             "controller_nft_token_id": args.controller_nft_token_id,
         },
+        session_id=args.session_id,
         include_custody_seal=not args.no_custody_seal,
         amplitude=amplitude,
     )
