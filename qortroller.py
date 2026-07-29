@@ -2616,9 +2616,49 @@ async def main():
     protocol_state = ProtocolState(bridge)
     hardware_watcher = HardwareWatcher(bridge)
 
+    # ── Initialize VLM Session Manager ──────────────────────────────────────
+    # This wires the VLM to the hardware lifecycle - starts automatically
+    # when ALL_READY and stops when IDLE
+    from bridge.vapi_bridge.vlm_session_manager import create_vlm_session_manager
+    from bridge.vapi_bridge.vlm_observer import get_vlm_observer, get_observation_queue
+
+    vlm_session_manager = create_vlm_session_manager(
+        hardware_watcher=hardware_watcher,
+        hardware_biographer=HardwareBiographer(),
+    )
+    vlm_observer = get_vlm_observer()
+    observation_queue = get_observation_queue()
+
+    logger.info(" VLM Session Manager: initialized (auto-starts on ALL_READY)")
+
     # ── Start background services ─────────────────────────────────────────
     # Hardware watcher
     hw_task = await hardware_watcher.start()
+
+    # --- Attestation loop ---
+    from bridge.vapi_bridge.attestation import AttestationTicker
+    from bridge.vapi_bridge.attestation.store import AttestationStore
+
+    attestation_store = AttestationStore(db_path=SESSION_DB_PATH)
+    attestation_ticker = AttestationTicker(store=attestation_store)
+    attestation_ticker.watch_hardware(hardware_watcher)
+    attestation_ticker.watch_pv_ci(invariant_sentinel)
+    attestation_ticker.watch_fsca(contradiction_oracle)
+    attestation_ticker.watch_session_id(lambda: session_history.session_id)
+
+    async def _on_hardware_state(old_state, new_state):
+        if new_state in ("ALL_READY", "all_ready"):
+            sid = session_history.session_id
+            await attestation_ticker.start(sid)
+            logger.info("Attestation loop started for session %s", sid)
+        elif old_state in ("ALL_READY", "all_ready"):
+            final = await attestation_ticker.stop()
+            if final:
+                logger.info("Attestation loop stopped - %d ticks, hash=%s", attestation_ticker.tick_count, final.envelope_hash[:16])
+
+    hardware_watcher.on_state_change = _on_hardware_state
+
+
     print(f"  Hardware Watcher: started")
 
     # Contradiction oracle refresh
