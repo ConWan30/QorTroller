@@ -10,8 +10,8 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
 
-from bridge.vapi_bridge.llm_routing.router import LLMRouter
-from bridge.vapi_bridge.llm_routing.policy import RoutingPolicy
+from vapi_bridge.llm_routing.router import LLMRouter
+from vapi_bridge.llm_routing.policy import RoutingPolicy
 
 
 # ══════════════════════════════════════════════════════
@@ -62,6 +62,18 @@ def _make_backend(id: str, configured: bool = True, capabilities=None, chat_resu
     return backend
 
 
+# ── Helper: build a router with mocked backends ──
+
+def _router_with_mocked_backends(policy=None):
+    """Create an LLMRouter with all backends replaced by mocks."""
+    r = LLMRouter(policy=policy)
+    for bid in list(r._backends.keys()):
+        r._backends[bid] = _make_backend(bid, configured=True)
+        r._health.register(bid, r._backends[bid])
+    r._chain = r._build_chain()
+    return r
+
+
 @pytest.fixture
 def router():
     """Router with all three backends healthy."""
@@ -81,7 +93,7 @@ def router():
     r._register(_make_backend("nim"))
     r._register(_make_backend("local"))
     # Rebuild health cache
-    from bridge.vapi_bridge.llm_routing.health import HealthCache
+    from vapi_bridge.llm_routing.health import HealthCache
     r._health = HealthCache(cache_seconds=300)
     # Re-register in health cache
     for bid, bk in r._backends.items():
@@ -98,10 +110,9 @@ def router():
 class TestChainBuilding:
     """Chain assembly from policy + configured backends."""
 
-    @patch.dict("os.environ", {"QUICKSILVER_API_KEY": "sk-test", "LOCAL_LLM_ENABLED": "true"}, clear=False)
     def test_chain_primary_healthy(self):
         """Primary succeeds → chain=[quicksilver, local]."""
-        r = LLMRouter(policy=RoutingPolicy(
+        r = _router_with_mocked_backends(RoutingPolicy(
             primary="quicksilver", secondary="local",
         ))
         chain = r._chain
@@ -130,10 +141,9 @@ class TestChainBuilding:
         assert "nim" not in chain
         assert "local" in chain
 
-    @patch.dict("os.environ", {"QUICKSILVER_API_KEY": "sk-test", "LOCAL_LLM_ENABLED": "true"}, clear=False)
     def test_chain_excluded_backends(self):
         """excluded_backends removes specific backends."""
-        r = LLMRouter(policy=RoutingPolicy(
+        r = _router_with_mocked_backends(RoutingPolicy(
             primary="quicksilver", secondary="local",
             excluded_backends=frozenset({"local"}),
         ))
@@ -147,10 +157,9 @@ class TestChainBuilding:
         chain = r._chain
         assert chain == ["local"]
 
-    @patch.dict("os.environ", {"QUICKSILVER_API_KEY": "sk-test", "LOCAL_LLM_ENABLED": "true", "NIM_API_KEY": "nvapi-test", "AGENTIC_REASONING_ENABLED": "true"}, clear=False)
     def test_chain_tertiary(self):
         """Tertiary slot is included if set."""
-        r = LLMRouter(policy=RoutingPolicy(
+        r = _router_with_mocked_backends(RoutingPolicy(
             primary="quicksilver", secondary="local", tertiary="nim",
         ))
         chain = r._chain
