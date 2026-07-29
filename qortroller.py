@@ -2211,13 +2211,15 @@ class QorTrollerTUI:
                 def compose(self):
                     with Container():
                         yield Header(show_clock=True)
-                        with Horizontal():
-                            with Vertical(id="main-column"):
-                                yield RichLog(id="chat-log", highlight=True, markup=True)
-                                yield Input(id="input-bar", placeholder="> Type a message...")
-                            with Vertical(id="sidebar"):
-                                yield Static(id="status-panel", classes="panel")
-                        yield Footer()
+                    with Horizontal():
+                        with Vertical(id="main-column"):
+                            yield RichLog(id="chat-log", highlight=True, markup=True)
+                            yield Input(id="input-bar", placeholder="> Type a message...")
+                        with Vertical(id="sidebar"):
+                            yield Static(id="status-panel", classes="panel")
+                            # NEW: VLM observation panel
+                            yield Static(id="vlm-panel", classes="panel")
+                    yield Footer()
 
                 def on_mount(self):
                     self.query_one("#chat-log").write(
@@ -2230,6 +2232,8 @@ class QorTrollerTUI:
                     self.query_one("#chat-log").write(f"\n{greeting}\n")
                     # Start background refresh
                     self.set_interval(5, self._refresh_status)
+                    # NEW: Start VLM observer background refresh
+                    self.set_interval(1, self._refresh_vlm)
 
                 async def _refresh_status(self):
                     status = []
@@ -2241,11 +2245,59 @@ class QorTrollerTUI:
                         br = "🟢" if hw["bridge"] else "🔴"
                         status.append(f"DS:{ds} CC:{cc} BR:{br}")
                     # Methodology
-                    status.append(f"M:{self.app.methodology.count()}")
+                    if self.app.methodology:
+                        status.append(f"Methodology: {self.app.methodology.count()} lessons")
                     # Contradictions
                     if self.app.contradiction_oracle:
-                        status.append(f"C:{self.app.contradiction_oracle.contradiction_count}")
-                    self.query_one("#status-panel").update(" | ".join(status))
+                        status.append(f"Contradictions: {self.app.contradiction_oracle.contradiction_count}")
+                    # VLM Session Manager
+                    if hasattr(self.app, 'vlm_session_manager'):
+                        if self.app.vlm_session_manager.is_active:
+                            status.append(f"VLM: 🟢 Active (session: {self.app.vlm_session_manager.current_session_id})")
+                        else:
+                            status.append("VLM: 🔴 Inactive")
+                        
+                    panel = self.query_one("#status-panel")
+                    panel.update("\n".join(status))
+
+                async def _refresh_vlm(self):
+                    """Refresh VLM observation panel with recent observations."""
+                    if not hasattr(self.app, 'vlm_observer'):
+                        return
+                        
+                    vlm_observer = self.app.vlm_observer
+                    if not vlm_observer:
+                        return
+                        
+                    # Get recent observations
+                    observations = vlm_observer.recent(max_observations=3, max_age_seconds=10)
+                        
+                    if not observations:
+                        panel = self.query_one("#vlm-panel")
+                        panel.update("[italic]No recent VLM observations[/]")
+                        return
+                        
+                    # Format observations for display
+                    lines = ["[bold]VLM Observations[/]"]
+                    for obs in observations:
+                        timestamp = time.strftime("%H:%M:%S", time.localtime(obs.timestamp_ns / 1e9))
+                        lines.append(f"[{timestamp}] {obs.game_state}")
+                        if obs.screen_description:
+                            desc = obs.screen_description[:50]
+                            if len(obs.screen_description) > 50:
+                                desc += "..."
+                            lines.append(f"  {desc}")
+                        if obs.cross_modal_anomaly:
+                            lines.append(f"  [bold red]⚠️ ANOMALY: {obs.cross_modal_anomaly_type}[/]")
+                        
+                    # Also check for autonomous responses
+                    if vlm_observer.last_autonomous_response:
+                        lines.append("")
+                        lines.append("[bold yellow]EA Insight:[/]")
+                        lines.append(vlm_observer.last_autonomous_response[:200])
+                        
+                    panel = self.query_one("#vlm-panel")
+                    panel.update("\n".join(lines))
 
                 def on_input_submitted(self, event: Input.Submitted):
                     """Handle user input."""
@@ -2272,6 +2324,11 @@ class QorTrollerTUI:
             app.methodology = self.methodology
             app.contradiction_oracle = self.contradiction_oracle
             app._process_message = self._process_message
+            # NEW: VLM integration
+            if hasattr(self, 'vlm_observer'):
+                app.vlm_observer = self.vlm_observer
+            if hasattr(self, 'vlm_session_manager'):
+                app.vlm_session_manager = self.vlm_session_manager
             await app.run_async()
 
         except ImportError:
