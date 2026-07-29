@@ -1,15 +1,16 @@
 """
-Retina Visual Oracle — Kimi K2.6 VLM Integration
+Retina Visual Oracle — Vision Language Model Integration
 ================================================
 Third lobe of the Retina Dual Lobe pipeline.
 
 Takes gameplay frames from the retina capture pipeline and feeds them to
-Kimi K2.6 (a vision-language model) for semantic understanding of the
-visual game state. Outputs structured game context that enables cross-modal
+a Vision Language Model (VLM) for semantic understanding of the visual
+game state. Outputs structured game context that enables cross-modal
 verification against controller inputs and motion tracking.
 
-Container: nvcr.io/nim/moonshotai/kimi-k2.6:latest
-Endpoint:  NIM_BASE_URL + /v1/chat/completions (OpenAI-compatible)
+Default Model: nvidia/nemotron-nano-12b-v2-vl (NVIDIA NIM)
+Container: nvcr.io/nim/nvidia/nemotron-nano-12b-v2-vl:latest
+Endpoint: NIM_BASE_URL + /v1/chat/completions (OpenAI-compatible)
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ class VisualOracleConfig:
             "NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"
         )
         self.nim_model = os.environ.get(
-            "NIM_MODEL", "moonshotai/kimi-k2.6"
+            "NIM_MODEL", "nvidia/nemotron-nano-12b-v2-vl"
         )
         # Frame analysis cadence: analyze every N frames
         self.frame_sample_rate = int(os.environ.get("VISUAL_ORACLE_SAMPLE_RATE", "30"))
@@ -228,27 +229,13 @@ class KimiK26Client:
                         {
                             "type": "text",
                             "text": (
-                                "Analyze this gameplay frame. Respond ONLY with valid JSON. "
-                                "No markdown, no explanation.\n\n"
-                                "{\n"
-                                '  "game_state": "menu|lobby|loading|gameplay|paused|replay|results|spectating|cutscene|unknown",\n'
-                                '  "game_title": "name or empty",\n'
-                                '  "screen_description": "one sentence describing what is visible",\n'
-                                '  "health": 0.0-1.0 or null (normalized health if visible),\n'
-                                '  "ammo": int or null (current ammo count if visible),\n'
-                                '  "score": int or null,\n'
-                                '  "round_info": "round description or empty",\n'
-                                '  "enemies_visible": int (0 if none),\n'
-                                '  "is_combat": true/false,\n'
-                                '  "is_moving": true/false,\n'
-                                '  "events": ["event1", "event2"],\n'
-                                '  "visual_integrity": {\n'
-                                '    "tearing": true/false,\n'
-                                '    "lag": true/false,\n'
-                                '    "quality": "normal|blurry|frozen|black"\n'
-                                '  },\n'
-                                '  "confidence": 0.0-1.0\n'
-                                "}"
+                                "Analyze this gameplay frame. Respond ONLY with valid JSON, no other text. "
+                                '{"game_state": "menu|lobby|loading|gameplay|paused|replay|results|spectating|cutscene|unknown", '
+                                '"game_title": "", "screen_description": "", "health": null, "ammo": null, '
+                                '"score": null, "round_info": "", "enemies_visible": 0, '
+                                '"is_combat": false, "is_moving": false, "events": [], '
+                                '"visual_integrity": {"tearing": false, "lag": false, "quality": "normal"}, '
+                                '"confidence": 0.5}'
                             ),
                         },
                         {
