@@ -167,19 +167,33 @@ def resolve_policy_from_env() -> RoutingPolicy:
     # ── Base policy from mode ────────────────────────
     mode_overrides = _MODE_MAP.get(mode, {})
 
+    # Build kwargs from env, filtered to avoid duplicate keys
+    def _env_bool(key, default):
+        return os.environ.get(key, default).lower() == "true"
+
+    def _env_int(key, default):
+        return int(os.environ.get(key, default))
+
+    env_kwargs = {
+        "primary": os.environ.get("LLM_PRIMARY", "quicksilver"),
+        "secondary": os.environ.get("LLM_SECONDARY", "local"),
+        "tertiary": os.environ.get("LLM_TERTIARY", ""),
+        "refuse_cloud": _env_bool("LLM_REFUSE_CLOUD", "false"),
+        "allow_nim_for_assistant": _env_bool("LLM_ALLOW_NIM_FOR_ASSISTANT", "false"),
+        "failover_on_timeout": _env_bool("LLM_FAILOVER_ON_TIMEOUT", "true"),
+        "health_cache_seconds": _env_int("LLM_HEALTH_CACHE_S", "30"),
+        "timeout_seconds": _env_int("LLM_ROUTER_TIMEOUT_SECONDS", "30"),
+        "max_failures": _env_int("LLM_ROUTER_MAX_FAILURES", "3"),
+        "cooldown_seconds": _env_int("LLM_ROUTER_COOLDOWN_SECONDS", "300"),
+    }
+    # Remove keys that mode_overrides provides — those take precedence
+    for k in mode_overrides:
+        env_kwargs.pop(k, None)
+
     policy = RoutingPolicy(
         mode=mode,
-        primary=os.environ.get("LLM_PRIMARY", "quicksilver"),
-        secondary=os.environ.get("LLM_SECONDARY", "local"),
-        tertiary=os.environ.get("LLM_TERTIARY", ""),
-        refuse_cloud=os.environ.get("LLM_REFUSE_CLOUD", "false").lower() == "true",
-        allow_nim_for_assistant=os.environ.get("LLM_ALLOW_NIM_FOR_ASSISTANT", "false").lower() == "true",
-        failover_on_timeout=os.environ.get("LLM_FAILOVER_ON_TIMEOUT", "true").lower() == "true",
-        health_cache_seconds=int(os.environ.get("LLM_HEALTH_CACHE_S", "30")),
-        timeout_seconds=int(os.environ.get("LLM_ROUTER_TIMEOUT_SECONDS", "30")),
-        max_failures=int(os.environ.get("LLM_ROUTER_MAX_FAILURES", "3")),
-        cooldown_seconds=int(os.environ.get("LLM_ROUTER_COOLDOWN_SECONDS", "300")),
         **mode_overrides,
+        **env_kwargs,
     )
 
     # ── LLM_ROUTER_CHAIN raw override ────────────────
