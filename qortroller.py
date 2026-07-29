@@ -368,13 +368,19 @@ class SessionHistory:
     def session_id(self) -> str:
         return self._session_id
 
-    def add_message(self, role: str, content: str, tool_calls: Optional[list] = None) -> int:
+    def add_message(self, role: str, content: str, tool_calls: Optional[list] = None,
+                    backend: str = "") -> int:
         with self._get_conn() as conn:
+            try:
+                conn.execute("ALTER TABLE messages ADD COLUMN backend TEXT DEFAULT ''")
+            except Exception:
+                pass
             cur = conn.execute(
-                """INSERT INTO messages (session_id, role, content, tool_calls)
-                   VALUES (?, ?, ?, ?)""",
+                """INSERT INTO messages (session_id, role, content, tool_calls, backend)
+                   VALUES (?, ?, ?, ?, ?)""",
                 (self._session_id, role, content,
-                 json.dumps(tool_calls) if tool_calls else None)
+                 json.dumps(tool_calls) if tool_calls else None,
+                 backend)
             )
             conn.execute(
                 "UPDATE sessions SET message_count = message_count + 1 WHERE id = ?",
@@ -2166,7 +2172,8 @@ class QorTrollerTUI:
                  contradiction_oracle: Optional[ContradictionOracle] = None,
                  invariant_sentinel: Optional[InvariantSentinel] = None,
                  protocol_state: Optional[ProtocolState] = None,
-                 debug_loop: Optional[AutonomousDebugLoop] = None):
+                 debug_loop: Optional[AutonomousDebugLoop] = None,
+                 vlm_observer: Optional = None):
         self.llm = llm_client
         self.tools = tools
         self.methodology = methodology
@@ -2177,6 +2184,7 @@ class QorTrollerTUI:
         self.invariant_sentinel = invariant_sentinel
         self.protocol_state = protocol_state
         self.debug_loop = debug_loop
+        self.vlm_observer = vlm_observer
         self._conversation: list[dict] = []
 
     async def run(self):
@@ -2425,7 +2433,7 @@ class QorTrollerTUI:
             if violations:
                 warn = "⚠️ Contradiction warning:\n"
                 for v in violations:
-                    warn += f"  - {v['rule']} ({v['severity']}): {v['description'][:120]}\n"
+                    warn += f" - {v['rule']} ({v['severity']}): {v['description'][:120]}\n"
                 warn += "\nProceed? The tool will log an override if you continue.\n"
                 self._conversation.append({"role": "system", "content": warn})
 
@@ -2433,6 +2441,19 @@ class QorTrollerTUI:
         messages = [
             {"role": "system", "content": system_prompt},
         ]
+        
+        # ── NEW: Inject recent VLM observations into context ──────────────
+        if self.vlm_observer:
+            vlm_context = self.vlm_observer.get_context_summary(
+                max_observations=5, 
+                max_age_seconds=30.0
+            )
+            if vlm_context:
+                messages.append({
+                    "role": "system",
+                    "content": vlm_context
+                })
+        
         # Add recent conversation history (last 10 exchanges)
         for msg in self._conversation[-20:]:
             messages.append(msg)
@@ -2448,7 +2469,7 @@ class QorTrollerTUI:
         if "error" in response:
             error_msg = f"[bold red]LLM Error: {response['error']}[/]"
             self._conversation.append({"role": "assistant", "content": error_msg})
-            self.session_history.add_message("assistant", error_msg)
+            self.session_history.add_message("assistant", error_msg, backend=self.llm._last_backend)
             return error_msg
 
         # Extract assistant message
@@ -2491,7 +2512,7 @@ class QorTrollerTUI:
 
         # Add assistant message to history
         self._conversation.append({"role": "assistant", "content": content})
-        self.session_history.add_message("assistant", content, tool_calls)
+        self.session_history.add_message("assistant", content, tool_calls, backend=self.llm._last_backend)
 
         return content
 
@@ -2518,6 +2539,9 @@ class RouterClient:
 
     def __init__(self):
         self._router = None
+        self._last_result = None
+        self._last_backend = ""
+        self._last_model = ""
         self._init_router()
 
     def _init_router(self):
@@ -2568,6 +2592,9 @@ class RouterClient:
             logger.error("RouterClient.route() failed: %s", exc)
             return {"error": str(exc)}
 
+        self._last_result = result
+        self._last_backend = result.backend
+        self._last_model = result.model
         if result.success and result.content:
             return {
                 "choices": [{"message": {"role": "assistant", "content": result.content}}],
@@ -2699,6 +2726,7 @@ async def main():
         invariant_sentinel=invariant_sentinel,
         protocol_state=protocol_state,
         debug_loop=debug_loop,
+        vlm_observer=vlm_observer,
     )
 
     try:
