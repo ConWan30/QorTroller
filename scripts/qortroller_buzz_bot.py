@@ -239,8 +239,10 @@ def _status_event_content(state: dict) -> str:
 
 
 def _status_tags(channel_id: str, state: dict) -> list[list[str]]:
+    # NOTE: do NOT include ["h", channel_id] — the Rust helper derives the
+    # h tag from the "channel" field in the publish payload and refuses
+    # caller-supplied h tags (safety rail against tag injection).
     tags = [
-        ["h", channel_id],
         ["qortroller", "1"],
         ["rig_state", state["rig_state"]],
         ["bridge_health", state["bridge_health"]],
@@ -255,7 +257,8 @@ def _status_tags(channel_id: str, state: dict) -> list[list[str]]:
 
 def _postcard_tags(channel_id: str, postcard: dict) -> list[list[str]]:
     """Honesty-tagged session postcard. Missing fields are posted as-is."""
-    tags = [["h", channel_id], ["qortroller", "1"]]
+    # NOTE: do NOT include ["h", channel_id] — the Rust helper derives it.
+    tags = [["qortroller", "1"]]
     for key in (
         "session_id",
         "verdict",
