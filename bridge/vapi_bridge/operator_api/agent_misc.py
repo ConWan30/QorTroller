@@ -1542,6 +1542,15 @@ def register_agent_misc_routes(
                     "registered":     _rec is not None,
                 })
             _all_registered = all(a["registered"] for a in _agents203)
+            return {
+                "agent_context_on_chain_enabled": _enabled203,
+                "agents":                         _agents203,
+                "all_registered":                 _all_registered,
+                "timestamp":                      _t203.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
     # ------------------------------------------------------------------
     # Phase 196 — GET /agent/nim-health-status
@@ -1574,13 +1583,5 @@ def register_agent_misc_routes(
                 except Exception:
                     pass
             return _result196
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-            return {
-                "agent_context_on_chain_enabled": _enabled203,
-                "agents":                         _agents203,
-                "all_registered":                 _all_registered,
-                "timestamp":                      _t203.time(),
-            }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
