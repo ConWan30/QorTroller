@@ -64,7 +64,7 @@ FOOTBALL_OBSERVED_EVENTS = frozenset({
 # ── Config ──────────────────────────────────────────────────────────────
 
 class VisualOracleConfig:
-    """Configuration for the Kimi K2.6 Visual Oracle, game-aware."""
+    """Configuration for the NVIDIA Nemotron Visual Oracle, game-aware."""
 
     def __init__(self):
         self.nim_api_key = os.environ.get("NIM_API_KEY", "")
@@ -120,7 +120,7 @@ class GameState(Enum):
 
 @dataclass
 class VisualContext:
-    """Structured output from the Kimi K2.6 VLM frame analysis.
+    """Structured output from the NVIDIA Nemotron VLM frame analysis.
 
     Game-Aware: When the game profile is football (ncaa_cfb_26/27), the
     football_* fields are populated and shooter fields (health, ammo,
@@ -289,10 +289,10 @@ def _build_vlm_prompt(game_category: str) -> str:
     return _build_shooter_prompt()
 
 
-# ── Kimi K2.6 VLM Client ──────────────────────────────────────────────────
+# ── NVIDIA Nemotron VLM Client (NIM OpenAI-compatible) ────────────────────
 
-class KimiK26Client:
-    """OpenAI-compatible client for Kimi K2.6 VLM via NVIDIA NIM endpoint.
+class NemotronVLMClient:
+    """OpenAI-compatible client for nvidia/nemotron-nano-12b-v2-vl via NVIDIA NIM.
 
     Game-aware: prompt selection depends on config.game_profile_id.
     """
@@ -317,7 +317,7 @@ class KimiK26Client:
 
     async def analyze_frame(self, frame: Any) -> VisualContext:
         """
-        Analyze a single gameplay frame using Kimi K2.6.
+        Analyze a single gameplay frame using NVIDIA Nemotron VLM.
         Returns structured visual context (game-aware fields).
 
         Args:
@@ -350,7 +350,7 @@ class KimiK26Client:
             frame_hash = hashlib.sha256(buffer).hexdigest()[:16]
             context.frame_hash = frame_hash
 
-            # Call Kimi K2.6 via NIM
+            # Call NVIDIA Nemotron VLM via NIM
             visual_context = await self._call_vlm(frame_b64)
 
             # Parse response into structured context (game-aware)
@@ -364,7 +364,7 @@ class KimiK26Client:
         return context
 
     async def _call_vlm(self, frame_b64: str) -> dict:
-        """Send frame to Kimi K2.6 VLM and return raw response.
+        """Send frame to NVIDIA Nemotron VLM and return raw response.
         Uses the game-aware prompt template."""
         loop = asyncio.get_event_loop()
         requests = self._get_requests()
@@ -447,7 +447,7 @@ class KimiK26Client:
         return {"game_state": "unknown", "confidence": 0.0}
 
     def _parse_response(self, raw: dict, context: VisualContext) -> VisualContext:
-        """Parse the Kimi K2.6 response into structured VisualContext.
+        """Parse the Nemotron VLM response into structured VisualContext.
 
         Game-aware: If context.game_category == "football", populates
         football_* fields. Otherwise populates shooter fields.
@@ -522,6 +522,10 @@ class KimiK26Client:
         context.football_team_away = str(_get("team_away", ""))
 
 
+# Backward-compat alias — runtime model is NVIDIA Nemotron; Kimi was the original label.
+KimiK26Client = NemotronVLMClient
+
+
 # ── Cross-Modal Verifier ──────────────────────────────────────────────────
 
 class CrossModalVerifier:
@@ -529,7 +533,7 @@ class CrossModalVerifier:
     Verifies agreement between three information streams:
     1. Motion tracking (MediaPipe from retina_screen_lobe)
     2. Controller inputs (DualShock from dualshock_integration)
-    3. Visual context (Kimi K2.6 VLM from VisualOracle)
+    3. Visual context (NVIDIA Nemotron VLM from VisualOracle)
 
     Game-Aware: The motion/input state mapping works for any game type;
     the activity-level classification (idle/active/combat) maps to
@@ -702,7 +706,7 @@ class CrossModalVerifier:
 
 class VisualOracle:
     """
-    Top-level integration that ties Kimi K2.6 into the Retina Dual Lobe.
+    Top-level integration that ties NVIDIA Nemotron VLM into the Retina Dual Lobe.
 
     Game-aware: Uses GAME_PROFILE_ID from config to select the correct
     VLM prompt (shooter vs football). All downstream consumers read
@@ -717,7 +721,7 @@ class VisualOracle:
 
     def __init__(self, config: Optional[VisualOracleConfig] = None):
         self.config = config or VisualOracleConfig()
-        self.client = KimiK26Client(self.config)
+        self.client = NemotronVLMClient(self.config)
         self.verifier = CrossModalVerifier()
         self._frame_count = 0
         self._last_context: Optional[VisualContext] = None
@@ -839,7 +843,7 @@ def test_prompt_selection():
 
 def test_football_parse_response():
     """VLM football response should be correctly parsed into VisualContext."""
-    client = KimiK26Client()
+    client = NemotronVLMClient()
     raw = {
         "game_state": "gameplay",
         "game_title": "NCAA Football 27",
@@ -974,8 +978,8 @@ def test_cross_modal_no_visual():
 
 
 def test_json_extraction():
-    """Kimi may wrap JSON in markdown — extract should handle this."""
-    client = KimiK26Client()
+    """VLM may wrap JSON in markdown — extract should handle this."""
+    client = NemotronVLMClient()
     text = 'Here is the analysis:\n```json\n{"game_state": "gameplay", "confidence": 0.9}\n```'
     result = client._extract_json(text)
     assert result["game_state"] == "gameplay"
@@ -984,7 +988,7 @@ def test_json_extraction():
 
 def test_shooter_parse_response():
     """Shooter VLM response should be correctly parsed into VisualContext."""
-    client = KimiK26Client()
+    client = NemotronVLMClient()
     raw = {
         "game_state": "gameplay",
         "game_title": "Call of Duty",
@@ -1033,14 +1037,14 @@ def test_config_football_detection():
 
 
 def test_football_config_disables_shooter_fields():
-    """KimiK26Client with football config should use football prompt."""
+    """NemotronVLMClient with football config should use football prompt."""
     cfg = VisualOracleConfig()
     old_val = cfg.game_profile_id
     try:
         import os
         os.environ["GAME_PROFILE_ID"] = "ncaa_cfb_27"
         cfg2 = VisualOracleConfig()
-        client = KimiK26Client(cfg2)
+        client = NemotronVLMClient(cfg2)
         assert client.game_category == "football"
         assert "football_home" in client._prompt
         assert "health" not in client._prompt

@@ -11,9 +11,9 @@ bind to the certified controller input lobe, at two timescales:
   * DISCRETE outcome coherence (dual-lobe OCR, event-rate): retina_causal_coherence over OCR
     HUD outcomes vs controller input events. Do down/score advances follow input?
 
-  * VISUAL oracle coherence (Kimi K2.6 VLM): third lobe added 2026-07-27. Uses a vision-language
-    model to classify the on-screen state (menu/lobby/gameplay/loading) and cross-verify it
-    against the continuous coupling and discrete outcome axes. A player in "menu" cannot produce
+  * VISUAL oracle coherence (NVIDIA Nemotron VLM): third lobe added 2026-07-27. Uses a vision-
+    language model to classify the on-screen state (menu/lobby/gameplay/loading) and cross-verify
+    it against the continuous coupling and discrete outcome axes. A player in "menu" cannot produce
     "combat coupling" — this catches replay/relay attacks that the first two axes alone miss.
 
 This module fuses the three ORTHOGONAL axes into one L9 verdict.
@@ -26,7 +26,7 @@ from typing import Optional
 
 from .retina_causal_coherence import CoherenceVerdict
 
-# Third lobe: Visual Oracle (Kimi K2.6 VLM) — optional import
+# Third lobe: Visual Oracle (NVIDIA Nemotron VLM) — optional import
 try:
     from .retina_visual_oracle import (
         VisualOracle, VisualContext, CrossModalVerdict,
@@ -77,7 +77,7 @@ class L9FusionVerdict(str, Enum):
     DECOUPLED_REVIEW = "DECOUPLED_REVIEW"
     INSUFFICIENT = "INSUFFICIENT"
 
-    # Visual Oracle verdicts (third axis — Kimi K2.6 VLM)
+    # Visual Oracle verdicts (third axis — NVIDIA Nemotron VLM)
     VISUALLY_CONFIRMED = "VISUALLY_CONFIRMED"
     VISUALLY_DECOUPLED = "VISUALLY_DECOUPLED"
     VISUALLY_BLOCKED = "VISUALLY_BLOCKED"
@@ -148,7 +148,7 @@ def _adjudicate_visual(verdict: L9FusionVerdict, visual_context: Optional[Visual
                        cross_modal: Optional[CrossModalVerdict]) -> L9FusionVerdict:
     """Apply the third axis (visual oracle) to override or confirm the base verdict.
 
-    Higher priority than the first two axes: if Kimi K2.6 sees a menu/loading screen,
+    Higher priority than the first two axes: if Nemotron VLM sees a menu/loading screen,
     there is no gameplay to verify, regardless of what the coupling/coherence axes say.
     """
     if visual_context is None or visual_context.confidence < 0.1:
@@ -190,7 +190,7 @@ def fuse_screen_retina(coupling_score: Optional[float],
         coherence:         Outcome coherence verdict (from CoherenceVerdict)
         coherence_ratio:   Ratio of coherent outcomes
         cfg:               Continuous coupling config
-        visual_context:    Visual scene understanding (from Kimi K2.6 VisualOracle)
+        visual_context:    Visual scene understanding (from NVIDIA Nemotron VisualOracle)
         cross_modal:       Cross-modal verification result (from CrossModalVerifier)
 
     Returns:
