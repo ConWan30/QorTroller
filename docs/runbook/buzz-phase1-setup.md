@@ -258,8 +258,8 @@ Note the honesty tags: `rig_state=UNKNOWN`, `poep_enabled=false`,
 | Auth tag | ⬜ Step 4 (you) |
 | Channels + UUIDs | ⬜ Step 5 (you) |
 | First live publish | ⬜ Step 7 (acceptance gate) |
-| `scripts/qortroller_buzz_bot.py` real state reads | ⬜ scaffold only — `_read_rig_state` returns `UNKNOWN`, `_read_session_postcard` returns `None`. Wiring these to `HardwareWatcher` / `sessions.db` is the next build step. |
-| Command loop (`!status`, `!ready`, `!session`) | ⬜ needs a read path (`buzz messages get` polling, or a Rust subscribe loop) |
+| `scripts/qortroller_buzz_bot.py` real state reads | ✅ wired — `_read_rig_state` reads `/health` + `/dualshock/status` + `/retina/status` via BridgeClient; `_read_session_postcard` reads `/player/session-status` with `x-api-key` |
+| Command loop (`!status`, `!ready`, `!session`) | ✅ wired — polls `buzz messages get --kinds 9 --since <ts>`, filters self, replies via helper |
 | kind 0 profile + kind 9000 self-add | ⬜ not yet in the helper (countdown-bot shows the exact shape) |
 | ACP conversational EA | ⬜ Phase 4, deliberately deferred |
 

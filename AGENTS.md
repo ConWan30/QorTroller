@@ -38,7 +38,7 @@ python -m pytest bridge/tests --collect-only -q
 | Retina Visual Oracle | `bridge/vapi_bridge/retina_visual_oracle.py` | Game-aware VLM (football/shooter); cross-modal verify feeds PoAC |
 | PV-CI gate | `scripts/vapi_invariant_gate.py` | Fail-closed 184-invariant baseline |
 | Operator agent routes | `bridge/vapi_bridge/operator_api/agent_misc.py` | Phase 196/203 agent health + registration endpoints |
-| QorTroller Buzz bot (Phase 1) | `scripts/qortroller_buzz_bot.py` | Buzz-native rig-status + session-digest bot; env-only keys; digest-only posts |
+| QorTroller Buzz bot (Phase 1) | `scripts/qortroller_buzz_bot.py` | Buzz-native rig-status + session-digest bot; env-only keys; digest-only posts; wired read path (BridgeClient → `/player/session-status`) + Rust-helper publish (`qortroller-buzz publish` subprocess) |
 
 ## Working-tree hygiene (multi-agent)
 
