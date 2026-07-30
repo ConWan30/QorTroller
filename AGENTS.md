@@ -38,6 +38,7 @@ python -m pytest bridge/tests --collect-only -q
 | Retina Visual Oracle | `bridge/vapi_bridge/retina_visual_oracle.py` | Game-aware VLM (football/shooter); cross-modal verify feeds PoAC |
 | PV-CI gate | `scripts/vapi_invariant_gate.py` | Fail-closed 184-invariant baseline |
 | Operator agent routes | `bridge/vapi_bridge/operator_api/agent_misc.py` | Phase 196/203 agent health + registration endpoints |
+| QorTroller Buzz bot (Phase 1) | `scripts/qortroller_buzz_bot.py` | Buzz-native rig-status + session-digest bot; env-only keys; digest-only posts |
 
 ## Working-tree hygiene (multi-agent)
 
@@ -61,3 +62,29 @@ If `git status` shows modified production files (`retina_visual_oracle.py`,
 2. Run its local tests.
 3. Restore accidental import-path rewrites that break CI (`from vapi_bridge...` is the bridge-test convention; `from bridge.vapi_bridge...` is wrong when cwd=`bridge`).
 4. Keep `bridge/pytest.ini` `asyncio_mode = strict`.
+
+## Buzz integration (Phase 1 — operator greenlight gate)
+
+Full scope: `docs/design/buzz-qortroller-gamer-mvp-v0.md`.
+
+One-line rule: **Buzz is the social/ops plane; QorTroller is the truth plane;
+Nostr carries pointers and operator signals, never the biometric substrate.**
+
+Before any live Buzz wiring:
+
+1. Keys are env-only (`BUZZ_PRIVATE_KEY`, `BUZZ_OWNER_PRIVATE_KEY`). Never
+   commit an `nsec`. The old `ea_buzz_bridge.py` scratch files are scrubbed
+   and the key in them is compromised — rotate it.
+2. EA bot key is NOT derived from ioID tokenId 498. Gamer key proves the
+   human; EA key proves the operator steward. Compose, never conflate.
+3. Use Buzz-correct protocol: kind 9 with `h` tags (NIP-29), kind 9000
+   self-add `role=bot`, NIP-42 auth (+ NIP-OA if owner-attested). Local
+   relay is `ws://localhost:3000`, not 8080.
+4. Digest-only posts: `session_id`, `verdict`, `commitment_root`,
+   `poep_enabled`, `l6b_enabled`, `candidate_ok`. Post honesty flags as-is.
+   Never post raw HID/IMU/L4/frames, full PoAC payloads, or any key.
+5. Bot scaffold: `scripts/qortroller_buzz_bot.py` (+ env template). The
+   signing/WS loop is stubbed until Phase 1 is greenlit and a real Nostr
+   library (nostr-sdk or python-nostr) is wired in — do NOT hand-roll
+   secp256k1; NIP-01 event id is `sha256([0, pubkey, created_at, kind,
+   tags, content])`, not sort_keys JSON.

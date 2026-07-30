@@ -150,6 +150,9 @@ QorTroller/
 _dl_ngc.py
 _download_ngc.py
 
+# Allow the Phase 1 bot env TEMPLATE (no secrets) to be committed despite *.env* rule
+!scripts/qortroller_buzz_bot.env.example
+
 # ----------------------------------------------------------------------------
 # BRP solo-track workspace exception (broadened across two repair commits).
 # ----------------------------------------------------------------------------
