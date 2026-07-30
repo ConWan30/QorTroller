@@ -38,6 +38,7 @@ Environment:
 
 from __future__ import annotations
 
+import logging
 import asyncio
 import datetime
 import hashlib
@@ -46,6 +47,7 @@ import json
 import os
 import re
 import sqlite3
+import shlex
 import subprocess
 import sys
 import time
@@ -1090,9 +1092,10 @@ class ToolEngine:
 
     def _shell(self, command: str, timeout_secs: int = 30) -> str:
         try:
+            argv = shlex.split(command)
             result = subprocess.run(
-                command,
-                shell=True, capture_output=True, text=True,
+                argv,
+                shell=False, capture_output=True, text=True,
                 cwd=self.repo_root, timeout=timeout_secs,
             )
             output = ""
@@ -1112,10 +1115,12 @@ class ToolEngine:
 
     def _run_pytest(self, test_path: str = "bridge/tests/",
                     timeout: int = 120, extra_args: str = "") -> str:
-        cmd = f"python -m pytest {test_path} -v --tb=short --no-header {extra_args}"
+        cmd = ["python", "-m", "pytest", test_path, "-v", "--tb=short", "--no-header"]
+        if extra_args:
+            cmd.extend(shlex.split(extra_args))
         try:
             result = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True,
+                cmd, shell=False, capture_output=True, text=True,
                 cwd=self.repo_root, timeout=timeout,
             )
             output = result.stdout or result.stderr
@@ -2678,6 +2683,8 @@ async def main():
     print(f"  Repo:  {REPO_ROOT}")
     print(f"  Data:  {DATA_DIR}")
     print(f"{'=' * 60}\n")
+    log = logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
 
     # ── Initialize core components ────────────────────────────────────────
     llm = QuickSilverClient()
@@ -2713,7 +2720,7 @@ async def main():
     vlm_observer = get_vlm_observer()
     observation_queue = get_observation_queue()
 
-    logger.info(" VLM Session Manager: initialized (auto-starts on ALL_READY)")
+    log.info(" VLM Session Manager: initialized (auto-starts on ALL_READY)")
 
     # ── Start background services ─────────────────────────────────────────
     # Hardware watcher
@@ -2738,7 +2745,7 @@ async def main():
         elif old_state in ("ALL_READY", "all_ready"):
             final = await attestation_ticker.stop()
             if final:
-                logger.info("Attestation loop stopped - %d ticks, hash=%s", attestation_ticker.tick_count, final.envelope_hash[:16])
+                log.info("Attestation loop stopped - %d ticks, hash=%s", attestation_ticker.tick_count, final.envelope_hash[:16])
 
     hardware_watcher.on_state_change = _on_hardware_state
 

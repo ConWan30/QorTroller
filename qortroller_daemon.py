@@ -39,6 +39,7 @@ import hmac
 import json
 import os
 import sqlite3
+import shlex
 import subprocess
 import sys
 import time
@@ -943,13 +944,14 @@ class QorTrollerBrain:
                     return f"BLOCKED: {shell_err}"
 
                 # L3: sealed execution environment — no arbitrary env injection
+                argv = shlex.split(command)
                 result = subprocess.run(
-                    command,
+                    argv,
                     cwd=REPO_ROOT,
                     capture_output=True,
                     text=True,
                     timeout=TOOL_TIMEOUT,
-                    shell=True,
+                    shell=False,
                     env=get_sealed_env(),
                 )
                 output = result.stdout

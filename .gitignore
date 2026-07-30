@@ -145,6 +145,11 @@ contracts/artifacts/build-info/
 # unaffected — git does not un-track indexed files on a new ignore rule.
 .claude/worktrees/
 
+# Security hardening — untracked transient / throwaway files that should never be committed
+QorTroller/
+_dl_ngc.py
+_download_ngc.py
+
 # ----------------------------------------------------------------------------
 # BRP solo-track workspace exception (broadened across two repair commits).
 # ----------------------------------------------------------------------------
