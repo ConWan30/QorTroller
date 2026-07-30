@@ -162,6 +162,66 @@ admin. It cannot manage channels. That matches `--role Bot` in Buzz.
 
 ---
 
+## 4a. Operator decisions — RESOLVED (2026-07-30)
+
+| Decision | Resolution |
+|---|---|
+| Bot auth mode (§12.1) | **Owner-attested (NIP-OA)** by the operator npub |
+| EA bot key origin | Fresh key from `buzz-admin generate-key`; **NOT** derived from ioID tokenId 498 |
+
+Remaining open: §12.2 (bot in `#matches`?), §12.3 (ioID claim kind),
+§12.4 (Blossom default), §12.5 (ACP runtime).
+
+---
+
+## 4b. V-check findings that changed the build (verified, not assumed)
+
+Three findings from reading the real Buzz tree and this machine. Each one
+invalidates part of the original Option 1/2 plan.
+
+**F-1: `buzz messages send` has no custom-tag flag.**
+Its options are `--channel`, `--content`, `--kind`, `--reply-to`,
+`--broadcast`, `--file`. So the CLI alone **cannot** emit the queryable digest
+tags §3 requires. Without tags there is no `#session_id` / `#verdict` filter,
+and the audit story collapses to "read every message."
+
+**F-2: Python on this machine cannot sign Nostr events.**
+No `coincurve` / `secp256k1` / `nostr_sdk`. Only `ecdsa`, which is ECDSA —
+Nostr requires **BIP-340 Schnorr**. The original draft also hashed
+`sort_keys` JSON; NIP-01 requires
+`sha256([0, pubkey, created_at, kind, tags, content])`. Both bugs produce
+events the relay rejects. Hand-rolling Schnorr is not acceptable here.
+
+**F-3: the default Rust host cannot link.**
+Host is `x86_64-pc-windows-gnu` and `dlltool.exe` is absent, so every native
+build fails — including `buzz-admin`, which is required to generate the bot
+key. MSVC Build Tools are present, so the fix is
+`rustup toolchain install stable-x86_64-pc-windows-msvc` and building with
+`cargo +stable-x86_64-pc-windows-msvc`. Applied and verified.
+
+### Resulting decision — Architecture C (split by strength)
+
+```
+Python (QorTroller truth plane)        Rust (bytes on the wire)
+  HardwareWatcher / sessions.db  ──►   qortroller-buzz publish
+  computes the digest JSON             signs kind 9 + custom tags
+  never touches crypto                 NIP-42 + NIP-OA (buzz-ws-client)
+```
+
+Helper: `buzz/examples/qortroller-buzz/` — follows the sanctioned
+`examples/countdown-bot` pattern. Subcommands `whoami`, `authtag`, `publish`.
+Built and smoke-tested; safety rails verified (refuses `nsec` in content,
+refuses bare 64-hex tag values, refuses self-attestation, refuses a
+caller-supplied `h` tag, 8 KiB content cap).
+
+Auth-tag posture: mint **once, offline** with `authtag`, then run the bot with
+`BUZZ_AUTH_TAG` only. The operator key is never in the bot's environment, so a
+compromised bot host does not compromise the operator identity.
+
+Setup runbook: `docs/runbook/buzz-phase1-setup.md`.
+
+---
+
 ## 5. Architecture (target)
 
 ```
