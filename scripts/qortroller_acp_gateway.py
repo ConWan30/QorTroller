@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -647,9 +648,80 @@ def run_once(cfg: GatewayConfig, since_ts: int) -> int:
     return now
 
 
+def preflight(cfg: GatewayConfig) -> list[tuple[bool, str, str]]:
+    """Operator-local readiness check for the §1 acceptance run.
+
+    Returns `(required, label, detail)` rows. Reads configuration presence only — never a key
+    value, never the relay, never the chain. A False row on a required check means the live
+    acceptance run would not behave as documented.
+    """
+    rows: list[tuple[bool, str, str]] = []
+
+    rows.append(
+        (
+            bool(cfg.operator_pubkeys),
+            "ACP_OPERATOR_PUBKEYS",
+            f"{len(cfg.operator_pubkeys)} operator pubkey(s)"
+            if cfg.operator_pubkeys
+            else "empty — fail-closed, every command would be rejected",
+        )
+    )
+    rows.append(
+        (
+            bool(cfg.rig_ops_channel),
+            "#rig-ops channel",
+            cfg.rig_ops_channel or "set ACP_RIG_OPS_CHANNEL_ID or BUZZ_CHANNEL_IDS",
+        )
+    )
+    rows.append(
+        (
+            bool(os.environ.get("BUZZ_PRIVATE_KEY")),
+            "BUZZ_PRIVATE_KEY",
+            "present in env" if os.environ.get("BUZZ_PRIVATE_KEY") else "absent — the bot cannot sign",
+        )
+    )
+
+    helper = os.environ.get("BUZZ_HELPER_PATH") or getattr(bot, "BUZZ_HELPER_PATH", "")
+    helper_ok = bool(helper) and (Path(helper).exists() or shutil.which(str(helper)) is not None)
+    rows.append((helper_ok, "publish helper", str(helper) if helper else "BUZZ_HELPER_PATH unset"))
+
+    try:
+        cfg.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with cfg.audit_log_path.open("a", encoding="utf-8"):
+            pass
+        rows.append((True, "audit log", str(cfg.audit_log_path)))
+    except OSError as exc:
+        rows.append((False, "audit log", f"{cfg.audit_log_path}: {exc}"))
+
+    health = _tool_health_check(Intent(tool=TOOL_HEALTH_CHECK), cfg)
+    rows.append((health.ok, "local tool surface", health.summary))
+
+    return rows
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     cfg = load_config()
+
+    # Operator readiness check for the addendum §1 acceptance run. Publishes nothing.
+    if argv and argv[0] == "--preflight":
+        rows = preflight(cfg)
+        for ok, label, detail in rows:
+            print(f"  [{'ok' if ok else 'FAIL'}] {label}: {detail}")
+        print(f"  [--] dry-run: {'on — replies are printed, not published' if cfg.dry_run else 'off'}")
+        failed = [label for ok, label, _ in rows if not ok]
+        if failed:
+            print(f"\npreflight FAILED: {', '.join(failed)}")
+            return 1
+        print(
+            "\npreflight OK. Acceptance run:\n"
+            "  1. ACP_DRY_RUN=1 python scripts/qortroller_acp_gateway.py   (watch, publish nothing)\n"
+            f"  2. post in #rig-ops: {cfg.bot_handle} run pytest bridge/tests/test_retina_visual_oracle.py\n"
+            f"  3. post in #rig-ops: {cfg.bot_handle} invariant status | {cfg.bot_handle} health\n"
+            f"  4. post in #rig-ops: {cfg.bot_handle} devin diagnose <topic>\n"
+            "  5. confirm each reply is a digest — no secrets, no raw substrate, no chain call."
+        )
+        return 0
 
     # One-shot local evaluation: `python scripts/qortroller_acp_gateway.py --eval "@EA health"`
     if argv and argv[0] == "--eval":

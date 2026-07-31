@@ -287,3 +287,41 @@ def test_audit_records_are_scrubbed(cfg):
 def test_unaddressed_message_produces_no_audit_entry(cfg):
     assert gw.handle_message(OPERATOR, "just chatting", cfg) is None
     assert not cfg.audit_log_path.exists()
+
+
+# --- Operator preflight (addendum §1 acceptance readiness) -------------------
+
+def _rows(cfg):
+    return {label: (ok, detail) for ok, label, detail in gw.preflight(cfg)}
+
+
+def test_preflight_flags_empty_operator_allowlist(cfg, monkeypatch):
+    monkeypatch.setattr(cfg, "operator_pubkeys", ())
+    ok, detail = _rows(cfg)["ACP_OPERATOR_PUBKEYS"]
+    assert ok is False
+    assert "fail-closed" in detail
+
+
+def test_preflight_reports_key_presence_without_the_value(cfg, monkeypatch):
+    monkeypatch.setenv("BUZZ_PRIVATE_KEY", "nsec1supersecret")
+    ok, detail = _rows(cfg)["BUZZ_PRIVATE_KEY"]
+    assert ok is True
+    assert "nsec1supersecret" not in detail
+
+
+def test_preflight_requires_a_rig_ops_channel(cfg, monkeypatch):
+    monkeypatch.setattr(cfg, "rig_ops_channel", "")
+    assert _rows(cfg)["#rig-ops channel"][0] is False
+
+
+def test_preflight_checks_the_local_tool_surface(cfg):
+    assert _rows(cfg)["local tool surface"][0] is True
+
+
+def test_preflight_publishes_nothing(cfg, monkeypatch):
+    def _boom(*_a, **_k):
+        raise AssertionError("preflight must not publish")
+
+    monkeypatch.setattr(gw, "_publish", _boom)
+    monkeypatch.setattr(gw.bot, "_publish_event", _boom)
+    gw.preflight(cfg)

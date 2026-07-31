@@ -88,9 +88,13 @@ def cmd_build(a) -> int:
     return 0
 
 
-def _make_groth16_verify(snarkjs_cmd):
+def _make_groth16_verify(snarkjs_cmd, vkey_override=None):
     """Inject a snarkjs-shelling groth16 verifier: `snarkjs groth16 verify <vkey> <public> <proof>`.
-    Returns None if no usable snarkjs (-> C5 UNCHECKED, honest). True only on 'OK!' output."""
+    Returns None if no usable snarkjs (-> C5 UNCHECKED, honest). True only on 'OK!' output.
+
+    `vkey_override` replaces the certificate's own `vkey_ref` — for a stranger verifying from a
+    fresh clone, where the cert may reference a build-local artifact path. This cannot manufacture
+    a pass: groth16 verification fails against any vkey other than the circuit's own."""
     if not snarkjs_cmd:
         return None
     exe = shutil.which(snarkjs_cmd) or (snarkjs_cmd if os.path.exists(snarkjs_cmd) else None)
@@ -101,7 +105,8 @@ def _make_groth16_verify(snarkjs_cmd):
         return None
 
     def _verify(vhr) -> bool:
-        vkey, public, proof = vhr.get("vkey_ref"), vhr.get("public_ref"), vhr.get("proof_ref")
+        vkey = vkey_override or vhr.get("vkey_ref")
+        public, proof = vhr.get("public_ref"), vhr.get("proof_ref")
         if not (vkey and public and proof):
             return False
         res = subprocess.run(base + ["groth16", "verify", vkey, public, proof],
@@ -136,13 +141,16 @@ def cmd_verify(a) -> int:
     if a.posp:
         with open(a.posp, "rb") as fh:
             posp_bytes = fh.read()
-    g16 = _make_groth16_verify(a.snarkjs)
+    g16 = _make_groth16_verify(a.snarkjs, a.vkey)
     chain = _make_chain_lookup(a.chain_rpc, (cert.get("surfaces", {}).get("anchor") or {}).get("registry"))
     rep = verify_match_certificate(cert, posp_file_bytes=posp_bytes, groth16_verify=g16, chain_lookup=chain)
     print(json.dumps(rep.to_dict(), indent=2))
     print(f"\nOVERALL: {rep.overall}"
           f"  (ZK {'checked' if g16 else 'UNCHECKED — pass --snarkjs'}, "
           f"anchor-onchain {'checked' if chain else 'UNCHECKED — pass --chain-rpc'})")
+    if a.vkey:
+        print(f"NOTE: C5 used the supplied verifying key {a.vkey}, not the cert's vkey_ref "
+              f"{(cert.get('surfaces', {}).get('vhr') or {}).get('vkey_ref')}.")
     return 0 if rep.overall in ("VERIFIED", "PARTIAL") else 1
 
 
@@ -166,6 +174,9 @@ def main() -> int:
     v.add_argument("--posp", default=None, help="published PoSP record file (for the anchor-digest match)")
     v.add_argument("--snarkjs", default=None, help="snarkjs command/path (enables the ZK check C5)")
     v.add_argument("--chain-rpc", default=None, help="IoTeX RPC URL (enables the on-chain anchor check C6)")
+    v.add_argument("--vkey", default=None,
+                   help="verifying key for C5, overriding the cert's vkey_ref (published-artifact path "
+                        "for a stranger verifying from a fresh clone)")
 
     a = ap.parse_args()
     return cmd_build(a) if a.cmd == "build" else cmd_verify(a)
