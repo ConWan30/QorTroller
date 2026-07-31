@@ -54,6 +54,22 @@ _REPO_ROOT = _BRIDGE_DIR.parent
 _BATCH_CAP = 50
 
 
+def _import_retina_depin_policy(cfg) -> bool:
+    """Import is_effective_perception from retina_depin_policy, handling
+    both `bridge.vapi_bridge...` and `vapi_bridge...` import paths."""
+    try:
+        from ..retina_depin_policy import is_effective_perception
+        return is_effective_perception(cfg)
+    except ImportError:
+        try:
+            from bridge.vapi_bridge.retina_depin_policy import is_effective_perception
+            return is_effective_perception(cfg)
+        except Exception:
+            return False
+    except Exception:
+        return False
+
+
 class _RateLimiter:
     """Sliding-window in-memory rate limiter (zero external dependencies).
 
@@ -629,10 +645,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "retina_perception_enabled": bool(
                     getattr(cfg, "retina_perception_enabled", False)
                 ),
-                "retina_perception_effective": __import__(
-                    "bridge.vapi_bridge.retina_depin_policy",
-                    fromlist=["is_effective_perception"],
-                ).is_effective_perception(cfg),
+                "retina_perception_effective": _import_retina_depin_policy(
+                    cfg
+                ),
                 "retina_perception_window": int(
                     getattr(cfg, "retina_perception_window", 120)
                 ),

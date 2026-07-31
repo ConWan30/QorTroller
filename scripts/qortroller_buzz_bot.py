@@ -37,7 +37,17 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
+
+# --- .env loading (scripts/.env) --------------------------------------------
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, encoding="utf-8")
+except ImportError:
+    pass
 
 # --- Config -----------------------------------------------------------------
 
@@ -147,20 +157,32 @@ def _read_rig_state(cfg: BotConfig) -> dict:
     Mirrors HardwareWatcher._poll but as a one-shot sync read — no async
     loop, no HID enumeration (the bridge is the single source of truth for
     rig state when the bot is running alongside it).
+
+    Endpoint paths:
+      /health                          — root app (no auth)
+      /operator/bridge/capture-health  — DualShock HID poll rate + capture state
+      /operator/bridge/retina-status   — retina perception + capture active
     """
     health = _bridge_get("/health", cfg, timeout=5)
-    bridge_up = bool(health and health.get("status") == "healthy")
+    bridge_up = bool(health and health.get("status") in ("ok", "healthy"))
 
-    ds = _bridge_get("/dualshock/status", cfg, timeout=3) or {}
-    dualshock = bool(ds.get("connected") or ds.get("status") == "active")
+    # DualShock state from the PCC monitor (capture-health endpoint)
+    ds = _bridge_get("/operator/bridge/capture-health", cfg, timeout=3) or {}
+    capture_state = ds.get("capture_state", "")
+    host_state = ds.get("host_state", "")
+    poll_rate = ds.get("poll_rate_hz", 0)
+    dualshock = (
+        capture_state in ("NOMINAL", "DEGRADED")
+        or host_state in ("EXCLUSIVE_USB", "EXCLUSIVE_BT")
+        or poll_rate > 0
+    )
 
-    retina = _bridge_get("/retina/status", cfg, timeout=3) or {}
-    # Try the operator-facing retina status endpoint first
-    if not retina:
-        retina = _bridge_get("/bridge/retina-status", cfg, timeout=3) or {}
+    # Retina/capture state from the retina-status endpoint
+    retina = _bridge_get("/operator/bridge/retina-status", cfg, timeout=3) or {}
     capture = bool(
-        retina.get("capture_active")
-        or retina.get("status") == "active"
+        retina.get("retina_perception_effective")
+        or retina.get("retina_perception_enabled")
+        or retina.get("capture_active")
     )
 
     # State machine (same logic as HardwareWatcher._poll)
@@ -183,6 +205,13 @@ def _read_rig_state(cfg: BotConfig) -> dict:
         "oracle_enabled": capture,
         "device_id": cfg.device_id,
         "ioid_token": cfg.ioid_token,
+        # Capture detail (from /operator/bridge/capture-health)
+        "capture_state": capture_state,
+        "host_state": host_state,
+        "poll_rate_hz": poll_rate,
+        # Retina detail (from /operator/bridge/retina-status)
+        "retina_perception_enabled": bool(retina.get("retina_perception_enabled")),
+        "retina_perception_effective": bool(retina.get("retina_perception_effective")),
     }
 
 
@@ -197,7 +226,7 @@ def _read_session_postcard(cfg: BotConfig, session_id: str = "") -> Optional[dic
     Phase 1, we read the current/active session. A historical session
     lookup requires the PoEP session runner's artifact store (Phase 2).
     """
-    path = "/player/session-status"
+    path = "/operator/player/session-status"
     if cfg.device_id:
         path += f"?device_id={cfg.device_id}"
     data = _bridge_get(path, cfg, timeout=10)
@@ -231,11 +260,18 @@ def _read_session_postcard(cfg: BotConfig, session_id: str = "") -> Optional[dic
 # --- Event builders (Buzz-correct shape, digest-only) -----------------------
 
 def _status_event_content(state: dict) -> str:
-    return (
-        f"rig: {state['rig_state']} | "
-        f"bridge: {state['bridge_health']} | "
-        f"oracle: {'enabled' if state['oracle_enabled'] else 'disabled'}"
-    )
+    parts = [
+        f"rig: {state['rig_state']}",
+        f"bridge: {state['bridge_health']}",
+        f"oracle: {'enabled' if state['oracle_enabled'] else 'disabled'}",
+    ]
+    if state.get("capture_state"):
+        parts.append(f"capture: {state['capture_state']}")
+    if state.get("poll_rate_hz"):
+        parts.append(f"poll: {state['poll_rate_hz']:.0f}Hz")
+    if state.get("host_state"):
+        parts.append(f"host: {state['host_state']}")
+    return " | ".join(parts)
 
 
 def _status_tags(channel_id: str, state: dict) -> list[list[str]]:

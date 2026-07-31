@@ -711,7 +711,7 @@ class DualShockTransport:
                 else:
                     log.warning("QorTroller Retina Game Capture failed to start (window not found?) — abstaining")
             except Exception as _rgc_exc:
-                log.debug("QorTroller Retina Game Capture init skipped (fail-open): %s", _rgc_exc)
+                log.warning("QorTroller Retina Game Capture init skipped (fail-open): %s", _rgc_exc)
         # Phase C classify-burst (docs/phase-c-classify-sampling-bottleneck-mitigation-2026-07-05.md):
         # independent of presence-burst — works whether or not retina_capture_burst_enabled is on, since
         # it densifies classify sampling within an ALREADY-capturing session, not WGC start/stop toggling.
