@@ -696,8 +696,9 @@ class DualShockTransport:
                     self._presence_burst = PresenceBurstController(_rgc, burst_s=_bs, period_s=_bp,
                                                                    trigger_path=_tp, log=log,
                                                                    de_gate=_dg, de_keep_quantile=_dq)
-                    self._prev_r2_combat = 0          # R2 edge state for the combat-triggered burst
-                    self._last_combat_burst_ts = 0.0
+                    self._prev_r2_combat = 0          # R2 edge state for the trigger burst
+                                                     # (football: R2=sprint/tackle; shooter: R2=fire)
+                    self._last_combat_burst_ts = 0.0  # renamed in future: _last_trigger_burst_ts
                     self._prev_r2_inline = 0          # R2 edge state for inline authorship classification
                     log.info("QorTroller Retina presence-burst mode — %s (burst=%.1fs%s)",
                              ("ON-DEMAND (no capture until trigger %r)" % _tp) if _bp <= 0

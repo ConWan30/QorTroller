@@ -14,7 +14,8 @@ bind to the certified controller input lobe, at two timescales:
   * VISUAL oracle coherence (NVIDIA Nemotron VLM): third lobe added 2026-07-27. Uses a vision-
     language model to classify the on-screen state (menu/lobby/gameplay/loading) and cross-verify
     it against the continuous coupling and discrete outcome axes. A player in "menu" cannot produce
-    "combat coupling" — this catches replay/relay attacks that the first two axes alone miss.
+    "gameplay coupling" (football: play-running; shooter: combat engagement) — this catches
+    replay/relay attacks that the first two axes alone miss.
 
 This module fuses the three ORTHOGONAL axes into one L9 verdict.
 """

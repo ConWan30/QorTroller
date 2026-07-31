@@ -39,8 +39,9 @@ logger = logging.getLogger(__name__)
 FOOTBALL_GAME_IDS = frozenset({"ncaa_cfb_26", "ncaa_cfb_27"})
 SHOOTER_GAME_IDS = frozenset({"cod_warzone", "cod_warzone_2", "cod_blackops", "cod_mw"})
 
-# Fallback when game not in either set: shooter prompt (conservative)
-DEFAULT_PROFILE = "shooter"
+# Fallback when game not in either set: football prompt (this is a
+# football-first project; NCAA CFB 27 is the primary game corpus).
+DEFAULT_PROFILE = "football"
 
 # Football event types the VLM might observe on screen
 FOOTBALL_OBSERVED_EVENTS = frozenset({
@@ -535,17 +536,21 @@ class CrossModalVerifier:
     2. Controller inputs (DualShock from dualshock_integration)
     3. Visual context (NVIDIA Nemotron VLM from VisualOracle)
 
-    Game-Aware: The motion/input state mapping works for any game type;
-    the activity-level classification (idle/active/combat) maps to
-    football play types appropriately (active=play running, combat=red zone).
+    Game-Aware: The motion/input state mapping works for any game type.
+    For football (NCAA CFB 27): idle=menu/break, active=play running,
+    intense=red zone / high-pressure play, menu_nav=between plays.
+    For shooter games: idle=menu, active=gameplay, combat=engagement.
     """
 
-    # Map of what motion/input states correspond to what visual states
+    # Map of what motion/input states correspond to what visual states.
+    # "intense" is the football term for high-activity gameplay; "combat"
+    # is the shooter equivalent. Both map to the same visual state.
     MOTION_VISUAL_MAP = {
         "idle":      (GameState.MENU, GameState.LOBBY, GameState.LOADING,
                       GameState.PAUSED, GameState.RESULTS, GameState.CUTSCENE),
         "active":    (GameState.GAMEPLAY,),
-        "combat":    (GameState.GAMEPLAY,),
+        "intense":   (GameState.GAMEPLAY,),  # football: red zone / clutch play
+        "combat":    (GameState.GAMEPLAY,),  # shooter: engagement (alias of intense)
         "menu_nav":  (GameState.MENU, GameState.LOBBY),
     }
 
@@ -553,10 +558,14 @@ class CrossModalVerifier:
 
     @staticmethod
     def motion_to_state(motion_features: dict) -> str:
-        """Classify motion features into a high-level state string."""
+        """Classify motion features into a high-level state string.
+
+        Returns "intense" for high-activity gameplay (football: red zone /
+        clutch play; shooter: combat engagement).
+        """
         activity = motion_features.get("activity_level", 0)
         if activity > 0.8:
-            return "combat"
+            return "intense"
         elif activity > 0.3:
             return "active"
         elif activity > 0.05:
@@ -565,10 +574,14 @@ class CrossModalVerifier:
 
     @staticmethod
     def input_to_state(input_features: dict) -> str:
-        """Classify input features into a high-level state string."""
+        """Classify input features into a high-level state string.
+
+        Returns "intense" for high-APM gameplay (football: rapid play-calling
+        / red zone; shooter: combat engagement).
+        """
         apm = input_features.get("apm", 0)  # actions per minute
         if apm > 120:
-            return "combat"
+            return "intense"
         elif apm > 30:
             return "active"
         elif apm > 5:
@@ -957,8 +970,8 @@ def test_cross_modal_match():
 def test_cross_modal_anomaly():
     """High-confidence mismatch should produce an anomaly."""
     verifier = CrossModalVerifier()
-    motion = {"activity_level": 0.9}  # combat
-    inputs = {"apm": 150}  # combat
+    motion = {"activity_level": 0.9}  # intense (football: red zone / shooter: combat)
+    inputs = {"apm": 150}  # intense
     visual = VisualContext(game_state=GameState.MENU, confidence=0.85)  # menu
     verdict = verifier.verify(motion, inputs, visual)
     assert not verdict.match
@@ -1031,7 +1044,7 @@ def test_config_football_detection():
         os.environ["GAME_PROFILE_ID"] = "unknown_game"
         cfg4 = VisualOracleConfig()
         assert cfg4.is_football is False
-        assert cfg4.game_category == "shooter"  # default fallback
+        assert cfg4.game_category == "football"  # default fallback (football-first project)
     finally:
         os.environ["GAME_PROFILE_ID"] = old_val
 
