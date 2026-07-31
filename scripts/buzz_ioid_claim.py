@@ -75,11 +75,31 @@ def _buzz_cli(args: list[str]) -> tuple[int, str, str]:
 
 
 def _whoami() -> str:
-    """Get the gamer's npub from the buzz CLI."""
-    rc, stdout, _ = _buzz_cli(["users", "whoami"])
-    if rc != 0:
+    """Get the gamer's pubkey hex from the qortroller-buzz helper."""
+    helper_path = os.environ.get(
+        "BUZZ_HELPER_PATH",
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "buzz", "target", "debug", "qortroller-buzz.exe",
+        ),
+    )
+    if not os.path.isfile(helper_path):
         return ""
-    return stdout.strip()
+    env = os.environ.copy()
+    try:
+        result = subprocess.run(
+            [helper_path, "whoami"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _get_profile() -> dict | None:
@@ -99,25 +119,11 @@ def _get_profile() -> dict | None:
 def _set_profile(name: str, about: str, tags: list[list[str]]) -> bool:
     """Set the gamer's kind 0 profile with custom tags.
 
-    Uses `buzz users set-profile` if it supports tags, otherwise falls
-    back to publishing a raw kind 0 event via the qortroller-buzz helper.
+    Uses the qortroller-buzz helper's `publish-profile` subcommand, which
+    publishes a kind 0 (NIP-01 Metadata) event with custom tags. The buzz
+    CLI's `users set-profile` doesn't support custom tags, so the helper
+    is the primary path.
     """
-    # Check if buzz users set-profile supports --tag
-    rc, _, _ = _buzz_cli(["users", "set-profile", "--help"])
-    # The buzz CLI may not support custom tags on kind 0 directly.
-    # If not, we use the qortroller-buzz helper to publish a kind 0.
-    # For now, try the CLI first with name + about.
-    args = ["users", "set-profile"]
-    if name:
-        args += ["--name", name]
-    if about:
-        args += ["--about", about]
-
-    rc, stdout, stderr = _buzz_cli(args)
-    if rc == 0:
-        return True
-
-    # Fallback: publish kind 0 via the helper
     helper_path = os.environ.get(
         "BUZZ_HELPER_PATH",
         os.path.join(
@@ -126,13 +132,12 @@ def _set_profile(name: str, about: str, tags: list[list[str]]) -> bool:
         ),
     )
     if not os.path.isfile(helper_path):
-        print(f"[!] neither buzz CLI set-profile nor helper at {helper_path}", file=sys.stderr)
+        print(f"[!] helper not found: {helper_path}", file=sys.stderr)
         return False
 
-    # Build kind 0 content as JSON metadata (NIP-01)
+    # Build NIP-01 metadata content (JSON object in the content field)
     metadata = {"name": name, "about": about}
     payload = json.dumps({
-        "kind": 0,
         "content": json.dumps(metadata),
         "tags": tags,
     })
@@ -141,16 +146,20 @@ def _set_profile(name: str, about: str, tags: list[list[str]]) -> bool:
     env["BUZZ_RELAY_URL"] = RELAY_URL
     try:
         result = subprocess.run(
-            [helper_path, "publish"],
+            [helper_path, "publish-profile"],
             input=payload,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=75,
             env=env,
             shell=False,
         )
-        return result.returncode == 0
-    except Exception:
+        if result.returncode == 0:
+            return True
+        print(f"[!] publish-profile failed: {result.stderr.strip()}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"[!] publish-profile error: {e}", file=sys.stderr)
         return False
 
 
