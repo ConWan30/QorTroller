@@ -1,122 +1,29 @@
-# Buzz × QorTroller — Phase 5 Claim Register (v0)
+# Buzz × QorTroller — Phase 5 Claim Register
 
-**Status:** DESIGN (WP-A) — binding for public language  
-**Date:** 2026-07-31  
-**Parent:** `docs/design/buzz-phase5-product-claims-scope.md`  
-**Also constrains:** README claim ceilings, `#announcements`, organizer one-pagers
+**Canonical document:** [`docs/design/buzz-phase5-claim-register-v0.md`](./buzz-phase5-claim-register-v0.md)
 
----
+This path is a **redirect only**. Do not maintain a second phrase table here.
 
-## 0. Purpose
+## Why this file exists
 
-This register is the **only** allowed mapping from public phrases to
-enablement gates. If a phrase is not in this table, it is not allowed
-in product-facing copy until a new row is added under operator review.
+An earlier design commit landed a phrase table at this path before G5-VER
+closed. PR #103 closed G5-VER for the M17 sealed match and published the
+graded register (G0–G4, row IDs R-01…R-12) at `buzz-phase5-claim-register-v0.md`.
 
-**Hard rule:** no free-text “tournament-ready” / “tournament-grade” /
-“certified fair” without a closed gate row cited in the same document
-or post.
+Keeping two tables would allow stale language (e.g. "G5-VER open") to be
+cited after the gate closed. All public / organizer / Buzz claim language
+must resolve to a row in the **v0** register.
 
----
+## Current honest ceiling (snapshot)
 
-## 1. Gate legend
-
-| Gate | One-line meaning |
+| What | Status |
 |---|---|
-| **G5-OPS** | Phase 4 ACP live ops acceptance signed off |
-| **G5-VER** | Independent verifier path: stranger re-checks a sealed package |
-| **G5-MULTI** | ≥2 distinct gamer ioID claims on a real sealed match |
-| **G5-SEP** | Inter-person separation batteries all pass (`all_pairs_above_1`) |
-| **G5-L6** | L6 haptic CR enabled after N≥50 calibration + ceremony |
-| **G5-L6B** | Live PoEP / L6B presence after measured corpus + ceremony |
-| **G5-FRR** | Field FRR/FAR proxies published with hold-out policy |
+| Permitted ceiling | **G1** (candidate / advisory), plus **G2 only for R-06** |
+| R-06 / G5-VER | **Closed for M17** (and later certs that exit 0 the same way) |
+| G5-OPS | Open — operator-local (`--preflight` → dry-run → live `#rig-ops`) |
+| G5-MULTI / SEP / L6 / L6B / FRR | Open |
 
-Until a gate is closed, treat it as **open**.
-
----
-
-## 2. Allowed phrases (current)
-
-| Phrase (public / organizer / Buzz) | Minimum closed gates | Notes |
-|---|---|---|
-| “Candidate presence digests on Buzz” | none (Phase 1–3) | Default honest floor |
-| “Session postcard with honesty flags” | none | Must include `poep_enabled` / `l6b_enabled` / `candidate_ok` as-is |
-| “Operator EA status bot on `#rig-ops`” | none | Path A bot; not ACP |
-| “Operator ACP surface (`@EA`) for engineering hygiene” | **G5-OPS** | Never cite as population evidence |
-| “Match result pinned with cryptographic pointer” | none | Pointer ≠ population certification |
-| “Gamer self-asserted ioID claim on Buzz” | none | Claim only; proof stays in QorTroller / IoTeX |
-| “Third party can re-verify this sealed match package” | **G5-VER** | Must link the exact verify command |
-| “Multi-gamer sealed session (N≥2 ioIDs)” | **G5-MULTI** | Distinct wallets/npubs required |
-| “Inter-person separation demonstrated on required batteries” | **G5-SEP** | Cite corpus + ratios |
-| “L6 challenge-response enabled on this build” | **G5-L6** | Ceremony-attested only |
-| “Live PoEP / L6B presence enabled on this build” | **G5-L6B** | Ceremony-attested only |
-| “Field FRR/FAR proxies published for enabled stack” | **G5-FRR** | Report must be pinned |
-| “Tournament-grade presence claims” | **G5-SEP + G5-L6/L6B + G5-FRR + G5-MULTI + G5-VER** | All five required; G5-OPS recommended |
-
----
-
-## 3. Forbidden phrases (until gates close)
-
-Do **not** use these without the corresponding closed gates and a
-register update:
-
-- “Tournament-ready” / “tournament-grade” (needs full set above)
-- “100% fair” / “cheat-proof forever”
-- “Population certified from developer-self data alone”
-- “Ban is cryptographic truth” (social adjudication ≠ proof)
-- “EA / ACP proved the gamer is human” (EA is steward, not gamer)
-- Any implication that digests on Nostr contain biometric substrate
-
----
-
-## 4. How to cite this register
-
-In `#announcements`, organizer docs, or README claim sections:
-
-```text
-Claim: <exact phrase from §2>
-Gates: <G5-… list>
-Register: docs/design/buzz-phase5-claim-register.md (v0)
-```
-
-If the phrase is not in §2, **do not publish** — open a design PR to
-add a row first.
-
----
-
-## 5. Current gate status (honest snapshot, 2026-07-31)
-
-| Gate | Status |
-|---|---|
-| G5-OPS | **Open** — code landed; ops checklist pending operator sign-off |
-| G5-VER | **Open** — WMP/PORT-CERT tooling exists; product runbook not yet signed |
-| G5-MULTI | **Open** — single-operator / dev-self demos only |
-| G5-SEP | **Partial** — AIT cleared; touchpad_corners still a blocker |
-| G5-L6 | **Open** — default-OFF; N below threshold |
-| G5-L6B | **Open** — advisory / operator-gated |
-| G5-FRR | **Open** — not published at product scope |
-
-Therefore the **maximum allowed public language today** is the “none”
-and Phase 1–3 rows in §2. Everything stronger is blocked.
-
----
-
-## 6. Relationship to ACP (Phase 4)
-
-A green `@EA invariant status` or `@EA health` reply is **engineering
-hygiene**, not a claim-register event. It does not close G5-SEP,
-G5-L6, G5-L6B, G5-MULTI, G5-FRR, or G5-VER.
-
----
-
-## 7. Change control
-
-- Adding a phrase or lowering a gate requirement is a **governance**
-  change: design PR + operator review.
-- Closing a gate requires the evidence named in
-  `buzz-phase5-product-claims-scope.md` §3, pinned and linked from
-  this register’s status table in a follow-up commit.
-
----
-
-**End of Phase 5 Claim Register (v0)**
+Full rows, never-sayable list, and honesty flags:
+[`buzz-phase5-claim-register-v0.md`](./buzz-phase5-claim-register-v0.md)
+and the WP-C rehearsal
+[`buzz-phase5-wpc-verifier-rehearsal.md`](./buzz-phase5-wpc-verifier-rehearsal.md).
