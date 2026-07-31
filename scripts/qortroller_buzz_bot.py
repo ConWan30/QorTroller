@@ -89,6 +89,9 @@ BUZZ_CLI_PATH = os.environ.get(
 # Poll intervals (seconds).
 STATUS_INTERVAL = float(os.environ.get("BUZZ_STATUS_INTERVAL", "30"))
 COMMAND_POLL_INTERVAL = float(os.environ.get("BUZZ_COMMAND_POLL_INTERVAL", "10"))
+# Session digest interval (seconds). Posts a §3.2 postcard periodically.
+# Default 120s — less frequent than rig status, since session state changes slowly.
+SESSION_DIGEST_INTERVAL = float(os.environ.get("BUZZ_SESSION_DIGEST_INTERVAL", "120"))
 
 
 @dataclass
@@ -106,6 +109,7 @@ class BotConfig:
     cli_path: str
     status_interval: float
     command_poll_interval: float
+    session_digest_interval: float
 
 
 def _load_config() -> BotConfig:
@@ -130,6 +134,7 @@ def _load_config() -> BotConfig:
         cli_path=BUZZ_CLI_PATH,
         status_interval=STATUS_INTERVAL,
         command_poll_interval=COMMAND_POLL_INTERVAL,
+        session_digest_interval=SESSION_DIGEST_INTERVAL,
     )
 
 
@@ -309,6 +314,31 @@ def _postcard_tags(channel_id: str, postcard: dict) -> list[list[str]]:
     return tags
 
 
+def _postcard_content(postcard: dict) -> str:
+    """Build the human-readable content line for a session postcard (§3.2)."""
+    sid = postcard.get("session_id", "?")
+    verdict = postcard.get("verdict", "UNKNOWN")
+    n = postcard.get("n_challenges", 0)
+    poep = postcard.get("poep_enabled", False)
+    l6b = postcard.get("l6b_enabled", False)
+    candidate = postcard.get("candidate_ok", False)
+    eligible = postcard.get("is_fully_eligible", False)
+    humanity = postcard.get("humanity_prob")
+    parts = [
+        f"session {sid}",
+        f"verdict: {verdict}",
+        f"N: {n}",
+        f"poep: {poep}",
+        f"l6b: {l6b}",
+        f"candidate_ok: {candidate}",
+    ]
+    if eligible:
+        parts.append("eligible: true")
+    if humanity is not None:
+        parts.append(f"humanity_prob: {humanity:.3f}")
+    return " | ".join(parts)
+
+
 # --- Publish via Rust helper (Architecture C) --------------------------------
 
 def _publish_event(
@@ -450,14 +480,7 @@ def handle_command(cmd: str, cfg: BotConfig) -> Optional[tuple[str, list[list[st
         pc = _read_session_postcard(cfg, sid)
         if pc is None:
             return "session: bridge unreachable or no active session", []
-        content = (
-            f"session {pc.get('session_id', sid)} | "
-            f"verdict: {pc.get('verdict', 'UNKNOWN')} | "
-            f"N: {pc.get('n_challenges', 0)} | "
-            f"poep: {pc.get('poep_enabled')} | "
-            f"l6b: {pc.get('l6b_enabled')}"
-        )
-        return content, _postcard_tags(cfg.channel_ids[0], pc)
+        return _postcard_content(pc), _postcard_tags(cfg.channel_ids[0], pc)
     return None
 
 
@@ -489,6 +512,8 @@ def main() -> int:
     last_status_state: Optional[str] = None
     last_status_time = 0.0
     last_command_poll = int(time.time())
+    last_digest_time = 0.0
+    last_digest_signature: Optional[str] = None
 
     print("[*] entering main loop (Ctrl-C to stop)", file=sys.stderr)
     try:
@@ -513,6 +538,34 @@ def main() -> int:
                             )
                     last_status_state = state["rig_state"]
                     last_status_time = now
+
+            # Periodic session digest (§3.2 postcard) — on change OR every
+            # session_digest_interval. Only posts when the session state
+            # actually changed (signature = verdict + flags + N), so idle
+            # sessions don't spam the channel.
+            if now - last_digest_time >= cfg.session_digest_interval:
+                postcard = _read_session_postcard(cfg)
+                if postcard is not None:
+                    sig = "|".join(str(postcard.get(k, "")) for k in (
+                        "verdict", "poep_enabled", "l6b_enabled",
+                        "candidate_ok", "n_challenges", "is_fully_eligible",
+                    ))
+                    if sig != last_digest_signature:
+                        content = _postcard_content(postcard)
+                        tags = _postcard_tags(cfg.channel_ids[0], postcard)
+                        print(f"[*] digest: {content}", file=sys.stderr)
+                        if helper_ok:
+                            result = _publish_event(
+                                cfg, cfg.channel_ids[0], content, tags
+                            )
+                            if result:
+                                print(
+                                    f"[*] digest published: "
+                                    f"{result.get('event_id', '?')}",
+                                    file=sys.stderr,
+                                )
+                        last_digest_signature = sig
+                    last_digest_time = now
 
             # Command polling
             if cli_ok and now - last_command_poll >= cfg.command_poll_interval:
