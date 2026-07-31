@@ -55,6 +55,9 @@ RELAY_URL = os.environ.get("BUZZ_RELAY_URL", "ws://localhost:3000")
 CHANNEL_IDS = [
     c.strip() for c in os.environ.get("BUZZ_CHANNEL_IDS", "").split(",") if c.strip()
 ]
+# Matches channel — where session postcards (§3.2) are published for pinning.
+# Defaults to the second channel in CHANNEL_IDS if not explicitly set.
+MATCHES_CHANNEL_ID = os.environ.get("BUZZ_MATCHES_CHANNEL_ID", "")
 BOT_NAME = os.environ.get("QORTROLLER_BOT_NAME", "QorTroller Rig EA")
 BOT_ABOUT = os.environ.get(
     "QORTROLLER_BOT_ABOUT",
@@ -98,6 +101,7 @@ SESSION_DIGEST_INTERVAL = float(os.environ.get("BUZZ_SESSION_DIGEST_INTERVAL", "
 class BotConfig:
     relay_url: str
     channel_ids: list[str]
+    matches_channel_id: str
     bot_name: str
     bot_about: str
     device_id: str
@@ -123,6 +127,7 @@ def _load_config() -> BotConfig:
     return BotConfig(
         relay_url=RELAY_URL,
         channel_ids=CHANNEL_IDS,
+        matches_channel_id=MATCHES_CHANNEL_ID,
         bot_name=BOT_NAME,
         bot_about=BOT_ABOUT,
         device_id=DEVICE_ID,
@@ -490,6 +495,8 @@ def main() -> int:
     cfg = _load_config()
     print(f"[*] {cfg.bot_name} → {cfg.relay_url}", file=sys.stderr)
     print(f"[*] channels: {cfg.channel_ids}", file=sys.stderr)
+    if cfg.matches_channel_id:
+        print(f"[*] matches channel: {cfg.matches_channel_id}", file=sys.stderr)
     print(f"[*] owner-attested: {cfg.owner_attested}", file=sys.stderr)
     print(f"[*] bridge: {cfg.bridge_base_url}", file=sys.stderr)
     print(f"[*] helper: {cfg.helper_path}", file=sys.stderr)
@@ -543,6 +550,9 @@ def main() -> int:
             # session_digest_interval. Only posts when the session state
             # actually changed (signature = verdict + flags + N), so idle
             # sessions don't spam the channel.
+            # Routed to #matches (not #rig-ops) — that's where pinned
+            # official results live. Falls back to the first rig-ops channel
+            # if no matches channel is configured.
             if now - last_digest_time >= cfg.session_digest_interval:
                 postcard = _read_session_postcard(cfg)
                 if postcard is not None:
@@ -553,10 +563,13 @@ def main() -> int:
                     if sig != last_digest_signature:
                         content = _postcard_content(postcard)
                         tags = _postcard_tags(cfg.channel_ids[0], postcard)
-                        print(f"[*] digest: {content}", file=sys.stderr)
+                        digest_channel = (
+                            cfg.matches_channel_id or cfg.channel_ids[0]
+                        )
+                        print(f"[*] digest → #{digest_channel[:8]}: {content}", file=sys.stderr)
                         if helper_ok:
                             result = _publish_event(
-                                cfg, cfg.channel_ids[0], content, tags
+                                cfg, digest_channel, content, tags
                             )
                             if result:
                                 print(
