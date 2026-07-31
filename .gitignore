@@ -307,3 +307,8 @@ audits/poep_live_capture_*.json
 # --live variants carry session-liveness scalars; operator-local. Durable facts live in memory/ledger.
 audits/poep_session_identity_attach_*.json
 audits/poep_ring_dump/
+
+# Phase 4 ACP gateway local audit trail + Devin hand-off queue (operator-local;
+# the addendum requires the ACP invocation log to stay off Nostr and off the repo).
+audits/acp_gateway.jsonl
+audits/acp_devin_queue.jsonl

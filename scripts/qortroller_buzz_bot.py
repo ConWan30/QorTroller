@@ -398,12 +398,15 @@ def _publish_event(
 
 # --- Command polling via buzz CLI -------------------------------------------
 
-def _poll_commands(cfg: BotConfig, since_ts: int) -> list[dict]:
+def _poll_commands(
+    cfg: BotConfig, since_ts: int, prefixes: tuple[str, ...] = ("!",)
+) -> list[dict]:
     """Poll for kind 9 messages since the given Unix timestamp.
 
-    Returns a list of {pubkey, content} dicts for messages that look like
-    bot commands (!status, !ready, !session). Filters out self-authored
-    messages (by comparing to the bot's pubkey via `whoami`).
+    Returns a list of {pubkey, content} dicts for messages that start with one
+    of `prefixes` — `!` for the Phase 1 bot commands, `@EA` for the Phase 4 ACP
+    gateway. Filters out self-authored messages (by comparing to the bot's
+    pubkey via `whoami`).
     """
     if not os.path.isfile(cfg.cli_path):
         return []  # CLI not built yet — silent (status-only mode)
@@ -440,7 +443,7 @@ def _poll_commands(cfg: BotConfig, since_ts: int) -> list[dict]:
                 content = msg.get("content", "").strip()
                 if pubkey and bot_pubkey and pubkey == bot_pubkey:
                     continue  # ignore self
-                if content.startswith("!"):
+                if content.lower().startswith(tuple(p.lower() for p in prefixes)):
                     messages.append({"pubkey": pubkey, "content": content})
         except Exception:
             continue
