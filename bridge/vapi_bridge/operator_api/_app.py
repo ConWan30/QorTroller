@@ -464,6 +464,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         check_agent_token=_check_agent_token,
     )
 
+    from .agent_vss import register_agent_vss_routes
+
+    register_agent_vss_routes(
+        app,
+        cfg=cfg,
+        store=store,
+        check_read_key=_check_read_key,
+    )
+
     from .agent_supervisor import register_agent_supervisor_routes
 
     register_agent_supervisor_routes(
