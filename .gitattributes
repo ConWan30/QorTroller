@@ -9,3 +9,15 @@
 # harness fails closed on a hash mismatch (this is what stranded cycle 49 before 2026-06-28).
 # See vsd-vault/orchestrator/SYNTHESIS_LOOP.md.
 vsd-vault/notes/**/*.md text eol=crlf
+
+# Sealed match artifacts — same policy, same reason.
+#
+# PoSP records, the tri-plane manifest, and the WMP corpus were sealed on Windows: the digests in
+# the anchor files, the M17 match certificate, and provenance_dag_index_2026-07-12.json are all
+# sha256 over the CRLF bytes. Checked out LF (any non-Windows clone, and CI), sha256 differs and
+# every byte-identity check over them fails closed — the PORT-CERT anchor-digest check (C4) and
+# verify_provenance_dag both report a mismatch that is purely line endings. Force CRLF so the
+# sealed bytes are reproduced on every platform.
+audits/posp_record_*.json text eol=crlf
+audits/tri_plane_manifest_*.json text eol=crlf
+wmp_corpus_real/wmp_corpus.jsonl text eol=crlf

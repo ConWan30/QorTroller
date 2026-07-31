@@ -52,6 +52,10 @@ the refusal lands in the audit log instead of being silently dropped.
 
 ```powershell
 # scripts/.env — see scripts/qortroller_buzz_bot.env.example
+
+# readiness check before the live acceptance run (publishes nothing)
+python scripts/qortroller_acp_gateway.py --preflight
+
 python scripts/qortroller_acp_gateway.py
 
 # one-shot local evaluation (no relay, no publish)
@@ -60,6 +64,12 @@ python scripts/qortroller_acp_gateway.py --eval "@EA invariant status"
 
 `ACP_DRY_RUN=1` parses, authorizes, routes, and audits without executing any
 tool — the safe first run against a live channel.
+
+`--preflight` checks the four things that make the live run behave as documented
+— a non-empty operator allow-list, a `#rig-ops` channel, a signing key in the
+environment, a reachable publish helper — plus a writable audit log and a
+working local tool surface, then prints the acceptance script. It reports key
+*presence* only, never a value, and exits non-zero if any check fails.
 
 ## Acceptance (addendum §6)
 

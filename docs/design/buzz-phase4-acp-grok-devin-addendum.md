@@ -49,12 +49,14 @@ Phase 4 ACP runtime is a **custom dual-harness** using:
 | Devin hand-off queue (no impersonation) | Landed |
 | Phase 1–3 bot `@EA` prefix support | Landed |
 | Live `--eval` acceptance (health / invariant / pytest / ban) | Passed in PR |
+| Operator `--preflight` readiness check | Landed |
 | PV-CI | **188** (live gate; baseline grew past the 184 quoted at design time) |
 
 ### Phase 4 operational acceptance (operator-local, still open)
 
 These require the operator’s live Buzz channel and key material; they cannot be completed from a remote design session:
 
+0. `python scripts/qortroller_acp_gateway.py --preflight` — config readiness check; publishes nothing, prints key presence only, exits non-zero if the live run would misbehave.
 1. Set `ACP_OPERATOR_PUBKEYS=<operator hex pubkey>` in `scripts/.env`.
 2. `ACP_DRY_RUN=1 python scripts/qortroller_acp_gateway.py` against live `#rig-ops`.
 3. Live `#rig-ops` posts of the four acceptance commands; confirm in-thread digests.

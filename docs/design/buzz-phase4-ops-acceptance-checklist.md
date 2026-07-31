@@ -1,7 +1,7 @@
 # Phase 4 ACP Gateway — Ops Acceptance Checklist
 
 **Status:** OPERATOR-LOCAL (cannot be completed from a remote session)  
-**Code:** `scripts/qortroller_acp_gateway.py` (`de50a6d`)  
+**Code:** `scripts/qortroller_acp_gateway.py` (`de50a6d` + `--preflight`)  
 **Runbook:** `docs/design/buzz-phase4-acp-gateway-runbook.md`  
 **Parent:** `docs/design/buzz-phase4-acp-grok-devin-addendum.md`
 
@@ -11,11 +11,27 @@ Phase 4 is **code-landed**. This checklist closes **ops acceptance** (G5-OPS).
 
 ## Prerequisites
 
-- [ ] Repo on `main` at or after `de50a6d`
+- [ ] Repo on `main` at or after PR #103 merge (includes `--preflight`)
 - [ ] Phase 1–3 bot still green (`scripts/qortroller_buzz_bot.py`)
 - [ ] `scripts/.env` present (see `scripts/qortroller_buzz_bot.env.example`)
 - [ ] Operator Nostr hex pubkey known
 - [ ] Live `#rig-ops` channel reachable
+
+---
+
+## Step 0 — Preflight (publishes nothing)
+
+```powershell
+python scripts/qortroller_acp_gateway.py --preflight
+```
+
+Checks: non-empty `ACP_OPERATOR_PUBKEYS` (fail-closed), `#rig-ops` channel,
+signing key **presence** only (never the value), publish helper, writable
+audit log, local tool surface. Exits non-zero on any failure and prints the
+acceptance script when OK.
+
+- [ ] Preflight exits 0
+- [ ] No secrets printed
 
 ---
 
@@ -33,6 +49,7 @@ Fail-closed rule: empty `ACP_OPERATOR_PUBKEYS` rejects every command.
 
 - [ ] Pubkey set
 - [ ] Channel ID confirmed
+- [ ] Re-run `--preflight` after edits
 
 ---
 
@@ -115,7 +132,8 @@ Post in `#rig-ops`:
 | PV-CI count observed | |
 | Notes | |
 
-Once signed, **G5-OPS is closed**. Phase 5 may then pursue WP-A (done in-repo) and WP-C without treating ACP replies as population evidence.
+Once signed, **G5-OPS is closed**. Phase 5 may then pursue remaining gates
+without treating ACP replies as population evidence.
 
 ---
 

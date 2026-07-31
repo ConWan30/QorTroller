@@ -178,6 +178,11 @@ First:
 Only after those three should multi-gamer or enablement ceremonies be
 scheduled.
 
+**Progress (2026-07-31):** (2) landed — `docs/design/buzz-phase5-claim-register-v0.md`.
+(3) rehearsed and **G5-VER closed for the M17 sealed match** —
+`docs/design/buzz-phase5-wpc-verifier-rehearsal.md`. (1) still open: it is
+operator-local, and `--preflight` on the ACP gateway is the readiness check for it.
+
 ---
 
 **End of Phase 5 Product Claims Scope (v0)**

@@ -33,6 +33,11 @@ _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CERT = "audits/match_certificate_m17.json"
 DEFAULT_POSP = "audits/posp_record_match17_rp_fixb3_2026-07-08.json"
 DEFAULT_RPC = "https://babel-api.testnet.iotex.io"     # TESTNET; read-only receipt lookup, 0 IOTX
+# The tracked verifying key. A cert's `vkey_ref` may point at a build-local artifact that is not in
+# the repo (zk_artifacts/ is regenerated, not published), which strands a stranger at exit 2. This
+# published copy is the fallback: it cannot manufacture a pass, because groth16 verification fails
+# against any key but the circuit's own.
+PUBLISHED_VKEY = "contracts/circuits/VAPIReplayProofVerifier_verification_key.json"
 
 
 def discover_snarkjs() -> str | None:
@@ -73,6 +78,9 @@ def main() -> int:
     ap.add_argument("--posp", default=DEFAULT_POSP)
     ap.add_argument("--chain-rpc", default=DEFAULT_RPC)
     ap.add_argument("--snarkjs", default=None, help="override discovery")
+    ap.add_argument("--vkey", default=None,
+                    help=f"verifying key for C5, overriding the cert's vkey_ref "
+                         f"(default when that ref is absent: {PUBLISHED_VKEY})")
     a = ap.parse_args()
 
     print("=" * 74)
@@ -88,11 +96,23 @@ def main() -> int:
             return 2
     cert = json.load(open(cert_p, encoding="utf-8"))
     vhr = (cert.get("surfaces") or {}).get("vhr") or {}
-    missing_refs = [r for r in ("vkey_ref", "public_ref", "proof_ref")
+    missing_refs = [r for r in ("public_ref", "proof_ref")
                     if not (vhr.get(r) and os.path.isfile(os.path.join(_REPO, vhr[r])))]
     if missing_refs:
         print(f"  INCOMPLETE: cert ZK refs absent on disk: {missing_refs} -- C5 cannot run  (exit 2)")
         return 2
+
+    vkey = a.vkey
+    if not vkey and not (vhr.get("vkey_ref") and os.path.isfile(os.path.join(_REPO, vhr["vkey_ref"]))):
+        if not os.path.isfile(os.path.join(_REPO, PUBLISHED_VKEY)):
+            print(f"  INCOMPLETE: cert vkey_ref {vhr.get('vkey_ref')!r} absent and no published "
+                  f"fallback at {PUBLISHED_VKEY} -- C5 cannot run  (exit 2)")
+            return 2
+        vkey = PUBLISHED_VKEY
+        print(f"  vkey      : {vkey} (published fallback; cert vkey_ref {vhr.get('vkey_ref')!r} "
+              f"is not in this tree)")
+    elif vkey:
+        print(f"  vkey      : {vkey} (supplied, overriding the cert's vkey_ref)")
     anchor_tx = ((cert.get("surfaces") or {}).get("anchor") or {}).get("tx")
     if not anchor_tx:
         print("  INCOMPLETE: cert carries no anchor tx -- C6 cannot run  (exit 2)")
@@ -114,6 +134,8 @@ def main() -> int:
     # -- the documented verify, tools injected (single source of truth) -------------------------
     cmd = [sys.executable, os.path.join(_REPO, "scripts", "match_certificate.py"), "verify",
            "--cert", cert_p, "--posp", posp_p, "--snarkjs", snark_arg, "--chain-rpc", a.chain_rpc]
+    if vkey:
+        cmd += ["--vkey", vkey]
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=_REPO)
     out = (res.stdout or "") + (res.stderr or "")
     print(out.rstrip()[-2000:])                                   # verifier's own report is the record
