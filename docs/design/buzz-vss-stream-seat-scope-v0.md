@@ -3,6 +3,7 @@
 
 **Status:** PROPOSED — design-only; no implementation until prerequisites clear  
 **Date:** 2026-07-31  
+**Revision:** v0.1 — top-3 novel features frozen into phased integration (§15)  
 **Parents:** `docs/design/buzz-qortroller-gamer-mvp-v0.md`, `docs/design/buzz-phase4-acp-grok-devin-addendum.md`, `docs/design/buzz-phase5-claim-register-v0.md`  
 **Harness:** Grok Build (primary ops / thin slices) + Devin (heavy multi-file) via existing ACP  
 **Product line:** Feature inside the **QorTroller Buzz community**, not a standalone streaming company
@@ -261,6 +262,9 @@ No WP may touch FROZEN wire, commitment tags, or spend chain.
 | R-VSS-02 | “Seat events are digests + media URL pointers on Buzz.” | G0 | VSS-2 |
 | R-VSS-03 | “Only human community members can open a seat; agents may view.” | G1 | VSS-7 policy |
 | R-VSS-04 | “Stream is humanity-proven / tournament-grade.” | G4 | **Forbidden** until full Phase 5 gates |
+| R-VSS-05 | “Seat carries honesty ribbon (poep/l6b/candidate flags as-is).” | G0 | F1 in VSS-2..3 |
+| R-VSS-06 | “This room is watching sealed session `<session_id>`.” | G0 | F2 when postcard link present |
+| R-VSS-07 | “Gamer self-asserted ioID claim accompanies this seat.” | G1 | F3 optional path |
 
 When these rows are promoted, edit `docs/design/buzz-phase5-claim-register-v0.md` in a reviewed commit — no silent upgrades.
 
@@ -312,7 +316,8 @@ Implement **VSS-1** only after:
 1. P-OPS (or explicit waiver: local-only eligibility, no live `#streams`)
 2. Ack of three-plane split and “no frames on Nostr”
 3. Ack that retina gate is **process health**, not humanity cert
-4. Ack claim rows R-VSS-01..04 as draft until promoted in the claim register
+4. Ack claim rows R-VSS-01..07 as draft until promoted in the claim register
+5. Ack §15 top-3 freeze (F1–F3 are mandatory for “VSS shipped,” not optional cosmetics)
 
 ---
 
@@ -331,4 +336,140 @@ VSS is a **community feature**: proof-adjacent **seat control** + Buzz **viewing
 
 ---
 
-**End of Verifiable Stream Seat scope (v0)**
+## 15. Frozen novel features — phased integration
+
+This section **freezes** the differentiators that separate VSS from commodity streaming.  
+**F1–F3 are mandatory** for calling VSS “shipped.” Secondary features are ordered later and must not block F1–F3.
+
+### 15.1 Top three (frozen — build in order)
+
+#### F1 — Proof-adjacent seat object
+
+**What:** The seat is not “OBS is live.” It is a protocol object: OPEN only while eligibility holds; carries an **honesty ribbon**; fails closed on capture/oracle loss.
+
+| Element | Spec | Plane |
+|---------|------|-------|
+| Live seat badge | `seat=OPEN\|CLOSED` from eligibility probe | Truth → Social |
+| Honesty ribbon | `poep_enabled`, `l6b_enabled`, `candidate_ok` posted **as-is** | Social (digest) |
+| Fail-closed drop | Ineligible → publish CLOSED; media URL may die independently | Truth → Social |
+| Media pointer | `media_url` only; never frames | Media (external) |
+
+**Phased engineering:**
+
+| Phase | WP | Deliverable |
+|-------|-----|-------------|
+| Core | VSS-1 | Eligibility API exposes capture + oracle + honesty block |
+| Core | VSS-2..3 | Kind 9 schema includes ribbon tags; open/close on edges |
+| Core | VSS-5 | R-VSS-01, R-VSS-05 promoted when dogfood passes |
+
+**Acceptance:** Capture or oracle down ⇒ seat cannot stay OPEN; ribbon never invents `true` flags.
+
+---
+
+#### F2 — Verifiable watch parties (`#streams` × `#matches`)
+
+**What:** The social room is **session-native**. Viewers are not only watching a URL; they can bind the room to a sealed session postcard.
+
+| Element | Spec | Plane |
+|---------|------|-------|
+| Session bind | Optional `session_id` (+ commitment root when known) on seat event | Social + Truth pointer |
+| Postcard link | `#matches` pin may reference active/closed seat; seat may reference pin | Social |
+| Two clocks | Media clock (entertainment) vs protocol clock (session digests) — never merged into one “truth video” claim | Both |
+| Post-match handoff | Seat CLOSED; optional pointer to PORT-CERT / verify command | Truth |
+
+**Phased engineering:**
+
+| Phase | WP | Deliverable |
+|-------|-----|-------------|
+| Core+ | VSS-2 | Schema allows `session_id`; `#streams` exists beside `#matches` |
+| Core+ | VSS-3 | Dogfood: one seat event with real or fixture `session_id` |
+| Extend | VSS-6+ | Human viewer follows seat → optional postcard → verify command |
+| Extend | VSS-5 | R-VSS-06 only when bind is real, not decorative |
+
+**Acceptance:** A stranger can distinguish “watching entertainment URL” from “room claims bind to session X”; missing bind is honest absence, not implied proof.
+
+---
+
+#### F3 — Gamer sovereignty surfaces
+
+**What:** Stream identity is **gamer-keyed**, not operator- or EA-keyed. Optional ioID claim and consent-gated artifacts reinforce V.A.P.I. sovereignty without upgrading claim grade.
+
+| Element | Spec | Plane |
+|---------|------|-------|
+| Gamer-authored OPEN | Seat events signed with **gamer** Buzz key only | Social |
+| Optional ioID claim | `ioid_token` / `device_id` tags as **claims** (script: `buzz_ioid_claim.py`) | Social pointer → on-chain truth elsewhere |
+| No operator `nsec` | Operator never holds gamer stream or Buzz keys to “go live for them” | Identity |
+| Consent-aware package (later) | Highlight / Blossom package only after gamer consent event | Media + Truth |
+
+**Phased engineering:**
+
+| Phase | WP | Deliverable |
+|-------|-----|-------------|
+| Core | VSS-3 | Seat publish path uses gamer key (Architecture C helper) |
+| Core | VSS-7 | `role=bot` cannot OPEN |
+| Optional v0.1 | after VSS-3 | Require or display ioID claim tags (policy flag) |
+| Later | post VSS-6 | Consent-gated VOD/highlight package (new WP; not CDN) |
+
+**Acceptance:** EA cannot open a gamer seat; claim tags never presented as on-chain verification without a separate verify path.
+
+---
+
+### 15.2 Integration map (top-3 → WP spine)
+
+```text
+VSS-0  design freeze (this doc, §15 included)
+  │
+VSS-1  eligibility  ──────────────────────────────► F1 (probe)
+  │
+VSS-2  #streams + schema  ─────────────► F1 ribbon tags + F2 session_id slot
+  │
+VSS-3  seat open/close dogfood  ───────► F1 fail-closed + F3 gamer key
+  │
+VSS-4  ACP status digest  ─────────────► operator view of F1 (not a new identity)
+  │
+VSS-5  claim rows  ────────────────────► R-VSS-01..07
+  │
+VSS-6  second human viewer  ───────────► F2 watch-party dogfood
+  │
+VSS-7  agent view / bot ban OPEN  ─────► F3 human-only + secondary S1
+```
+
+**Ship rule:** VSS-3 dogfood without F1 honesty tags or gamer-authored events is **incomplete**. F2 bind may be absent on first dogfood but schema must allow it. F3 gamer key is non-negotiable at VSS-3.
+
+---
+
+### 15.3 Secondary features (phased after F1–F3)
+
+These align with QorTroller but **must not delay** the top three.
+
+| ID | Feature | Earliest phase | Notes |
+|----|---------|----------------|-------|
+| **S1** | Agent-native viewers (summarize digests, flag down seats) | VSS-7 | View only; no OPEN |
+| **S2** | Anti-farm hardening (one seat per key, no empty OPEN) | after VSS-7 | Policy + tests |
+| **S3** | Post-match certified highlight / verify pointer | new WP after VSS-6 | Consent-gated; claim register |
+| **S4** | Rig-ops fusion (`@EA stream status`) | VSS-4 | Already in spine |
+| **S5** | Organizer pilot room (seat + pin + portcert) | after VSS-6 + G5-VER style verify | Not tournament-grade language |
+| **S6** | Multi-gamer seats | after G5-MULTI evidence | Blocked by enablement, not by VSS schema |
+
+### 15.4 Explicitly not frozen into VSS
+
+- Global discovery / For You ranking as product core
+- Pixels on Nostr
+- “Verified human live” badge before Phase 5 gates
+- Agent or EA as streamer
+- Ban-as-proof
+- First-party CDN as a VSS milestone
+
+---
+
+### 15.5 Harness split for F1–F3
+
+| Feature | Grok Build | Devin | Operator |
+|---------|------------|-------|----------|
+| F1 | Eligibility shape, unit tests, claim rows | Bridge health wiring, seat edge logic | Live capture/oracle dogfood |
+| F2 | Schema/docs, R-VSS-06 draft | Channel + postcard cross-link helpers | Pin + watch party trial |
+| F3 | Policy text, bot rejection tests | Gamer-key publish path | Own key dogfood; never share nsec |
+
+---
+
+**End of Verifiable Stream Seat scope (v0.1)**
