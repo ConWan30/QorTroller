@@ -126,11 +126,11 @@ Post in `#rig-ops`:
 
 | Field | Value |
 |---|---|
-| Operator | |
-| Date (UTC) | |
-| Main SHA at sign-off | |
-| PV-CI count observed | |
-| Notes | |
+| Operator | ConWan30 |
+| Date (UTC) | 2026-07-31 |
+| Main SHA at sign-off | `57201c5e7f0b91c3f74e8b7226c75d3a6f2fb02e` (`57201c5e`) |
+| PV-CI count observed | 188 |
+| Notes | G5-OPS closed — preflight, --eval, dry-run, live acceptance all pass. Gateway stopped after sign-off. No chain interaction. No secrets in replies. |
 
 Once signed, **G5-OPS is closed**. Phase 5 may then pursue remaining gates
 without treating ACP replies as population evidence.
