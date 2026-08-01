@@ -1246,15 +1246,105 @@ def _latest_record_by_job_id(path: Path, job_id: str) -> dict | None:
     return latest
 
 
+def _satisfies_challenge(challenge: dict, records: list[dict]) -> bool:
+    """Heuristic check: does a later record satisfy the challenge demand?
+
+    This is intentionally local and approximate. It never invents evidence.
+    """
+    demand = scrub(str(challenge.get("demand", ""))).lower()
+    challenge_ts = challenge.get("ts", 0)
+    if not demand:
+        return False
+
+    demand_tokens = [t for t in demand.split() if len(t) > 1]
+    # Order invariant / pytest / generic.
+    for record in records:
+        if record.get("ts", 0) < challenge_ts:
+            continue
+        text = " ".join(
+            str(record.get(k, "")) for k in ("topic", "summary", "reply", "demand", "goal")
+        ).lower()
+        tool = str(record.get("tool", "")).lower()
+        ok = record.get("ok")
+
+        if demand.startswith("pytest") or "pytest" in demand:
+            path_tokens = [t for t in demand.split() if t.endswith(".py") or "/" in t]
+            if tool == TOOL_RUN_PYTEST and ok is True:
+                return True
+            if "pytest" in text:
+                if not path_tokens or any(pt in text for pt in path_tokens):
+                    if any(w in text for w in ("passed", "green", "ok", "all green")):
+                        return True
+
+        if any(w in demand for w in ("invariant", "pv-ci", "gate")):
+            if tool in (TOOL_INVARIANT_GATE, "vapi_invariant_gate") and ok is True:
+                return True
+            if all(w in text for w in ("invariant", "pass")) or "188" in text:
+                return True
+
+        if any(w in demand for w in ("health", "repo health")):
+            if tool in (TOOL_REPO_HEALTH, TOOL_HEALTH_CHECK) and ok is True:
+                return True
+            if all(w in text for w in ("health", "ok")):
+                return True
+
+        # Generic: demand words appear with a positive completion signal.
+        if all(t in text for t in demand_tokens[:4]):
+            if any(w in text for w in ("done", "ok", "passed", "green", "accept")):
+                return True
+    return False
+
+
+def _all_records_by_job_id(
+    job_id: str, cfg: GatewayConfig
+) -> list[dict]:
+    """Collect all queue/plan/result/seal/challenge rows for the job."""
+    records: list[dict] = []
+    for path in (
+        cfg.audit_log_path,
+        cfg.devin_queue_path,
+        cfg.plans_path,
+        cfg.devin_results_path,
+        cfg.seals_path,
+        cfg.challenges_path,
+    ):
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if str(record.get("job_id", "")) == job_id:
+                    records.append(record)
+    return records
+
+
+def _challenge_summary(challenges: list[dict], records: list[dict]) -> list[str]:
+    """Build bounded challenge status lines."""
+    lines: list[str] = []
+    for ch in challenges:
+        demand = scrub(str(ch.get("demand", ""))[:60])
+        state = "satisfied" if _satisfies_challenge(ch, records) else "open"
+        lines.append(f"challenge: {demand} [{state}]")
+    return lines
+
+
 def _tool_get_job_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
-    """SAP-3: one digest tying queue, results, and local seals for a job_id."""
+    """SAP-3: one digest tying queue, results, seals, and challenges for a job_id."""
     job_id = intent.args.get("job_id", "")
     queue = _latest_record_by_job_id(cfg.devin_queue_path, job_id)
     plan = _latest_record_by_job_id(cfg.plans_path, job_id)
     result = _latest_record_by_job_id(cfg.devin_results_path, job_id)
     seal = _latest_record_by_job_id(cfg.seals_path, job_id)
 
-    if not any((queue, plan, result, seal)):
+    # SAP-4: collect challenges and cross-check against all job records.
+    records = _all_records_by_job_id(job_id, cfg)
+    challenges = [r for r in records if r.get("demand") and r.get("status") == "open"]
+
+    if not any((queue, plan, result, seal, records)):
         return ToolResult(
             intent.tool,
             intent.harness,
@@ -1285,6 +1375,9 @@ def _tool_get_job_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
             pieces.append(f"ref: {ref}")
         if note:
             pieces.append(f"note: {note}")
+
+    for line in _challenge_summary(challenges, records):
+        pieces.append(line)
 
     summary = " | ".join(pieces)
     if len(summary) > MAX_REPLY_CHARS - 80:
