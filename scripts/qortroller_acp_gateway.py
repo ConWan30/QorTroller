@@ -59,6 +59,9 @@ TOOL_CEREMONY_STEPS = "list_ceremony_steps"
 TOOL_HEALTH_CHECK = "health_check"
 TOOL_DEEP_DIAGNOSE = "deep_diagnose"
 TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
+# VSS-S1 — agent viewers: summarize digests + flag a down seat (never OPEN)
+TOOL_STREAM_SEAT_SUMMARY = "summarize_stream_seat"
+TOOL_STREAM_SEAT_FLAG = "flag_stream_seat_down"
 
 ALLOWED_TOOLS = (
     TOOL_RUN_PYTEST,
@@ -69,6 +72,8 @@ ALLOWED_TOOLS = (
     TOOL_HEALTH_CHECK,
     TOOL_DEEP_DIAGNOSE,
     TOOL_STREAM_SEAT_STATUS,
+    TOOL_STREAM_SEAT_SUMMARY,
+    TOOL_STREAM_SEAT_FLAG,
 )
 
 # Tools Devin owns regardless of phrasing.
@@ -80,6 +85,8 @@ GROK_ONLY_TOOLS = (
     TOOL_CEREMONY_STEPS,
     TOOL_HEALTH_CHECK,
     TOOL_STREAM_SEAT_STATUS,
+    TOOL_STREAM_SEAT_SUMMARY,
+    TOOL_STREAM_SEAT_FLAG,
 )
 
 BOT_HANDLE = os.environ.get("ACP_BOT_HANDLE", "@EA")
@@ -315,6 +322,24 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
     if re.match(r"^(?:get\s+)?(?:rig\s*)?status$|^rig$", command, re.I):
         return Intent(TOOL_RIG_STATUS)
 
+    # VSS-S1: more-specific agent-viewer intents before generic "seat"
+    if re.match(
+        r"^(?:summarize\s+(?:stream\s+)?seat(?:\s+status)?|"
+        r"stream\s+seat\s+summary|seat\s+summary)$",
+        command,
+        re.I,
+    ):
+        return Intent(TOOL_STREAM_SEAT_SUMMARY)
+
+    if re.match(
+        r"^(?:flag\s+(?:stream\s+)?seat(?:\s+down)?|"
+        r"(?:is\s+)?(?:stream\s+)?seat\s+down|"
+        r"flag\s+stream\s+down)$",
+        command,
+        re.I,
+    ):
+        return Intent(TOOL_STREAM_SEAT_FLAG)
+
     if re.match(
         r"^(?:get\s+)?stream(?:\s+seat)?(?:\s+status)?$|^seat$|^vss$",
         command,
@@ -508,6 +533,70 @@ def _tool_stream_seat_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_stream_seat_summary(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """VSS-S1 — Agent viewer summary of stream seat (digest only).
+
+    Agents may READ/summarize; they never OPEN (scope §4 + S1).
+    """
+    # Import path: bridge package when repo root is cwd / sys.path
+    bridge_path = str(REPO_ROOT / "bridge")
+    if bridge_path not in sys.path:
+        sys.path.insert(0, bridge_path)
+    from vapi_bridge.vss_agent_viewer import (  # noqa: WPS433
+        agent_may_open_seat,
+        summarize_seat,
+    )
+
+    bot_cfg = bot._load_config()
+    elig = bot._bridge_get("/operator/vss/eligibility", bot_cfg)
+    summary = summarize_seat(elig)
+    ok = elig is not None
+    tags = [
+        ["acp_tool", intent.tool],
+        ["agent_can_open", "true" if agent_may_open_seat() else "false"],
+        ["eligible", "unknown" if elig is None else ("true" if elig.get("eligible") else "false")],
+    ]
+    return ToolResult(intent.tool, intent.harness, ok, summary, tags)
+
+
+def _tool_stream_seat_flag(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """VSS-S1 — Agent flag-down for a stream seat (view-only signal).
+
+    FLAG_DOWN when eligibility is false; SEAT_OK when true; UNKNOWN if
+    bridge unreachable. Never fabricates DOWN. Never opens a seat.
+    """
+    bridge_path = str(REPO_ROOT / "bridge")
+    if bridge_path not in sys.path:
+        sys.path.insert(0, bridge_path)
+    from vapi_bridge.vss_agent_viewer import (  # noqa: WPS433
+        FLAG_DOWN,
+        agent_may_open_seat,
+        flag_seat_down,
+    )
+
+    bot_cfg = bot._load_config()
+    elig = bot._bridge_get("/operator/vss/eligibility", bot_cfg)
+    decision = flag_seat_down(elig)
+    tags = [
+        ["acp_tool", intent.tool],
+        ["flag", str(decision.get("flag", "UNKNOWN"))],
+        ["should_flag", "true" if decision.get("should_flag") else "false"],
+        ["agent_can_open", "true" if agent_may_open_seat() else "false"],
+    ]
+    # ok=True for a successful evaluation (including FLAG_DOWN); False only unknown
+    ok = decision.get("flag") != "SEAT_UNKNOWN"
+    # Prefer flagging DOWN as the actionable agent signal
+    if decision.get("flag") == FLAG_DOWN:
+        ok = True
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        ok,
+        str(decision.get("summary", "")),
+        tags,
+    )
+
+
 def _tool_ceremony_steps(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     return ToolResult(
         intent.tool,
@@ -589,6 +678,8 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_HEALTH_CHECK: _tool_health_check,
     TOOL_DEEP_DIAGNOSE: _tool_deep_diagnose,
     TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
+    TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
+    TOOL_STREAM_SEAT_FLAG: _tool_stream_seat_flag,
 }
 
 
