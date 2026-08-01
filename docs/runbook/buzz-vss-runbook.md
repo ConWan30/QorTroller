@@ -119,9 +119,31 @@ CLOSED --(eligible rising edge)--> OPEN --(ineligible falling edge)--> CLOSED
 # With session_id (F2 watch-party bind slot)
 python scripts/buzz_vss_seat.py --session-id sess_abc123 ...
 
+# F2: probe bridge for session_id (never fabricates; URL-only if absent)
+python scripts/buzz_vss_seat.py --bind-session --media-url https://...
+
+# F2: refuse OPEN unless a session_id is resolved
+python scripts/buzz_vss_seat.py --require-session-bind --session-id sess_abc123 ...
+
+# F2: optional #matches channel UUID pointer on the seat
+python scripts/buzz_vss_seat.py --matches-channel <matches-uuid> ...
+
 # With ioID token (display only, never required)
 python scripts/buzz_vss_seat.py --ioid-token 498 ...
 ```
+
+### F2 — Verifiable watch-party bind
+
+When `session_id` is present on the seat:
+
+- Tags include `session_id=<id>`
+- Content includes `session: <id>` so a stranger can distinguish
+  “watching a URL” from “room claims sealed session X”
+- Optional `matches_channel` points at `#matches` (UUID only — not proof)
+- **R-VSS-06** is sayable **only** for that bound seat (not for URL-only seats)
+
+Honest absence: omit `--session-id` / leave bind probe empty → no session tag.
+Never invent a session id. Never use `device_id` alone as the session bind.
 
 ## VSS-4: ACP status tool
 
@@ -184,11 +206,10 @@ See the claim register for grades, gates, and the never-sayable list.
 
 ## Out of scope for this runbook
 
-- VSS-6: Second human viewer dogfood (operator action — another member opens `media_url`)
-- VSS-7: Agent viewer policy (bot cannot OPEN, can READ — code change)
-- `#streams` channel bootstrap (operator live community task)
-- Live rig dogfood (operator action)
+- VSS-6 / VSS-7 / live dogfood (shipped + operator-confirmed)
+- Proper relay `profile get` for VSS-7 role verify (helper enhancement)
 - Multi-gamer seats (after G5-MULTI)
+- Real production CDN / Twitch integration (media URL is gamer-controlled)
 
 ---
 

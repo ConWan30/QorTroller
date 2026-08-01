@@ -53,6 +53,9 @@ def _make_cfg(**kw):
         media_url="https://stream.example.com/live",
         session_id=None,
         ioid_token=None,
+        matches_channel=None,
+        bind_session=False,
+        require_session_bind=False,
         dry_run=False,
     )
     defaults.update(kw)

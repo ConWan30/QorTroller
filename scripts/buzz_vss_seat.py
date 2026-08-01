@@ -85,6 +85,9 @@ class SeatConfig:
     media_url: str
     session_id: Optional[str]
     ioid_token: Optional[str]
+    matches_channel: Optional[str]
+    bind_session: bool
+    require_session_bind: bool
     dry_run: bool
 
 
@@ -104,6 +107,28 @@ def _load_config(args: argparse.Namespace) -> SeatConfig:
     )
     poll_interval = float(
         os.environ.get("VSS_POLL_INTERVAL", str(args.poll_interval))
+    )
+
+    # F2: explicit session_id wins; else env; bind-from-bridge may fill later
+    session_id = args.session_id or os.environ.get("VSS_SESSION_ID") or None
+    if session_id is not None and not str(session_id).strip():
+        session_id = None
+    matches_channel = (
+        getattr(args, "matches_channel", None)
+        or os.environ.get("VSS_MATCHES_CHANNEL")
+        or os.environ.get("BUZZ_MATCHES_CHANNEL_ID")
+        or None
+    )
+    if matches_channel is not None and not str(matches_channel).strip():
+        matches_channel = None
+    bind_session = bool(
+        getattr(args, "bind_session", False)
+        or os.environ.get("VSS_BIND_SESSION", "").strip() in ("1", "true", "True", "yes")
+    )
+    require_session_bind = bool(
+        getattr(args, "require_session_bind", False)
+        or os.environ.get("VSS_REQUIRE_SESSION_BIND", "").strip()
+        in ("1", "true", "True", "yes")
     )
 
     if not channel_id and not args.dry_run:
@@ -126,8 +151,11 @@ def _load_config(args: argparse.Namespace) -> SeatConfig:
         helper_path=helper_path,
         poll_interval=poll_interval,
         media_url=args.media_url or "",
-        session_id=args.session_id,
+        session_id=session_id,
         ioid_token=args.ioid_token,
+        matches_channel=matches_channel,
+        bind_session=bind_session,
+        require_session_bind=require_session_bind,
         dry_run=args.dry_run,
     )
 
@@ -153,6 +181,78 @@ def _poll_eligibility(cfg: SeatConfig) -> Optional[dict]:
         return resp.json()
     except Exception as e:
         print(f"[!] eligibility poll failed: {e}", file=sys.stderr)
+        return None
+
+
+def _extract_session_id_from_status(data: dict) -> Optional[str]:
+    """Pull a sealed-session id from session-status JSON. Never invent.
+
+    Prefer real session fields over device_id (device_id is identity, not a
+    sealed match session — F2 requires session bind, not device label).
+    """
+    if not isinstance(data, dict):
+        return None
+    candidates = [
+        data.get("session_id"),
+        data.get("grind_session_id"),
+        data.get("poep_session_id"),
+        (data.get("presence") or {}).get("session_id")
+        if isinstance(data.get("presence"), dict)
+        else None,
+        (data.get("poep") or {}).get("session_id")
+        if isinstance(data.get("poep"), dict)
+        else None,
+        ((data.get("presence") or {}).get("poep") or {}).get("session_id")
+        if isinstance(data.get("presence"), dict)
+        else None,
+    ]
+    for c in candidates:
+        if c is None:
+            continue
+        s = str(c).strip()
+        if s:
+            return s
+    return None
+
+
+def resolve_session_id(cfg: SeatConfig) -> Optional[str]:
+    """F2: resolve session_id for watch-party bind.
+
+    Order:
+      1. Explicit cfg.session_id (CLI / VSS_SESSION_ID)
+      2. If bind_session: probe /operator/player/session-status
+      3. None (honest absence — URL-only seat)
+
+    Never fabricates a session_id. Never substitutes device_id alone.
+    """
+    if cfg.session_id and str(cfg.session_id).strip():
+        return str(cfg.session_id).strip()
+    if not cfg.bind_session:
+        return None
+    try:
+        import requests
+
+        headers = {}
+        if cfg.bridge_api_key:
+            headers["x-api-key"] = cfg.bridge_api_key
+        resp = requests.get(
+            f"{cfg.bridge_base_url}/operator/player/session-status",
+            headers=headers,
+            timeout=8,
+        )
+        resp.raise_for_status()
+        sid = _extract_session_id_from_status(resp.json())
+        if sid:
+            print(f"[*] F2 bind: session_id from bridge={sid[:16]}…", file=sys.stderr)
+            return sid
+        print(
+            "[*] F2 bind: bridge session-status has no session_id "
+            "(honest absence — URL-only seat)",
+            file=sys.stderr,
+        )
+        return None
+    except Exception as e:
+        print(f"[!] F2 bind probe failed: {e}", file=sys.stderr)
         return None
 
 
@@ -310,15 +410,26 @@ def _build_and_publish(
     # For CLOSED events, media_url is optional (may include a replay pointer)
     media_url = cfg.media_url if seat_state == SEAT_OPEN else None
 
+    # F2: resolve session bind (explicit / probe / honest absence)
+    session_id = resolve_session_id(cfg)
+    if seat_state == SEAT_OPEN and cfg.require_session_bind and not session_id:
+        print(
+            "[!] OPEN refused — VSS_REQUIRE_SESSION_BIND set but no session_id "
+            "(F2 fail-closed)",
+            file=sys.stderr,
+        )
+        return None
+
     try:
         event = build_seat_event(
             seat_state=seat_state,
             capture=capture,
             retina_oracle=oracle,
             media_url=media_url,
-            session_id=cfg.session_id,
+            session_id=session_id,
             ioid_token=cfg.ioid_token,
             signer_role=signer_role,
+            matches_channel=cfg.matches_channel,
             poep_enabled=bool(honesty.get("poep_enabled", False)),
             l6b_enabled=bool(honesty.get("l6b_enabled", False)),
             candidate_ok=bool(honesty.get("candidate_ok", False)),
@@ -359,6 +470,13 @@ def run_seat_loop(cfg: SeatConfig) -> int:
     print(f"[*] channel: {cfg.channel_id[:8]}…", file=sys.stderr)
     print(f"[*] bridge: {cfg.bridge_base_url}", file=sys.stderr)
     print(f"[*] poll interval: {cfg.poll_interval}s", file=sys.stderr)
+    print(
+        f"[*] F2 bind: session_id={cfg.session_id or '(none)'} "
+        f"bind_session={cfg.bind_session} require={cfg.require_session_bind}",
+        file=sys.stderr,
+    )
+    if cfg.matches_channel:
+        print(f"[*] F2 matches_channel: {cfg.matches_channel[:8]}…", file=sys.stderr)
 
     try:
         while True:
@@ -464,7 +582,19 @@ def main() -> int:
     )
     parser.add_argument(
         "--session-id", type=str, default=None,
-        help="Optional session_id (F2 watch-party bind slot)",
+        help="Optional session_id (F2 watch-party bind; or set VSS_SESSION_ID)",
+    )
+    parser.add_argument(
+        "--bind-session", action="store_true",
+        help="F2: probe bridge /operator/player/session-status for session_id",
+    )
+    parser.add_argument(
+        "--require-session-bind", action="store_true",
+        help="F2: refuse OPEN if no session_id can be resolved",
+    )
+    parser.add_argument(
+        "--matches-channel", type=str, default=None,
+        help="F2: optional #matches channel UUID pointer (or VSS_MATCHES_CHANNEL)",
     )
     parser.add_argument(
         "--ioid-token", type=str, default=None,
