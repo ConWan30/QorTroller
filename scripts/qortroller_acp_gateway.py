@@ -58,6 +58,7 @@ TOOL_SESSION_SUMMARY = "get_session_summary"
 TOOL_CEREMONY_STEPS = "list_ceremony_steps"
 TOOL_HEALTH_CHECK = "health_check"
 TOOL_DEEP_DIAGNOSE = "deep_diagnose"
+TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
 
 ALLOWED_TOOLS = (
     TOOL_RUN_PYTEST,
@@ -67,13 +68,19 @@ ALLOWED_TOOLS = (
     TOOL_CEREMONY_STEPS,
     TOOL_HEALTH_CHECK,
     TOOL_DEEP_DIAGNOSE,
+    TOOL_STREAM_SEAT_STATUS,
 )
 
 # Tools Devin owns regardless of phrasing.
 DEVIN_ONLY_TOOLS = (TOOL_DEEP_DIAGNOSE,)
 # Tools that stay on Grok Build even if the operator says "devin" — routing a
 # read-only status call to the heavy harness buys nothing.
-GROK_ONLY_TOOLS = (TOOL_RIG_STATUS, TOOL_CEREMONY_STEPS, TOOL_HEALTH_CHECK)
+GROK_ONLY_TOOLS = (
+    TOOL_RIG_STATUS,
+    TOOL_CEREMONY_STEPS,
+    TOOL_HEALTH_CHECK,
+    TOOL_STREAM_SEAT_STATUS,
+)
 
 BOT_HANDLE = os.environ.get("ACP_BOT_HANDLE", "@EA")
 
@@ -308,6 +315,13 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
     if re.match(r"^(?:get\s+)?(?:rig\s*)?status$|^rig$", command, re.I):
         return Intent(TOOL_RIG_STATUS)
 
+    if re.match(
+        r"^(?:get\s+)?stream(?:\s+seat)?(?:\s+status)?$|^seat$|^vss$",
+        command,
+        re.I,
+    ):
+        return Intent(TOOL_STREAM_SEAT_STATUS)
+
     m = re.match(r"^(?:get\s+)?session(?:\s+summary)?(?:\s+(\S+))?$", command, re.I)
     if m:
         session_id = (m.group(1) or "").strip()
@@ -433,6 +447,66 @@ def _tool_session_summary(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_stream_seat_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """VSS-4 — Read stream seat status (digest only, scrubbed).
+
+    Reads /vss/eligibility (VSS-1) from the bridge and returns a digest.
+    Never carries raw HID/IMU/L4/frames, keys, or full PoAC. The reply
+    is scrubbed by format_reply() before publishing to #rig-ops.
+
+    Fail-closed: if the bridge is unreachable, returns ok=False with a
+    clear message — never fabricates eligibility.
+    """
+    bot_cfg = bot._load_config()
+    elig = bot._bridge_get("/vss/eligibility", bot_cfg)
+    if elig is None:
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            False,
+            "stream seat: bridge unreachable — eligibility unknown (fail-closed)",
+            [["acp_tool", intent.tool], ["eligible", "unknown"]],
+        )
+
+    eligible = bool(elig.get("eligible", False))
+    capture_up = bool(elig.get("capture_up", False))
+    oracle_running = bool(elig.get("retina_oracle_running", False))
+    reason = elig.get("reason_if_closed", "")
+    honesty = elig.get("honesty", {})
+
+    # Build digest-only summary (no raw substrate, no keys)
+    parts = [
+        f"stream seat: {'ELIGIBLE' if eligible else 'CLOSED'}",
+        f"capture: {'up' if capture_up else 'down'}",
+        f"oracle: {'running' if oracle_running else 'stopped'}",
+    ]
+    if reason:
+        parts.append(f"reason: {reason[:80]}")
+    poep = honesty.get("poep_enabled", False)
+    l6b = honesty.get("l6b_enabled", False)
+    cand = honesty.get("candidate_ok", False)
+    parts.append(f"poep={poep} l6b={l6b} candidate={cand}")
+
+    summary = " | ".join(parts)
+    tags = [
+        ["acp_tool", intent.tool],
+        ["eligible", "true" if eligible else "false"],
+        ["capture", "up" if capture_up else "down"],
+        ["oracle", "running" if oracle_running else "stopped"],
+        ["poep_enabled", "true" if poep else "false"],
+        ["l6b_enabled", "true" if l6b else "false"],
+        ["candidate_ok", "true" if cand else "false"],
+    ]
+
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        eligible,  # ok=True only if eligible
+        summary,
+        tags,
+    )
+
+
 def _tool_ceremony_steps(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     return ToolResult(
         intent.tool,
@@ -513,6 +587,7 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_CEREMONY_STEPS: _tool_ceremony_steps,
     TOOL_HEALTH_CHECK: _tool_health_check,
     TOOL_DEEP_DIAGNOSE: _tool_deep_diagnose,
+    TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
 }
 
 
