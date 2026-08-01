@@ -57,6 +57,10 @@ TOOL_RIG_STATUS = "get_rig_status"
 TOOL_SESSION_SUMMARY = "get_session_summary"
 TOOL_CEREMONY_STEPS = "list_ceremony_steps"
 TOOL_HEALTH_CHECK = "health_check"
+# EA-ACP-2 — engineering read tools (Grok-only)
+TOOL_LIST_FAILING_TESTS = "list_failing_tests"
+TOOL_REPO_HEALTH = "repo_health"
+TOOL_SHOW_WP_STATUS = "show_wp_status"
 TOOL_DEEP_DIAGNOSE = "deep_diagnose"
 TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
 # VSS-S1 — agent viewers: summarize digests + flag a down seat (never OPEN)
@@ -74,6 +78,9 @@ ALLOWED_TOOLS = (
     TOOL_SESSION_SUMMARY,
     TOOL_CEREMONY_STEPS,
     TOOL_HEALTH_CHECK,
+    TOOL_LIST_FAILING_TESTS,
+    TOOL_REPO_HEALTH,
+    TOOL_SHOW_WP_STATUS,
     TOOL_DEEP_DIAGNOSE,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
@@ -90,6 +97,9 @@ GROK_ONLY_TOOLS = (
     TOOL_RIG_STATUS,
     TOOL_CEREMONY_STEPS,
     TOOL_HEALTH_CHECK,
+    TOOL_LIST_FAILING_TESTS,
+    TOOL_REPO_HEALTH,
+    TOOL_SHOW_WP_STATUS,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
@@ -101,6 +111,14 @@ BOT_HANDLE = os.environ.get("ACP_BOT_HANDLE", "@EA")
 
 # Where a pytest target may live. Anything else is rejected.
 PYTEST_ROOTS = ("bridge/tests", "sdk/tests", "tests", "autoresearch/tests")
+
+# EA-ACP-2: allowed work-package docs. Keys are the slugs operators may type.
+WP_DOCS: dict[str, Path] = {
+    "acp": REPO_ROOT / "docs" / "design" / "buzz-ea-acp-harness-integration-v0.md",
+    "gateway": REPO_ROOT / "docs" / "design" / "buzz-phase4-acp-gateway-runbook.md",
+    "mvp": REPO_ROOT / "docs" / "design" / "buzz-qortroller-gamer-mvp-v0.md",
+    "vss": REPO_ROOT / "docs" / "design" / "buzz-vss-stream-seat-scope-v0.md",
+}
 
 # Reply bounds (digest discipline).
 MAX_REPLY_CHARS = int(os.environ.get("ACP_MAX_REPLY_CHARS", "480"))
@@ -385,6 +403,20 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
 
     if re.match(r"^health(?:\s+check)?$", command, re.I):
         return Intent(TOOL_HEALTH_CHECK)
+
+    # EA-ACP-2: engineering read tools
+    if re.match(r"^(?:list\s+)?failing(?:\s+tests?)?$", command, re.I):
+        return Intent(TOOL_LIST_FAILING_TESTS)
+
+    if re.match(r"^(?:repo\s+)?health$|^repo\s+status$", command, re.I):
+        return Intent(TOOL_REPO_HEALTH)
+
+    m = re.match(r"^(?:wp|work(?:\s*|-)?package)\s+(\S+)$", command, re.I)
+    if m:
+        slug = m.group(1).strip().lower()
+        if slug not in WP_DOCS:
+            return Rejection(REJECT_BAD_TARGET, f"unknown wp: {slug}")
+        return Intent(TOOL_SHOW_WP_STATUS, {"wp": slug})
 
     m = re.match(r"^(?:deep\s+)?diagnose\s+(.+)$", command, re.I)
     if m:
@@ -763,6 +795,125 @@ def _tool_health_check(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_list_failing_tests(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """EA-ACP-2: Read lastfailed cache and return a bounded digest.
+
+    Does not re-run tests; only reports what pytest already recorded.
+    """
+    cache_path = cfg.repo_root / ".pytest_cache" / "v" / "cache" / "lastfailed"
+    if not cache_path.is_file():
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            True,
+            "failing tests: no cache (run pytest first)",
+            [["acp_tool", intent.tool], ["count", "0"], ["cache", "missing"]],
+        )
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        nodeids = sorted(str(k) for k in data.keys())
+    except (json.JSONDecodeError, OSError):
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            False,
+            "failing tests: cache unreadable",
+            [["acp_tool", intent.tool], ["count", "?"]],
+        )
+    count = len(nodeids)
+    if count == 0:
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            True,
+            "failing tests: 0 (empty cache)",
+            [["acp_tool", intent.tool], ["count", "0"]],
+        )
+    # Bound the digest to MAX_REPLY_CHARS; keep the first N node ids.
+    joined = ", ".join(nodeids)
+    if len(joined) > MAX_REPLY_CHARS - 80:
+        joined = joined[: MAX_REPLY_CHARS - 100].rsplit(", ", 1)[0] + f", … (+{count - 3} more)"
+    summary = f"failing tests: {count} — {joined}"
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        True,
+        summary,
+        [["acp_tool", intent.tool], ["count", str(count)]],
+    )
+
+
+def _tool_repo_health(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """EA-ACP-2: Compose health + PV-CI one-liner."""
+    health = _tool_health_check(intent, cfg)
+    pvci = _tool_invariant_gate(intent, cfg)
+    ok = health.ok and pvci.ok
+    summary = f"repo health — {health.summary} | {pvci.summary}"
+    tags = [
+        ["acp_tool", intent.tool],
+        ["healthy", "true" if health.ok else "false"],
+        ["pv_ci", next((t[1] for t in pvci.tags if t[0] == "pv_ci"), "?")],
+        ["verdict", "PASS" if ok else "FAIL"],
+    ]
+    return ToolResult(intent.tool, intent.harness, ok, summary, tags)
+
+
+def _tool_show_wp_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """EA-ACP-2: Read headings from an allow-listed work-package doc."""
+    slug = intent.args.get("wp", "")
+    doc_path = WP_DOCS.get(slug)
+    if not doc_path or not doc_path.is_file():
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            False,
+            f"wp: {slug} not found",
+            [["acp_tool", intent.tool], ["wp", slug], ["found", "false"]],
+        )
+    try:
+        text = doc_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            False,
+            f"wp: {slug} unreadable ({exc})",
+            [["acp_tool", intent.tool], ["wp", slug]],
+        )
+    headings: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# ") or stripped.startswith("## "):
+            heading = stripped.lstrip("# ").strip()
+            if heading:
+                headings.append(heading)
+    if not headings:
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            True,
+            f"wp {slug}: no headings",
+            [["acp_tool", intent.tool], ["wp", slug], ["headings", "0"]],
+        )
+    # Build a bounded digest of headings.
+    joined = " | ".join(headings[:8])
+    if len(joined) > MAX_REPLY_CHARS - 60:
+        joined = joined[: MAX_REPLY_CHARS - 80].rsplit(" | ", 1)[0] + " | …"
+    summary = f"wp {slug}: {joined}"
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        True,
+        summary,
+        [
+            ["acp_tool", intent.tool],
+            ["wp", slug],
+            ["headings", str(len(headings))],
+            ["found", "true"],
+        ],
+    )
+
+
 def _repo_sha_hint(cfg: GatewayConfig) -> str:
     """Return the current HEAD SHA for the hand-off record (EA-ACP-1).
 
@@ -830,6 +981,9 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_SESSION_SUMMARY: _tool_session_summary,
     TOOL_CEREMONY_STEPS: _tool_ceremony_steps,
     TOOL_HEALTH_CHECK: _tool_health_check,
+    TOOL_LIST_FAILING_TESTS: _tool_list_failing_tests,
+    TOOL_REPO_HEALTH: _tool_repo_health,
+    TOOL_SHOW_WP_STATUS: _tool_show_wp_status,
     TOOL_DEEP_DIAGNOSE: _tool_deep_diagnose,
     TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
     TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
@@ -885,7 +1039,7 @@ def rejection_reply(rejection: Rejection) -> str:
         return "rejected: operator allow-list"
     if rejection.reason == REJECT_BAD_TARGET:
         return f"rejected: {rejection.detail}"
-    return "rejected: unknown command — try status | invariant | health | ceremony | session | pytest <path>"
+    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | ceremony | session | pytest <path>"
 
 
 # --- Audit trail (local only, never on Nostr) --------------------------------
