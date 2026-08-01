@@ -7,7 +7,7 @@ commands that actually keep the system functioning after multi-agent days.
 ## Baseline health commands (run before merge/push)
 
 ```powershell
-# 1. Protocol invariants (must stay at 184)
+# 1. Protocol invariants (must stay at 188)
 python scripts/vapi_invariant_gate.py
 
 # 2. Critical component smoke imports
@@ -36,7 +36,7 @@ python -m pytest bridge/tests --collect-only -q
 |---|---|---|
 | QorTroller Engineering Assistant | `qortroller.py`, `qortroller_daemon.py` | Operator TUI/REPL/daemon; shell tools must stay `shell=False` + `shlex.split` |
 | Retina Visual Oracle | `bridge/vapi_bridge/retina_visual_oracle.py` | Game-aware VLM (football/shooter); cross-modal verify feeds PoAC |
-| PV-CI gate | `scripts/vapi_invariant_gate.py` | Fail-closed 184-invariant baseline |
+| PV-CI gate | `scripts/vapi_invariant_gate.py` | Fail-closed 188-invariant baseline (grew after VSS/Phase-O0 merges) |
 | Operator agent routes | `bridge/vapi_bridge/operator_api/agent_misc.py` | Phase 196/203 agent health + registration endpoints |
 | QorTroller ACP gateway (Phase 4) | `scripts/qortroller_acp_gateway.py` | `@EA` mention surface in `#rig-ops`; fail-closed operator allow-list, fixed-argv tools (`shell=False`), digest-only replies, local JSONL audit trail; Grok Build primary / Devin for heavy work. Runbook: `docs/design/buzz-phase4-acp-gateway-runbook.md` |
 | QorTroller Buzz bot (Phase 1) | `scripts/qortroller_buzz_bot.py` | Buzz-native rig-status + session-digest bot; env-only keys; digest-only posts; wired read path (BridgeClient → `/player/session-status`) + Rust-helper publish (`qortroller-buzz publish` subprocess) |
