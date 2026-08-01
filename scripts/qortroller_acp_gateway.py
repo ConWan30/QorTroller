@@ -388,8 +388,27 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
 
     m = re.match(r"^(?:deep\s+)?diagnose\s+(.+)$", command, re.I)
     if m:
-        topic = m.group(1).strip()
-        return Intent(TOOL_DEEP_DIAGNOSE, {"topic": topic[:200]})
+        raw = m.group(1).strip()
+        # EA-ACP-1: optional acceptance/priority fields after '|'
+        parts = [p.strip() for p in raw.split("|")]
+        topic = parts[0]
+        acceptance = None
+        priority = None
+        for part in parts[1:]:
+            low = part.lower()
+            if low.startswith("acceptance "):
+                acceptance = part[11:].strip()[:200]
+            elif low.startswith("priority "):
+                priority = part[9:].strip()[:32]
+            else:
+                # Unknown pipe segment — keep it in the topic, do not invent fields.
+                topic += " | " + part
+        args: dict[str, str] = {"topic": topic[:200]}
+        if acceptance:
+            args["acceptance"] = acceptance
+        if priority:
+            args["priority"] = priority
+        return Intent(TOOL_DEEP_DIAGNOSE, args)
 
     return None
 
@@ -744,23 +763,63 @@ def _tool_health_check(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _repo_sha_hint(cfg: GatewayConfig) -> str:
+    """Return the current HEAD SHA for the hand-off record (EA-ACP-1).
+
+    Fail-open: if git is missing or the repo is not a git checkout, return "".
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=cfg.repo_root,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()[:40]
+    except Exception:
+        pass
+    return ""
+
+
 def _tool_deep_diagnose(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     """Queue a Devin hand-off. The gateway never impersonates the harness."""
     topic = intent.args.get("topic", "")
-    record = {
+    acceptance = intent.args.get("acceptance")
+    priority = intent.args.get("priority", "normal")
+    record: dict[str, object] = {
         "ts": int(time.time()),
         "harness": HARNESS_DEVIN,
         "tool": intent.tool,
         "topic": topic,
         "status": "queued",
+        "priority": priority,
     }
+    if acceptance:
+        record["acceptance"] = acceptance
+    sha = _repo_sha_hint(cfg)
+    if sha:
+        record["repo_sha_hint"] = sha
     _append_jsonl(cfg.devin_queue_path, record)
+    tags = [
+        ["acp_tool", intent.tool],
+        ["harness", HARNESS_DEVIN],
+        ["status", "queued"],
+        ["ticket", str(record["ts"])],
+    ]
+    if priority != "normal":
+        tags.append(["priority", priority])
+    summary = f"queued for Devin: {topic[:120]}"
+    if acceptance:
+        summary += f" | acceptance: {acceptance[:60]}"
     return ToolResult(
         intent.tool,
         intent.harness,
         True,
-        f"queued for Devin: {topic[:120]} (operator invokes the harness; no result yet)",
-        [["acp_tool", intent.tool], ["harness", HARNESS_DEVIN], ["status", "queued"]],
+        summary,
+        tags,
     )
 
 
