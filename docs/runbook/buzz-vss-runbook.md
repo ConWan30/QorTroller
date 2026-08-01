@@ -35,7 +35,8 @@ Three-plane split:
 ## VSS-1: Eligibility endpoint
 
 **Code:** `bridge/vapi_bridge/operator_api/agent_vss.py`
-**Route:** `GET /vss/eligibility`
+**Route:** `GET /operator/vss/eligibility`
+(Operator sub-app is mounted at `/operator`; route on the sub-app is `/vss/eligibility`.)
 
 Returns:
 ```json
@@ -163,7 +164,7 @@ See the claim register for grades, gates, and the never-sayable list.
 1. **Verify PV-CI:** `python scripts/vapi_invariant_gate.py` (expect 188 PASS)
 2. **Verify VSS tests:** `python -m pytest bridge/tests/test_vss_*.py -q` (expect 58 passed)
 3. **Start bridge:** ensure capture monitor + retina oracle are running
-4. **Check eligibility:** `curl http://localhost:8000/vss/eligibility` (expect `eligible: true`)
+4. **Check eligibility:** `curl http://localhost:8000/operator/vss/eligibility` (expect `eligible: true`)
 5. **Set gamer key:** `$env:BUZZ_PRIVATE_KEY = "<gamer-nsec>"`
 6. **Set channel:** `$env:VSS_STREAMS_CHANNEL = "<streams-channel-uuid>"`
 7. **Dry-run first:** `python scripts/buzz_vss_seat.py --dry-run`

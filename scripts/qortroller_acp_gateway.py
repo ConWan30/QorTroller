@@ -450,7 +450,7 @@ def _tool_session_summary(intent: Intent, cfg: GatewayConfig) -> ToolResult:
 def _tool_stream_seat_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     """VSS-4 — Read stream seat status (digest only, scrubbed).
 
-    Reads /vss/eligibility (VSS-1) from the bridge and returns a digest.
+    Reads /operator/vss/eligibility (VSS-1) from the bridge and returns a digest.
     Never carries raw HID/IMU/L4/frames, keys, or full PoAC. The reply
     is scrubbed by format_reply() before publishing to #rig-ops.
 
@@ -458,7 +458,8 @@ def _tool_stream_seat_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     clear message — never fabricates eligibility.
     """
     bot_cfg = bot._load_config()
-    elig = bot._bridge_get("/vss/eligibility", bot_cfg)
+    # Operator sub-app is mounted at /operator (see main.py app.mount).
+    elig = bot._bridge_get("/operator/vss/eligibility", bot_cfg)
     if elig is None:
         return ToolResult(
             intent.tool,
