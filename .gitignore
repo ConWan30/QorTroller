@@ -312,3 +312,5 @@ audits/poep_ring_dump/
 # the addendum requires the ACP invocation log to stay off Nostr and off the repo).
 audits/acp_gateway.jsonl
 audits/acp_devin_queue.jsonl
+audits/acp_plans.jsonl
+audits/acp_devin_results.jsonl

@@ -29,6 +29,7 @@ def cfg(tmp_path: Path) -> gw.GatewayConfig:
         audit_log_path=tmp_path / "acp_gateway.jsonl",
         devin_queue_path=tmp_path / "acp_devin_queue.jsonl",
         plans_path=tmp_path / "acp_plans.jsonl",
+        devin_results_path=tmp_path / "acp_devin_results.jsonl",
     )
 
 
@@ -58,6 +59,7 @@ def test_unaddressed_message_is_silent(cfg):
         ("@EA plan full check", gw.TOOL_PLAN),
         ("@EA plan investigate bridge lag", gw.TOOL_PLAN),
         ("@EA confirm plan abcdef", gw.TOOL_CONFIRM_PLAN),
+        ("@EA diagnose status", gw.TOOL_DIAGNOSE_STATUS),
         ("@EA diagnose retina oracle drift", gw.TOOL_DEEP_DIAGNOSE),
     ],
 )
@@ -423,6 +425,72 @@ def test_confirm_refuses_unknown_plan_id(cfg):
     result = gw.execute(gw.parse_mention("@EA confirm plan deadbeef", cfg), cfg)
     assert result.ok is False
     assert "not found" in result.summary
+
+
+def test_diagnose_status_reads_local_results(cfg):
+    result = gw.execute(gw.parse_mention("@EA diagnose status", cfg), cfg)
+    assert result.ok is True
+    assert "no results yet" in result.summary
+
+
+def test_diagnose_status_shows_latest_results(cfg):
+    cfg.devin_results_path.parent.mkdir(parents=True, exist_ok=True)
+    gw._append_jsonl(
+        cfg.devin_results_path,
+        {
+            "ts": 1,
+            "topic": "vss helper",
+            "status": "done",
+            "pr_url": "https://github.com/ConWan30/QorTroller/pull/999",
+            "summary": "fixed race",
+        },
+    )
+    gw._append_jsonl(
+        cfg.devin_results_path,
+        {
+            "ts": 2,
+            "topic": "acp parser",
+            "status": "done",
+            "pr_url": "",
+            "summary": "tightened regex",
+        },
+    )
+    result = gw.execute(gw.parse_mention("@EA diagnose status", cfg), cfg)
+    assert result.ok is True
+    assert "acp parser" in result.summary
+    assert "vss helper" in result.summary
+    assert ["count", "2"] in result.tags
+
+
+def test_context_pack_script_emits_a_bundle(tmp_path: Path):
+    queue = tmp_path / "audits" / "acp_devin_queue.jsonl"
+    queue.parent.mkdir(parents=True, exist_ok=True)
+    gw._append_jsonl(queue, {"ts": 1, "topic": "bridge lag", "status": "queued"})
+    out = tmp_path / "pack.md"
+    # Import the script and call main directly.
+    import acp_devin_context_pack as pack
+    pack.main(["--repo-root", str(tmp_path), "--topic", "bridge lag", "--output", str(out)])
+    text = out.read_text(encoding="utf-8")
+    assert "# Devin Context Pack" in text
+    assert "bridge lag" in text
+    assert "Verification commands" in text
+
+
+def test_diagnose_status_scrubs_secrets_from_results(cfg):
+    cfg.devin_results_path.parent.mkdir(parents=True, exist_ok=True)
+    gw._append_jsonl(
+        cfg.devin_results_path,
+        {
+            "ts": 1,
+            "topic": "leaky summary",
+            "status": "done",
+            "pr_url": "",
+            "summary": "BUZZ_PRIVATE_KEY=nsec1qqqqqqqqqqqq",
+        },
+    )
+    result = gw.execute(gw.parse_mention("@EA diagnose status", cfg), cfg)
+    assert "nsec1qqq" not in result.summary
+    assert "[redacted" in result.summary
 
 
 def test_confirm_refuses_already_completed_plan(cfg, monkeypatch):

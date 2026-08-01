@@ -65,6 +65,8 @@ TOOL_SHOW_WP_STATUS = "show_wp_status"
 # EA-ACP-3 — plan/confirm (agentic, not autonomous)
 TOOL_PLAN = "plan"
 TOOL_CONFIRM_PLAN = "confirm_plan"
+# EA-ACP-4 — Devin result bridge (operator-mediated read)
+TOOL_DIAGNOSE_STATUS = "diagnose_status"
 TOOL_DEEP_DIAGNOSE = "deep_diagnose"
 TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
 # VSS-S1 — agent viewers: summarize digests + flag a down seat (never OPEN)
@@ -87,6 +89,7 @@ ALLOWED_TOOLS = (
     TOOL_SHOW_WP_STATUS,
     TOOL_PLAN,
     TOOL_CONFIRM_PLAN,
+    TOOL_DIAGNOSE_STATUS,
     TOOL_DEEP_DIAGNOSE,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
@@ -108,6 +111,7 @@ GROK_ONLY_TOOLS = (
     TOOL_SHOW_WP_STATUS,
     TOOL_PLAN,
     TOOL_CONFIRM_PLAN,
+    TOOL_DIAGNOSE_STATUS,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
@@ -147,6 +151,11 @@ PLAN_REGISTRY: dict[str, list[dict[str, dict[str, str]]]] = {
 
 PLANS_PATH = Path(
     os.environ.get("ACP_PLANS_FILE", str(REPO_ROOT / "audits" / "acp_plans.jsonl"))
+)
+
+# EA-ACP-4: operator/Devin writes result records here; gateway reads only.
+DEVIN_RESULTS_PATH = Path(
+    os.environ.get("ACP_DEVIN_RESULTS", str(REPO_ROOT / "audits" / "acp_devin_results.jsonl"))
 )
 
 # Reply bounds (digest discipline).
@@ -219,6 +228,7 @@ class GatewayConfig:
     audit_log_path: Path = AUDIT_LOG_PATH
     devin_queue_path: Path = DEVIN_QUEUE_PATH
     plans_path: Path = PLANS_PATH
+    devin_results_path: Path = DEVIN_RESULTS_PATH
     max_reply_chars: int = MAX_REPLY_CHARS
     dry_run: bool = False
 
@@ -457,6 +467,10 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
     m = re.match(r"^confirm\s+plan\s+(\S+)$", command, re.I)
     if m:
         return Intent(TOOL_CONFIRM_PLAN, {"plan_id": m.group(1).strip().lower()[:16]})
+
+    # EA-ACP-4: operator asks for the latest Devin result digest.
+    if re.match(r"^(?:diagnose|devin)\s+status$", command, re.I):
+        return Intent(TOOL_DIAGNOSE_STATUS)
 
     m = re.match(r"^(?:deep\s+)?diagnose\s+(.+)$", command, re.I)
     if m:
@@ -1085,6 +1099,68 @@ def _tool_confirm_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_diagnose_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """EA-ACP-4: read the local Devin results file and post a bounded digest.
+
+    The gateway never auto-publishes a Devin result as protocol truth. This
+    tool only reads what an operator or Devin has already written to the
+    local `acp_devin_results.jsonl`.
+    """
+    if not cfg.devin_results_path.is_file():
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            True,
+            "diagnose status: no results yet",
+            [["acp_tool", intent.tool], ["count", "0"], ["status", "empty"]],
+        )
+    rows: list[dict] = []
+    for line in cfg.devin_results_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    if not rows:
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            True,
+            "diagnose status: no results yet",
+            [["acp_tool", intent.tool], ["count", "0"], ["status", "empty"]],
+        )
+    # Show latest 3 by default.
+    latest = list(reversed(rows))[:3]
+    parts: list[str] = []
+    for r in latest:
+        topic = scrub(str(r.get("topic", "?"))[:50])
+        status = scrub(str(r.get("status", "?")))
+        pr_url = scrub(str(r.get("pr_url", ""))[:80])
+        one_line = scrub(str(r.get("summary", ""))[:80])
+        piece = f"{topic} [{status}]"
+        if pr_url:
+            piece += f" pr={pr_url}"
+        if one_line:
+            piece += f" — {one_line}"
+        parts.append(piece)
+    summary = "diagnose status: " + " | ".join(parts)
+    if len(summary) > MAX_REPLY_CHARS - 80:
+        summary = summary[: MAX_REPLY_CHARS - 100].rsplit(" | ", 1)[0] + " | …"
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        True,
+        summary,
+        [
+            ["acp_tool", intent.tool],
+            ["count", str(len(rows))],
+            ["status", "ok"],
+        ],
+    )
+
+
 def _repo_sha_hint(cfg: GatewayConfig) -> str:
     """Return the current HEAD SHA for the hand-off record (EA-ACP-1).
 
@@ -1157,6 +1233,7 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_SHOW_WP_STATUS: _tool_show_wp_status,
     TOOL_PLAN: _tool_plan,
     TOOL_CONFIRM_PLAN: _tool_confirm_plan,
+    TOOL_DIAGNOSE_STATUS: _tool_diagnose_status,
     TOOL_DEEP_DIAGNOSE: _tool_deep_diagnose,
     TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
     TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
@@ -1212,7 +1289,7 @@ def rejection_reply(rejection: Rejection) -> str:
         return "rejected: operator allow-list"
     if rejection.reason == REJECT_BAD_TARGET:
         return f"rejected: {rejection.detail}"
-    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | plan <goal> | confirm plan <id> | ceremony | session | pytest <path>"
+    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | plan <goal> | confirm plan <id> | diagnose status | ceremony | session | pytest <path>"
 
 
 # --- Audit trail (local only, never on Nostr) --------------------------------
