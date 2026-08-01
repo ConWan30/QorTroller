@@ -1,6 +1,6 @@
 # QorTroller Workflow Policy Router — Runbook
 
-**Scope:** WPR-1 / WPR-2 / WPR-3 from `docs/design/buzz-workflow-policy-routers-*.md`
+**Scope:** WPR-1 / WPR-2 / WPR-3 / WPR-4 from `docs/design/buzz-workflow-policy-routers-*.md`
 
 - `config/buzz_workflow_policies.json` — catalog
 - `scripts/workflow_policy_router.py` — CLI + library
@@ -25,6 +25,10 @@ ACP_OPERATOR_PUBKEYS=<op-pubkey-hex> python scripts/workflow_policy_router.py --
 WORKFLOW_WEBHOOK_URL=http://localhost:8080/buzz \
     ACP_OPERATOR_PUBKEYS=<op-pubkey-hex> \
     python scripts/workflow_policy_router.py --policy-id daily-repo-health
+
+# Queue-depth trigger (WPR-4): run on-queue-depth if ACP Devin queue is non-empty
+ACP_OPERATOR_PUBKEYS=<op-pubkey-hex> \
+    python scripts/workflow_policy_router.py --trigger queue_nonempty
 ```
 
 Dashboard API:
