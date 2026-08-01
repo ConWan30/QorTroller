@@ -2,7 +2,7 @@
 """VSS-3 — Buzz VSS seat open/close helper.
 
 Implements docs/design/buzz-vss-stream-seat-scope-v0.md §6 (Gamer helper):
-  1. Poll /vss/eligibility
+  1. Poll /operator/vss/eligibility
   2. Rising edge → publish OPEN (gamer key, Architecture C)
   3. Falling edge → publish CLOSED
   4. Never upload pixels
@@ -133,7 +133,7 @@ def _load_config(args: argparse.Namespace) -> SeatConfig:
 
 
 def _poll_eligibility(cfg: SeatConfig) -> Optional[dict]:
-    """Poll the bridge's /vss/eligibility endpoint. Never fabricate.
+    """Poll the bridge's /operator/vss/eligibility endpoint. Never fabricate.
 
     Returns the eligibility dict or None on failure.
     """
@@ -144,7 +144,8 @@ def _poll_eligibility(cfg: SeatConfig) -> Optional[dict]:
         if cfg.bridge_api_key:
             headers["x-api-key"] = cfg.bridge_api_key
         resp = requests.get(
-            f"{cfg.bridge_base_url}/vss/eligibility",
+            # Operator sub-app is mounted at /operator (see main.py app.mount).
+            f"{cfg.bridge_base_url}/operator/vss/eligibility",
             headers=headers,
             timeout=5,
         )
@@ -193,18 +194,29 @@ def check_signer_is_not_bot(cfg: SeatConfig) -> Optional[str]:
         # "human" if the relay has no role tag for this pubkey (new member).
         env = os.environ.copy()
         env["BUZZ_RELAY_URL"] = cfg.relay_url
+        # Current qortroller-buzz builds expose whoami/publish/authtag only —
+        # no `profile get`. When the subcommand is missing, role is unqueryable:
+        # scope §2 says only an explicit role=bot blocks OPEN, so treat as human.
         prof = subprocess.run(
             [cfg.helper_path, "profile", "get", "--pubkey", pubkey],
             capture_output=True, text=True, timeout=15,
             env=env, shell=False,
         )
+        err = (prof.stderr or "").strip()
+        out = (prof.stdout or "").strip()
         if prof.returncode != 0:
+            if "unknown subcommand" in err.lower() or "unknown subcommand" in out.lower():
+                print(
+                    "[*] profile get unsupported by helper — "
+                    "role unqueryable; treating as human (VSS-7 §2 absence rule)",
+                    file=sys.stderr,
+                )
+                return "human"
             # Relay unreachable or profile not found — fail-closed
-            print(f"[!] profile get failed: {prof.stderr.strip()}",
-                  file=sys.stderr)
+            print(f"[!] profile get failed: {err or out}", file=sys.stderr)
             return None
         try:
-            data = json.loads(prof.stdout.strip())
+            data = json.loads(out)
         except json.JSONDecodeError:
             print("[!] profile get returned non-JSON", file=sys.stderr)
             return None
