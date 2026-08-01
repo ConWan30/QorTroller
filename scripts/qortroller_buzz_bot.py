@@ -1,5 +1,5 @@
 """
-QorTroller Buzz bot — Phase 1 (WIRED read path + Rust-helper publish).
+QorTroller Buzz bot — Phase 2 (session-end attestation + kind 9 postcards).
 
 Implements Architecture C from docs/design/buzz-qortroller-gamer-mvp-v0.md:
   Python (truth plane)  ──►  Rust helper (bytes on the wire)
@@ -50,6 +50,8 @@ try:
 except ImportError:
     _NOSTR_SDK = False
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 # --- .env loading (scripts/.env) --------------------------------------------
 try:
     from dotenv import load_dotenv
@@ -68,6 +70,8 @@ CHANNEL_IDS = [
 # Matches channel — where session postcards (§3.2) are published for pinning.
 # Defaults to the second channel in CHANNEL_IDS if not explicitly set.
 MATCHES_CHANNEL_ID = os.environ.get("BUZZ_MATCHES_CHANNEL_ID", "")
+# Phase 2 — archive directory where session runners write session_continuum.json.
+QORTROLLER_SESSIONS_DIR = os.environ.get("QORTROLLER_SESSIONS_DIR", "")
 BOT_NAME = os.environ.get("QORTROLLER_BOT_NAME", "QorTroller Rig EA")
 BOT_ABOUT = os.environ.get(
     "QORTROLLER_BOT_ABOUT",
@@ -119,6 +123,7 @@ class BotConfig:
     bridge_base_url: str
     bridge_api_key: str
     bot_privkey: str
+    sessions_dir: str
     owner_attested: bool
     helper_path: str
     cli_path: str
@@ -146,6 +151,7 @@ def _load_config() -> BotConfig:
         bridge_base_url=BRIDGE_BASE_URL,
         bridge_api_key=BRIDGE_API_KEY,
         bot_privkey=BOT_PRIVKEY,
+        sessions_dir=QORTROLLER_SESSIONS_DIR,
         owner_attested=bool(OWNER_PRIVKEY),
         helper_path=BUZZ_HELPER_PATH,
         cli_path=BUZZ_CLI_PATH,
@@ -279,6 +285,107 @@ def _read_session_postcard(cfg: BotConfig, session_id: str = "") -> Optional[dic
     }
 
 
+def _resolve_session_archive(cfg: BotConfig, session_id: str) -> Optional[Path]:
+    """Return the archive directory for a session, if it exists.
+
+    Searches, in order:
+      1. cfg.sessions_dir / <session_id>
+      2. REPO_ROOT / .qortroller / sessions / <session_id>
+      3. REPO_ROOT / audits / <session_id>
+    """
+    if not session_id:
+        return None
+    candidates: list[Path] = []
+    if cfg.sessions_dir:
+        candidates.append(Path(cfg.sessions_dir) / session_id)
+    candidates.append(REPO_ROOT / ".qortroller" / "sessions" / session_id)
+    candidates.append(REPO_ROOT / "audits" / session_id)
+    # Some runners stamp the archive with a label + timestamp prefix.
+    for audits in (REPO_ROOT / "audits",):
+        if audits.is_dir():
+            for p in audits.iterdir():
+                if p.is_dir() and session_id in p.name:
+                    candidates.append(p)
+    for p in candidates:
+        if p.is_dir() and (p / "rwm_manifest_chain.json").is_file():
+            return p
+    return None
+
+
+def _read_session_continuum(archive_dir: Path) -> Optional[dict]:
+    """Load session_continuum.json from an archive directory."""
+    sidecar = archive_dir / "session_continuum.json"
+    if not sidecar.is_file():
+        return None
+    try:
+        return json.loads(sidecar.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _commitment_root_from_continuum(continuum: dict | None) -> Optional[str]:
+    """Extract the strongest commitment root available from a continuum record."""
+    if not continuum:
+        return None
+    stack = continuum.get("stack") or {}
+    # Escrow or stranger pack commitments are strongest.
+    for key in ("escrow", "stranger_pack"):
+        if key in stack:
+            root = (stack[key] or {}).get("commitment_root") or (stack[key] or {}).get("merkle_root")
+            if root and isinstance(root, str) and len(root) == 64:
+                return root
+    # Fallback to RWM L0 chain tip.
+    rwm = continuum.get("rwm") or {}
+    tip = rwm.get("l0_chain_tip_hex") or rwm.get("chain_tip")
+    if tip and isinstance(tip, str) and len(tip) == 64:
+        return tip
+    # PoSP/KAS anchors.
+    for key in ("posp", "kas"):
+        if key in stack:
+            anchor = (stack[key] or {}).get("anchor_digest") or (stack[key] or {}).get("session_id")
+            if anchor and isinstance(anchor, str) and len(anchor) == 64:
+                return anchor
+    return None
+
+
+def _build_attestation_postcard(
+    postcard: dict, continuum: dict | None
+) -> dict:
+    """Build the final attestation postcard for a completed session.
+
+    Uses the session-status `postcard` as the base and enriches it with the
+    continuum verdict / commitment_root when a continuum sidecar exists.
+    Never fabricates: if no continuum, the attestation stays at candidate/advisory.
+    """
+    if not continuum:
+        return {**postcard, "attestation": False, "commitment_root": None}
+
+    cont_verdict = continuum.get("verdict")
+    cont_advisory = continuum.get("advisory", True)
+    # Honest verdict: prefer the continuum verdict only when it is advisory/candidate.
+    # The bot never upgrades a candidate to a sealed population claim.
+    if cont_verdict and cont_advisory:
+        verdict = cont_verdict
+    else:
+        verdict = postcard.get("verdict", "UNKNOWN")
+
+    root = _commitment_root_from_continuum(continuum)
+    out = dict(postcard)
+    out["verdict"] = verdict
+    out["commitment_root"] = root or postcard.get("commitment_root")
+    out["n_challenges"] = int(
+        continuum.get("l6b_probe_count")
+        or continuum.get("n_challenges")
+        or postcard.get("n_challenges", 0)
+    )
+    out["attestation"] = True
+    # Honesty flags straight from the status endpoint (operator-gated).
+    out["poep_enabled"] = postcard.get("poep_enabled", False)
+    out["l6b_enabled"] = postcard.get("l6b_enabled", False)
+    out["candidate_ok"] = bool(continuum.get("presence_candidate") or postcard.get("candidate_ok", False))
+    return out
+
+
 # --- Event builders (Buzz-correct shape, digest-only) -----------------------
 
 def _status_event_content(state: dict) -> str:
@@ -341,6 +448,7 @@ def _postcard_content(postcard: dict) -> str:
     candidate = postcard.get("candidate_ok", False)
     eligible = postcard.get("is_fully_eligible", False)
     humanity = postcard.get("humanity_prob")
+    attestation = postcard.get("attestation", False)
     parts = [
         f"session {sid}",
         f"verdict: {verdict}",
@@ -353,6 +461,10 @@ def _postcard_content(postcard: dict) -> str:
         parts.append("eligible: true")
     if humanity is not None:
         parts.append(f"humanity_prob: {humanity:.3f}")
+    if attestation:
+        parts.append("attestation: final")
+    if postcard.get("commitment_root"):
+        parts.append(f"root: {postcard['commitment_root'][:16]}…")
     return " | ".join(parts)
 
 
@@ -621,6 +733,23 @@ def handle_command(
     return None
 
 
+def _publish_attestation(cfg: BotConfig, postcard: dict) -> Optional[dict]:
+    """Phase 2 — publish a final attestation for a completed session.
+
+    Looks up the session archive, loads the continuum sidecar, builds the
+    attestation postcard, and posts it to #matches. Returns the publish result.
+    """
+    session_id = postcard.get("session_id", "")
+    archive = _resolve_session_archive(cfg, session_id)
+    continuum = _read_session_continuum(archive) if archive else None
+    attestation = _build_attestation_postcard(postcard, continuum)
+    content = _postcard_content(attestation)
+    tags = _postcard_tags(cfg.channel_ids[0], attestation)
+    digest_channel = cfg.matches_channel_id or cfg.channel_ids[0]
+    print(f"[*] attestation → #{digest_channel[:8]}: {content}", file=sys.stderr)
+    return _publish_event(cfg, digest_channel, content, tags)
+
+
 # --- Main loop ---------------------------------------------------------------
 
 def main() -> int:
@@ -657,6 +786,9 @@ def main() -> int:
     last_command_poll = int(time.time())
     last_digest_time = 0.0
     last_digest_signature: Optional[str] = None
+    last_session_active = False
+    last_session_id: str = ""
+    attested_sessions: set[str] = set()
 
     print("[*] entering main loop (Ctrl-C to stop)", file=sys.stderr)
     try:
@@ -714,6 +846,21 @@ def main() -> int:
                                     file=sys.stderr,
                                 )
                         last_digest_signature = sig
+                    # Phase 2 — session-end attestation.
+                    session_id = postcard.get("session_id", "")
+                    session_active = bool(postcard.get("session_active", False))
+                    if (
+                        session_id
+                        and not session_active
+                        and last_session_active
+                        and session_id not in attested_sessions
+                    ):
+                        if publish_ok:
+                            _publish_attestation(cfg, postcard)
+                        attested_sessions.add(session_id)
+                    last_session_active = session_active
+                    if session_id:
+                        last_session_id = session_id
                     last_digest_time = now
 
             # Command polling
