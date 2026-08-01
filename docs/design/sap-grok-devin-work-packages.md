@@ -1,10 +1,20 @@
 # SAP — Grok Build × Devin Collaboration Work Packages
 
-**Status:** IMPLEMENTATION INSTRUMENTS  
-**Date:** 2026-08-01  
+**Status:** IMPLEMENTATION INSTRUMENTS — **start at SAP-1**  
+**Date:** 2026-08-01 (handoff refresh post-PR #123 MCP)  
 **Parent:** `docs/design/sap-qortroller-buzz-integration-v0.md`  
-**Code base:** `scripts/qortroller_acp_gateway.py`, EA-ACP-1..5, webhook PR #122  
-**Harness split:** Grok = default tools + tests in-PR; Devin = multi-file / queue consumer paths
+**Code base:** `scripts/qortroller_acp_gateway.py`, EA-ACP-1..5, webhook #122, **MCP #123**  
+**Harness split:** Grok = pure helpers + parse/tool tests; Devin = multi-file plumbing + scripts
+
+---
+
+## Handoff for Devin
+
+1. Read parent integration doc § Handoff + §2 object map.  
+2. **No merge conflict** with MCP/webhook — do **not** reimplement tools inside MCP/webhook.  
+3. Implement **SAP-1** first in one PR; then SAP-2; then SAP-3.  
+4. New gateway tools automatically work via `@EA`, `POST /buzz`, and `ask_ea`.  
+5. Use PR template at bottom of this file.
 
 ---
 
@@ -14,43 +24,47 @@
 2. Reuse `handle_message` / `execute` / `format_reply` / `scrub`.  
 3. `shell=False`; allow-listed tools only.  
 4. JSONL under `audits/` stays gitignored for operator data.  
-5. Tests in `bridge/tests/test_qortroller_acp_gateway.py` (or `test_sap_*.py`).  
+5. Tests in `bridge/tests/test_qortroller_acp_gateway.py` and/or `bridge/tests/test_sap_*.py`.  
 6. `python scripts/vapi_invariant_gate.py` PASS (188+).  
 7. No FROZEN wire, chain, VSS OPEN, or claim-register grade inflation.  
-8. PR body must include the Devin checklist from EA ACP integration doc.
+8. Do **not** modify MCP/webhook except if a shared import breaks — fix at gateway.  
+9. PR body: Devin checklist from EA ACP integration doc + SAP rails below.
 
-**Grok-first:** parse/route/tool digests, small pure helpers, unit tests.  
-**Devin-first:** cross-file plumbing, scripts UX, watchers, richer status tools.
+**Grok-first:** `new_job_id()`, parse bits, unit tests.  
+**Devin-first:** result_record, context_pack, queue_watch, seal CLI wiring, integration tests.
 
 ---
 
-## SAP-1 — Stable `job_id` propagation
+## SAP-1 — Stable `job_id` propagation  ← **DO THIS FIRST**
 
 **Goal:** One id ties queue ticket, plan (optional), audit, and Devin result.
 
 ### Spec
 
-- Generate `job_id` as `sap_<short_hash>` or `sap_<ts>_<nonce>` when:
-  - `deep_diagnose` queues
-  - `plan` stages (plan_id may equal or alias job_id — pick one rule and test it)
+- Generate `job_id` as `sap_<12 hex>` (preferred) or `sap_<ts>_<nonce>` when:
+  - `deep_diagnose` queues a row
+  - `plan` stages a plan (**rule:** set `job_id` on plan record; `plan_id` may remain the short confirm token **or** equal `job_id` — **pick one, document in PR, test both create + confirm paths**)
 - Write `job_id` into:
   - `audits/acp_devin_queue.jsonl`
-  - `audits/acp_gateway.jsonl` audit rows for that tool
-  - `audits/acp_plans.jsonl` when plan created from diagnose-like goals
-- `acp_devin_result_record.py --job-id` optional arg (required for SAP-2 link)
+  - `audits/acp_gateway.jsonl` audit rows for diagnose (and plan tools)
+  - `audits/acp_plans.jsonl` on plan create
+- `scripts/acp_devin_result_record.py --job-id` optional (store if provided)
+- `scripts/acp_devin_context_pack.py` / `acp_devin_queue_watch.py` show `job_id` when present
 - Reply digest may include `job: sap_…` within `MAX_REPLY_CHARS`
+- **Backward compatible:** old JSONL rows without `job_id` still parse
 
 ### Grok Build
 
-- [ ] ID helper pure function + unit tests
-- [ ] diagnose path attaches job_id
-- [ ] reply/audit include job_id
+- [ ] `new_job_id()` pure helper + unit tests
+- [ ] diagnose path attaches `job_id`
+- [ ] reply + audit include `job_id`
 
 ### Devin
 
-- [ ] result_record + context_pack read/write job_id
-- [ ] queue_watch prints job_id
-- [ ] Integration tests across queue → result
+- [ ] plan path attaches `job_id` per chosen rule
+- [ ] result_record + context_pack + queue_watch
+- [ ] Integration: queue row → result row same `job_id`
+- [ ] Regression: existing ACP + webhook + MCP test suites still green
 
 ### Acceptance
 
@@ -58,15 +72,16 @@
 @EA diagnose example topic
 → queue row has job_id
 → audit row has job_id
-scripts/acp_devin_result_record.py --job-id … --status done
+python scripts/acp_devin_result_record.py --job-id sap_… --status done
 → results row has same job_id
+# optional: MCP/webhook same content string behaves identically
 ```
 
 ---
 
 ## SAP-2 — Local seal log (`scripts/sap_seal.py`)
 
-**Goal:** Operator-only seal without implying protocol/population proof.
+**Goal:** Operator-only seal without protocol/population proof claims.
 
 ### Spec
 
@@ -75,8 +90,6 @@ python scripts/sap_seal.py --job-id sap_… --accept|--reject|--hold \
   [--ref PR_URL_OR_SHA] [--note "…"]
 → appends audits/acp_sap_seals.jsonl
 ```
-
-Record shape:
 
 ```json
 {
@@ -89,23 +102,13 @@ Record shape:
 }
 ```
 
-- No Nostr publish from this script by default
-- Refuse unknown job_id unless `--force` (default refuse)
-- `.gitignore` seals file
-
-### Grok Build
-
-- [ ] CLI + validation tests
-- [ ] refuse missing job_id
-
-### Devin
-
-- [ ] Wire job_id index lookup from queue/results
-- [ ] Document operator flow in runbook blurb under `docs/design/` or runbook pointer
+- No Nostr publish by default
+- Default: refuse if `job_id` never seen in queue/results/plans (unless `--force`)
+- `.gitignore` `audits/acp_sap_seals.jsonl`
 
 ### Acceptance
 
-Seal file append-only; reject path works; no Buzz side effects.
+Append-only seals; reject path; no Buzz side effects.
 
 ---
 
@@ -115,19 +118,11 @@ Seal file append-only; reject path works; no Buzz side effects.
 
 ### Spec
 
-- New tool `get_job_status` (Grok-only)
+- Tool `get_job_status` (**Grok-only**)
 - Parse: `job status <id>` / `sap status <id>`
-- Read local JSONL only; honest “unknown job” if missing
-- Summary example: `job sap_…: queued|done|sealed-accept | pr: … | note: …`
-- Scrub + bound
-
-### Grok Build
-
-- [ ] Tool + parse + tests
-
-### Devin
-
-- [ ] Edge cases: sealed without result; result without seal; duplicate ids latest-wins rule documented
+- Read local JSONL only; honest `unknown job` if missing
+- Example: `job sap_…: queued|done|sealed-accept | pr: …`
+- Available automatically via MCP/webhook once in gateway
 
 ### Acceptance
 
@@ -138,41 +133,15 @@ Seal file append-only; reject path works; no Buzz side effects.
 
 ---
 
-## SAP-4 — Optional challenge records (lightweight)
+## SAP-4 — Optional challenge records
 
-**Goal:** Record re-exec challenges without a social voting system.
-
-### Spec
-
-- `audits/acp_sap_challenges.jsonl` optional
-- CLI or tool: challenge job_id with demand `pytest …` or `invariant`
-- Satisfaction = later receipt audit row matching demand (heuristic ok for v0)
-- Max depth 1 in v0 (no challenge chains)
-
-### Prefer Devin for multi-file; Grok for parse/tool stub.
-
-### Acceptance
-
-Challenge append + status line on `job status` optional field.
-
-**Skip** if SAP-1..3 dogfood is enough for first public note.
+Lightweight `audits/acp_sap_challenges.jsonl`; **skip** if SAP-1..3 enough for first public note.
 
 ---
 
 ## SAP-5 — Publish gate (docs only)
 
-**Goal:** Freeze public narrative only after local dogfood.
-
-### Checklist
-
-- [ ] SAP-1..3 on operator machine once
-- [ ] No identity matrix regression
-- [ ] Edit `docs/publish/sap-sealed-agent-jobs-qortroller-buzz.md` “Status” to **reference-ready**
-- [ ] Optional: wiki mirror / X thread from that file — **no** overclaim grades
-
-### Owners
-
-Operator + Grok copy-edit; Devin only if link/CI path automation requested.
+After operator dogfood SAP-1..3: set publish doc Status to **reference-ready**. No overclaim grades.
 
 ---
 
@@ -185,11 +154,12 @@ Operator + Grok copy-edit; Devin only if link/CI path automation requested.
 ## Rails
 - [ ] @EA only face
 - [ ] shell=False / allow-list
-- [ ] job_id additive only
+- [ ] job_id additive only; old rows still parse
 - [ ] no auto-seal from harness
 - [ ] no VSS OPEN / chain
+- [ ] MCP/webhook not duplicated (gateway only)
 - [ ] PV-CI PASS
-- [ ] tests listed
+- [ ] tests listed (incl. ACP and, if touched imports, webhook/MCP smoke)
 
 ## Mapping
 Job / Receipt / Seal touched: …
@@ -197,13 +167,12 @@ Job / Receipt / Seal touched: …
 
 ---
 
-## Out of scope for these WPs
+## Out of scope
 
-- Nostr-native SAP kinds
-- ZK receipts
-- Multi-operator seals
-- Sentry/Guardian/Curator as SAP peers on Buzz
-- Replacing webhook or Phase 1 bot
+- Nostr-native SAP kinds, ZK, multi-operator seals  
+- Sentry/Guardian/Curator as Buzz bots  
+- Replacing webhook, MCP, or Phase 1 bot  
+- Implementing SAP tools only inside MCP server  
 
 ---
 
