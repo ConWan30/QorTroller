@@ -155,6 +155,74 @@ def _poll_eligibility(cfg: SeatConfig) -> Optional[dict]:
         return None
 
 
+def check_signer_is_not_bot(cfg: SeatConfig) -> Optional[str]:
+    """VSS-7: Verify the gamer's key is NOT a bot (role != bot).
+
+    Queries the Rust helper's `whoami` to get the signer pubkey, then
+    queries the relay for the pubkey's kind 9000 self-add role tag.
+
+    Returns:
+        "human" if the signer is a human community member (or role unknown)
+        "bot" if the signer is a bot
+        None if the check failed (relay unreachable / helper missing)
+
+    Fail-closed: returns None on any error — the caller MUST treat None as
+    "cannot verify" and refuse OPEN.
+    """
+    if not os.path.isfile(cfg.helper_path):
+        print(f"[!] helper not found for role check: {cfg.helper_path}",
+              file=sys.stderr)
+        return None
+    try:
+        # Get the signer's pubkey
+        who = subprocess.run(
+            [cfg.helper_path, "whoami"],
+            capture_output=True, text=True, timeout=10,
+            env=os.environ.copy(), shell=False,
+        )
+        if who.returncode != 0:
+            print(f"[!] whoami failed: {who.stderr.strip()}", file=sys.stderr)
+            return None
+        pubkey = who.stdout.strip()
+        if not pubkey:
+            print("[!] whoami returned empty pubkey", file=sys.stderr)
+            return None
+
+        # Query the relay for kind 9000 self-add events by this pubkey
+        # The Rust helper exposes `profile get` for this; fall back to
+        # "human" if the relay has no role tag for this pubkey (new member).
+        env = os.environ.copy()
+        env["BUZZ_RELAY_URL"] = cfg.relay_url
+        prof = subprocess.run(
+            [cfg.helper_path, "profile", "get", "--pubkey", pubkey],
+            capture_output=True, text=True, timeout=15,
+            env=env, shell=False,
+        )
+        if prof.returncode != 0:
+            # Relay unreachable or profile not found — fail-closed
+            print(f"[!] profile get failed: {prof.stderr.strip()}",
+                  file=sys.stderr)
+            return None
+        try:
+            data = json.loads(prof.stdout.strip())
+        except json.JSONDecodeError:
+            print("[!] profile get returned non-JSON", file=sys.stderr)
+            return None
+        role = str(data.get("role", "")).lower()
+        if role == "bot":
+            return "bot"
+        # "human", "", or any other value → treat as human (role unknown = human)
+        # Per scope §2: "Buzz human membership is identity" — absence of a role
+        # tag does NOT block OPEN; only an explicit role=bot blocks it.
+        return "human"
+    except subprocess.TimeoutExpired:
+        print("[!] role check timed out", file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"[!] role check failed: {e}", file=sys.stderr)
+        return None
+
+
 def _publish_seat_event(
     cfg: SeatConfig, tags: list[list[str]], content: str
 ) -> Optional[dict]:
@@ -214,10 +282,15 @@ def _build_and_publish(
     seat_state: str,
     eligible: bool,
     honesty: dict,
+    signer_role: Optional[str] = None,
 ) -> Optional[dict]:
     """Build a seat event from eligibility + honesty, validate, and publish.
 
     Fail-closed: if validation fails, no publish.
+
+    VSS-7: signer_role is attached as an honesty marker on the event.
+    The caller (run_seat_loop) must have already enforced the bot ban via
+    check_signer_is_not_bot before calling this for OPEN events.
     """
     capture = CAPTURE_UP if eligible else CAPTURE_DOWN
     oracle = ORACLE_RUNNING if eligible else ORACLE_STOPPED
@@ -233,6 +306,7 @@ def _build_and_publish(
             media_url=media_url,
             session_id=cfg.session_id,
             ioid_token=cfg.ioid_token,
+            signer_role=signer_role,
             poep_enabled=bool(honesty.get("poep_enabled", False)),
             l6b_enabled=bool(honesty.get("l6b_enabled", False)),
             candidate_ok=bool(honesty.get("candidate_ok", False)),
@@ -263,8 +337,12 @@ def run_seat_loop(cfg: SeatConfig) -> int:
     The seat starts CLOSED. Only a rising edge (false→true) opens it.
     Only a falling edge (true→false) closes it. No spam — one event per
     transition.
+
+    VSS-7: before OPEN, verify the signer is not a bot (check_signer_is_not_bot).
+    Fail-closed: if the role check returns None (relay unreachable), refuse OPEN.
     """
     seat_open = False  # track current seat state
+    cached_role: Optional[str] = None  # cache the role check (it's stable per key)
     print(f"[*] VSS seat helper started (dry_run={cfg.dry_run})", file=sys.stderr)
     print(f"[*] channel: {cfg.channel_id[:8]}…", file=sys.stderr)
     print(f"[*] bridge: {cfg.bridge_base_url}", file=sys.stderr)
@@ -283,6 +361,7 @@ def run_seat_loop(cfg: SeatConfig) -> int:
                         cfg, SEAT_CLOSED, eligible=False,
                         honesty={"poep_enabled": False, "l6b_enabled": False,
                                  "candidate_ok": False},
+                        signer_role=cached_role,
                     )
                     if result:
                         print(f"[+] CLOSED: {result.get('event_id', '?')}",
@@ -296,9 +375,28 @@ def run_seat_loop(cfg: SeatConfig) -> int:
 
             # Rising edge: false → true
             if eligible and not seat_open:
+                # VSS-7: verify signer is not a bot before OPEN
+                if cached_role is None and not cfg.dry_run:
+                    print("[*] checking signer role (VSS-7)…", file=sys.stderr)
+                    cached_role = check_signer_is_not_bot(cfg)
+                if cached_role == "bot":
+                    print("[!] signer is role=bot — refusing OPEN (VSS-7)",
+                          file=sys.stderr)
+                    time.sleep(cfg.poll_interval)
+                    continue
+                if cached_role is None and not cfg.dry_run:
+                    print("[!] cannot verify signer role — refusing OPEN (fail-closed)",
+                          file=sys.stderr)
+                    time.sleep(cfg.poll_interval)
+                    continue
+                # dry-run: skip the role check (no relay needed)
+                if cfg.dry_run and cached_role is None:
+                    cached_role = "human"  # assume human in dry-run
+
                 print("[*] rising edge → OPEN", file=sys.stderr)
                 result = _build_and_publish(
                     cfg, SEAT_OPEN, eligible=True, honesty=honesty,
+                    signer_role=cached_role,
                 )
                 if result:
                     print(f"[+] OPEN: {result.get('event_id', '?')}",
@@ -313,6 +411,7 @@ def run_seat_loop(cfg: SeatConfig) -> int:
                 print("[*] falling edge → CLOSED", file=sys.stderr)
                 result = _build_and_publish(
                     cfg, SEAT_CLOSED, eligible=False, honesty=honesty,
+                    signer_role=cached_role,
                 )
                 if result:
                     print(f"[+] CLOSED: {result.get('event_id', '?')}",

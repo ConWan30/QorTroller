@@ -61,6 +61,12 @@ MEDIA_URL_TAG = "media_url"
 SESSION_ID_TAG = "session_id"
 IOID_TOKEN_TAG = "ioid_token"
 
+# VSS-7: signer role tag (optional, but if present must NOT be "bot" for OPEN)
+SIGNER_ROLE_TAG = "signer_role"
+SIGNER_ROLE_HUMAN = "human"
+SIGNER_ROLE_BOT = "bot"
+SIGNER_ROLES = frozenset({SIGNER_ROLE_HUMAN, SIGNER_ROLE_BOT})
+
 # Honesty ribbon (always present, posted as-is — never invents "true")
 RIBBON_TAGS = ("poep_enabled", "l6b_enabled", "candidate_ok")
 RIBBON_TRUE = "true"
@@ -78,7 +84,7 @@ REQUIRED_TAGS = (
 ) + RIBBON_TAGS
 
 # Optional tags (present only when the gamer provides them)
-OPTIONAL_TAGS = (MEDIA_URL_TAG, SESSION_ID_TAG, IOID_TOKEN_TAG)
+OPTIONAL_TAGS = (MEDIA_URL_TAG, SESSION_ID_TAG, IOID_TOKEN_TAG, SIGNER_ROLE_TAG)
 
 # Tags that must NEVER appear in a seat event (substrate leakage guard)
 FORBIDDEN_PATTERNS = (
@@ -108,6 +114,7 @@ class SeatEvent:
     media_url: str | None = None
     session_id: str | None = None
     ioid_token: str | None = None
+    signer_role: str | None = None  # VSS-7: optional, but bot cannot OPEN
     ribbon: dict[str, str] = field(default_factory=lambda: {
         "poep_enabled": RIBBON_FALSE,
         "l6b_enabled": RIBBON_FALSE,
@@ -129,6 +136,8 @@ class SeatEvent:
             tags.append([SESSION_ID_TAG, self.session_id])
         if self.ioid_token:
             tags.append([IOID_TOKEN_TAG, self.ioid_token])
+        if self.signer_role:  # VSS-7
+            tags.append([SIGNER_ROLE_TAG, self.signer_role])
         # Honesty ribbon — always present, posted as-is
         for key in RIBBON_TAGS:
             tags.append([key, self.ribbon.get(key, RIBBON_FALSE)])
@@ -154,6 +163,7 @@ def build_seat_event(
     media_url: str | None = None,
     session_id: str | None = None,
     ioid_token: str | None = None,
+    signer_role: str | None = None,
     poep_enabled: bool = False,
     l6b_enabled: bool = False,
     candidate_ok: bool = False,
@@ -162,6 +172,11 @@ def build_seat_event(
 
     Ribbon defaults to all-false (honest). The caller may pass true values
     but must do so explicitly — the builder never invents true.
+
+    VSS-7: signer_role is optional. If present, must be "human" or "bot".
+    The schema rejects bot-authored OPEN events; the seat helper must
+    ALSO verify the role against the relay (kind 9000 self-add) — the
+    schema tag is an honesty marker, not the enforcement point.
     """
     if seat_state not in SEAT_STATES:
         raise ValueError(f"seat_state must be one of {SEAT_STATES}, got '{seat_state}'")
@@ -171,6 +186,10 @@ def build_seat_event(
         raise ValueError(f"retina_oracle must be one of {ORACLE_STATES}, got '{retina_oracle}'")
     if seat_state == SEAT_OPEN and not media_url:
         raise ValueError("media_url is required for OPEN seat events")
+    if signer_role is not None and signer_role not in SIGNER_ROLES:
+        raise ValueError(f"signer_role must be one of {SIGNER_ROLES} or None, got '{signer_role}'")
+    if seat_state == SEAT_OPEN and signer_role == SIGNER_ROLE_BOT:
+        raise ValueError("bot cannot OPEN a seat (VSS-7 / scope §4: humans open seats; agents view)")
 
     # Forbidden content guard
     for field_val in (media_url, session_id, ioid_token):
@@ -190,6 +209,7 @@ def build_seat_event(
         media_url=media_url,
         session_id=session_id,
         ioid_token=ioid_token,
+        signer_role=signer_role,
         ribbon=ribbon,
     )
 
@@ -246,6 +266,21 @@ def validate_seat_event(tags: list[list[str]], content: str = "") -> list[str]:
     # OPEN requires media_url
     if tag_map.get(SEAT_TAG) == SEAT_OPEN and MEDIA_URL_TAG not in tag_map:
         errors.append("media_url is required for OPEN seat events")
+
+    # VSS-7: signer_role check — bot cannot OPEN
+    if SIGNER_ROLE_TAG in tag_map:
+        if tag_map[SIGNER_ROLE_TAG] not in SIGNER_ROLES:
+            errors.append(
+                f"{SIGNER_ROLE_TAG} must be one of {SIGNER_ROLES}, "
+                f"got '{tag_map[SIGNER_ROLE_TAG]}'"
+            )
+        if (
+            tag_map.get(SEAT_TAG) == SEAT_OPEN
+            and tag_map[SIGNER_ROLE_TAG] == SIGNER_ROLE_BOT
+        ):
+            errors.append(
+                "bot cannot OPEN a seat (VSS-7: humans open seats; agents view)"
+            )
 
     # Forbidden content guard
     full_text = content + " " + " ".join(str(v) for v in tag_map.values())
