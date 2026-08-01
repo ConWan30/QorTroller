@@ -149,6 +149,28 @@ def _append_state(state_path: Path, record: dict[str, Any]) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _count_queued_records(queue_path: Path) -> int:
+    """Count records in a Devin queue JSONL with status == queued.
+
+    WPR-4 trigger helper. Empty or missing queue -> 0.
+    """
+    if not queue_path.is_file():
+        return 0
+    count = 0
+    with queue_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("status") == "queued":
+                count += 1
+    return count
+
+
 def _count_runs_in_window(
     state: list[dict[str, Any]], policy_id: str, window_s: float
 ) -> int:
@@ -382,6 +404,67 @@ def _run_to_record(run: PolicyRun) -> dict[str, Any]:
     }
 
 
+def run_policy_by_trigger(
+    trigger_type: str,
+    *,
+    policies_path: Path | str = DEFAULT_POLICIES_PATH,
+    state_path: Path | str = DEFAULT_STATE_PATH,
+    queue_path: Path | str = "",
+    cfg: gw.GatewayConfig | None = None,
+    dry_run: bool = False,
+    webhook_url: str = "",
+    pubkey: str = "",
+) -> list[PolicyRun]:
+    """WPR-4 — run all policies whose trigger matches a condition.
+
+    For `queue_nonempty`: if the Devin queue has 0 queued records, every
+    matching policy is skipped with `queue_empty`. Otherwise, the default
+    `on-queue-depth` policy runs (or the first `queue_nonempty` policy).
+    """
+    catalog = _load_policies(policies_path)
+    matching = [p for p in catalog.values() if p.trigger.get("type") == trigger_type]
+    if not matching:
+        return []
+
+    if trigger_type == "queue_nonempty":
+        q_path = Path(queue_path) if queue_path else gw.DEVIN_QUEUE_PATH
+        depth = _count_queued_records(q_path)
+        if depth == 0:
+            return [
+                PolicyRun(
+                    policy_id=p.id,
+                    ok=True,
+                    skipped=True,
+                    content="",
+                    tags=[["qortroller", "1"], ["workflow", "1"], ["skipped", "queue_empty"]],
+                    tool="",
+                    harness="",
+                    error="queue_empty",
+                    ts=_now(),
+                )
+                for p in matching
+            ]
+
+    if cfg is None:
+        cfg = gw.load_config()
+    results: list[PolicyRun] = []
+    for policy in matching:
+        if trigger_type == "queue_nonempty" and policy.id != "on-queue-depth":
+            # The default queue-depth policy is the only one that fires.
+            continue
+        results.append(
+            _run_policy(
+                policy,
+                cfg=cfg,
+                state_path=Path(state_path),
+                dry_run=dry_run,
+                webhook_url=webhook_url,
+                pubkey=pubkey,
+            )
+        )
+    return results
+
+
 def run_policy_by_id(
     policy_id: str,
     *,
@@ -440,8 +523,10 @@ def list_policies(
 def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="QorTroller Workflow Policy Router")
     parser.add_argument("--policy-id", default="", help="Policy to run")
+    parser.add_argument("--trigger", default="", help="Trigger type (e.g. queue_nonempty)")
     parser.add_argument("--config", default=str(DEFAULT_POLICIES_PATH), help="Policy catalog path")
     parser.add_argument("--state", default=str(DEFAULT_STATE_PATH), help="State JSONL path")
+    parser.add_argument("--queue-path", default=str(gw.DEVIN_QUEUE_PATH), help="Path to Devin queue JSONL")
     parser.add_argument("--pubkey", default="", help="Operator pubkey (or ACP_OPERATOR_PUBKEYS)")
     parser.add_argument("--webhook-url", default=DEFAULT_WEBHOOK_URL, help="POST to webhook instead of in-process")
     parser.add_argument("--dry-run", action="store_true", help="Print command, do not execute")
@@ -454,6 +539,45 @@ def _main(argv: list[str] | None = None) -> int:
 
     pubkey = _resolve_pubkey(args.pubkey)
     cfg = gw.load_config()
+
+    if args.trigger:
+        if not args.policy_id:
+            runs = run_policy_by_trigger(
+                args.trigger,
+                policies_path=args.config,
+                state_path=args.state,
+                queue_path=args.queue_path,
+                cfg=cfg,
+                dry_run=args.dry_run,
+                webhook_url=args.webhook_url,
+                pubkey=pubkey,
+            )
+            if not runs:
+                print(json.dumps({"ok": False, "error": f"no policies for trigger {args.trigger}"}, indent=2))
+                return 1
+            print(json.dumps([_run_to_record(r) for r in runs], indent=2, ensure_ascii=False))
+            return 0 if all(r.ok or r.skipped for r in runs) else 1
+        else:
+            # Trigger may filter by policy id.
+            catalog = _load_policies(args.config)
+            policy = catalog.get(args.policy_id)
+            if policy is None or policy.trigger.get("type") != args.trigger:
+                print(json.dumps({"ok": False, "error": f"policy {args.policy_id} not found or trigger mismatch"}, indent=2))
+                return 1
+            run = _run_policy(
+                policy,
+                cfg=cfg,
+                state_path=Path(args.state),
+                dry_run=args.dry_run,
+                webhook_url=args.webhook_url,
+                pubkey=pubkey,
+            )
+            print(json.dumps(_run_to_record(run), indent=2, ensure_ascii=False))
+            return 0 if (run.ok or run.skipped) else 1
+
+    if not args.policy_id:
+        parser.error("--policy-id or --trigger required")
+
     run = run_policy_by_id(
         args.policy_id,
         policies_path=args.config,
