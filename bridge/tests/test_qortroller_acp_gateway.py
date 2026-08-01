@@ -28,6 +28,7 @@ def cfg(tmp_path: Path) -> gw.GatewayConfig:
         rig_ops_channel="rig-ops-uuid",
         audit_log_path=tmp_path / "acp_gateway.jsonl",
         devin_queue_path=tmp_path / "acp_devin_queue.jsonl",
+        plans_path=tmp_path / "acp_plans.jsonl",
     )
 
 
@@ -54,6 +55,9 @@ def test_unaddressed_message_is_silent(cfg):
         ("@EA repo health", gw.TOOL_REPO_HEALTH),
         ("@EA wp acp", gw.TOOL_SHOW_WP_STATUS),
         ("@EA workpackage vss", gw.TOOL_SHOW_WP_STATUS),
+        ("@EA plan full check", gw.TOOL_PLAN),
+        ("@EA plan investigate bridge lag", gw.TOOL_PLAN),
+        ("@EA confirm plan abcdef", gw.TOOL_CONFIRM_PLAN),
         ("@EA diagnose retina oracle drift", gw.TOOL_DEEP_DIAGNOSE),
     ],
 )
@@ -366,6 +370,81 @@ def test_show_wp_status_rejects_unknown_slug(cfg):
     rejection = gw.parse_mention("@EA wp ../../secret", cfg)
     assert isinstance(rejection, gw.Rejection)
     assert rejection.reason == gw.REJECT_BAD_TARGET
+
+
+# --- EA-ACP-3 plan / confirm -------------------------------------------------
+
+def test_plan_creates_a_pending_record(cfg):
+    result = gw.execute(gw.parse_mention("@EA plan full check", cfg), cfg)
+    assert result.ok is True
+    plan_id = next(t[1] for t in result.tags if t[0] == "plan_id")
+    assert len(plan_id) == 6
+    lines = cfg.plans_path.read_text(encoding="utf-8").strip().splitlines()
+    record = json.loads(lines[0])
+    assert record["plan_id"] == plan_id
+    assert record["status"] == "pending"
+    assert record["goal"] == "full check"
+    assert len(record["steps"]) == 2
+
+
+def test_plan_unknown_goal_falls_back_to_diagnose(cfg):
+    result = gw.execute(gw.parse_mention("@EA plan investigate bridge lag", cfg), cfg)
+    assert result.ok is True
+    lines = cfg.plans_path.read_text(encoding="utf-8").strip().splitlines()
+    record = json.loads(lines[0])
+    assert record["steps"][0]["tool"] == gw.TOOL_DEEP_DIAGNOSE
+    assert record["steps"][0]["args"]["topic"] == "investigate bridge lag"
+
+
+def test_confirm_executes_staged_plan(cfg, monkeypatch):
+    # Use a one-step plan with a mocked tool.
+    def _fake_tool(intent, c):
+        return gw.ToolResult(
+            gw.TOOL_HEALTH_CHECK, gw.HARNESS_GROK, True, "health — ea: ok", [["healthy", "true"]]
+        )
+
+    monkeypatch.setattr(gw, "_tool_health_check", _fake_tool)
+    plan_record = {
+        "ts": 1,
+        "plan_id": "abc123",
+        "goal": "acp health",
+        "status": "pending",
+        "steps": [{"tool": gw.TOOL_HEALTH_CHECK, "args": {}}],
+    }
+    gw._append_jsonl(cfg.plans_path, plan_record)
+    result = gw.execute(gw.parse_mention("@EA confirm plan abc123", cfg), cfg)
+    assert result.ok is True
+    assert ["status", "completed"] in result.tags
+    assert ["steps_ok", "true"] in result.tags
+    assert "health" in result.summary
+
+
+def test_confirm_refuses_unknown_plan_id(cfg):
+    result = gw.execute(gw.parse_mention("@EA confirm plan deadbeef", cfg), cfg)
+    assert result.ok is False
+    assert "not found" in result.summary
+
+
+def test_confirm_refuses_already_completed_plan(cfg, monkeypatch):
+    def _fake_tool(intent, c):
+        return gw.ToolResult(
+            gw.TOOL_HEALTH_CHECK, gw.HARNESS_GROK, True, "health — ea: ok", [["healthy", "true"]]
+        )
+
+    monkeypatch.setattr(gw, "_tool_health_check", _fake_tool)
+    plan_record = {
+        "ts": 1,
+        "plan_id": "abc123",
+        "goal": "acp health",
+        "status": "pending",
+        "steps": [{"tool": gw.TOOL_HEALTH_CHECK, "args": {}}],
+    }
+    gw._append_jsonl(cfg.plans_path, plan_record)
+    first = gw.execute(gw.parse_mention("@EA confirm plan abc123", cfg), cfg)
+    assert first.ok is True
+    second = gw.execute(gw.parse_mention("@EA confirm plan abc123", cfg), cfg)
+    assert second.ok is False
+    assert "already completed" in second.summary
 
 
 # --- Reply discipline --------------------------------------------------------
