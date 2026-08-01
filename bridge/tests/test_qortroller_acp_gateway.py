@@ -168,6 +168,34 @@ def test_deep_diagnose_queues_for_devin_without_claiming_a_result(cfg):
     record = json.loads(cfg.devin_queue_path.read_text(encoding="utf-8").splitlines()[0])
     assert record["status"] == "queued"
     assert record["topic"] == "bridge capture lag"
+    # EA-ACP-1: priority defaults to normal, repo_sha_hint present in real repo
+    assert record["priority"] == "normal"
+    assert "repo_sha_hint" in record
+    assert record["repo_sha_hint"]
+    assert ["ticket", str(record["ts"])] in result.tags
+
+
+def test_deep_diagnose_parses_acceptance_and_priority(cfg):
+    intent = gw.parse_mention(
+        "@EA diagnose failing vss tests | acceptance tests green | priority high", cfg
+    )
+    result = gw.execute(intent, cfg)
+    record = json.loads(cfg.devin_queue_path.read_text(encoding="utf-8").splitlines()[0])
+    assert record["topic"] == "failing vss tests"
+    assert record["acceptance"] == "tests green"
+    assert record["priority"] == "high"
+    assert "high" in [t[1] for t in result.tags if t[0] == "priority"]
+    assert "acceptance: tests green" in result.summary
+
+
+def test_deep_diagnose_keeps_unknown_pipe_segments_in_topic(cfg):
+    intent = gw.parse_mention("@EA diagnose lag | please hurry", cfg)
+    result = gw.execute(intent, cfg)
+    assert result.ok is True
+    record = json.loads(cfg.devin_queue_path.read_text(encoding="utf-8").splitlines()[0])
+    assert record["topic"] == "lag | please hurry"
+    assert "acceptance" not in record
+    assert record["priority"] == "normal"
 
 
 def test_execute_refuses_a_tool_outside_the_allow_list(cfg):
