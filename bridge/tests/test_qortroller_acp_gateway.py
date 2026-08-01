@@ -575,6 +575,39 @@ def test_get_job_status_shows_invariant_challenge_satisfied(cfg):
     assert "[satisfied]" in result.summary
 
 
+def test_parse_claim_allowed(cfg):
+    intent = gw.parse_mention('@EA claim allowed "@EA reports PV-CI green"', cfg)
+    assert isinstance(intent, gw.Intent)
+    assert intent.tool == gw.TOOL_CLAIM_CHECK
+    assert "PV-CI" in intent.args["phrase"]
+
+
+def test_parse_claim_check(cfg):
+    intent = gw.parse_mention("@EA claim check tournament-grade anti-cheat", cfg)
+    assert intent.tool == gw.TOOL_CLAIM_CHECK
+    assert "tournament" in intent.args["phrase"].lower()
+
+
+def test_claim_check_approved_phrase(cfg):
+    result = gw.execute(gw.parse_mention("@EA claim allowed candidate presence was observed", cfg), cfg)
+    assert result.ok is True
+    assert "matched" in result.summary.lower()
+    assert "approved" in result.summary.lower()
+
+
+def test_claim_check_blocked_by_gate(cfg):
+    result = gw.execute(gw.parse_mention("@EA claim allowed humanity is cryptographically proven", cfg), cfg)
+    assert result.ok is False
+    assert "blocked" in result.summary.lower()
+    assert "G4" in result.summary
+
+
+def test_claim_check_forbidden(cfg):
+    result = gw.execute(gw.parse_mention("@EA claim allowed 100% fair unhackable", cfg), cfg)
+    assert result.ok is False
+    assert "forbidden" in result.summary.lower()
+
+
 def test_get_job_status_shows_plan_when_no_queue(cfg):
     job_id = "sap_planjob002"
     gw._append_jsonl(cfg.plans_path, {"ts": 1, "plan_id": "abc123", "job_id": job_id, "goal": "acp health", "status": "pending", "steps": []})

@@ -40,10 +40,17 @@ from pathlib import Path
 from typing import Callable, Optional
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
 if str(REPO_ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import qortroller_buzz_bot as bot  # noqa: E402  (needs the scripts/ path above)
+
+# Phase 5 claim register (same directory as this script).
+try:
+    import buzz_claim_register as _claim_register
+except ImportError:
+    _claim_register = None  # type: ignore
 
 # --- Harnesses ---------------------------------------------------------------
 
@@ -71,6 +78,8 @@ TOOL_DIAGNOSE_STATUS = "diagnose_status"
 TOOL_GET_JOB_STATUS = "get_job_status"
 # SAP-4 — challenge record
 TOOL_CHALLENGE_JOB = "challenge_job"
+# Phase 5 — claim register check
+TOOL_CLAIM_CHECK = "claim_check"
 TOOL_DEEP_DIAGNOSE = "deep_diagnose"
 TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
 # VSS-S1 — agent viewers: summarize digests + flag a down seat (never OPEN)
@@ -96,6 +105,7 @@ ALLOWED_TOOLS = (
     TOOL_DIAGNOSE_STATUS,
     TOOL_GET_JOB_STATUS,
     TOOL_CHALLENGE_JOB,
+    TOOL_CLAIM_CHECK,
     TOOL_DEEP_DIAGNOSE,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
@@ -120,6 +130,7 @@ GROK_ONLY_TOOLS = (
     TOOL_DIAGNOSE_STATUS,
     TOOL_GET_JOB_STATUS,
     TOOL_CHALLENGE_JOB,
+    TOOL_CLAIM_CHECK,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
@@ -508,6 +519,11 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
                 "demand": m.group(2).strip()[:200],
             },
         )
+
+    # Phase 5: claim register check.
+    m = re.match(r"^claim\s+(?:allowed|check)\s+(.+)$", command, re.I)
+    if m:
+        return Intent(TOOL_CLAIM_CHECK, {"phrase": m.group(1).strip()[:500]})
 
     m = re.match(r"^(?:deep\s+)?diagnose\s+(.+)$", command, re.I)
     if m:
@@ -1395,6 +1411,59 @@ def _tool_get_job_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_claim_check(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """Phase 5: check a phrase against the claim register."""
+    phrase = intent.args.get("phrase", "")
+    if _claim_register is None:
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            False,
+            "claim check: register module not available",
+            [["acp_tool", intent.tool], ["status", "error"]],
+        )
+    try:
+        result = _claim_register.check_phrase(phrase, _claim_register.DEFAULT_REGISTER)
+    except Exception as exc:
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            False,
+            f"claim check: failed to load register ({exc})",
+            [["acp_tool", intent.tool], ["status", "error"]],
+        )
+
+    best = result.get("best_match")
+    forbidden = result.get("forbidden_hits", [])
+    if forbidden:
+        summary = f"claim check: forbidden phrase(s) detected: {', '.join(forbidden)}"
+        tags = [
+            ["acp_tool", intent.tool],
+            ["status", "forbidden"],
+        ]
+    elif best:
+        row_id = best.get("row_id", "?")
+        grade = best.get("grade", "?")
+        sayable = best.get("sayable_today", False)
+        gates = best.get("gates", [])
+        status = "approved" if sayable else "blocked"
+        summary = f"claim check: matched {row_id} ({grade}) — {status}"
+        if gates:
+            summary += f"; gates={','.join(gates)[:80]}"
+        if not sayable:
+            summary += " (not sayable today)"
+        tags = [
+            ["acp_tool", intent.tool],
+            ["row", row_id],
+            ["grade", grade],
+            ["status", status],
+        ]
+    else:
+        summary = "claim check: no register row matched (if this is a product claim, it is not approved language)"
+        tags = [["acp_tool", intent.tool], ["status", "unmatched"]]
+    return ToolResult(intent.tool, intent.harness, not forbidden and (best.get("sayable_today", False) if best else False), summary, tags)
+
+
 def _new_job_id() -> str:
     """Generate a stable SAP job id: sap_<ts_hex>_<4-hex nonce>."""
     return f"sap_{int(time.time()):x}_{secrets.token_hex(2)}"
@@ -1478,6 +1547,7 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_DIAGNOSE_STATUS: _tool_diagnose_status,
     TOOL_GET_JOB_STATUS: _tool_get_job_status,
     TOOL_CHALLENGE_JOB: _tool_challenge_job,
+    TOOL_CLAIM_CHECK: _tool_claim_check,
     TOOL_DEEP_DIAGNOSE: _tool_deep_diagnose,
     TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
     TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
@@ -1540,7 +1610,7 @@ def rejection_reply(rejection: Rejection) -> str:
         return "rejected: operator allow-list"
     if rejection.reason == REJECT_BAD_TARGET:
         return f"rejected: {rejection.detail}"
-    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | plan <goal> | confirm plan <id> | job status <id> | diagnose status | ceremony | session | pytest <path>"
+    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | plan <goal> | confirm plan <id> | job status <id> | claim allowed \"phrase\" | diagnose status | ceremony | session | pytest <path>"
 
 
 # --- Audit trail (local only, never on Nostr) --------------------------------
