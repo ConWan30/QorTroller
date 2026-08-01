@@ -526,6 +526,55 @@ def test_challenge_job_appends_record(cfg):
     assert record["status"] == "open"
 
 
+def test_get_job_status_shows_open_challenge(cfg):
+    job_id = "sap_challenge_open"
+    gw._append_jsonl(cfg.devin_queue_path, {"ts": 1, "job_id": job_id, "topic": "capture lag", "status": "queued"})
+    gw._append_jsonl(cfg.challenges_path, {"ts": 2, "job_id": job_id, "demand": "pytest bridge/tests/test_qortroller_acp_gateway.py", "status": "open"})
+    result = gw.execute(gw.parse_mention(f"@EA job status {job_id}", cfg), cfg)
+    assert result.ok is True
+    assert "challenge:" in result.summary
+    assert "[open]" in result.summary
+
+
+def test_get_job_status_shows_satisfied_challenge(cfg):
+    job_id = "sap_challenge_done"
+    gw._append_jsonl(cfg.devin_queue_path, {"ts": 1, "job_id": job_id, "topic": "capture lag", "status": "queued"})
+    gw._append_jsonl(cfg.challenges_path, {"ts": 2, "job_id": job_id, "demand": "pytest bridge/tests/test_qortroller_acp_gateway.py", "status": "open"})
+    # Later audit row with the matching path and a positive signal.
+    gw._append_jsonl(
+        cfg.audit_log_path,
+        {
+            "ts": 3,
+            "job_id": job_id,
+            "tool": gw.TOOL_RUN_PYTEST,
+            "ok": True,
+            "reply": "[grok-build] pytest bridge/tests/test_qortroller_acp_gateway.py passed",
+        },
+    )
+    result = gw.execute(gw.parse_mention(f"@EA job status {job_id}", cfg), cfg)
+    assert result.ok is True
+    assert "[satisfied]" in result.summary
+
+
+def test_get_job_status_shows_invariant_challenge_satisfied(cfg):
+    job_id = "sap_challenge_invariant"
+    gw._append_jsonl(cfg.devin_queue_path, {"ts": 1, "job_id": job_id, "topic": "check invariants", "status": "queued"})
+    gw._append_jsonl(cfg.challenges_path, {"ts": 2, "job_id": job_id, "demand": "invariant", "status": "open"})
+    gw._append_jsonl(
+        cfg.audit_log_path,
+        {
+            "ts": 3,
+            "job_id": job_id,
+            "tool": gw.TOOL_INVARIANT_GATE,
+            "ok": True,
+            "reply": "[grok-build] 188 invariants pass",
+        },
+    )
+    result = gw.execute(gw.parse_mention(f"@EA job status {job_id}", cfg), cfg)
+    assert result.ok is True
+    assert "[satisfied]" in result.summary
+
+
 def test_get_job_status_shows_plan_when_no_queue(cfg):
     job_id = "sap_planjob002"
     gw._append_jsonl(cfg.plans_path, {"ts": 1, "plan_id": "abc123", "job_id": job_id, "goal": "acp health", "status": "pending", "steps": []})
