@@ -197,6 +197,38 @@ Never: agent-authored seat OPEN, raw HID/frames, humanity-proven language.
 - CLOSED clears the slot so the same key can OPEN again
 - Local ops state only — not a cryptographic ban ledger
 
+## VSS-S3: Consent-gated highlight / verify pointer
+
+**Code:** `bridge/vapi_bridge/vss_highlight.py`, `scripts/buzz_vss_highlight.py`
+
+After a seat, the **gamer** may optionally post a short highlight and/or a
+public verify pointer. **Never auto-published** — requires `--consent-ok`.
+
+```powershell
+# Dry-run
+python scripts/buzz_vss_highlight.py --consent-ok --dry-run `
+  --session-id grind_phase235_v1 `
+  --note "match sealed — verify with public tools" `
+  --default-verify-pointer
+
+# Live (gamer key, no bot AUTH_TAG)
+$env:BUZZ_PRIVATE_KEY = "<gamer-nsec>"
+python scripts/buzz_vss_highlight.py --consent-ok `
+  --session-id grind_phase235_v1 `
+  --note "match sealed — verify with public tools" `
+  --default-verify-pointer
+```
+
+ACP (READ-only — does **not** publish):
+
+```
+@EA verify pointer
+@EA get stream verify pointer
+```
+
+Default pointer points at the G5-VER public command  
+`python scripts/portcert_full_verify.py` — no operator keys, no raw biometrics.
+
 ## VSS-5: Claim rows
 
 **Doc:** `docs/design/buzz-phase5-claim-register-v0.md` (§6 — VSS rows)

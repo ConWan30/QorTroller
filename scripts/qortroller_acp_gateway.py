@@ -62,6 +62,8 @@ TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
 # VSS-S1 — agent viewers: summarize digests + flag a down seat (never OPEN)
 TOOL_STREAM_SEAT_SUMMARY = "summarize_stream_seat"
 TOOL_STREAM_SEAT_FLAG = "flag_stream_seat_down"
+# VSS-S3 — READ-only verify-pointer digest (publish is consent-gated elsewhere)
+TOOL_STREAM_VERIFY_POINTER = "get_stream_verify_pointer"
 
 ALLOWED_TOOLS = (
     TOOL_RUN_PYTEST,
@@ -74,6 +76,7 @@ ALLOWED_TOOLS = (
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
+    TOOL_STREAM_VERIFY_POINTER,
 )
 
 # Tools Devin owns regardless of phrasing.
@@ -87,6 +90,7 @@ GROK_ONLY_TOOLS = (
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
+    TOOL_STREAM_VERIFY_POINTER,
 )
 
 BOT_HANDLE = os.environ.get("ACP_BOT_HANDLE", "@EA")
@@ -339,6 +343,15 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
         re.I,
     ):
         return Intent(TOOL_STREAM_SEAT_FLAG)
+
+    # VSS-S3: verify pointer display (not a publish)
+    if re.match(
+        r"^(?:get\s+)?(?:stream\s+)?verify(?:\s+pointer)?$"
+        r"|^verify\s+stream$|^portcert\s+pointer$",
+        command,
+        re.I,
+    ):
+        return Intent(TOOL_STREAM_VERIFY_POINTER)
 
     if re.match(
         r"^(?:get\s+)?stream(?:\s+seat)?(?:\s+status)?$|^seat$|^vss$",
@@ -597,6 +610,35 @@ def _tool_stream_seat_flag(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_stream_verify_pointer(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """VSS-S3 — Display public verify pointer (READ-only; does not publish).
+
+    Publishing a highlight requires gamer --consent-ok via buzz_vss_highlight.py.
+    This tool only shows the stranger-runnable pointer digest.
+    """
+    bridge_path = str(REPO_ROOT / "bridge")
+    if bridge_path not in sys.path:
+        sys.path.insert(0, bridge_path)
+    from vapi_bridge.vss_highlight import format_verify_pointer_digest  # noqa: WPS433
+
+    session_id = intent.args.get("session_id") or os.environ.get("VSS_SESSION_ID") or ""
+    summary = format_verify_pointer_digest(
+        session_id=session_id or None,
+        verify_url=None,
+    )
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        True,
+        summary,
+        [
+            ["acp_tool", intent.tool],
+            ["consent_required_to_publish", "true"],
+            ["session_id", session_id or "none"],
+        ],
+    )
+
+
 def _tool_ceremony_steps(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     return ToolResult(
         intent.tool,
@@ -680,6 +722,7 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
     TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
     TOOL_STREAM_SEAT_FLAG: _tool_stream_seat_flag,
+    TOOL_STREAM_VERIFY_POINTER: _tool_stream_verify_pointer,
 }
 
 
