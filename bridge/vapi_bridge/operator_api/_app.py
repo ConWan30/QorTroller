@@ -503,6 +503,13 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
     )
 
     # ------------------------------------------------------------------
+    # Workflow Policy Router (Buzz-compatible dashboard API)
+    # ------------------------------------------------------------------
+    from .workflow_policies import register_workflow_policy_routes
+
+    register_workflow_policy_routes(app, check_read_key=_check_read_key)
+
+    # ------------------------------------------------------------------
     # Phase 3 Path B — Gameplay Workflow Layer (player-facing session status)
     # ------------------------------------------------------------------
     # 60s TTL cache for on-chain eligibility VIEW calls so GET /player/session-status
