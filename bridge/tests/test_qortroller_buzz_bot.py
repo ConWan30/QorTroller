@@ -1,4 +1,5 @@
-"""Tests for Phase 1 Buzz bot Nostr wiring + Phase 4 !ea ACP bridge."""
+"""Tests for Phase 2 Buzz bot session attestation + Phase 4 !ea ACP bridge."""
+import json
 import os
 import secrets
 import sys
@@ -27,6 +28,7 @@ def cfg():
         bridge_base_url="http://localhost:8000",
         bridge_api_key="",
         bot_privkey=secrets.token_hex(32),
+        sessions_dir="",
         owner_attested=False,
         helper_path="/nonexistent/helper",
         cli_path="/nonexistent/cli",
@@ -111,3 +113,53 @@ def test_claim_register_forbidden():
     result = check_phrase("100% fair and unhackable", REPO_ROOT / "docs" / "design" / "buzz-phase5-claim-register.json")
     assert result["approved"] is False
     assert "100% fair" in result["forbidden_hits"]
+
+
+def test_resolve_session_archive(tmp_path, cfg):
+    archive = tmp_path / "session_abc"
+    archive.mkdir()
+    (archive / "rwm_manifest_chain.json").write_text("{}")
+    (archive / "session_continuum.json").write_text(json.dumps({"verdict": "OPTICAL_SESSION"}))
+    cfg = bot.BotConfig(**{**cfg.__dict__, "sessions_dir": str(tmp_path)})
+    found = bot._resolve_session_archive(cfg, "session_abc")
+    assert found == archive
+
+
+def test_build_attestation_from_continuum():
+    continuum = {
+        "verdict": "OPTICAL_SESSION",
+        "advisory": True,
+        "stack": {
+            "escrow": {"commitment_root": "a" * 64},
+        },
+        "presence_candidate": False,
+    }
+    postcard = {
+        "session_id": "s1",
+        "verdict": "UNKNOWN",
+        "n_challenges": 0,
+        "poep_enabled": False,
+        "l6b_enabled": False,
+        "candidate_ok": False,
+    }
+    att = bot._build_attestation_postcard(postcard, continuum)
+    assert att["verdict"] == "OPTICAL_SESSION"
+    assert att["commitment_root"] == "a" * 64
+    assert att["attestation"] is True
+
+
+def test_build_attestation_without_continuum():
+    postcard = {
+        "session_id": "s1",
+        "verdict": "PRESENCE_CANDIDATE",
+        "n_challenges": 0,
+    }
+    att = bot._build_attestation_postcard(postcard, None)
+    assert att["verdict"] == "PRESENCE_CANDIDATE"
+    assert att["attestation"] is False
+
+
+def test_commitment_root_fallbacks():
+    assert bot._commitment_root_from_continuum({}) is None
+    assert bot._commitment_root_from_continuum({"rwm": {"l0_chain_tip_hex": "b" * 64}}) == "b" * 64
+    assert bot._commitment_root_from_continuum({"stack": {"posp": {"anchor_digest": "c" * 64}}}) == "c" * 64
