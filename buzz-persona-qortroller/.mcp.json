@@ -5,12 +5,7 @@
       "args": [
         "mcp/qortroller_acp_stdio.py"
       ],
-      "env": {
-        "ACP_OPERATOR_PUBKEYS": "${ACP_OPERATOR_PUBKEYS}",
-        "ACP_MCP_SECRET": "${ACP_MCP_SECRET}",
-        "ACP_MAX_REPLY_CHARS": "${ACP_MAX_REPLY_CHARS}",
-        "QORTROLLER_REPO_ROOT": "${QORTROLLER_REPO_ROOT}"
-      }
+      "env": {}
     }
   }
 }
