@@ -147,6 +147,8 @@ contracts/artifacts/build-info/
 
 # Security hardening — untracked transient / throwaway files that should never be committed
 QorTroller/
+!buzz-persona-qortroller/skills/qortroller/
+!buzz-persona-qortroller/skills/qortroller/SKILL.md
 _dl_ngc.py
 _download_ngc.py
 
