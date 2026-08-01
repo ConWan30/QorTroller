@@ -64,6 +64,8 @@ TOOL_STREAM_SEAT_SUMMARY = "summarize_stream_seat"
 TOOL_STREAM_SEAT_FLAG = "flag_stream_seat_down"
 # VSS-S3 — READ-only verify-pointer digest (publish is consent-gated elsewhere)
 TOOL_STREAM_VERIFY_POINTER = "get_stream_verify_pointer"
+# VSS-S5 — organizer pilot checklist (seat + pin + portcert composition)
+TOOL_ORGANIZER_PILOT = "get_organizer_pilot_status"
 
 ALLOWED_TOOLS = (
     TOOL_RUN_PYTEST,
@@ -77,6 +79,7 @@ ALLOWED_TOOLS = (
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
     TOOL_STREAM_VERIFY_POINTER,
+    TOOL_ORGANIZER_PILOT,
 )
 
 # Tools Devin owns regardless of phrasing.
@@ -91,6 +94,7 @@ GROK_ONLY_TOOLS = (
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
     TOOL_STREAM_VERIFY_POINTER,
+    TOOL_ORGANIZER_PILOT,
 )
 
 BOT_HANDLE = os.environ.get("ACP_BOT_HANDLE", "@EA")
@@ -353,6 +357,15 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
     ):
         return Intent(TOOL_STREAM_VERIFY_POINTER)
 
+    # VSS-S5: organizer pilot checklist
+    if re.match(
+        r"^(?:get\s+)?organizer\s+pilot(?:\s+status)?$"
+        r"|^pilot\s+checklist$|^pilot\s+status$|^organizer\s+status$",
+        command,
+        re.I,
+    ):
+        return Intent(TOOL_ORGANIZER_PILOT)
+
     if re.match(
         r"^(?:get\s+)?stream(?:\s+seat)?(?:\s+status)?$|^seat$|^vss$",
         command,
@@ -610,6 +623,46 @@ def _tool_stream_seat_flag(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_organizer_pilot(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """VSS-S5 — Organizer pilot checklist (seat + pin + portcert). Digest only."""
+    bridge_path = str(REPO_ROOT / "bridge")
+    if bridge_path not in sys.path:
+        sys.path.insert(0, bridge_path)
+    from vapi_bridge.vss_organizer_pilot import (  # noqa: WPS433
+        organizer_commands,
+        pilot_from_eligibility,
+    )
+
+    bot_cfg = bot._load_config()
+    elig = bot._bridge_get("/operator/vss/eligibility", bot_cfg)
+    session_id = intent.args.get("session_id") or os.environ.get("VSS_SESSION_ID") or ""
+    pin = intent.args.get("pin_event_id") or os.environ.get("VSS_PIN_EVENT_ID") or ""
+    checklist = pilot_from_eligibility(
+        elig,
+        session_id=session_id or None,
+        pin_event_id=pin or None,
+        streams_channel=os.environ.get("VSS_STREAMS_CHANNEL") or None,
+        matches_channel=os.environ.get("BUZZ_MATCHES_CHANNEL_ID") or None,
+    )
+    cmds = organizer_commands(session_id=session_id or None, pin_event_id=pin or None)
+    summary = checklist.summary + " | cmds: " + " ; ".join(cmds[:3])
+    if len(summary) > MAX_REPLY_CHARS:
+        summary = summary[: MAX_REPLY_CHARS - 3] + "..."
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        True,
+        summary,
+        [
+            ["acp_tool", intent.tool],
+            ["ready", "true" if checklist.ready else "false"],
+            ["seat_ok", "true" if checklist.seat_ok else "false"],
+            ["session_bound", "true" if checklist.session_bound else "false"],
+            ["pin_present", "true" if checklist.pin_present else "false"],
+        ],
+    )
+
+
 def _tool_stream_verify_pointer(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     """VSS-S3 — Display public verify pointer (READ-only; does not publish).
 
@@ -723,6 +776,7 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
     TOOL_STREAM_SEAT_FLAG: _tool_stream_seat_flag,
     TOOL_STREAM_VERIFY_POINTER: _tool_stream_verify_pointer,
+    TOOL_ORGANIZER_PILOT: _tool_organizer_pilot,
 }
 
 
