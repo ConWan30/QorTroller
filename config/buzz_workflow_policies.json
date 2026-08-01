@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "policies": [
+    {
+      "id": "daily-repo-health",
+      "enabled": true,
+      "trigger": {
+        "type": "cron",
+        "expr": "0 9 * * *"
+      },
+      "match": {},
+      "action": {
+        "content": "@EA repo health",
+        "require_operator_pubkey": true
+      },
+      "limits": {
+        "max_per_hour": 1,
+        "cooldown_s": 3600
+      },
+      "publish": {
+        "mode": "return_only"
+      },
+      "notes": "Morning digest; human may relay to #rig-ops"
+    },
+    {
+      "id": "daily-invariants",
+      "enabled": true,
+      "trigger": {
+        "type": "cron",
+        "expr": "0 10 * * *"
+      },
+      "match": {},
+      "action": {
+        "content": "@EA invariant status",
+        "require_operator_pubkey": true
+      },
+      "limits": {
+        "max_per_hour": 1,
+        "cooldown_s": 3600
+      },
+      "publish": {
+        "mode": "return_only"
+      },
+      "notes": "Daily PV-CI status check"
+    },
+    {
+      "id": "on-queue-depth",
+      "enabled": true,
+      "trigger": {
+        "type": "queue_nonempty"
+      },
+      "match": {},
+      "action": {
+        "content": "@EA diagnose status",
+        "require_operator_pubkey": true
+      },
+      "limits": {
+        "max_per_hour": 6,
+        "cooldown_s": 600
+      },
+      "publish": {
+        "mode": "return_only"
+      },
+      "notes": "Triggered when ACP_DEVIN_QUEUE has queued jobs"
+    },
+    {
+      "id": "seat-read-hourly",
+      "enabled": true,
+      "trigger": {
+        "type": "cron",
+        "expr": "0 * * * *"
+      },
+      "match": {},
+      "action": {
+        "content": "@EA seat",
+        "require_operator_pubkey": true
+      },
+      "limits": {
+        "max_per_hour": 1,
+        "cooldown_s": 3600
+      },
+      "publish": {
+        "mode": "return_only"
+      },
+      "notes": "Hourly VSS seat status"
+    },
+    {
+      "id": "manual-full-check",
+      "enabled": true,
+      "trigger": {
+        "type": "manual"
+      },
+      "match": {},
+      "action": {
+        "content": "@EA plan full check",
+        "require_operator_pubkey": true
+      },
+      "limits": {
+        "max_per_hour": 2,
+        "cooldown_s": 1800
+      },
+      "publish": {
+        "mode": "return_only"
+      },
+      "notes": "Manual only; confirm still human"
+    }
+  ]
+}
