@@ -44,11 +44,14 @@ def _format_row(row: dict) -> str:
     status = row.get("status", "?")
     priority = row.get("priority", "normal")
     sha = row.get("repo_sha_hint", "")[:12]
+    job_id = row.get("job_id", "")
     extra = f" priority={priority}"
     if sha:
         extra += f" sha={sha}"
     if row.get("acceptance"):
         extra += f" acceptance={row['acceptance'][:60]}"
+    if job_id:
+        extra += f" job={job_id}"
     return f"[{ts}] {status}: {topic[:80]}{extra}"
 
 

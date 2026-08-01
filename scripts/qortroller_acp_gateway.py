@@ -256,6 +256,7 @@ class ToolResult:
     ok: bool
     summary: str
     tags: list[list[str]] = field(default_factory=list)
+    job_id: str | None = None
 
 
 def load_config() -> GatewayConfig:
@@ -1007,9 +1008,12 @@ def _tool_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     goal = intent.args.get("goal", "")
     steps = _plan_steps_from_goal(goal)
     plan_id = secrets.token_hex(3)  # 6 hex chars, short enough to type
+    # SAP-1: job_id aliases plan_id for stable cross-file tracing.
+    job_id = f"sap_{plan_id}"
     record: dict[str, object] = {
         "ts": int(time.time()),
         "plan_id": plan_id,
+        "job_id": job_id,
         "goal": goal,
         "status": "pending",
         "steps": steps,
@@ -1026,7 +1030,7 @@ def _tool_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
         ["steps", str(len(steps))],
         ["status", "pending"],
     ]
-    return ToolResult(intent.tool, intent.harness, True, summary, tags)
+    return ToolResult(intent.tool, intent.harness, True, summary, tags, job_id=job_id)
 
 
 def _tool_confirm_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
@@ -1067,6 +1071,7 @@ def _tool_confirm_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     completed_record = {
         "ts": int(time.time()),
         "plan_id": plan_id,
+        "job_id": plan.get("job_id"),
         "goal": plan.get("goal", ""),
         "status": "completed",
         "steps_ok": all_ok,
@@ -1083,19 +1088,21 @@ def _tool_confirm_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     if len(completed_summary) > MAX_REPLY_CHARS - 80:
         completed_summary = completed_summary[: MAX_REPLY_CHARS - 100].rsplit(" | ", 1)[0] + " | …"
     summary = f"plan {plan_id} executed — {completed_summary}"
-
+    tags = [
+        ["acp_tool", intent.tool],
+        ["plan_id", plan_id],
+        ["steps", str(len(step_results))],
+        ["steps_ok", "true" if all_ok else "false"],
+        ["status", "completed"],
+    ]
+    job_id = plan.get("job_id")
     return ToolResult(
         intent.tool,
         intent.harness,
         all_ok,
         summary,
-        [
-            ["acp_tool", intent.tool],
-            ["plan_id", plan_id],
-            ["steps", str(len(step_results))],
-            ["steps_ok", "true" if all_ok else "false"],
-            ["status", "completed"],
-        ],
+        tags,
+        job_id=job_id,
     )
 
 
@@ -1161,6 +1168,11 @@ def _tool_diagnose_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _new_job_id() -> str:
+    """Generate a stable SAP job id: sap_<ts_hex>_<4-hex nonce>."""
+    return f"sap_{int(time.time()):x}_{secrets.token_hex(2)}"
+
+
 def _repo_sha_hint(cfg: GatewayConfig) -> str:
     """Return the current HEAD SHA for the hand-off record (EA-ACP-1).
 
@@ -1187,6 +1199,7 @@ def _tool_deep_diagnose(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     topic = intent.args.get("topic", "")
     acceptance = intent.args.get("acceptance")
     priority = intent.args.get("priority", "normal")
+    job_id = _new_job_id()
     record: dict[str, object] = {
         "ts": int(time.time()),
         "harness": HARNESS_DEVIN,
@@ -1194,6 +1207,7 @@ def _tool_deep_diagnose(intent: Intent, cfg: GatewayConfig) -> ToolResult:
         "topic": topic,
         "status": "queued",
         "priority": priority,
+        "job_id": job_id,
     }
     if acceptance:
         record["acceptance"] = acceptance
@@ -1218,6 +1232,7 @@ def _tool_deep_diagnose(intent: Intent, cfg: GatewayConfig) -> ToolResult:
         True,
         summary,
         tags,
+        job_id=job_id,
     )
 
 
@@ -1272,6 +1287,11 @@ def scrub(text: str) -> str:
 def format_reply(result: ToolResult, cfg: GatewayConfig) -> tuple[str, list[list[str]]]:
     """Build the (content, tags) pair for the #rig-ops reply."""
     body = scrub(" ".join(result.summary.split()))
+    # SAP-1: surface the job_id in the digest when it fits.
+    if result.job_id:
+        job_part = f" | job: {result.job_id}"
+        if len(body) + len(job_part) <= cfg.max_reply_chars:
+            body += job_part
     limit = max(cfg.max_reply_chars, 32)
     if len(body) > limit:
         body = body[: limit - 1].rstrip() + "…"
@@ -1279,6 +1299,8 @@ def format_reply(result: ToolResult, cfg: GatewayConfig) -> tuple[str, list[list
     for tag in result.tags:
         if tag and tag[0] not in ("h",):
             tags.append([str(part) for part in tag])
+    if result.job_id:
+        tags.append(["job", result.job_id])
     return f"[{result.harness}] {body}", tags
 
 
@@ -1334,18 +1356,18 @@ def handle_message(
     started = time.time()
     result = execute(parsed, cfg)
     reply, tags = format_reply(result, cfg)
-    audit(
-        cfg,
-        {
-            "pubkey": pubkey,
-            "tool": parsed.tool,
-            "harness": parsed.harness,
-            "args": parsed.args,
-            "ok": result.ok,
-            "duration_s": round(time.time() - started, 3),
-            "reply": reply,
-        },
-    )
+    audit_record: dict[str, object] = {
+        "pubkey": pubkey,
+        "tool": parsed.tool,
+        "harness": parsed.harness,
+        "args": parsed.args,
+        "ok": result.ok,
+        "duration_s": round(time.time() - started, 3),
+        "reply": reply,
+    }
+    if result.job_id:
+        audit_record["job_id"] = result.job_id
+    audit(cfg, audit_record)
     return reply, tags
 
 

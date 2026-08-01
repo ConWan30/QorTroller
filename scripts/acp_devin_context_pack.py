@@ -85,9 +85,23 @@ def _find_queue_row(topic: str, repo_root: Path) -> dict | None:
     return None
 
 
+def _find_queue_row_by_job(job_id: str, repo_root: Path) -> dict | None:
+    for row in reversed(_read_jsonl(_queue_path(repo_root))):
+        if str(row.get("job_id", "")) == job_id:
+            return row
+    return None
+
+
 def _find_plan(plan_id: str, repo_root: Path) -> dict | None:
     for row in reversed(_read_jsonl(_plans_path(repo_root))):
         if str(row.get("plan_id", "")) == plan_id:
+            return row
+    return None
+
+
+def _find_plan_by_job(job_id: str, repo_root: Path) -> dict | None:
+    for row in reversed(_read_jsonl(_plans_path(repo_root))):
+        if str(row.get("job_id", "")) == job_id:
             return row
     return None
 
@@ -107,12 +121,14 @@ def _read_doc_headings(path: Path, limit: int = 8) -> list[str]:
     return headings
 
 
-def build_pack(topic: str, plan_id: str, repo_root: Path) -> str:
+def build_pack(topic: str, plan_id: str, job_id: str, repo_root: Path) -> str:
     sections: list[str] = ["# Devin Context Pack\n"]
 
     sections.append(f"## Repo state")
     sections.append(f"- SHA: `{_repo_sha()}`")
     sections.append(f"- Generated: `{int(__import__('time').time())}`")
+    if job_id:
+        sections.append(f"- Job: `{job_id}`")
     sections.append("")
 
     sections.append("## Relevant design docs")
@@ -125,6 +141,15 @@ def build_pack(topic: str, plan_id: str, repo_root: Path) -> str:
             sections.append("(no headings or file missing)")
         sections.append("")
 
+    if job_id:
+        plan = _find_plan_by_job(job_id, repo_root)
+        sections.append("## Matching plan by job")
+        if plan:
+            sections.append(f"```json\n{json.dumps(plan, indent=2)}\n```")
+        else:
+            sections.append(f"No plan found for job `{job_id}`.")
+        sections.append("")
+
     if plan_id:
         plan = _find_plan(plan_id, repo_root)
         sections.append("## Matching plan")
@@ -132,6 +157,15 @@ def build_pack(topic: str, plan_id: str, repo_root: Path) -> str:
             sections.append(f"```json\n{json.dumps(plan, indent=2)}\n```")
         else:
             sections.append(f"No plan found for id `{plan_id}`.")
+        sections.append("")
+
+    if job_id:
+        row = _find_queue_row_by_job(job_id, repo_root)
+        sections.append("## Matching Devin queue row by job")
+        if row:
+            sections.append(f"```json\n{json.dumps(row, indent=2)}\n```")
+        else:
+            sections.append(f"No queue row found for job `{job_id}`.")
         sections.append("")
 
     if topic:
@@ -147,7 +181,8 @@ def build_pack(topic: str, plan_id: str, repo_root: Path) -> str:
     results = _read_jsonl(_results_path(repo_root))[-3:]
     if results:
         for r in reversed(results):
-            sections.append(f"- `{r.get('status')}` {r.get('topic')} — {r.get('pr_url')} — {r.get('summary', '')[:80]}")
+            extra = f" job={r['job_id']}" if r.get("job_id") else ""
+            sections.append(f"- `{r.get('status')}` {r.get('topic')}{extra} — {r.get('pr_url')} — {r.get('summary', '')[:80]}")
     else:
         sections.append("No result records yet.")
     sections.append("")
@@ -167,14 +202,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build a Devin context pack.")
     parser.add_argument("--topic", default="", help="Topic to match in the queue")
     parser.add_argument("--plan-id", default="", help="Plan id to include")
+    parser.add_argument("--job-id", default="", help="SAP job_id to resolve queue/plan/result")
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT, help="Repo root for queue/plans/results")
     parser.add_argument("--output", type=Path, default=None, help="Output file (default: stdout)")
     args = parser.parse_args(argv)
 
-    if not args.topic and not args.plan_id:
-        parser.error("Provide --topic and/or --plan-id")
+    if not args.topic and not args.plan_id and not args.job_id:
+        parser.error("Provide --topic and/or --plan-id and/or --job-id")
 
-    pack = build_pack(args.topic, args.plan_id, args.repo_root)
+    pack = build_pack(args.topic, args.plan_id, args.job_id, args.repo_root)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(pack, encoding="utf-8")

@@ -37,6 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pr-url", default="", help="Pull request URL")
     parser.add_argument("--summary", default="", help="One-line summary")
     parser.add_argument("--status", default="done", choices=["done", "deferred", "aborted"])
+    parser.add_argument("--job-id", default="", help="SAP job_id from queue or plan")
     args = parser.parse_args(argv)
 
     record = {
@@ -46,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         "pr_url": gw.scrub(args.pr_url[:200]),
         "summary": gw.scrub(args.summary[:500]),
     }
+    if args.job_id:
+        record["job_id"] = gw.scrub(args.job_id[:64])
     args.path.parent.mkdir(parents=True, exist_ok=True)
     with args.path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")

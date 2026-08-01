@@ -462,6 +462,69 @@ def test_diagnose_status_shows_latest_results(cfg):
     assert ["count", "2"] in result.tags
 
 
+def test_new_job_id_format():
+    job_id = gw._new_job_id()
+    assert job_id.startswith("sap_")
+    parts = job_id.split("_")
+    assert len(parts) == 3
+    assert all(p for p in parts)
+
+
+def test_diagnose_queue_record_has_job_id(cfg):
+    gw.handle_message(OPERATOR, "@EA diagnose example topic", cfg)
+    lines = cfg.devin_queue_path.read_text(encoding="utf-8").strip().splitlines()
+    record = json.loads(lines[0])
+    assert record["job_id"].startswith("sap_")
+
+
+def test_diagnose_audit_row_has_job_id(cfg):
+    gw.handle_message(OPERATOR, "@EA diagnose example topic", cfg)
+    lines = cfg.audit_log_path.read_text(encoding="utf-8").strip().splitlines()
+    record = json.loads(lines[0])
+    assert record["job_id"].startswith("sap_")
+
+
+def test_diagnose_reply_includes_job_tag(cfg):
+    content, tags = gw.handle_message(OPERATOR, "@EA diagnose example topic", cfg)
+    job_tag = next((t for t in tags if t[0] == "job"), None)
+    assert job_tag is not None
+    assert job_tag[1].startswith("sap_")
+    assert "job:" in content
+
+
+def test_plan_record_has_job_id(cfg):
+    result = gw.execute(gw.parse_mention("@EA plan full check", cfg), cfg)
+    plan_id = result.tags[[t[0] for t in result.tags].index("plan_id")][1]
+    lines = cfg.plans_path.read_text(encoding="utf-8").strip().splitlines()
+    record = json.loads(lines[0])
+    assert record["job_id"] == f"sap_{plan_id}"
+    assert result.job_id == record["job_id"]
+
+
+def test_confirm_plan_record_includes_job_id(cfg, monkeypatch):
+    def _fake_tool(intent, c):
+        return gw.ToolResult(
+            gw.TOOL_HEALTH_CHECK, gw.HARNESS_GROK, True, "health — ea: ok", [["healthy", "true"]]
+        )
+
+    monkeypatch.setattr(gw, "_tool_health_check", _fake_tool)
+    plan_record = {
+        "ts": 1,
+        "plan_id": "abc123",
+        "job_id": "sap_abc123",
+        "goal": "acp health",
+        "status": "pending",
+        "steps": [{"tool": gw.TOOL_HEALTH_CHECK, "args": {}}],
+    }
+    gw._append_jsonl(cfg.plans_path, plan_record)
+    result = gw.execute(gw.parse_mention("@EA confirm plan abc123", cfg), cfg)
+    assert result.job_id == "sap_abc123"
+    lines = cfg.plans_path.read_text(encoding="utf-8").strip().splitlines()
+    completed = json.loads(lines[-1])
+    assert completed["status"] == "completed"
+    assert completed["job_id"] == "sap_abc123"
+
+
 def test_context_pack_script_emits_a_bundle(tmp_path: Path):
     queue = tmp_path / "audits" / "acp_devin_queue.jsonl"
     queue.parent.mkdir(parents=True, exist_ok=True)
