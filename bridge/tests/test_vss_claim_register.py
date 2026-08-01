@@ -78,13 +78,13 @@ class TestClaimRegisterVSS(unittest.TestCase):
         rvss05_match = re.search(r"R-VSS-05.*?yes", self.register_text, re.I | re.S)
         self.assertIsNotNone(rvss05_match, "R-VSS-05 should be sayable")
 
-    def test_6_rvss03_g1_not_sayable(self):
-        """R-VSS-03 is G1, NOT sayable (VSS-7 not shipped)."""
+    def test_6_rvss03_g1_sayable_after_vss7(self):
+        """R-VSS-03 is G1, sayable after VSS-7 shipped (bot OPEN ban enforced)."""
         self.assertIn("R-VSS-03", self.register_text)
         self.assertIn("G1", self.register_text)
-        # R-VSS-03 should be marked as NOT sayable
-        rvss03_match = re.search(r"R-VSS-03.*?no", self.register_text, re.I | re.S)
-        self.assertIsNotNone(rvss03_match, "R-VSS-03 should NOT be sayable")
+        # R-VSS-03 should now be marked as sayable (VSS-7 shipped)
+        rvss03_match = re.search(r"R-VSS-03.*?yes", self.register_text, re.I | re.S)
+        self.assertIsNotNone(rvss03_match, "R-VSS-03 should be sayable after VSS-7")
 
     def test_7_rvss06_g0_not_sayable(self):
         """R-VSS-06 is G0, NOT sayable (F2 bind not yet live)."""
