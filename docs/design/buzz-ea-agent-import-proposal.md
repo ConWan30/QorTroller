@@ -41,16 +41,17 @@ Buzz workflow
 
 The workflow must use the same `qortroller_buzz_bot._publish_event` path. It never signs an event with its own key.
 
-### 3.2 Programmatic — agent calls the gateway directly
+### 3.2 Programmatic — MCP tool surface
 
 ```text
 External process
-  -> qortroller_acp_gateway.handle_message(operator_pubkey, "@EA <command>", cfg)
+  -> scripts/qortroller_acp_mcp_server.py (or direct import)
+  -> POST /mcp/tools/ask_ea {pubkey, content}
   -> (content, tags) returned
   -> workflow decides whether to publish as @EA
 ```
 
-This is useful for CI or local agent loops that do not need a Nostr round-trip.
+This is useful for Claude, Cursor, or any MCP-aware coding agent. The server and the webhook both route through the same `handle_message` call.
 
 ### 3.3 File-driven — agent watches queue / plan files
 
@@ -91,13 +92,13 @@ A typical Buzz agent flow under this contract:
 
 ## 7. Implementation options
 
-| Option | Effort | When |
+| Option | Status | When |
 |---|---|---|
-| A — Webhook adapter | Low | Buzz exposes a webhook the operator can point at `qortroller_acp_gateway` |
-| B — MCP server wrapper | Medium | Expose `handle_message` as an MCP tool surface for Claude / Cursor / etc. |
-| C — Buzz-native bot plugin | High | Wait for Buzz to expose an agent SDK and implement a thin adapter |
+| A — Webhook adapter | **Shipped** | `scripts/qortroller_buzz_webhook.py` — `POST /buzz` |
+| B — MCP server wrapper | **Shipped** | `scripts/qortroller_acp_mcp_server.py` — `/mcp/tools/ask_ea` |
+| C — Buzz-native bot plugin | Future | Wait for Buzz to expose an agent SDK and implement a thin adapter |
 
-Recommended starting point: **Option A** for CI/webhooks, **Option B** for LLM-based coding agents. Option C is a future rewrite when the Buzz SDK is stable.
+Both A and B reuse the same `qortroller_acp_gateway.handle_message` path. Option C is a future rewrite when the Buzz SDK is stable.
 
 ## 8. Acceptance criteria
 
