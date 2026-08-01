@@ -60,6 +60,8 @@ ORACLE_STATES = frozenset({ORACLE_RUNNING, ORACLE_STOPPED})
 MEDIA_URL_TAG = "media_url"
 SESSION_ID_TAG = "session_id"
 IOID_TOKEN_TAG = "ioid_token"
+# F2: optional pointer from #streams seat → #matches channel UUID
+MATCHES_CHANNEL_TAG = "matches_channel"
 
 # VSS-7: signer role tag (optional, but if present must NOT be "bot" for OPEN)
 SIGNER_ROLE_TAG = "signer_role"
@@ -84,7 +86,13 @@ REQUIRED_TAGS = (
 ) + RIBBON_TAGS
 
 # Optional tags (present only when the gamer provides them)
-OPTIONAL_TAGS = (MEDIA_URL_TAG, SESSION_ID_TAG, IOID_TOKEN_TAG, SIGNER_ROLE_TAG)
+OPTIONAL_TAGS = (
+    MEDIA_URL_TAG,
+    SESSION_ID_TAG,
+    IOID_TOKEN_TAG,
+    SIGNER_ROLE_TAG,
+    MATCHES_CHANNEL_TAG,
+)
 
 # Tags that must NEVER appear in a seat event (substrate leakage guard)
 FORBIDDEN_PATTERNS = (
@@ -115,11 +123,17 @@ class SeatEvent:
     session_id: str | None = None
     ioid_token: str | None = None
     signer_role: str | None = None  # VSS-7: optional, but bot cannot OPEN
+    matches_channel: str | None = None  # F2: optional #matches channel UUID
     ribbon: dict[str, str] = field(default_factory=lambda: {
         "poep_enabled": RIBBON_FALSE,
         "l6b_enabled": RIBBON_FALSE,
         "candidate_ok": RIBBON_FALSE,
     })
+
+    @property
+    def session_bound(self) -> bool:
+        """True when F2 watch-party bind is present (session_id non-empty)."""
+        return bool(self.session_id and str(self.session_id).strip())
 
     def to_tags(self) -> list[list[str]]:
         """Serialize to Nostr tag list (excluding h tag — Rust helper derives it)."""
@@ -138,6 +152,8 @@ class SeatEvent:
             tags.append([IOID_TOKEN_TAG, self.ioid_token])
         if self.signer_role:  # VSS-7
             tags.append([SIGNER_ROLE_TAG, self.signer_role])
+        if self.matches_channel:  # F2
+            tags.append([MATCHES_CHANNEL_TAG, self.matches_channel])
         # Honesty ribbon — always present, posted as-is
         for key in RIBBON_TAGS:
             tags.append([key, self.ribbon.get(key, RIBBON_FALSE)])
@@ -152,6 +168,9 @@ class SeatEvent:
         ]
         if self.media_url:
             parts.append(f"media: {self.media_url}")
+        # F2: stranger-readable bind (URL alone ≠ sealed session claim)
+        if self.session_id:
+            parts.append(f"session: {self.session_id}")
         return " | ".join(parts)
 
 
@@ -164,6 +183,7 @@ def build_seat_event(
     session_id: str | None = None,
     ioid_token: str | None = None,
     signer_role: str | None = None,
+    matches_channel: str | None = None,
     poep_enabled: bool = False,
     l6b_enabled: bool = False,
     candidate_ok: bool = False,
@@ -177,6 +197,10 @@ def build_seat_event(
     The schema rejects bot-authored OPEN events; the seat helper must
     ALSO verify the role against the relay (kind 9000 self-add) — the
     schema tag is an honesty marker, not the enforcement point.
+
+    F2: session_id is optional. When present, the seat claims a sealed
+    session bind (R-VSS-06). Absence is honest — URL-only watch is still valid.
+    matches_channel is an optional #matches UUID pointer (not a second proof).
     """
     if seat_state not in SEAT_STATES:
         raise ValueError(f"seat_state must be one of {SEAT_STATES}, got '{seat_state}'")
@@ -191,8 +215,14 @@ def build_seat_event(
     if seat_state == SEAT_OPEN and signer_role == SIGNER_ROLE_BOT:
         raise ValueError("bot cannot OPEN a seat (VSS-7 / scope §4: humans open seats; agents view)")
 
+    # Normalize empty strings to None (honest absence of F2 bind)
+    if session_id is not None and not str(session_id).strip():
+        session_id = None
+    if matches_channel is not None and not str(matches_channel).strip():
+        matches_channel = None
+
     # Forbidden content guard
-    for field_val in (media_url, session_id, ioid_token):
+    for field_val in (media_url, session_id, ioid_token, matches_channel):
         if field_val:
             _check_forbidden(field_val)
 
@@ -210,6 +240,7 @@ def build_seat_event(
         session_id=session_id,
         ioid_token=ioid_token,
         signer_role=signer_role,
+        matches_channel=matches_channel,
         ribbon=ribbon,
     )
 

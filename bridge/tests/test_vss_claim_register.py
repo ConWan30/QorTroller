@@ -10,7 +10,7 @@ Test coverage:
   4. R-VSS-02 is G0, sayable (VSS-2 shipped)
   5. R-VSS-05 is G0, sayable (VSS-2..3 shipped)
   6. R-VSS-03 is G1, NOT sayable (VSS-7 not shipped)
-  7. R-VSS-06 is G0, NOT sayable (F2 bind not yet live)
+  7. R-VSS-06 is G0, sayable when session_id bind is present (F2 live)
   8. R-VSS-07 is G1, sayable only if ioid_token present
   9. Never-sayable list includes VSS-specific phrases
  10. Never-sayable list includes "humanity-proven" for streams
@@ -86,11 +86,14 @@ class TestClaimRegisterVSS(unittest.TestCase):
         rvss03_match = re.search(r"R-VSS-03.*?yes", self.register_text, re.I | re.S)
         self.assertIsNotNone(rvss03_match, "R-VSS-03 should be sayable after VSS-7")
 
-    def test_7_rvss06_g0_not_sayable(self):
-        """R-VSS-06 is G0, NOT sayable (F2 bind not yet live)."""
+    def test_7_rvss06_g0_sayable_when_bound(self):
+        """R-VSS-06 is G0, sayable when seat carries session_id (F2 bind live)."""
         self.assertIn("R-VSS-06", self.register_text)
-        rvss06_match = re.search(r"R-VSS-06.*?no", self.register_text, re.I | re.S)
-        self.assertIsNotNone(rvss06_match, "R-VSS-06 should NOT be sayable")
+        rvss06_match = re.search(r"R-VSS-06.*?yes", self.register_text, re.I | re.S)
+        self.assertIsNotNone(
+            rvss06_match,
+            "R-VSS-06 should be sayable when F2 session_id bind is present",
+        )
 
     def test_8_rvss07_g1_conditional(self):
         """R-VSS-07 is G1, sayable only if ioid_token present."""
