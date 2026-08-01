@@ -67,7 +67,7 @@ VSS work package(s) that must be shipped before the phrase is sayable.
 |---|---|---|---|---|
 | R-VSS-01 | "Stream seat is OPEN while capture and retina oracle process report up." | G0 | VSS-1..3 | yes — VSS-1..3 shipped |
 | R-VSS-02 | "Seat events are digests + media URL pointers on Buzz." | G0 | VSS-2 | yes — VSS-2 shipped |
-| R-VSS-03 | "Only human community members can open a seat; agents may view." | G1 | VSS-7 | no — VSS-7 not shipped |
+| R-VSS-03 | "Only human community members can open a seat; agents may view." | G1 | VSS-7 | yes — VSS-7 shipped (bot OPEN ban enforced) |
 | R-VSS-04 | "Stream is humanity-proven / tournament-grade." | G4 | **Forbidden** until Phase 5 gates | **no — never at this scope** |
 | R-VSS-05 | "Seat carries honesty ribbon (flags as-is)." | G0 | F1 / VSS-2..3 | yes — VSS-2..3 shipped |
 | R-VSS-06 | "This room is watching sealed session `<session_id>`." | G0 | F2 when bind is real | no — F2 bind not yet live |
@@ -134,7 +134,7 @@ is unlocked by this.
 |---|---|
 | VSS-1..3 | R-VSS-01, R-VSS-05 (shipped) |
 | VSS-2 | R-VSS-02 (shipped) |
-| VSS-7 | R-VSS-03 (not shipped) |
+| VSS-7 | R-VSS-03 (shipped — bot OPEN ban enforced) |
 | F2 bind live | R-VSS-06 (not yet live) |
 | Phase 5 all gates | R-VSS-04 (forbidden until then) |
 
