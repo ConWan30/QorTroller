@@ -57,6 +57,22 @@ Current permitted ceiling: **G1**, plus G2 for the artifacts named in §3.
 | R-11 | "Tournament-grade anti-cheat." | G4 | all | no |
 | R-12 | "Cheating cannot exist on QorTroller." | G4 | all | no — aspirational framing only, never as a product claim |
 
+### VSS stream seat rows (draft — VSS-5)
+
+Source: `docs/design/buzz-vss-stream-seat-scope-v0.md` §10. These rows are
+**draft** until promoted in a reviewed commit. The gate column names the
+VSS work package(s) that must be shipped before the phrase is sayable.
+
+| # | Phrase (or equivalent) | Grade | Gates required | Sayable today |
+|---|---|---|---|---|
+| R-VSS-01 | "Stream seat is OPEN while capture and retina oracle process report up." | G0 | VSS-1..3 | yes — VSS-1..3 shipped |
+| R-VSS-02 | "Seat events are digests + media URL pointers on Buzz." | G0 | VSS-2 | yes — VSS-2 shipped |
+| R-VSS-03 | "Only human community members can open a seat; agents may view." | G1 | VSS-7 | no — VSS-7 not shipped |
+| R-VSS-04 | "Stream is humanity-proven / tournament-grade." | G4 | **Forbidden** until Phase 5 gates | **no — never at this scope** |
+| R-VSS-05 | "Seat carries honesty ribbon (flags as-is)." | G0 | F1 / VSS-2..3 | yes — VSS-2..3 shipped |
+| R-VSS-06 | "This room is watching sealed session `<session_id>`." | G0 | F2 when bind is real | no — F2 bind not yet live |
+| R-VSS-07 | "Gamer self-asserted ioID claim accompanies this seat." | G1 | Optional only | yes — but only if ioid_token actually present |
+
 ### Phrases that are never sayable
 
 Independent of gates, because no evidence can support them at this scope:
@@ -64,6 +80,9 @@ Independent of gates, because no evidence can support them at this scope:
 - "100% fair" / "unhackable" / "impossible to cheat"
 - "Certified" for any population the corpus does not contain
 - Any claim implying a ban decision is cryptographic truth (bans are human decisions informed by evidence)
+- "Stream is humanity-proven" or "tournament-grade stream" (R-VSS-04 — oracle process health ≠ population cert)
+- "Verified human live" for any stream seat (the seat is eligibility-gated, not proof-graded)
+- "Cheating-proof stream" or any variant implying the seat prevents cheating
 
 ---
 
@@ -107,7 +126,17 @@ is unlocked by this.
 | G5-FRR | R-09 |
 | G5-VER | R-06 (**closed** — see §3) |
 | G5-OPS | none directly; it is the Phase 4 acceptance precondition |
-| all of the above | R-10, R-11 |
+| all of the above | R-10, R-11, R-VSS-04 |
+
+### VSS work package gates
+
+| WP | Rows it unlocks |
+|---|---|
+| VSS-1..3 | R-VSS-01, R-VSS-05 (shipped) |
+| VSS-2 | R-VSS-02 (shipped) |
+| VSS-7 | R-VSS-03 (not shipped) |
+| F2 bind live | R-VSS-06 (not yet live) |
+| Phase 5 all gates | R-VSS-04 (forbidden until then) |
 
 ---
 
