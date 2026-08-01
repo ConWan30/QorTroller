@@ -30,6 +30,8 @@ def cfg(tmp_path: Path) -> gw.GatewayConfig:
         devin_queue_path=tmp_path / "acp_devin_queue.jsonl",
         plans_path=tmp_path / "acp_plans.jsonl",
         devin_results_path=tmp_path / "acp_devin_results.jsonl",
+        seals_path=tmp_path / "acp_sap_seals.jsonl",
+        challenges_path=tmp_path / "acp_sap_challenges.jsonl",
     )
 
 
@@ -460,6 +462,77 @@ def test_diagnose_status_shows_latest_results(cfg):
     assert "acp parser" in result.summary
     assert "vss helper" in result.summary
     assert ["count", "2"] in result.tags
+
+
+def test_parse_job_status(cfg):
+    intent = gw.parse_mention("@EA job status sap_abc123", cfg)
+    assert isinstance(intent, gw.Intent)
+    assert intent.tool == gw.TOOL_GET_JOB_STATUS
+    assert intent.args["job_id"] == "sap_abc123"
+
+
+def test_parse_sap_status_alias(cfg):
+    intent = gw.parse_mention("@EA sap status sap_xyz", cfg)
+    assert isinstance(intent, gw.Intent)
+    assert intent.tool == gw.TOOL_GET_JOB_STATUS
+    assert intent.args["job_id"] == "sap_xyz"
+
+
+def test_get_job_status_unknown_job(cfg):
+    result = gw.execute(gw.parse_mention("@EA job status sap_nonexistent", cfg), cfg)
+    assert result.ok is True
+    assert "unknown job" in result.summary
+    assert ["status", "unknown"] in result.tags
+
+
+def test_get_job_status_shows_queue_result_and_seal(cfg):
+    job_id = "sap_testjob001"
+    gw._append_jsonl(cfg.devin_queue_path, {"ts": 1, "job_id": job_id, "topic": "capture lag", "status": "queued"})
+    gw._append_jsonl(cfg.devin_results_path, {"ts": 2, "job_id": job_id, "topic": "capture lag", "status": "done", "pr_url": "https://github.com/ConWan30/QorTroller/pull/125", "summary": "fixed latency"})
+    gw._append_jsonl(cfg.seals_path, {"ts": 3, "job_id": job_id, "verdict": "accept", "ref": "https://github.com/ConWan30/QorTroller/pull/125", "note": "merged", "operator": "local"})
+    result = gw.execute(gw.parse_mention(f"@EA job status {job_id}", cfg), cfg)
+    assert result.ok is True
+    assert "queued" in result.summary
+    assert "done" in result.summary
+    assert "sealed: accept" in result.summary
+    assert "pr:" in result.summary
+
+
+def test_parse_challenge_job(cfg):
+    intent = gw.parse_mention("@EA challenge job sap_abc123 pytest bridge/tests/test_qortroller_acp_gateway.py", cfg)
+    assert isinstance(intent, gw.Intent)
+    assert intent.tool == gw.TOOL_CHALLENGE_JOB
+    assert intent.args["job_id"] == "sap_abc123"
+    assert "pytest" in intent.args["demand"]
+
+
+def test_parse_challenge_without_job_keyword(cfg):
+    intent = gw.parse_mention("@EA challenge sap_abc123 invariant", cfg)
+    assert intent.tool == gw.TOOL_CHALLENGE_JOB
+    assert intent.args["demand"] == "invariant"
+
+
+def test_challenge_job_appends_record(cfg):
+    result = gw.execute(
+        gw.parse_mention("@EA challenge sap_abc123 pytest bridge/tests/test_qortroller_acp_gateway.py", cfg),
+        cfg,
+    )
+    assert result.ok is True
+    assert result.job_id == "sap_abc123"
+    lines = cfg.challenges_path.read_text(encoding="utf-8").strip().splitlines()
+    record = json.loads(lines[0])
+    assert record["job_id"] == "sap_abc123"
+    assert record["demand"] == "pytest bridge/tests/test_qortroller_acp_gateway.py"
+    assert record["status"] == "open"
+
+
+def test_get_job_status_shows_plan_when_no_queue(cfg):
+    job_id = "sap_planjob002"
+    gw._append_jsonl(cfg.plans_path, {"ts": 1, "plan_id": "abc123", "job_id": job_id, "goal": "acp health", "status": "pending", "steps": []})
+    result = gw.execute(gw.parse_mention(f"@EA job status {job_id}", cfg), cfg)
+    assert result.ok is True
+    assert "planned" in result.summary
+    assert "acp health" in result.summary
 
 
 def test_new_job_id_format():

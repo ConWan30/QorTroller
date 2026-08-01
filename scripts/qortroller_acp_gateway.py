@@ -67,6 +67,10 @@ TOOL_PLAN = "plan"
 TOOL_CONFIRM_PLAN = "confirm_plan"
 # EA-ACP-4 — Devin result bridge (operator-mediated read)
 TOOL_DIAGNOSE_STATUS = "diagnose_status"
+# SAP-3 — job status digest
+TOOL_GET_JOB_STATUS = "get_job_status"
+# SAP-4 — challenge record
+TOOL_CHALLENGE_JOB = "challenge_job"
 TOOL_DEEP_DIAGNOSE = "deep_diagnose"
 TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
 # VSS-S1 — agent viewers: summarize digests + flag a down seat (never OPEN)
@@ -90,6 +94,8 @@ ALLOWED_TOOLS = (
     TOOL_PLAN,
     TOOL_CONFIRM_PLAN,
     TOOL_DIAGNOSE_STATUS,
+    TOOL_GET_JOB_STATUS,
+    TOOL_CHALLENGE_JOB,
     TOOL_DEEP_DIAGNOSE,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
@@ -112,6 +118,8 @@ GROK_ONLY_TOOLS = (
     TOOL_PLAN,
     TOOL_CONFIRM_PLAN,
     TOOL_DIAGNOSE_STATUS,
+    TOOL_GET_JOB_STATUS,
+    TOOL_CHALLENGE_JOB,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
@@ -156,6 +164,16 @@ PLANS_PATH = Path(
 # EA-ACP-4: operator/Devin writes result records here; gateway reads only.
 DEVIN_RESULTS_PATH = Path(
     os.environ.get("ACP_DEVIN_RESULTS", str(REPO_ROOT / "audits" / "acp_devin_results.jsonl"))
+)
+
+# SAP-2: operator-only seal log; no Nostr publish by default.
+SEALS_PATH = Path(
+    os.environ.get("ACP_SAP_SEALS", str(REPO_ROOT / "audits" / "acp_sap_seals.jsonl"))
+)
+
+# SAP-4: lightweight challenge records.
+CHALLENGES_PATH = Path(
+    os.environ.get("ACP_SAP_CHALLENGES", str(REPO_ROOT / "audits" / "acp_sap_challenges.jsonl"))
 )
 
 # Reply bounds (digest discipline).
@@ -229,6 +247,8 @@ class GatewayConfig:
     devin_queue_path: Path = DEVIN_QUEUE_PATH
     plans_path: Path = PLANS_PATH
     devin_results_path: Path = DEVIN_RESULTS_PATH
+    seals_path: Path = SEALS_PATH
+    challenges_path: Path = CHALLENGES_PATH
     max_reply_chars: int = MAX_REPLY_CHARS
     dry_run: bool = False
 
@@ -472,6 +492,22 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
     # EA-ACP-4: operator asks for the latest Devin result digest.
     if re.match(r"^(?:diagnose|devin)\s+status$", command, re.I):
         return Intent(TOOL_DIAGNOSE_STATUS)
+
+    # SAP-3: job status across queue / results / seals.
+    m = re.match(r"^(?:job|sap)\s+status\s+(\S+)$", command, re.I)
+    if m:
+        return Intent(TOOL_GET_JOB_STATUS, {"job_id": m.group(1).strip().lower()[:64]})
+
+    # SAP-4: challenge a job with a demand (e.g. "pytest bridge/tests/..." or "invariant").
+    m = re.match(r"^challenge\s+(?:job\s+)?(\S+)\s+(.+)$", command, re.I)
+    if m:
+        return Intent(
+            TOOL_CHALLENGE_JOB,
+            {
+                "job_id": m.group(1).strip().lower()[:64],
+                "demand": m.group(2).strip()[:200],
+            },
+        )
 
     m = re.match(r"^(?:deep\s+)?diagnose\s+(.+)$", command, re.I)
     if m:
@@ -1168,6 +1204,104 @@ def _tool_diagnose_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _tool_challenge_job(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """SAP-4: append a lightweight challenge record for a job."""
+    job_id = intent.args.get("job_id", "")
+    demand = intent.args.get("demand", "")
+    record: dict[str, object] = {
+        "ts": int(time.time()),
+        "job_id": job_id,
+        "demand": scrub(demand),
+        "status": "open",
+        "verdict": "",
+    }
+    _append_jsonl(cfg.challenges_path, record)
+    summary = f"challenge {job_id}: {demand[:120]}"
+    tags = [
+        ["acp_tool", intent.tool],
+        ["job", job_id],
+        ["status", "open"],
+    ]
+    if demand:
+        tags.append(["demand", scrub(demand)[:120]])
+    return ToolResult(intent.tool, intent.harness, True, summary, tags, job_id=job_id)
+
+
+def _latest_record_by_job_id(path: Path, job_id: str) -> dict | None:
+    """Return the most recent JSONL record with the given job_id, or None."""
+    if not path.is_file():
+        return None
+    latest: dict | None = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if str(record.get("job_id", "")) == job_id:
+            if latest is None or record.get("ts", 0) > latest.get("ts", 0):
+                latest = record
+    return latest
+
+
+def _tool_get_job_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """SAP-3: one digest tying queue, results, and local seals for a job_id."""
+    job_id = intent.args.get("job_id", "")
+    queue = _latest_record_by_job_id(cfg.devin_queue_path, job_id)
+    plan = _latest_record_by_job_id(cfg.plans_path, job_id)
+    result = _latest_record_by_job_id(cfg.devin_results_path, job_id)
+    seal = _latest_record_by_job_id(cfg.seals_path, job_id)
+
+    if not any((queue, plan, result, seal)):
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            True,
+            f"job {job_id}: unknown job",
+            [["acp_tool", intent.tool], ["job", job_id], ["status", "unknown"]],
+        )
+
+    pieces: list[str] = [f"job {job_id}"]
+    if queue:
+        pieces.append(f"queued: {scrub(str(queue.get('topic', ''))[:60])}")
+    elif plan:
+        pieces.append(f"planned: {scrub(str(plan.get('goal', ''))[:60])}")
+
+    if result:
+        status = scrub(str(result.get("status", "?")))
+        topic = scrub(str(result.get("topic", ""))[:50])
+        pieces.append(f"result: {topic} [{status}]")
+        if result.get("pr_url"):
+            pieces.append(f"pr: {scrub(str(result['pr_url'])[:80])}")
+
+    if seal:
+        verdict = scrub(str(seal.get("verdict", "?")))
+        ref = scrub(str(seal.get("ref", ""))[:60])
+        note = scrub(str(seal.get("note", ""))[:60])
+        pieces.append(f"sealed: {verdict}")
+        if ref:
+            pieces.append(f"ref: {ref}")
+        if note:
+            pieces.append(f"note: {note}")
+
+    summary = " | ".join(pieces)
+    if len(summary) > MAX_REPLY_CHARS - 80:
+        summary = summary[: MAX_REPLY_CHARS - 100].rsplit(" | ", 1)[0] + " | …"
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        True,
+        summary,
+        [
+            ["acp_tool", intent.tool],
+            ["job", job_id],
+            ["status", "ok"],
+        ],
+    )
+
+
 def _new_job_id() -> str:
     """Generate a stable SAP job id: sap_<ts_hex>_<4-hex nonce>."""
     return f"sap_{int(time.time()):x}_{secrets.token_hex(2)}"
@@ -1249,6 +1383,8 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_PLAN: _tool_plan,
     TOOL_CONFIRM_PLAN: _tool_confirm_plan,
     TOOL_DIAGNOSE_STATUS: _tool_diagnose_status,
+    TOOL_GET_JOB_STATUS: _tool_get_job_status,
+    TOOL_CHALLENGE_JOB: _tool_challenge_job,
     TOOL_DEEP_DIAGNOSE: _tool_deep_diagnose,
     TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
     TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
@@ -1311,7 +1447,7 @@ def rejection_reply(rejection: Rejection) -> str:
         return "rejected: operator allow-list"
     if rejection.reason == REJECT_BAD_TARGET:
         return f"rejected: {rejection.detail}"
-    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | plan <goal> | confirm plan <id> | diagnose status | ceremony | session | pytest <path>"
+    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | plan <goal> | confirm plan <id> | job status <id> | diagnose status | ceremony | session | pytest <path>"
 
 
 # --- Audit trail (local only, never on Nostr) --------------------------------

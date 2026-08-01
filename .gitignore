@@ -314,3 +314,5 @@ audits/acp_gateway.jsonl
 audits/acp_devin_queue.jsonl
 audits/acp_plans.jsonl
 audits/acp_devin_results.jsonl
+audits/acp_sap_seals.jsonl
+audits/acp_sap_challenges.jsonl
