@@ -49,6 +49,11 @@ def test_unaddressed_message_is_silent(cfg):
         ("@EA ceremony steps", gw.TOOL_CEREMONY_STEPS),
         ("@EA session", gw.TOOL_SESSION_SUMMARY),
         ("@EA session 581a836c", gw.TOOL_SESSION_SUMMARY),
+        ("@EA failing tests", gw.TOOL_LIST_FAILING_TESTS),
+        ("@EA failing", gw.TOOL_LIST_FAILING_TESTS),
+        ("@EA repo health", gw.TOOL_REPO_HEALTH),
+        ("@EA wp acp", gw.TOOL_SHOW_WP_STATUS),
+        ("@EA workpackage vss", gw.TOOL_SHOW_WP_STATUS),
         ("@EA diagnose retina oracle drift", gw.TOOL_DEEP_DIAGNOSE),
     ],
 )
@@ -265,6 +270,102 @@ def test_run_uses_a_fixed_argv_without_a_shell(cfg, monkeypatch):
     assert seen["kwargs"]["shell"] is False
     assert isinstance(seen["argv"], list)
     assert seen["argv"][1:3] == ["-m", "pytest"]
+
+
+# --- EA-ACP-2 engineering read tools -----------------------------------------
+
+def test_list_failing_tests_no_cache(cfg, tmp_path: Path):
+    # Use a clean temp repo so the real .pytest_cache is not visible.
+    cfg = gw.GatewayConfig(
+        operator_pubkeys=cfg.operator_pubkeys,
+        rig_ops_channel=cfg.rig_ops_channel,
+        audit_log_path=cfg.audit_log_path,
+        devin_queue_path=cfg.devin_queue_path,
+        repo_root=tmp_path,
+    )
+    result = gw.execute(gw.parse_mention("@EA failing", cfg), cfg)
+    assert result.ok is True
+    assert "no cache" in result.summary
+    assert ["count", "0"] in result.tags
+
+
+def test_list_failing_tests_with_cache(cfg, tmp_path: Path, monkeypatch):
+    # Point repo_root to a temp tree so we can safely write a fake pytest cache.
+    cfg = gw.GatewayConfig(
+        operator_pubkeys=cfg.operator_pubkeys,
+        rig_ops_channel=cfg.rig_ops_channel,
+        audit_log_path=cfg.audit_log_path,
+        devin_queue_path=cfg.devin_queue_path,
+        repo_root=tmp_path,
+    )
+    cache = tmp_path / ".pytest_cache" / "v" / "cache" / "lastfailed"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps({"bridge/tests/test_x.py::test_a": 1}), encoding="utf-8")
+    result = gw.execute(gw.parse_mention("@EA failing", cfg), cfg)
+    assert result.ok is True
+    assert "1" in result.summary
+    assert "bridge/tests/test_x.py::test_a" in result.summary
+    assert ["count", "1"] in result.tags
+
+
+def test_repo_health_composes_health_and_pvci(cfg, monkeypatch):
+    def _tool_health_check(intent, c):
+        return gw.ToolResult(
+            gw.TOOL_HEALTH_CHECK, gw.HARNESS_GROK, True, "health — ea: ok", [["healthy", "true"]]
+        )
+
+    def _tool_invariant_gate(intent, c):
+        return gw.ToolResult(
+            gw.TOOL_INVARIANT_GATE,
+            gw.HARNESS_GROK,
+            True,
+            "PV-CI PASS — 188 invariants",
+            [["pv_ci", "188"], ["verdict", "PASS"]],
+        )
+
+    monkeypatch.setattr(gw, "_tool_health_check", _tool_health_check)
+    monkeypatch.setattr(gw, "_tool_invariant_gate", _tool_invariant_gate)
+    result = gw.execute(gw.parse_mention("@EA repo health", cfg), cfg)
+    assert result.ok is True
+    assert "health —" in result.summary
+    assert "PV-CI PASS" in result.summary
+    assert ["verdict", "PASS"] in result.tags
+
+
+def test_repo_health_fail_if_either_part_fails(cfg, monkeypatch):
+    def _tool_health_check(intent, c):
+        return gw.ToolResult(
+            gw.TOOL_HEALTH_CHECK, gw.HARNESS_GROK, True, "health — ea: ok", [["healthy", "true"]]
+        )
+
+    def _tool_invariant_gate(intent, c):
+        return gw.ToolResult(
+            gw.TOOL_INVARIANT_GATE,
+            gw.HARNESS_GROK,
+            False,
+            "PV-CI FAIL — 187 invariants",
+            [["pv_ci", "187"], ["verdict", "FAIL"]],
+        )
+
+    monkeypatch.setattr(gw, "_tool_health_check", _tool_health_check)
+    monkeypatch.setattr(gw, "_tool_invariant_gate", _tool_invariant_gate)
+    result = gw.execute(gw.parse_mention("@EA repo health", cfg), cfg)
+    assert result.ok is False
+    assert ["verdict", "FAIL"] in result.tags
+
+
+def test_show_wp_status_reads_allowed_doc(cfg):
+    result = gw.execute(gw.parse_mention("@EA wp acp", cfg), cfg)
+    assert result.ok is True
+    assert result.summary.startswith("wp acp:")
+    assert ["found", "true"] in result.tags
+    assert int(next(t[1] for t in result.tags if t[0] == "headings")) > 0
+
+
+def test_show_wp_status_rejects_unknown_slug(cfg):
+    rejection = gw.parse_mention("@EA wp ../../secret", cfg)
+    assert isinstance(rejection, gw.Rejection)
+    assert rejection.reason == gw.REJECT_BAD_TARGET
 
 
 # --- Reply discipline --------------------------------------------------------
