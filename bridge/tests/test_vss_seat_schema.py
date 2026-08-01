@@ -17,7 +17,12 @@ Test coverage:
   11. build_seat_event + to_tags round-trip
   12. to_content produces correct content string
 """
+import sys
 import unittest
+from pathlib import Path
+
+BRIDGE_DIR = Path(__file__).parents[1]
+sys.path.insert(0, str(BRIDGE_DIR))
 
 from vapi_bridge.vss_seat_schema import (
     VSS_KIND,
