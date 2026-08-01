@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -61,6 +62,9 @@ TOOL_HEALTH_CHECK = "health_check"
 TOOL_LIST_FAILING_TESTS = "list_failing_tests"
 TOOL_REPO_HEALTH = "repo_health"
 TOOL_SHOW_WP_STATUS = "show_wp_status"
+# EA-ACP-3 — plan/confirm (agentic, not autonomous)
+TOOL_PLAN = "plan"
+TOOL_CONFIRM_PLAN = "confirm_plan"
 TOOL_DEEP_DIAGNOSE = "deep_diagnose"
 TOOL_STREAM_SEAT_STATUS = "get_stream_seat_status"
 # VSS-S1 — agent viewers: summarize digests + flag a down seat (never OPEN)
@@ -81,6 +85,8 @@ ALLOWED_TOOLS = (
     TOOL_LIST_FAILING_TESTS,
     TOOL_REPO_HEALTH,
     TOOL_SHOW_WP_STATUS,
+    TOOL_PLAN,
+    TOOL_CONFIRM_PLAN,
     TOOL_DEEP_DIAGNOSE,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
@@ -100,6 +106,8 @@ GROK_ONLY_TOOLS = (
     TOOL_LIST_FAILING_TESTS,
     TOOL_REPO_HEALTH,
     TOOL_SHOW_WP_STATUS,
+    TOOL_PLAN,
+    TOOL_CONFIRM_PLAN,
     TOOL_STREAM_SEAT_STATUS,
     TOOL_STREAM_SEAT_SUMMARY,
     TOOL_STREAM_SEAT_FLAG,
@@ -119,6 +127,27 @@ WP_DOCS: dict[str, Path] = {
     "mvp": REPO_ROOT / "docs" / "design" / "buzz-qortroller-gamer-mvp-v0.md",
     "vss": REPO_ROOT / "docs" / "design" / "buzz-vss-stream-seat-scope-v0.md",
 }
+
+# EA-ACP-3: pre-declared plan templates. Unknown goals fall back to a single
+# `deep_diagnose` step — the tool is pre-declared, the topic is the goal.
+PLAN_REGISTRY: dict[str, list[dict[str, dict[str, str]]]] = {
+    "full check": [
+        {"tool": TOOL_REPO_HEALTH, "args": {}},
+        {"tool": TOOL_LIST_FAILING_TESTS, "args": {}},
+    ],
+    "vss verify": [
+        {"tool": TOOL_STREAM_SEAT_STATUS, "args": {}},
+        {"tool": TOOL_STREAM_VERIFY_POINTER, "args": {}},
+    ],
+    "acp health": [
+        {"tool": TOOL_HEALTH_CHECK, "args": {}},
+        {"tool": TOOL_INVARIANT_GATE, "args": {}},
+    ],
+}
+
+PLANS_PATH = Path(
+    os.environ.get("ACP_PLANS_FILE", str(REPO_ROOT / "audits" / "acp_plans.jsonl"))
+)
 
 # Reply bounds (digest discipline).
 MAX_REPLY_CHARS = int(os.environ.get("ACP_MAX_REPLY_CHARS", "480"))
@@ -189,6 +218,7 @@ class GatewayConfig:
     rig_ops_channel: str = ""
     audit_log_path: Path = AUDIT_LOG_PATH
     devin_queue_path: Path = DEVIN_QUEUE_PATH
+    plans_path: Path = PLANS_PATH
     max_reply_chars: int = MAX_REPLY_CHARS
     dry_run: bool = False
 
@@ -417,6 +447,16 @@ def _match_intent(command: str, cfg: GatewayConfig) -> Intent | Rejection | None
         if slug not in WP_DOCS:
             return Rejection(REJECT_BAD_TARGET, f"unknown wp: {slug}")
         return Intent(TOOL_SHOW_WP_STATUS, {"wp": slug})
+
+    # EA-ACP-3: plan/confirm. `plan` stages, `confirm` executes.
+    m = re.match(r"^plan\s+(.+)$", command, re.I)
+    if m:
+        goal = m.group(1).strip()[:200]
+        return Intent(TOOL_PLAN, {"goal": goal})
+
+    m = re.match(r"^confirm\s+plan\s+(\S+)$", command, re.I)
+    if m:
+        return Intent(TOOL_CONFIRM_PLAN, {"plan_id": m.group(1).strip().lower()[:16]})
 
     m = re.match(r"^(?:deep\s+)?diagnose\s+(.+)$", command, re.I)
     if m:
@@ -914,6 +954,137 @@ def _tool_show_wp_status(intent: Intent, cfg: GatewayConfig) -> ToolResult:
     )
 
 
+def _load_latest_plan(plans_path: Path, plan_id: str) -> dict | None:
+    """Return the most recent record for a given plan_id, or None."""
+    if not plans_path.is_file():
+        return None
+    latest: dict | None = None
+    for line in plans_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if record.get("plan_id") == plan_id:
+            if latest is None or record.get("ts", 0) > latest.get("ts", 0):
+                latest = record
+    return latest
+
+
+def _save_plan_record(plans_path: Path, record: dict) -> None:
+    _append_jsonl(plans_path, record)
+
+
+def _plan_steps_from_goal(goal: str) -> list[dict[str, dict[str, str]]]:
+    """Look up a pre-declared plan, or fall back to a single deep_diagnose step.
+
+    The fallback keeps every `plan` command useful while the tool itself is
+    still from the allow-list. Unknown goals never generate arbitrary shell.
+    """
+    return PLAN_REGISTRY.get(goal.lower()) or [
+        {"tool": TOOL_DEEP_DIAGNOSE, "args": {"topic": goal}}
+    ]
+
+
+def _tool_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """EA-ACP-3: stage a plan. No tool executes until `confirm plan <id>`."""
+    goal = intent.args.get("goal", "")
+    steps = _plan_steps_from_goal(goal)
+    plan_id = secrets.token_hex(3)  # 6 hex chars, short enough to type
+    record: dict[str, object] = {
+        "ts": int(time.time()),
+        "plan_id": plan_id,
+        "goal": goal,
+        "status": "pending",
+        "steps": steps,
+    }
+    _save_plan_record(cfg.plans_path, record)
+    step_lines = ", ".join(
+        f"{i + 1}. {s['tool']}" + (f" ({s['args'].get('topic', '')})"[:40] if s.get("args") else "")
+        for i, s in enumerate(steps)
+    )
+    summary = f"plan {plan_id}: {goal[:80]} — {step_lines} (reply `@EA confirm plan {plan_id}` to run)"
+    tags = [
+        ["acp_tool", intent.tool],
+        ["plan_id", plan_id],
+        ["steps", str(len(steps))],
+        ["status", "pending"],
+    ]
+    return ToolResult(intent.tool, intent.harness, True, summary, tags)
+
+
+def _tool_confirm_plan(intent: Intent, cfg: GatewayConfig) -> ToolResult:
+    """EA-ACP-3: execute a staged plan, one allow-listed tool at a time."""
+    plan_id = intent.args.get("plan_id", "")
+    plan = _load_latest_plan(cfg.plans_path, plan_id)
+    if plan is None or plan.get("status") != "pending":
+        return ToolResult(
+            intent.tool,
+            intent.harness,
+            False,
+            f"confirm: plan {plan_id} not found or already completed",
+            [["acp_tool", intent.tool], ["plan_id", plan_id], ["found", "false"]],
+        )
+
+    # Execute each step through the same safe execute() path.
+    step_results: list[dict[str, object]] = []
+    all_ok = True
+    for step in plan.get("steps", []):
+        step_tool = step.get("tool", "")
+        step_args = step.get("args", {})
+        step_intent = Intent(
+            step_tool,
+            {k: str(v) for k, v in step_args.items()},
+            harness=route(step_tool),
+            raw=f"plan {plan_id} step {step_tool}",
+        )
+        step_result = execute(step_intent, cfg)
+        all_ok = all_ok and step_result.ok
+        step_results.append(
+            {
+                "tool": step_tool,
+                "ok": step_result.ok,
+                "summary": step_result.summary,
+            }
+        )
+
+    completed_record = {
+        "ts": int(time.time()),
+        "plan_id": plan_id,
+        "goal": plan.get("goal", ""),
+        "status": "completed",
+        "steps_ok": all_ok,
+        "step_results": step_results,
+    }
+    _save_plan_record(cfg.plans_path, completed_record)
+
+    # Build a bounded, honest digest.
+    parts = []
+    for sr in step_results:
+        mark = "ok" if sr["ok"] else "fail"
+        parts.append(f"{sr['tool']}: {mark}")
+    completed_summary = " | ".join(parts)
+    if len(completed_summary) > MAX_REPLY_CHARS - 80:
+        completed_summary = completed_summary[: MAX_REPLY_CHARS - 100].rsplit(" | ", 1)[0] + " | …"
+    summary = f"plan {plan_id} executed — {completed_summary}"
+
+    return ToolResult(
+        intent.tool,
+        intent.harness,
+        all_ok,
+        summary,
+        [
+            ["acp_tool", intent.tool],
+            ["plan_id", plan_id],
+            ["steps", str(len(step_results))],
+            ["steps_ok", "true" if all_ok else "false"],
+            ["status", "completed"],
+        ],
+    )
+
+
 def _repo_sha_hint(cfg: GatewayConfig) -> str:
     """Return the current HEAD SHA for the hand-off record (EA-ACP-1).
 
@@ -984,6 +1155,8 @@ TOOL_IMPLS: dict[str, Callable[[Intent, GatewayConfig], ToolResult]] = {
     TOOL_LIST_FAILING_TESTS: _tool_list_failing_tests,
     TOOL_REPO_HEALTH: _tool_repo_health,
     TOOL_SHOW_WP_STATUS: _tool_show_wp_status,
+    TOOL_PLAN: _tool_plan,
+    TOOL_CONFIRM_PLAN: _tool_confirm_plan,
     TOOL_DEEP_DIAGNOSE: _tool_deep_diagnose,
     TOOL_STREAM_SEAT_STATUS: _tool_stream_seat_status,
     TOOL_STREAM_SEAT_SUMMARY: _tool_stream_seat_summary,
@@ -1039,7 +1212,7 @@ def rejection_reply(rejection: Rejection) -> str:
         return "rejected: operator allow-list"
     if rejection.reason == REJECT_BAD_TARGET:
         return f"rejected: {rejection.detail}"
-    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | ceremony | session | pytest <path>"
+    return "rejected: unknown command — try status | invariant | health | failing | repo health | wp <name> | plan <goal> | confirm plan <id> | ceremony | session | pytest <path>"
 
 
 # --- Audit trail (local only, never on Nostr) --------------------------------
