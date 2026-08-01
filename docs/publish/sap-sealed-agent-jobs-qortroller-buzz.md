@@ -1,7 +1,7 @@
 # Sealed Agent Jobs on a Community Relay
 ## A QorTroller × Buzz use case (public note)
 
-**Status:** DRAFT — publish after SAP-1..3 dogfood on operator machine  
+**Status:** REFERENCE-READY — SAP-1..4 implemented and unit-tested; operator machine dogfood recommended before public thread  
 **Project:** [QorTroller](https://github.com/ConWan30/QorTroller)  
 **Community plane:** Buzz (Nostr-based workspace)  
 **Audience:** builders of operator agents, Nostr/Buzz communities, agent harness authors  
@@ -66,6 +66,10 @@ Sealed jobs apply to **operator engineering and live-ops checks**, not to “the
 | Grok Build | Fast receipts (pytest, PV-CI, health, plan confirm steps) |
 | Devin | Queued heavy work; results recorded offline; human merges |
 | Webhook adapter | Optional machine client into the **same** gateway |
+| MCP `ask_ea` | Machine client into the **same** gateway |
+| `scripts/sap_seal.py` | Operator-only local seal log; no auto-publish |
+| `challenge job <id> <demand>` | Lightweight challenge record; max depth 1 |
+| `job status <id>` | Queue → results → seal digest |
 | Allow-list | Empty operator pubkey list ⇒ nothing runs |
 
 Agents do not gain commit, chain spend, or gamer seat OPEN from this surface.
