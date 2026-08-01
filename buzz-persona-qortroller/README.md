@@ -23,10 +23,14 @@ The simplest way to get QorT into Buzz is the pre-built `.agent.json` snapshot:
 4. After import, open QorT’s settings.
 5. Set **Runtime / Harness** to **goose**.
 6. Set **Provider** to **xai** and **Model** to **grok-4.5**.
-7. If you want the agent to actually call `@EA`, add the QorTroller ACP MCP server:
+7. If you want the agent to actually call `@EA`, add the QorTroller ACP MCP server in the agent's **MCP / Tools** settings:
    - Command: `python`
    - Args: `mcp/qortroller_acp_stdio.py` (from this pack)
-   - Env: `ACP_OPERATOR_PUBKEYS=<operator-pubkey-hex>`, `QORTROLLER_REPO_ROOT=<absolute-path-to-QorTroller-repo>`
+   - Working directory: the pack root (`buzz-persona-qortroller/`)
+   - Environment:
+     - `ACP_OPERATOR_PUBKEYS=<operator-pubkey-hex>`
+     - `QORTROLLER_REPO_ROOT=<absolute-path-to-QorTroller-repo>`
+     - `ACP_MCP_SECRET=<optional-secret>`
 
 ### Option B: Install as a Persona Pack
 

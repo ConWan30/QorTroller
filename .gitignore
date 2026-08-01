@@ -146,14 +146,24 @@ contracts/artifacts/build-info/
 .claude/worktrees/
 
 # Security hardening — untracked transient / throwaway files that should never be committed
-QorTroller/
+/QorTroller/
+/buzz/
 !buzz-persona-qortroller/skills/qortroller/
 !buzz-persona-qortroller/skills/qortroller/SKILL.md
 _dl_ngc.py
 _download_ngc.py
 
-# Allow the Phase 1 bot env TEMPLATE (no secrets) to be committed despite *.env* rule
+# Agent runtime state / local STOP signals / session digests
+audits/*_agent_state.json
+audits/*_relay_state.json
+audits/*_agent.STOP
+audits/buzz_personal_agent.jsonl
+audits/qort_buzz_persona_relay.jsonl
+audits/retina_bridge_agent/
+
+# Allow bot/env TEMPLATES (no secrets) to be committed despite *.env* rule
 !scripts/qortroller_buzz_bot.env.example
+!scripts/buzz_personal_agent.env.example
 
 # ----------------------------------------------------------------------------
 # BRP solo-track workspace exception (broadened across two repair commits).
