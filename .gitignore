@@ -316,3 +316,6 @@ audits/acp_plans.jsonl
 audits/acp_devin_results.jsonl
 audits/acp_sap_seals.jsonl
 audits/acp_sap_challenges.jsonl
+
+# WPR-1 local state (operator-local rate/cooldown state; same class as SAP seals).
+audits/workflow_router_state.jsonl

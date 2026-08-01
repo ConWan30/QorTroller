@@ -260,9 +260,12 @@ def _run_in_process(policy: Policy, cfg: gw.GatewayConfig, pubkey: str) -> Polic
                 tool = tag[1]
             elif tag[0] == "harness":
                 harness = tag[1]
+    # Heuristic: the ACP pipeline is "ok" unless the gateway explicitly
+    # tagged the reply as rejected or the intent was rejected before execute.
+    has_rejected_tag = any(t[0] == "rejected" for t in tags)
     return PolicyRun(
         policy_id=policy.id,
-        ok="rejected" not in reply_content.lower() and "error" not in reply_content.lower(),
+        ok=not has_rejected_tag,
         skipped=False,
         content=reply_content,
         tags=tags,
