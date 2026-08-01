@@ -40,6 +40,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+# Phase 1 Nostr wiring: use a real library (nostr-sdk) for key/event crypto.
+# The Rust helper remains a valid publish transport; nostr-sdk is the default
+# when the helper is absent or BUZZ_USE_NOSTR_SDK is set.
+try:
+    from nostr_sdk import Keys, Event, EventBuilder, Tag, Client, Kind, NostrSigner, RelayUrl
+
+    _NOSTR_SDK = True
+except ImportError:
+    _NOSTR_SDK = False
+
 # --- .env loading (scripts/.env) --------------------------------------------
 try:
     from dotenv import load_dotenv
@@ -108,6 +118,7 @@ class BotConfig:
     ioid_token: str
     bridge_base_url: str
     bridge_api_key: str
+    bot_privkey: str
     owner_attested: bool
     helper_path: str
     cli_path: str
@@ -134,6 +145,7 @@ def _load_config() -> BotConfig:
         ioid_token=IOID_TOKEN,
         bridge_base_url=BRIDGE_BASE_URL,
         bridge_api_key=BRIDGE_API_KEY,
+        bot_privkey=BOT_PRIVKEY,
         owner_attested=bool(OWNER_PRIVKEY),
         helper_path=BUZZ_HELPER_PATH,
         cli_path=BUZZ_CLI_PATH,
@@ -344,17 +356,79 @@ def _postcard_content(postcard: dict) -> str:
     return " | ".join(parts)
 
 
+# --- Nostr event signing / publish (Phase 1 wiring with nostr-sdk) -----------
+
+def _tags_to_nostr_sdk(tags: list[list[str]]) -> list:
+    """Convert our tag lists to nostr-sdk Tag objects."""
+    return [Tag.parse(t) for t in tags]
+
+
+def _sign_event(keys: Keys, kind: int, content: str, tags: list[list[str]]) -> Event:
+    """Sign a Nostr event with nostr-sdk. Fail-closed on invalid input."""
+    builder = EventBuilder(Kind(kind), content).tags(_tags_to_nostr_sdk(tags))
+    return builder.sign_with_keys(keys)
+
+
+async def _publish_nostr_sdk_async(
+    cfg: BotConfig, event: Event
+) -> Optional[dict]:
+    """Publish a signed event via nostr-sdk Client.
+
+    This is async and wrapped in asyncio.run by the sync caller. It does not
+    require the Rust helper. Returns {event_id, accepted: True} on success.
+    """
+    if not _NOSTR_SDK or not cfg.bot_privkey:
+        return None
+    try:
+        keys = Keys.parse(cfg.bot_privkey)
+        signer = NostrSigner.keys(keys)
+        client = Client(signer)
+        await client.add_relay(RelayUrl.parse(cfg.relay_url))
+        await client.connect()
+        await client.send_event(event)
+        await client.disconnect()
+        return {"event_id": event.id().to_hex(), "accepted": True}
+    except Exception as e:
+        print(f"[!] nostr-sdk publish failed: {e}", file=sys.stderr)
+        return None
+
+
+def _publish_nostr_sdk(
+    cfg: BotConfig, content: str, tags: list[list[str]]
+) -> Optional[dict]:
+    """Sync wrapper around the nostr-sdk publish coroutine."""
+    import asyncio
+
+    if not _NOSTR_SDK or not cfg.bot_privkey:
+        return None
+    try:
+        keys = Keys.parse(cfg.bot_privkey)
+    except Exception as e:
+        print(f"[!] invalid BUZZ_PRIVATE_KEY: {e}", file=sys.stderr)
+        return None
+    event = _sign_event(keys, 9, content, tags)
+    try:
+        return asyncio.run(_publish_nostr_sdk_async(cfg, event))
+    except Exception as e:
+        print(f"[!] nostr-sdk publish runner failed: {e}", file=sys.stderr)
+        return None
+
+
 # --- Publish via Rust helper (Architecture C) --------------------------------
 
 def _publish_event(
     cfg: BotConfig, channel_id: str, content: str, tags: list[list[str]]
 ) -> Optional[dict]:
-    """Pipe a digest JSON to the qortroller-buzz Rust helper's stdin.
+    """Publish a digest to the Buzz relay.
 
-    The helper signs the Nostr event (BIP-340 Schnorr) and publishes to
-    the relay with NIP-42 auth + NIP-OA attestation. Returns the helper's
-    JSON response ({event_id, accepted, message}) or None on failure.
+    Uses the Rust helper by default (NIP-42 auth + NIP-OA attestation).
+    Falls back to nostr-sdk when the helper is missing or BUZZ_USE_NOSTR_SDK=1.
+    Returns {event_id, accepted} or None on failure.
     """
+    use_sdk = _NOSTR_SDK and (os.environ.get("BUZZ_USE_NOSTR_SDK") == "1" or not os.path.isfile(cfg.helper_path))
+    if use_sdk:
+        return _publish_nostr_sdk(cfg, content, tags)
+
     if not os.path.isfile(cfg.helper_path):
         print(
             f"[!] helper not found: {cfg.helper_path} — "
@@ -451,7 +525,16 @@ def _poll_commands(
 
 
 def _whoami(cfg: BotConfig) -> str:
-    """Get the bot's own pubkey via the Rust helper's whoami command."""
+    """Get the bot's own pubkey.
+
+    Prefer nostr-sdk (real Nostr library) over the Rust helper's whoami command.
+    """
+    if _NOSTR_SDK and cfg.bot_privkey:
+        try:
+            keys = Keys.parse(cfg.bot_privkey)
+            return keys.public_key().to_hex()
+        except Exception:
+            pass
     if not os.path.isfile(cfg.helper_path):
         return ""
     try:
@@ -470,9 +553,44 @@ def _whoami(cfg: BotConfig) -> str:
     return ""
 
 
+# --- ACP gateway bridge (Phase 4 integration) -------------------------------
+
+def _run_acp_eval(cfg: BotConfig, pubkey: str, content: str) -> Optional[str]:
+    """Run the ACP gateway in one-shot --eval mode via subprocess.
+
+    This keeps the circular import clean: the bot calls the gateway as a CLI,
+    not as a module. The operator pubkey is used for allow-list authorization.
+    """
+    script = Path(__file__).resolve()
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script.parent.parent / "scripts" / "qortroller_acp_gateway.py"),
+                "--eval",
+                content,
+                pubkey,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=os.environ.copy(),
+            shell=False,
+        )
+        if result.returncode != 0:
+            print(f"[!] acp eval exit {result.returncode}: {result.stderr.strip()}", file=sys.stderr)
+            return None
+        return result.stdout.strip()
+    except Exception as exc:
+        print(f"[!] acp eval failed: {exc}", file=sys.stderr)
+        return None
+
+
 # --- Command handlers (bounded, ignore self) --------------------------------
 
-def handle_command(cmd: str, cfg: BotConfig) -> Optional[tuple[str, list[list[str]]]]:
+def handle_command(
+    cmd: str, cfg: BotConfig, author_pubkey: str = ""
+) -> Optional[tuple[str, list[list[str]]]]:
     """Return (content, tags) for a channel reply, or None to stay silent."""
     cmd = cmd.strip()
     if cmd == "!status":
@@ -489,6 +607,17 @@ def handle_command(cmd: str, cfg: BotConfig) -> Optional[tuple[str, list[list[st
         if pc is None:
             return "session: bridge unreachable or no active session", []
         return _postcard_content(pc), _postcard_tags(cfg.channel_ids[0], pc)
+    # Phase 4 ACP via Buzz: !ea <command> routes to qortroller_acp_gateway.
+    if cmd.lower().startswith("!ea "):
+        acp_content = cmd[4:].strip()
+        if not acp_content.startswith(("@ea", "@EA")):
+            acp_content = f"@EA {acp_content}"
+        # The author's pubkey is what matters for ACP operator allow-list.
+        caller = author_pubkey or _whoami(cfg) or ""
+        reply = _run_acp_eval(cfg, caller, acp_content)
+        if reply is None:
+            return "ea: ACP gateway unavailable or rejected", []
+        return reply, [["acp_tool", "buzz_ea"], ["harness", "buzz"]]
     return None
 
 
@@ -506,12 +635,16 @@ def main() -> int:
 
     helper_ok = os.path.isfile(cfg.helper_path)
     cli_ok = os.path.isfile(cfg.cli_path)
-    if not helper_ok:
+    nostr_sdk_ok = _NOSTR_SDK and bool(cfg.bot_privkey)
+    publish_ok = helper_ok or nostr_sdk_ok
+    if not publish_ok:
         print(
-            "[!] Rust helper not built — publish disabled. "
+            "[!] No publish path: build the Rust helper or install nostr-sdk. "
             "Build: cargo +stable-x86_64-pc-windows-msvc build -p qortroller-buzz",
             file=sys.stderr,
         )
+    elif not helper_ok and nostr_sdk_ok:
+        print("[*] publish path: nostr-sdk (Rust helper not found)", file=sys.stderr)
     if not cli_ok:
         print(
             "[!] buzz CLI not built — command polling disabled (status-only mode). "
@@ -537,7 +670,7 @@ def main() -> int:
                     content = _status_event_content(state)
                     tags = _status_tags(cfg.channel_ids[0], state)
                     print(f"[*] status: {content}", file=sys.stderr)
-                    if helper_ok:
+                    if publish_ok:
                         result = _publish_event(
                             cfg, cfg.channel_ids[0], content, tags
                         )
@@ -570,7 +703,7 @@ def main() -> int:
                             cfg.matches_channel_id or cfg.channel_ids[0]
                         )
                         print(f"[*] digest → #{digest_channel[:8]}: {content}", file=sys.stderr)
-                        if helper_ok:
+                        if publish_ok:
                             result = _publish_event(
                                 cfg, digest_channel, content, tags
                             )
@@ -587,8 +720,8 @@ def main() -> int:
             if cli_ok and now - last_command_poll >= cfg.command_poll_interval:
                 msgs = _poll_commands(cfg, last_command_poll)
                 for msg in msgs:
-                    reply = handle_command(msg["content"], cfg)
-                    if reply and helper_ok:
+                    reply = handle_command(msg["content"], cfg, msg.get("pubkey", ""))
+                    if reply and publish_ok:
                         content, tags = reply
                         _publish_event(cfg, cfg.channel_ids[0], content, tags)
                         print(

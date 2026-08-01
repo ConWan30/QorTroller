@@ -3,6 +3,7 @@
 **Status:** DESIGN-ONLY (WP-A of `docs/design/buzz-phase5-product-claims-scope.md`)
 **Date:** 2026-07-31
 **Parent documents:** `docs/design/buzz-phase5-product-claims-scope.md`, `docs/design/buzz-qortroller-gamer-mvp-v0.md`
+**Machine-readable twin:** `docs/design/buzz-phase5-claim-register.json` (kept in sync with this table)
 **Binding rule:** if a gate in the scope doc is open, the phrases it guards are not sayable.
 
 ---

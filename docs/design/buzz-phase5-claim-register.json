@@ -1,0 +1,165 @@
+{
+  "version": "v0",
+  "status": "design-only",
+  "ceiling": "G1",
+  "note": "Machine-readable form of docs/design/buzz-phase5-claim-register-v0.md. If a gate is open, the phrase it guards is not sayable.",
+  "gates": {
+    "G5-SEP": "Inter-person separation above 1.0 across required batteries",
+    "G5-L6": "L6 haptic challenge-response N>=50 calibration",
+    "G5-L6B": "PoEP/L6B presence verdicts after measured corpus + operator attestation",
+    "G5-MULTI": "Multi-gamer sealed match with distinct ioID claims",
+    "G5-FRR": "Published false-reject / false-accept proxy measurement",
+    "G5-VER": "Independent verifier path (closed for M17 certificate)",
+    "G5-OPS": "Phase 4 ACP ops acceptance signed off"
+  },
+  "vss_wps": {
+    "VSS-1..3": "Stream seat OPEN / capture + retina oracle shipped",
+    "VSS-2": "Seat events as digests + media URL pointers",
+    "VSS-7": "Bot OPEN ban enforced",
+    "F2": "Session_id bind live"
+  },
+  "rows": [
+    {
+      "id": "R-01",
+      "phrase": "The session produced a signed PoSP record with verdict SYNCHRONIZED.",
+      "grade": "G0",
+      "gates": [],
+      "sayable_today": true
+    },
+    {
+      "id": "R-02",
+      "phrase": "The match digest is anchored on IoTeX testnet in tx 0x….",
+      "grade": "G0",
+      "gates": [],
+      "sayable_today": true
+    },
+    {
+      "id": "R-03",
+      "phrase": "@EA reports PV-CI green at N invariants.",
+      "grade": "G0",
+      "gates": [],
+      "sayable_today": true
+    },
+    {
+      "id": "R-04",
+      "phrase": "Candidate presence was observed for this session.",
+      "grade": "G1",
+      "gates": [],
+      "sayable_today": true
+    },
+    {
+      "id": "R-05",
+      "phrase": "L6B / PoEP verdicts are advisory and default-OFF.",
+      "grade": "G1",
+      "gates": [],
+      "sayable_today": true
+    },
+    {
+      "id": "R-06",
+      "phrase": "Anyone can re-verify this match certificate with public tools: python scripts/portcert_full_verify.py.",
+      "grade": "G2",
+      "gates": ["G5-VER"],
+      "sayable_today": true
+    },
+    {
+      "id": "R-07",
+      "phrase": "Two independent gamers completed a sealed, pinned match.",
+      "grade": "G2",
+      "gates": ["G5-MULTI"],
+      "sayable_today": false
+    },
+    {
+      "id": "R-08",
+      "phrase": "Inter-person separation exceeds 1.0 across the required batteries.",
+      "grade": "G3",
+      "gates": ["G5-SEP"],
+      "sayable_today": false
+    },
+    {
+      "id": "R-09",
+      "phrase": "Measured false-reject rate is X% at the published threshold.",
+      "grade": "G3",
+      "gates": ["G5-FRR"],
+      "sayable_today": false
+    },
+    {
+      "id": "R-10",
+      "phrase": "Humanity is cryptographically proven for this session.",
+      "grade": "G4",
+      "gates": ["all"],
+      "sayable_today": false
+    },
+    {
+      "id": "R-11",
+      "phrase": "Tournament-grade anti-cheat.",
+      "grade": "G4",
+      "gates": ["all"],
+      "sayable_today": false
+    },
+    {
+      "id": "R-12",
+      "phrase": "Cheating cannot exist on QorTroller.",
+      "grade": "G4",
+      "gates": ["all"],
+      "sayable_today": false
+    },
+    {
+      "id": "R-VSS-01",
+      "phrase": "Stream seat is OPEN while capture and retina oracle process report up.",
+      "grade": "G0",
+      "gates": ["VSS-1..3"],
+      "sayable_today": true
+    },
+    {
+      "id": "R-VSS-02",
+      "phrase": "Seat events are digests + media URL pointers on Buzz.",
+      "grade": "G0",
+      "gates": ["VSS-2"],
+      "sayable_today": true
+    },
+    {
+      "id": "R-VSS-03",
+      "phrase": "Only human community members can open a seat; agents may view.",
+      "grade": "G1",
+      "gates": ["VSS-7"],
+      "sayable_today": true
+    },
+    {
+      "id": "R-VSS-04",
+      "phrase": "Stream is humanity-proven / tournament-grade.",
+      "grade": "G4",
+      "gates": ["forbidden"],
+      "sayable_today": false
+    },
+    {
+      "id": "R-VSS-05",
+      "phrase": "Seat carries honesty ribbon (flags as-is).",
+      "grade": "G0",
+      "gates": ["VSS-2..3"],
+      "sayable_today": true
+    },
+    {
+      "id": "R-VSS-06",
+      "phrase": "This room is watching sealed session <session_id>.",
+      "grade": "G0",
+      "gates": ["F2"],
+      "sayable_today": true
+    },
+    {
+      "id": "R-VSS-07",
+      "phrase": "Gamer self-asserted ioID claim accompanies this seat.",
+      "grade": "G1",
+      "gates": ["optional"],
+      "sayable_today": true
+    }
+  ],
+  "forbidden_phrases": [
+    "100% fair",
+    "unhackable",
+    "impossible to cheat",
+    "Certified",
+    "tournament-grade stream",
+    "verified human live",
+    "cheating-proof stream"
+  ]
+}
