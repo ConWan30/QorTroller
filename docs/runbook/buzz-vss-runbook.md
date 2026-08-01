@@ -229,6 +229,43 @@ ACP (READ-only — does **not** publish):
 Default pointer points at the G5-VER public command  
 `python scripts/portcert_full_verify.py` — no operator keys, no raw biometrics.
 
+## VSS-S5: Organizer pilot room (seat + pin + portcert)
+
+**Code:** `bridge/vapi_bridge/vss_organizer_pilot.py`,  
+`scripts/buzz_vss_organizer_pilot.py`
+
+Composes the three organizer surfaces into one checklist digest:
+
+| Plane | Piece |
+|-------|--------|
+| Truth | Seat eligibility + `session_id` |
+| Social | Optional `#matches` pin event id |
+| Verify | `portcert_full_verify.py` pointer |
+
+```powershell
+# Checklist only
+python scripts/buzz_vss_organizer_pilot.py --check `
+  --session-id grind_phase235_v1 `
+  --pin-event-id <postcard_event_id>
+
+# Consent-gated publish to #streams
+python scripts/buzz_vss_organizer_pilot.py --consent-ok `
+  --session-id grind_phase235_v1 `
+  --media-url https://example.com/live `
+  --pin-event-id <postcard_event_id>
+```
+
+ACP:
+
+```
+@EA organizer pilot
+@EA pilot checklist
+```
+
+**Does not** auto-pin the canvas (still `buzz_pin_match.py <event_id>`) or
+spend chain. Pin is recommended; pilot `ready=true` requires seat eligible +
+session bound + portcert pointer.
+
 ## VSS-5: Claim rows
 
 **Doc:** `docs/design/buzz-phase5-claim-register-v0.md` (§6 — VSS rows)
