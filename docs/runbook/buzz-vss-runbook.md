@@ -167,6 +167,36 @@ Fail-closed: bridge unreachable → "stream seat: bridge unreachable — eligibi
 
 Routing: stays on Grok Build even if operator says `@EA devin seat`.
 
+## VSS-S1: Agent viewers (summarize + flag-down)
+
+**Code:** `bridge/vapi_bridge/vss_agent_viewer.py`, ACP tools on the gateway.
+
+Agents may **READ / summarize / flag DOWN**. Agents **cannot OPEN** (VSS-7 / F3).
+
+```
+@EA summarize stream seat
+@EA seat summary
+@EA flag seat down
+@EA is seat down
+```
+
+| Tool | Role |
+|------|------|
+| `summarize_stream_seat` | Digest agent-view of eligibility + ribbon + READ-only reminder |
+| `flag_stream_seat_down` | `FLAG_DOWN` if ineligible; `SEAT_OK` if eligible; `UNKNOWN` if bridge down (never invents DOWN) |
+
+Never: agent-authored seat OPEN, raw HID/frames, humanity-proven language.
+
+## VSS-S2: Anti-farm (one seat per key)
+
+**Code:** `bridge/vapi_bridge/vss_anti_farm.py` (wired into `buzz_vss_seat.py`)
+
+- **Empty OPEN refused** — no `media_url` → no OPEN (schema + helper)
+- **One OPEN at a time** per (channel, signer pubkey) via local state
+  `audits/vss_seat_local_state.json` (override with `VSS_SEAT_STATE_PATH`)
+- CLOSED clears the slot so the same key can OPEN again
+- Local ops state only — not a cryptographic ban ledger
+
 ## VSS-5: Claim rows
 
 **Doc:** `docs/design/buzz-phase5-claim-register-v0.md` (§6 — VSS rows)

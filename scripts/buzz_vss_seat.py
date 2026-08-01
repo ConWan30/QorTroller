@@ -53,6 +53,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 # VSS-2 schema (same package, importable from bridge/)
@@ -420,6 +421,10 @@ def _build_and_publish(
         )
         return None
 
+    # S2 anti-farm: empty OPEN + one OPEN per key+channel (local state)
+    if seat_state == SEAT_OPEN and not _s2_allow_open(cfg, media_url):
+        return None
+
     try:
         event = build_seat_event(
             seat_state=seat_state,
@@ -448,7 +453,123 @@ def _build_and_publish(
               file=sys.stderr)
         return None
 
-    return _publish_seat_event(cfg, tags, content)
+    result = _publish_seat_event(cfg, tags, content)
+    if result and not cfg.dry_run:
+        _s2_record(cfg, seat_state, media_url, result.get("event_id"))
+    return result
+
+
+def _s2_state_path() -> str:
+    return os.environ.get(
+        "VSS_SEAT_STATE_PATH",
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "audits",
+            "vss_seat_local_state.json",
+        ),
+    )
+
+
+def _s2_signer_pubkey(cfg: SeatConfig) -> Optional[str]:
+    """Best-effort whoami for anti-farm key. None → skip S2 (fail-open for key)."""
+    if not os.path.isfile(cfg.helper_path):
+        return None
+    try:
+        who = subprocess.run(
+            [cfg.helper_path, "whoami"],
+            capture_output=True, text=True, timeout=10,
+            env=os.environ.copy(), shell=False,
+        )
+        if who.returncode != 0:
+            return None
+        pub = (who.stdout or "").strip()
+        return pub or None
+    except Exception:
+        return None
+
+
+def _s2_allow_open(cfg: SeatConfig, media_url: Optional[str]) -> bool:
+    """S2: refuse empty OPEN and double-OPEN for same key+channel."""
+    try:
+        bridge_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bridge"
+        )
+        if bridge_dir not in sys.path:
+            sys.path.insert(0, bridge_dir)
+        from vapi_bridge.vss_anti_farm import (  # noqa: WPS433
+            can_open_seat,
+            load_state,
+        )
+    except Exception as e:
+        print(f"[!] S2 import failed (continuing without anti-farm): {e}",
+              file=sys.stderr)
+        return True
+
+    # Empty media always refused (also schema-enforced)
+    ok, reason = can_open_seat(
+        channel_id=cfg.channel_id or "unknown",
+        signer_pubkey="pending",
+        media_url=media_url,
+        state={"seats": {}},
+    )
+    if not ok and "empty OPEN" in reason:
+        print(f"[!] OPEN refused — {reason}", file=sys.stderr)
+        return False
+
+    pub = _s2_signer_pubkey(cfg)
+    if not pub:
+        # Cannot key the seat — empty OPEN already checked; allow OPEN
+        print("[*] S2: no whoami pubkey — double-OPEN check skipped",
+              file=sys.stderr)
+        return True
+
+    path = Path(_s2_state_path())
+    state = load_state(path)
+    ok, reason = can_open_seat(
+        channel_id=cfg.channel_id,
+        signer_pubkey=pub,
+        media_url=media_url,
+        state=state,
+    )
+    if not ok:
+        print(f"[!] OPEN refused — {reason}", file=sys.stderr)
+        return False
+    return True
+
+
+def _s2_record(
+    cfg: SeatConfig,
+    seat_state: str,
+    media_url: Optional[str],
+    event_id: Optional[str],
+) -> None:
+    try:
+        bridge_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bridge"
+        )
+        if bridge_dir not in sys.path:
+            sys.path.insert(0, bridge_dir)
+        from vapi_bridge.vss_anti_farm import (  # noqa: WPS433
+            load_state,
+            record_transition,
+            save_state,
+        )
+        pub = _s2_signer_pubkey(cfg)
+        if not pub or not cfg.channel_id:
+            return
+        path = Path(_s2_state_path())
+        state = load_state(path)
+        state = record_transition(
+            state,
+            channel_id=cfg.channel_id,
+            signer_pubkey=pub,
+            seat_state=seat_state,
+            media_url=media_url,
+            event_id=event_id,
+        )
+        save_state(path, state)
+    except Exception as e:
+        print(f"[!] S2 state record failed: {e}", file=sys.stderr)
 
 
 def run_seat_loop(cfg: SeatConfig) -> int:
