@@ -1,6 +1,6 @@
 # Trio-Retina × OBS — Dual-path live sync (v0)
 
-**Status:** DESIGN (CANDIDATE) — not implementation  
+**Status:** DESIGN (CANDIDATE) — **WP-S1 implemented** (source.kind tagging); WP-S2+ pending  
 **Date:** 2026-08-02  
 **Parents:**  
 - `docs/design/trio-retina-streamer-perception-v0.md` (thin UVC → events → OBS)  
@@ -143,10 +143,10 @@ Dogfooding streamer v0 does **not** complete this design. Completing this design
 
 ## 7. Suggested work packages (when building)
 
-| WP | Acceptance |
-|----|------------|
-| **WP-S1 Source tag** | Events carry `source.kind` ∈ {`uvc_card`,`obs_virtual`,`unknown`}; name sniff + CLI override |
-| **WP-S2 Dual open** | Runtime can open primary+secondary devices; per-source eye-check fail-closed |
+| WP | Acceptance | Status |
+|----|------------|--------|
+| **WP-S1 Source tag** | Events carry `source.kind` ∈ {`uvc_card`,`obs_virtual`,`unknown`,`synthetic`}; name sniff + CLI/`RETINA_SOURCE_KIND` override | **done** — `classify_source_kind` / `build_source_dict` in `streamer_perception.py`; CLI `--source-kind` / `--device-name` |
+| **WP-S2 Dual open** | Runtime can open primary+secondary devices; per-source eye-check fail-closed | config reserved (`secondary_device*`); dual loop not active |
 | **WP-S3 Session marker** | OBS text/QR encodes `session_id` (+ short root); Retina OCR verify optional, advisory |
 | **WP-S4 Shared clock** | Frame events and controller events share documented clock field (monotonic ns or session head) |
 | **WP-S5 Presence-sync activity** | High-confidence optical activity gated on recent controller input; unit tests for no optical-only “playing” claim |

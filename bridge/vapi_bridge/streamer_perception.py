@@ -20,9 +20,73 @@ from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 DOMAIN = "QORTROLLER-STREAMER-PERCEPTION-v0"
 SCHEMA_V = 0
 
+# WP-S1 — source.kind tags (docs/design/trio-retina-obs-sync-v0.md)
+SOURCE_UVC_CARD = "uvc_card"
+SOURCE_OBS_VIRTUAL = "obs_virtual"
+SOURCE_UNKNOWN = "unknown"
+SOURCE_SYNTHETIC = "synthetic"
+SOURCE_KINDS = frozenset(
+    {SOURCE_UVC_CARD, SOURCE_OBS_VIRTUAL, SOURCE_UNKNOWN, SOURCE_SYNTHETIC}
+)
+
+# Substrings matched against device friendly names (case-insensitive).
+_OBS_NAME_MARKERS = (
+    "obs virtual camera",
+    "obs-virtualcam",
+    "obs virtual cam",
+    "obs-camera",
+    "obs virtual",
+    "virtualcam",
+)
+
 
 def now_ns() -> int:
     return time.time_ns()
+
+
+def classify_source_kind(
+    device_name: Optional[str] = None,
+    *,
+    override: Optional[str] = None,
+    synthetic: bool = False,
+) -> str:
+    """Classify UVC source kind for event tagging (WP-S1).
+
+    Priority: override > synthetic > name sniff > unknown.
+    Never claims clean-game fidelity — operators still eye-check.
+    """
+    if override is not None and str(override).strip():
+        o = str(override).strip().lower().replace("-", "_")
+        aliases = {
+            "uvc_card": SOURCE_UVC_CARD,
+            "card": SOURCE_UVC_CARD,
+            "capture_card": SOURCE_UVC_CARD,
+            "obs_virtual": SOURCE_OBS_VIRTUAL,
+            "obs": SOURCE_OBS_VIRTUAL,
+            "obsvirtual": SOURCE_OBS_VIRTUAL,
+            "obs_vcam": SOURCE_OBS_VIRTUAL,
+            "unknown": SOURCE_UNKNOWN,
+            "synthetic": SOURCE_SYNTHETIC,
+        }
+        if o in aliases:
+            return aliases[o]
+        if o in SOURCE_KINDS:
+            return o
+        raise ValueError(
+            f"invalid source kind override '{override}'; "
+            f"expected one of {sorted(SOURCE_KINDS)} or card|obs"
+        )
+    if synthetic:
+        return SOURCE_SYNTHETIC
+    if not device_name or not str(device_name).strip():
+        return SOURCE_UNKNOWN
+    n = str(device_name).strip().lower()
+    for marker in _OBS_NAME_MARKERS:
+        if marker in n:
+            return SOURCE_OBS_VIRTUAL
+    if "virtual camera" in n:
+        return SOURCE_OBS_VIRTUAL
+    return SOURCE_UVC_CARD
 
 
 def make_event(
@@ -65,6 +129,13 @@ class PerceptionConfig:
     process_scale: float = 0.5  # downscale for metrics
     backend: str = "auto"  # auto|msmf|dshow|any
     session_id: Optional[str] = None
+    # WP-S1 source tagging
+    device_name: Optional[str] = None  # friendly name if known (CLI / env / probe)
+    source_kind: Optional[str] = None  # override: uvc_card|obs_virtual|unknown|synthetic
+    # WP-S2 groundwork (not dual-loop yet): secondary UVC index reserved
+    secondary_device: Optional[int] = None
+    secondary_device_name: Optional[str] = None
+    secondary_source_kind: Optional[str] = None
     motion_high: float = 8.0
     motion_idle: float = 2.0
     activity_hysteresis_s: float = 1.0
@@ -76,6 +147,7 @@ class PerceptionConfig:
     ws_port: int = 8765
     enable_ws: bool = True
     max_frames: int = 0  # 0 = unlimited
+    snapshot: Optional[Path] = None  # save first full-res frame for eye-check
 
 
 def default_zones() -> List[ZoneSpec]:
@@ -176,6 +248,44 @@ def open_capture(device: int, width: int, height: int, fps: float, backend: str)
     raise RuntimeError(f"could not open capture device {device}: {last_err}")
 
 
+def build_source_dict(
+    cfg: PerceptionConfig,
+    *,
+    backend: Optional[str] = None,
+    synthetic: bool = False,
+) -> Dict[str, Any]:
+    """Build the event `source` object (WP-S1)."""
+    kind = classify_source_kind(
+        cfg.device_name,
+        override=cfg.source_kind,
+        synthetic=synthetic,
+    )
+    out: Dict[str, Any] = {
+        "kind": kind,
+        "device": "synthetic" if synthetic else cfg.device,
+        "backend": backend if backend is not None else cfg.backend,
+        "width": cfg.width,
+        "height": cfg.height,
+        "fps_target": cfg.fps_target,
+    }
+    if cfg.device_name:
+        out["name"] = cfg.device_name
+    # Dual-path groundwork: announce secondary if configured (not opened yet)
+    if cfg.secondary_device is not None:
+        sk = classify_source_kind(
+            cfg.secondary_device_name,
+            override=cfg.secondary_source_kind,
+        )
+        out["secondary"] = {
+            "kind": sk,
+            "device": cfg.secondary_device,
+            "name": cfg.secondary_device_name,
+            "opened": False,
+            "note": "WP-S2 dual-open not yet active; secondary is reserved/config-only",
+        }
+    return out
+
+
 class StreamerPerceptionRuntime:
     """Main loop: grab frames → metrics → events."""
 
@@ -188,15 +298,12 @@ class StreamerPerceptionRuntime:
         self._zone_ema: Dict[str, float] = {}
         self.frames = 0
         self.t0 = 0.0
+        self._source_cache: Optional[Dict[str, Any]] = None
 
     def _source(self) -> Dict[str, Any]:
-        return {
-            "device": self.cfg.device,
-            "backend": self.cfg.backend,
-            "width": self.cfg.width,
-            "height": self.cfg.height,
-            "fps_target": self.cfg.fps_target,
-        }
+        if self._source_cache is not None:
+            return dict(self._source_cache)
+        return build_source_dict(self.cfg)
 
     def emit(self, etype: str, payload: Dict[str, Any]) -> None:
         self.bus.emit(
@@ -304,17 +411,33 @@ class StreamerPerceptionRuntime:
             self.cfg.backend,
         )
         self.cfg.backend = backend_name
-        # Eye-check hint
+        # Resolve source.kind after open (WP-S1); name may come from CLI/env only
+        self._source_cache = build_source_dict(self.cfg, backend=backend_name)
+        # Eye-check hint — still mandatory; kind tag is not proof of clean game
         h0, w0 = first.shape[:2]
-        self.emit(
-            "frame_stats",
-            {
-                "n": 0,
-                "eye_check": "operator must verify first frames are GAME not webcam",
-                "first_shape": [int(h0), int(w0)],
-                "mean_luma": round(frame_mean_luma(cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)), 2),
-            },
-        )
+        if self.cfg.snapshot is not None:
+            self.cfg.snapshot.parent.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(self.cfg.snapshot), first)
+            self.emit(
+                "frame_stats",
+                {
+                    "n": 0,
+                    "eye_check": f"operator must verify first frames are GAME not webcam; snapshot saved to {self.cfg.snapshot}",
+                    "first_shape": [int(h0), int(w0)],
+                    "mean_luma": round(frame_mean_luma(cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)), 2),
+                    "snapshot": str(self.cfg.snapshot),
+                },
+            )
+        else:
+            self.emit(
+                "frame_stats",
+                {
+                    "n": 0,
+                    "eye_check": "operator must verify first frames are GAME not webcam",
+                    "first_shape": [int(h0), int(w0)],
+                    "mean_luma": round(frame_mean_luma(cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)), 2),
+                },
+            )
 
         period = 1.0 / max(self.cfg.fps_target, 1.0)
         last_stats = 0.0

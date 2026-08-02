@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Streamer perception v0 — capture card → JSONL + WebSocket events.
+"""Streamer perception v0 - capture card -> JSONL + WebSocket events.
 
 Design: docs/design/trio-retina-streamer-perception-v0.md
 
@@ -13,7 +13,7 @@ Usage:
   # Synthetic self-test (no camera)
   python scripts/streamer_retina_events.py --synthetic --max-frames 90
 
-OBS: add Browser Source → tools/obs_streamer_perception_overlay.html
+OBS: add Browser Source -> tools/obs_streamer_perception_overlay.html
      (or serve file URL) with WS default ws://127.0.0.1:8765
 """
 from __future__ import annotations
@@ -34,6 +34,7 @@ from vapi_bridge.streamer_perception import (  # noqa: E402
     PerceptionConfig,
     StreamerPerceptionRuntime,
     WsFanout,
+    build_source_dict,
     default_zones,
     make_event,
     run_ws_server,
@@ -60,12 +61,14 @@ def _run_synthetic(cfg: PerceptionConfig, bus: EventBus) -> dict:
 
     rt = StreamerPerceptionRuntime(cfg, bus)
     rt.t0 = time.time()
+    src = build_source_dict(cfg, synthetic=True)
+    rt._source_cache = src
     bus.emit(
         make_event(
             "session_start",
             {"synthetic": True, "jsonl": str(cfg.jsonl_path)},
             session_id=cfg.session_id,
-            source={"device": "synthetic"},
+            source=src,
         )
     )
     h, w = 180, 320
@@ -90,13 +93,18 @@ def _run_synthetic(cfg: PerceptionConfig, bus: EventBus) -> dict:
                     "frame_stats",
                     {"n": i, "synthetic": True},
                     session_id=cfg.session_id,
-                    source={"device": "synthetic"},
+                    source=src,
                 )
             )
         time.sleep(0.01)
-    summary = {"frames": n, "events": bus.events_emitted, "synthetic": True}
+    summary = {
+        "frames": n,
+        "events": bus.events_emitted,
+        "synthetic": True,
+        "source_kind": src.get("kind"),
+    }
     bus.emit(
-        make_event("session_end", summary, session_id=cfg.session_id, source={"device": "synthetic"})
+        make_event("session_end", summary, session_id=cfg.session_id, source=src)
     )
     return summary
 
@@ -104,6 +112,27 @@ def _run_synthetic(cfg: PerceptionConfig, bus: EventBus) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Streamer Retina events v0")
     ap.add_argument("--device", type=int, default=int(os.environ.get("RETINA_UVC_INDEX", "0")))
+    ap.add_argument(
+        "--device-name",
+        default=os.environ.get("RETINA_UVC_DEVICE_NAME", "") or None,
+        help="Friendly device name for WP-S1 kind sniff (or set RETINA_UVC_DEVICE_NAME)",
+    )
+    ap.add_argument(
+        "--source-kind",
+        default=os.environ.get("RETINA_SOURCE_KIND", "") or None,
+        help="Override source.kind: uvc_card|obs_virtual|unknown|synthetic",
+    )
+    ap.add_argument(
+        "--secondary-device",
+        type=int,
+        default=None,
+        help="WP-S2 groundwork: reserve secondary UVC index (not dual-opened yet)",
+    )
+    ap.add_argument(
+        "--secondary-device-name",
+        default=None,
+        help="Friendly name for secondary source kind sniff",
+    )
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720)
     ap.add_argument("--fps", type=float, default=20.0)
@@ -116,6 +145,7 @@ def main() -> int:
     ap.add_argument("--duration", type=float, default=0.0, help="Stop after N seconds (0=until Ctrl+C)")
     ap.add_argument("--synthetic", action="store_true", help="No camera; synthetic motion")
     ap.add_argument("--no-zones", action="store_true")
+    ap.add_argument("--snapshot", default="", help="Save first full-res frame to this PNG path for eye-check")
     args = ap.parse_args()
 
     out = Path(args.out) if args.out else (
@@ -124,6 +154,10 @@ def main() -> int:
     session_id = args.session_id or _session_id_from_env()
     cfg = PerceptionConfig(
         device=args.device,
+        device_name=args.device_name or None,
+        source_kind=args.source_kind or None,
+        secondary_device=args.secondary_device,
+        secondary_device_name=args.secondary_device_name,
         width=args.width,
         height=args.height,
         fps_target=args.fps,
@@ -134,6 +168,7 @@ def main() -> int:
         ws_port=args.ws_port,
         enable_ws=not args.no_ws and not args.synthetic,
         max_frames=args.max_frames,
+        snapshot=Path(args.snapshot) if args.snapshot else None,
     )
 
     bus = EventBus(cfg.jsonl_path)
@@ -160,9 +195,15 @@ def main() -> int:
         )
         print(f"[streamer-perception] WebSocket ws://{cfg.ws_host}:{cfg.ws_port}")
 
-    print(f"[streamer-perception] JSONL → {out}")
-    print("[streamer-perception] advisory only — not humanity/tournament proof")
-    print("[streamer-perception] EYE-CHECK: confirm feed is GAME not webcam")
+    src_preview = build_source_dict(cfg, synthetic=bool(args.synthetic))
+    print(f"[streamer-perception] JSONL -> {out}")
+    print(f"[streamer-perception] source.kind={src_preview.get('kind')} device={src_preview.get('device')}")
+    if src_preview.get("name"):
+        print(f"[streamer-perception] source.name={src_preview.get('name')}")
+    if src_preview.get("secondary"):
+        print(f"[streamer-perception] secondary reserved (not opened): {src_preview['secondary']}")
+    print("[streamer-perception] advisory only - not humanity/tournament proof")
+    print("[streamer-perception] EYE-CHECK: confirm feed is GAME not webcam (kind tag is not proof)")
 
     if args.duration > 0 and not args.synthetic:
         # approximate max frames from duration

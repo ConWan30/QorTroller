@@ -15,10 +15,16 @@ sys.path.insert(0, str(BRIDGE))
 
 from vapi_bridge.streamer_perception import (  # noqa: E402
     DOMAIN,
+    SOURCE_OBS_VIRTUAL,
+    SOURCE_SYNTHETIC,
+    SOURCE_UNKNOWN,
+    SOURCE_UVC_CARD,
     EventBus,
     PerceptionConfig,
     StreamerPerceptionRuntime,
     ZoneSpec,
+    build_source_dict,
+    classify_source_kind,
     frame_mean_luma,
     frame_motion,
     make_event,
@@ -114,6 +120,79 @@ class TestStreamerPerception(unittest.TestCase):
         self.assertTrue(
             (root / "tools" / "obs_streamer_perception_overlay.html").is_file()
         )
+        self.assertTrue(
+            (root / "docs" / "design" / "trio-retina-obs-sync-v0.md").is_file()
+        )
+
+    def test_9_classify_source_kind_obs(self):
+        self.assertEqual(
+            classify_source_kind("OBS Virtual Camera"), SOURCE_OBS_VIRTUAL
+        )
+        self.assertEqual(
+            classify_source_kind("obs-virtualcam"), SOURCE_OBS_VIRTUAL
+        )
+        self.assertEqual(
+            classify_source_kind("Some USB Capture Card"), SOURCE_UVC_CARD
+        )
+        self.assertEqual(classify_source_kind(None), SOURCE_UNKNOWN)
+        self.assertEqual(classify_source_kind("", synthetic=True), SOURCE_SYNTHETIC)
+        self.assertEqual(
+            classify_source_kind("OBS Virtual Camera", override="uvc_card"),
+            SOURCE_UVC_CARD,
+        )
+        with self.assertRaises(ValueError):
+            classify_source_kind(override="not-a-kind")
+
+    def test_10_build_source_dict_kind(self):
+        cfg = PerceptionConfig(
+            device=1,
+            device_name="OBS Virtual Camera",
+            backend="msmf",
+            enable_ws=False,
+        )
+        src = build_source_dict(cfg, backend="msmf")
+        self.assertEqual(src["kind"], SOURCE_OBS_VIRTUAL)
+        self.assertEqual(src["device"], 1)
+        self.assertEqual(src["name"], "OBS Virtual Camera")
+        self.assertEqual(src["backend"], "msmf")
+
+    def test_11_activity_events_carry_source_kind(self):
+        events = []
+        bus = EventBus(None)
+        bus.subscribe(events.append)
+        cfg = PerceptionConfig(
+            zones=[],
+            motion_high=5.0,
+            motion_idle=1.0,
+            activity_hysteresis_s=0.0,
+            device_name="Elgato 4K60",
+            source_kind=None,
+            jsonl_path=None,
+            enable_ws=False,
+        )
+        rt = StreamerPerceptionRuntime(cfg, bus)
+        rt._source_cache = build_source_dict(cfg)
+        quiet = np.zeros((60, 80), dtype=np.uint8) + 20
+        busy = np.random.randint(0, 255, (60, 80), dtype=np.uint8)
+        t = time.time()
+        rt.process_gray(quiet, t)
+        rt.process_gray(busy, t + 0.1)
+        acts = [e for e in events if e["type"] == "activity"]
+        self.assertTrue(acts)
+        self.assertEqual(acts[0]["source"]["kind"], SOURCE_UVC_CARD)
+
+    def test_12_secondary_reserved_in_source(self):
+        cfg = PerceptionConfig(
+            device=0,
+            device_name="Capture Card",
+            secondary_device=2,
+            secondary_device_name="OBS Virtual Camera",
+            enable_ws=False,
+        )
+        src = build_source_dict(cfg)
+        self.assertIn("secondary", src)
+        self.assertEqual(src["secondary"]["kind"], SOURCE_OBS_VIRTUAL)
+        self.assertFalse(src["secondary"]["opened"])
 
 
 if __name__ == "__main__":
