@@ -15,26 +15,23 @@ A gamer-facing DM concierge that runs under the **gamer's own `BUZZ_PRIVATE_KEY`
 |---------|-------------|-------|
 | `status` | `GET /player/session-status` | Rig/session status digest |
 | `analytics` | `GET /player/self-analytics` | Your own verified data summary |
-| `claim` | none (docs) | How to run `scripts/buzz_ioid_claim.py` |
+| `claim <token> <device>` | `scripts/buzz_ioid_claim.py` | Posts kind 0 profile + #lobby claim |
 | `help` | none | Command list |
 
 Anything starting with `@EA`, `devin @EA`, `run `, etc. is rejected.
 
 ## Activation
 
-1. Generate a **gamer key** (separate from the operator key):
+1. Generate a **gamer key**:
    ```powershell
    python -c "from nostr_sdk import Keys; k=Keys.generate(); print(k.secret_key().to_bech32())"
    ```
-2. From your gamer profile, open a DM with the agent's pubkey:
-   ```powershell
-   $env:BUZZ_PRIVATE_KEY="<gamer-nsec>"
-   buzz/target/debug/buzz.exe dms open --pubkey <agent-pubkey>
-   ```
+2. Create or find the `#lobby` channel. The `claim` command posts there.
 3. Copy `scripts/buzz_personal_agent.env.example` to a local `.env` and fill:
-   - `BUZZ_PRIVATE_KEY` — agent key (not the gamer key)
+   - `BUZZ_PRIVATE_KEY` — **gamer key** (the agent signs posts with it)
    - `BUZZ_RELAY_URL` — e.g. `http://localhost:3000`
-   - `BUZZ_PERSONAL_AGENT_DM_IDS` — the `dm_id` from step 2
+   - `BUZZ_LOBBY_CHANNEL_ID` — `#lobby` channel UUID
+   - `BUZZ_PERSONAL_AGENT_DM_IDS` — DM UUID(s) to poll (optional but recommended)
    - `BRIDGE_BASE_URL` — e.g. `http://localhost:8000`
    - `BRIDGE_API_KEY` (if bridge requires it)
    - `BUZZ_PERSONAL_AGENT_ENABLED=1`
