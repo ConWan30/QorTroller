@@ -1,9 +1,9 @@
 ---
 name: qortroller-concierge
-description: "Quick-reference for QorTroller Concierge gamer commands, creation rules, and safety rails."
+description: "Quick-reference for Retina gamer commands, charter v1 propose/hire, and safety rails."
 ---
 
-# QorTroller Concierge Quick Reference
+# Retina Quick Reference (Agentic Charter v1)
 
 ## Core identity
 
@@ -12,7 +12,8 @@ description: "Quick-reference for QorTroller Concierge gamer commands, creation 
 - **PoEP:** Proof of Embodied Play — controller-side reflex/IMU liveness.
 - **PoSP:** Proof of Secure Presence — session-level presence binding.
 - **ioID:** IoTeX decentralized identity; token 498 for the certified Edge.
-- **VSS:** Verifiable Session Service; seat/queue/session status.
+- **VSS:** Verifiable stream seat; seat/queue/session status.
+- **Clause:** Retina is **P-SOV** (gamer sovereignty). Charter: `docs/design/qortroller-agentic-charter-v1.md`.
 
 ## Certified device
 
@@ -27,13 +28,27 @@ description: "Quick-reference for QorTroller Concierge gamer commands, creation 
 | `status` | `GET /player/session-status` | Rig/session digest |
 | `analytics` | `GET /player/self-analytics` | Gamer data digest |
 | `claim <token> <device>` | `buzz_ioid_claim.py` | ioID claim posted to `#lobby` |
-| `create agent <name> <role>` | `buzz_agent_factory.py create-agent` | Child agent `.env` created |
-| `create channel <name> <desc>` | `buzz_agent_factory.py create-channel` | Channel created |
-| `create project <name> <goal>` | `buzz_agent_factory.py create-project` | Channel + NIP-34 repo created |
-| `create workflow <name> <steps>` | `buzz_agent_factory.py create-workflow` | Channel + workflow created |
-| `create template <name> <desc>` | `buzz_agent_factory.py create-template` | NIP-23 note created |
-| `brainstorm <topic>` | `buzz_agent_factory.py brainstorm` | Brainstorm post seeded |
+| `propose <artifact> <clause> <name> [desc...]` | `buzz_agent_factory.py propose` | Proposal (not mint) |
+| `hire <name> --clause P-... --resume "..."` | `buzz_agent_factory.py hire` | Candidate agent (ENABLED off) |
+| `brainstorm <topic>` | `propose` brainstorm under **P-FRM** | Framework seed / proposal |
 | `help` | none | Command list |
+
+**Deprecated (do not present as primary power):** `create agent|channel|project|workflow|template`.  
+If a gamer says “create”, rewrite to **propose** (or **hire** with clause+resume). Mint only after operator approval / mint allow-list.
+
+## Purpose clauses (must declare one)
+
+| Clause | Use |
+|--------|-----|
+| P-SOV | Sovereignty, claims, consent |
+| P-ATT | Attestation / postcard explanation |
+| P-VSS | Seat status language only (**never OPEN**) |
+| P-WMP | Provenance / deferred export honesty |
+| P-OPS | Rig / SAP / invariants |
+| P-FRM | Frameworks / WPs |
+| P-STU | Studio / SDK pitch ceilings |
+
+**No clause → no hire, no channel.**
 
 ## Useful `@EA` commands (operator only)
 
@@ -45,10 +60,15 @@ description: "Quick-reference for QorTroller Concierge gamer commands, creation 
 
 ## Forbidden patterns
 
-- Operator commands, shell, chain spend, raw HID/IMU, wallet/private-key, git force push, nsec.
-- QorTroller ACP rejects these with `rejected: banned_tool_surface`.
+- Operator allow-list expansion, shell, chain spend, raw HID/IMU, wallet/private-key, git force push, nsec.
+- VSS **OPEN**, claim inflation, candidate→certified upgrades, silent topology (new stable channels without propose).
+- QorTroller ACP rejects banned tool surfaces with `rejected: banned_tool_surface`.
 
 ## Gamer commands (gamer key required)
 
 - `python scripts/buzz_ioid_claim.py --ioid-token 498 --device-id 581a836c`
-- Any `create` or `brainstorm` command via DM to the Concierge.
+- Propose / hire via DM to Retina (never free-form mint as the default).
+
+## Progress is not a creation receipt
+
+Progress = SAP seal / pin / on-chain / human accept — not “channel created.”

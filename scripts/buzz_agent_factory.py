@@ -1,24 +1,32 @@
 #!/usr/bin/env python3
 """
-buzz_agent_factory.py — Agentic creation for the QorTroller Buzz plane.
+buzz_agent_factory.py — Purpose-bound agentic factory (Agentic Charter v1).
 
-This script lets an authorized parent agent create:
-  1. New channels (`create-channel`).
-  2. New child agents (`create-agent`) — fresh nsec, kind 0 profile, `.env` file.
-  3. New projects (`create-project`) — Buzz channel + NIP-34 git repo.
-  4. New workflows (`create-workflow`) — Buzz channel + executable workflow.
-  5. New templates (`create-template`) — NIP-23 long-form note.
-  6. Brainstorm seeds (`brainstorm`) — post to a brainstorm channel.
+Charter: docs/design/qortroller-agentic-charter-v1.md
 
-Authority model:
-  - Parent provides `BUZZ_PRIVATE_KEY` (its own key).
-  - Optional `BUZZ_LOBBY_CHANNEL_ID` / `BUZZ_AUDIT_CHANNEL_ID` / `BUZZ_BRAINSTORM_CHANNEL_ID`.
-  - No limit on children unless the caller imposes one.
+Primary power is clause + resume, not free-form mint:
+  hire          — child agent with P-* clause + engineering resume (candidate unless --approve)
+  propose       — channel/project/workflow/template/brainstorm proposal
+  propose-wp    — Frameworks WP skeleton (problem + non-claims + acceptance)
+  create-*      — propose-first by default; mint only with --approve or mint env
+
+Deprecated:
+  create-agent  — use hire --clause --resume [--approve]
+
+Authority model (v1):
+  - Parent provides BUZZ_PRIVATE_KEY (its own key).
+  - No clause → no hire, no channel mint.
+  - Recursive child hire gated by BUZZ_AGENT_MINTERS (operator allow-list).
+  - Mint override: --approve or BUZZ_CREATION_APPROVED=1 / BUZZ_AGENT_MINTERS=1
+  - Channel IDs: BUZZ_FRAMEWORKS_CHANNEL_ID, BUZZ_AGENT_ROSTER_CHANNEL_ID,
+    BUZZ_LOBBY_CHANNEL_ID, BUZZ_AUDIT_CHANNEL_ID, BUZZ_BRAINSTORM_CHANNEL_ID
 
 Usage:
   $env:BUZZ_PRIVATE_KEY = "nsec1..."
   $env:BUZZ_RELAY_URL = "wss://qortroller.communities.buzz.xyz"
-  python scripts/buzz_agent_factory.py create-project --name "MyProject" --description "Expand QorTroller"
+  python scripts/buzz_agent_factory.py hire --name Seatwarden --clause P-VSS \\
+    --resume "competence: flag-down; forbidden: VSS OPEN,keys"
+  python scripts/buzz_agent_factory.py propose --artifact channel --name verify-lab --clause P-WMP
 """
 from __future__ import annotations
 
@@ -35,6 +43,29 @@ from typing import Optional
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = REPO_ROOT / "agents"
 AGENTS_DIR.mkdir(parents=True, exist_ok=True)
+
+VALID_CLAUSES = {"P-SOV", "P-ATT", "P-VSS", "P-WMP", "P-OPS", "P-FRM", "P-STU"}
+AGENT_ROSTER_CHANNEL_ID = os.environ.get("BUZZ_AGENT_ROSTER_CHANNEL_ID", "")
+FRAMEWORKS_CHANNEL_ID = os.environ.get("BUZZ_FRAMEWORKS_CHANNEL_ID", "")
+
+
+def _registry_path() -> Path:
+    return REPO_ROOT / "agents" / "registry.json"
+
+
+def _load_registry() -> dict:
+    path = _registry_path()
+    if not path.exists():
+        return {"version": "1.0.0", "roster": []}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"[!] could not load registry: {e}", file=sys.stderr)
+        return {"version": "1.0.0", "roster": []}
+
+
+def _save_registry(registry: dict) -> None:
+    _registry_path().write_text(json.dumps(registry, indent=2), encoding="utf-8")
 
 
 def _raw_to_http(url: str) -> str:
@@ -158,6 +189,44 @@ def _my_hex(private_key: str) -> str:
     except Exception as e:
         print(f"[!] could not derive hex pubkey: {e}", file=sys.stderr)
         return ""
+
+
+def _validate_clause(clause: str) -> bool:
+    if clause in VALID_CLAUSES:
+        return True
+    print(f"[!] invalid clause '{clause}'. Valid: {', '.join(sorted(VALID_CLAUSES))}", file=sys.stderr)
+    return False
+
+
+def _parse_resume(resume_input: str) -> dict:
+    """Parse a resume from a JSON string or a file path."""
+    if not resume_input:
+        return {}
+    if Path(resume_input).exists():
+        try:
+            return json.loads(Path(resume_input).read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"[!] could not read resume file: {e}", file=sys.stderr)
+            return {}
+    try:
+        return json.loads(resume_input)
+    except Exception:
+        # Try simple key:value semicolon syntax: "competence: a,b; forbidden: x,y"
+        resume = {}
+        for part in resume_input.split(";"):
+            if ":" in part:
+                key, value = part.split(":", 1)
+                key = key.strip()
+                value = value.strip()
+                if key in ("competence", "forbidden", "channels", "tools"):
+                    resume[key] = [v.strip() for v in value.split(",") if v.strip()]
+                else:
+                    resume[key] = value
+        return resume
+
+
+def _default_forbidden() -> list[str]:
+    return ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"]
 
 
 def _generate_key() -> tuple[str, str]:
@@ -391,8 +460,18 @@ def brainstorm(topic: str, channel_id: str) -> bool:
     return _post_artifact(topic, "brainstorm", channel_id, [], content)
 
 
-def create_agent(name: str, role: str, about: str, post_birth: bool = True) -> Optional[dict]:
-    """Create a child agent: generate key, set profile, write .env, optionally announce."""
+def hire_agent(name: str, clause: str, resume: str, supervisor: str = "operator", about: str = "", post_birth: bool = True, approved: bool = False) -> Optional[dict]:
+    """Hire a child agent: validate clause/resume, generate key, write .env, set profile, announce."""
+    if not _validate_clause(clause):
+        return None
+
+    resume_data = _parse_resume(resume)
+    forbidden = resume_data.get("forbidden") or _default_forbidden()
+    competence = resume_data.get("competence", [])
+    if not competence:
+        print("[!] resume must include 'competence'", file=sys.stderr)
+        return None
+
     parent_key = os.environ.get("BUZZ_PRIVATE_KEY", "")
     if not parent_key:
         print("[!] BUZZ_PRIVATE_KEY required (parent key)", file=sys.stderr)
@@ -404,11 +483,10 @@ def create_agent(name: str, role: str, about: str, post_birth: bool = True) -> O
 
     nsec, npub = _generate_key()
     relay_url = os.environ.get("BUZZ_RELAY_URL", "wss://qortroller.communities.buzz.xyz")
-    env_path = _write_child_env(name, nsec, npub, relay_url, role, parent_npub)
+    env_path = _write_child_env(name, nsec, npub, relay_url, clause, parent_npub)
     print(f"[*] child agent key written to {env_path}")
 
-    # Set child profile
-    child_about = about or f"Child QorTroller agent ({role}) minted by {parent_npub}."
+    child_about = about or f"QorTroller agent ({clause}) hired by {parent_npub}."
     extra_env = {
         "BUZZ_PRIVATE_KEY": nsec,
         "BUZZ_RELAY_URL": relay_url,
@@ -416,34 +494,56 @@ def create_agent(name: str, role: str, about: str, post_birth: bool = True) -> O
     rc, _, stderr = _buzz_cli(["users", "set-profile", "--name", name, "--about", child_about], extra_env=extra_env, timeout=30)
     if rc != 0:
         print(f"[!] child profile set failed (child may need relay invite): {stderr}", file=sys.stderr)
-        # Not fatal — the key and .env are still created.
     else:
         print(f"[*] child profile set for {npub}")
 
-    # Optional birth announcement on audit channel using parent key
-    audit_channel = os.environ.get("BUZZ_AUDIT_CHANNEL_ID", "")
-    if post_birth and audit_channel:
-        birth_content = f"Agent minted: {name} ({role}) by {parent_npub} → child {npub}"
+    agent_id = _safe_id(name)
+    registry = _load_registry()
+    registry.setdefault("roster", []).append({
+        "agent_id": agent_id,
+        "display_name": name,
+        "npub": npub,
+        "hex": _my_hex(nsec),
+        "clause": clause,
+        "parent": "operator",
+        "supervisor": supervisor,
+        "status": "hired" if approved else "candidate",
+        "competence": competence,
+        "evidence_bar": resume_data.get("evidence_bar", ""),
+        "forbidden": forbidden,
+        "channels": resume_data.get("channels", []),
+        "tools": resume_data.get("tools", []),
+        "output_types": resume_data.get("output_types", ["digest"]),
+        "env_path": str(env_path),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "sealed_by": parent_npub,
+    })
+    _save_registry(registry)
+    print(f"[*] registry updated: {agent_id} ({'hired' if approved else 'candidate'})")
+
+    roster_channel = AGENT_ROSTER_CHANNEL_ID or os.environ.get("BUZZ_AUDIT_CHANNEL_ID", "")
+    if post_birth and roster_channel:
+        birth_content = f"Agent {'hired' if approved else 'proposed'}: {name} ({clause}) by {parent_npub} → child {npub}\nCompetence: {', '.join(competence)}\nForbidden: {', '.join(forbidden)}"
         payload = json.dumps({
-            "channel": audit_channel,
+            "channel": roster_channel,
             "content": birth_content,
             "tags": [
                 ["qortroller", "1"],
                 ["agent_mint", "1"],
                 ["agent_name", name],
-                ["agent_role", role],
+                ["agent_clause", clause],
                 ["parent", parent_npub],
                 ["child", npub],
             ],
         })
         rc, stdout, stderr = _qortroller_buzz(["publish"], stdin=payload, timeout=30)
         if rc != 0:
-            print(f"[!] birth announcement failed: {stderr}", file=sys.stderr)
+            print(f"[!] roster post failed: {stderr}", file=sys.stderr)
         else:
             try:
                 data = json.loads(stdout)
                 if data.get("accepted"):
-                    print(f"[*] birth announcement posted to {audit_channel}")
+                    print(f"[*] roster post accepted")
             except Exception:
                 pass
 
@@ -451,91 +551,390 @@ def create_agent(name: str, role: str, about: str, post_birth: bool = True) -> O
         "nsec": nsec,
         "npub": npub,
         "name": name,
-        "role": role,
+        "clause": clause,
+        "competence": competence,
         "parent_npub": parent_npub,
         "env_path": str(env_path),
+        "status": "hired" if approved else "candidate",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def propose(
+    artifact: str,
+    name: str,
+    clause: str,
+    description: str = "",
+    goal: str = "",
+    steps: str = "",
+    source: str = "",
+    topic: str = "",
+) -> Optional[dict]:
+    """Post a proposal to #frameworks for a channel, project, workflow, template, or brainstorm."""
+    if not _validate_clause(clause):
+        return None
+
+    parent_key = os.environ.get("BUZZ_PRIVATE_KEY", "")
+    parent_npub = _my_npub(parent_key) or "unknown"
+    frameworks_channel = FRAMEWORKS_CHANNEL_ID or os.environ.get("BUZZ_FRAMEWORKS_CHANNEL_ID", "")
+    if not frameworks_channel:
+        print("[!] no #frameworks channel configured (BUZZ_FRAMEWORKS_CHANNEL_ID)", file=sys.stderr)
+        return None
+
+    details = []
+    if description:
+        details.append(f"Description: {description}")
+    if goal:
+        details.append(f"Goal: {goal}")
+    if steps:
+        details.append(f"Steps: {steps}")
+    if source:
+        details.append(f"Source: {source}")
+    if topic:
+        details.append(f"Topic: {topic}")
+
+    content = f"Proposal: {artifact} `{name}`\nClause: {clause}\nProposed by: {parent_npub}\n"
+    if details:
+        content += "\n" + "\n".join(details)
+    content += "\n\nReply with `approve` or post a WP skeleton to move to Ops."
+
+    extra_tags = [
+        ["proposal", artifact],
+        ["artifact_name", name],
+        ["clause", clause],
+    ]
+    ok = _post_artifact(name, "proposal", frameworks_channel, extra_tags, content)
+    if not ok:
+        return None
+    return {
+        "artifact": artifact,
+        "name": name,
+        "clause": clause,
+        "proposed_by": parent_npub,
+        "status": "proposed",
+    }
+
+
+def propose_wp(
+    topic: str,
+    clause: str,
+    problem: str,
+    non_claims: str,
+    acceptance: str,
+    parent_proposal: str = "",
+) -> Optional[dict]:
+    """Post a WP skeleton to #frameworks."""
+    if not _validate_clause(clause):
+        return None
+
+    parent_key = os.environ.get("BUZZ_PRIVATE_KEY", "")
+    parent_npub = _my_npub(parent_key) or "unknown"
+    frameworks_channel = FRAMEWORKS_CHANNEL_ID or os.environ.get("BUZZ_FRAMEWORKS_CHANNEL_ID", "")
+    if not frameworks_channel:
+        print("[!] no #frameworks channel configured", file=sys.stderr)
+        return None
+
+    content = f"WP Skeleton: {topic}\nClause: {clause}\nAuthor: {parent_npub}\n\n"
+    content += f"## Problem\n{problem}\n\n"
+    content += f"## Non-claims / honesty ceiling\n{non_claims}\n\n"
+    content += f"## Acceptance tests / exit criteria\n{acceptance}\n\n"
+    if parent_proposal:
+        content += f"Parent proposal: {parent_proposal}\n\n"
+    content += "Handoff: Frame → Ops → Seal. Human seal required."
+
+    extra_tags = [
+        ["wp", "1"],
+        ["topic", topic],
+        ["clause", clause],
+    ]
+    if parent_proposal:
+        extra_tags.append(["parent_proposal", parent_proposal])
+
+    ok = _post_artifact(topic, "wp", frameworks_channel, extra_tags, content)
+    if not ok:
+        return None
+    return {
+        "topic": topic,
+        "clause": clause,
+        "author": parent_npub,
+        "status": "framed",
+    }
+
+
+def _creation_approved() -> bool:
+    """Operator mint override (charter v1: propose-first unless approved)."""
+    if os.environ.get("BUZZ_CREATION_APPROVED", "") == "1":
+        return True
+    # Prefer BUZZ_AGENT_MINTERS; keep BUZZ_MINTERS as legacy alias.
+    for key in ("BUZZ_AGENT_MINTERS", "BUZZ_MINTERS"):
+        val = os.environ.get(key, "").strip()
+        if val == "1" or val.lower() == "true":
+            return True
+    return False
+
+
+def _add_clause_and_approve(parser):
+    parser.add_argument("--clause", default="", help="Purpose clause (P-SOV, P-ATT, P-VSS, P-WMP, P-OPS, P-FRM, P-STU)")
+    parser.add_argument("--approve", action="store_true", help="Skip proposal and mint immediately (operator-only)")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Agentic factory for QorTroller Buzz.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    ch = sub.add_parser("create-channel", help="Create a new channel")
+    ch = sub.add_parser("create-channel", help="Create or propose a new channel")
     ch.add_argument("--name", required=True)
     ch.add_argument("--description", default="")
     ch.add_argument("--visibility", default="open", choices=["open", "restricted"])
+    _add_clause_and_approve(ch)
 
-    ag = sub.add_parser("create-agent", help="Create a new child agent")
+    ag = sub.add_parser("create-agent", help="Hire a child agent (v1: use 'hire' instead)")
     ag.add_argument("--name", required=True)
     ag.add_argument("--role", default="concierge")
     ag.add_argument("--about", default="")
-    ag.add_argument("--no-birth-post", action="store_true", help="Skip audit-channel birth post")
+    ag.add_argument("--clause", default="", help="Purpose clause for the agent")
+    ag.add_argument("--resume", default="", help="Resume JSON string or file path")
+    ag.add_argument("--no-birth-post", action="store_true", help="Skip roster birth post")
 
-    pr = sub.add_parser("create-project", help="Create a project channel + NIP-34 repo")
+    pr = sub.add_parser("create-project", help="Create or propose a project")
     pr.add_argument("--name", required=True)
     pr.add_argument("--description", default="")
     pr.add_argument("--goal", default="")
     pr.add_argument("--channel", default="", help="Optional existing channel UUID")
+    _add_clause_and_approve(pr)
 
-    wf = sub.add_parser("create-workflow", help="Create a workflow channel + workflow")
+    wf = sub.add_parser("create-workflow", help="Create or propose a workflow")
     wf.add_argument("--name", required=True)
     wf.add_argument("--description", default="")
     wf.add_argument("--steps", default="")
     wf.add_argument("--channel", default="", help="Optional existing channel UUID")
+    _add_clause_and_approve(wf)
 
-    tp = sub.add_parser("create-template", help="Create a template as a NIP-23 note")
+    tp = sub.add_parser("create-template", help="Create or propose a template")
     tp.add_argument("--name", required=True)
     tp.add_argument("--description", default="")
     tp.add_argument("--source", default="")
+    _add_clause_and_approve(tp)
 
-    br = sub.add_parser("brainstorm", help="Post a brainstorm seed to a brainstorm channel")
+    br = sub.add_parser("brainstorm", help="Post a brainstorm seed")
     br.add_argument("--topic", required=True)
     br.add_argument("--channel", default="", help="Brainstorm channel UUID (or BUZZ_BRAINSTORM_CHANNEL_ID)")
+    _add_clause_and_approve(br)
+
+    h = sub.add_parser("hire", help="Hire a child agent with clause and resume")
+    h.add_argument("--name", required=True)
+    h.add_argument("--clause", required=True)
+    h.add_argument("--resume", required=True, help="Resume JSON or 'competence: a,b; forbidden: x,y' string")
+    h.add_argument("--supervisor", default="operator")
+    h.add_argument("--about", default="")
+    h.add_argument("--approve", action="store_true", help="Hire immediately instead of candidate")
+    h.add_argument("--no-roster-post", action="store_true")
+
+    prop = sub.add_parser("propose", help="Propose a channel/project/workflow/template/brainstorm")
+    prop.add_argument("--artifact", required=True, choices=["channel", "project", "workflow", "template", "brainstorm"])
+    prop.add_argument("--name", required=True)
+    prop.add_argument("--clause", required=True)
+    prop.add_argument("--description", default="")
+    prop.add_argument("--goal", default="")
+    prop.add_argument("--steps", default="")
+    prop.add_argument("--source", default="")
+    prop.add_argument("--topic", default="")
+
+    wp = sub.add_parser("propose-wp", help="Post a WP skeleton to #frameworks")
+    wp.add_argument("--topic", required=True)
+    wp.add_argument("--clause", required=True)
+    wp.add_argument("--problem", required=True)
+    wp.add_argument("--non-claims", required=True)
+    wp.add_argument("--acceptance", required=True)
+    wp.add_argument("--parent-proposal", default="")
+
+    gpush = sub.add_parser("git-push", help="Push the current branch to a Buzz NIP-34 repo")
+    gpush.add_argument("--repo", required=True, help="Repository name on Buzz (e.g. MyProject)")
+    gpush.add_argument("--branch", default="main")
+    gpush.add_argument("--owner-hex", default="", help="Owner pubkey hex (defaults to caller)")
+
+    gcommit = sub.add_parser("git-commit", help="Stage, commit, and push to a Buzz NIP-34 repo")
+    gcommit.add_argument("--repo", required=True)
+    gcommit.add_argument("--message", required=True)
+    gcommit.add_argument("--branch", default="main")
+    gcommit.add_argument("--owner-hex", default="")
+
+    gmerge = sub.add_parser("git-merge", help="Mark a Buzz PR as merged")
+    gmerge.add_argument("--pr-event-id", required=True)
+
+    gpro = sub.add_parser("git-pr-open", help="Open a Buzz pull request")
+    gpro.add_argument("--repo", required=True)
+    gpro.add_argument("--title", required=True)
+    gpro.add_argument("--body", required=True)
+    gpro.add_argument("--source", default="main")
+    gpro.add_argument("--target", default="main")
 
     args = parser.parse_args()
 
-    if not os.environ.get("BUZZ_PRIVATE_KEY"):
+    if not os.environ.get("BUZZ_PRIVATE_KEY") and args.cmd not in ("git-push", "git-commit", "git-merge", "git-pr-open"):
         print("[!] BUZZ_PRIVATE_KEY (parent key) is required", file=sys.stderr)
         return 1
 
     if args.cmd == "create-channel":
-        channel_id = create_channel(args.name, args.description, args.visibility)
-        return 0 if channel_id else 1
+        if not args.clause:
+            print("[!] create-channel requires --clause", file=sys.stderr)
+            return 1
+        if args.approve or _creation_approved():
+            channel_id = create_channel(args.name, args.description, args.visibility)
+            return 0 if channel_id else 1
+        result = propose("channel", args.name, args.clause, description=args.description)
+        if result:
+            print(json.dumps(result, indent=2))
+        return 0 if result else 1
 
     if args.cmd == "create-project":
-        result = create_project(args.name, args.description, args.goal, channel_id=args.channel or None)
+        if not args.clause:
+            print("[!] create-project requires --clause", file=sys.stderr)
+            return 1
+        if args.approve or _creation_approved():
+            result = create_project(args.name, args.description, args.goal, channel_id=args.channel or None)
+        else:
+            result = propose("project", args.name, args.clause, description=args.description, goal=args.goal)
         if result:
             print(json.dumps(result, indent=2))
         return 0 if result else 1
 
     if args.cmd == "create-workflow":
-        result = create_workflow(args.name, args.description, args.steps, channel_id=args.channel or None)
+        if not args.clause:
+            print("[!] create-workflow requires --clause", file=sys.stderr)
+            return 1
+        if args.approve or _creation_approved():
+            result = create_workflow(args.name, args.description, args.steps, channel_id=args.channel or None)
+        else:
+            result = propose("workflow", args.name, args.clause, description=args.description, steps=args.steps)
         if result:
             print(json.dumps(result, indent=2))
         return 0 if result else 1
 
     if args.cmd == "create-template":
-        result = create_template(args.name, args.description, args.source)
+        if not args.clause:
+            print("[!] create-template requires --clause", file=sys.stderr)
+            return 1
+        if args.approve or _creation_approved():
+            result = create_template(args.name, args.description, args.source)
+        else:
+            result = propose("template", args.name, args.clause, description=args.description, source=args.source)
         if result:
             print(json.dumps(result, indent=2))
         return 0 if result else 1
 
     if args.cmd == "brainstorm":
+        if not args.clause:
+            print("[!] brainstorm requires --clause", file=sys.stderr)
+            return 1
         channel_id = args.channel or os.environ.get("BUZZ_BRAINSTORM_CHANNEL_ID", "")
-        ok = brainstorm(args.topic, channel_id)
+        if not channel_id:
+            print("[!] no brainstorm channel configured", file=sys.stderr)
+            return 1
+        if args.approve or _creation_approved():
+            ok = brainstorm(args.topic, channel_id)
+        else:
+            result = propose("brainstorm", args.topic, args.clause, topic=args.topic)
+            ok = bool(result)
         if ok:
             print(json.dumps({"topic": args.topic, "channel_id": channel_id, "status": "seeded"}, indent=2))
         return 0 if ok else 1
 
     if args.cmd == "create-agent":
-        result = create_agent(args.name, args.role, args.about, post_birth=not args.no_birth_post)
+        print(
+            "[!] create-agent is deprecated; use "
+            "`hire --name <n> --clause P-... --resume ... [--approve]`",
+            file=sys.stderr,
+        )
+        if not args.clause or not args.resume:
+            print("[!] create-agent requires --clause and --resume (charter v1 hire bar)", file=sys.stderr)
+            return 1
+        # Never auto-approve: same bar as hire (candidate unless mint override).
+        approved = _creation_approved()
+        if approved:
+            print("[*] mint override active — hiring as approved", file=sys.stderr)
+        result = hire_agent(
+            args.name,
+            args.clause,
+            args.resume,
+            supervisor="operator",
+            about=args.about,
+            post_birth=not args.no_birth_post,
+            approved=approved,
+        )
         if result:
             print(json.dumps({k: v for k, v in result.items() if k != "nsec"}, indent=2))
             print(f"[*] child nsec stored in: {result['env_path']}")
             return 0
         return 1
+
+    if args.cmd == "hire":
+        approved = bool(args.approve) or _creation_approved()
+        result = hire_agent(
+            args.name,
+            args.clause,
+            args.resume,
+            supervisor=args.supervisor,
+            about=args.about,
+            post_birth=not args.no_roster_post,
+            approved=approved,
+        )
+        if result:
+            print(json.dumps({k: v for k, v in result.items() if k != "nsec"}, indent=2))
+            print(f"[*] child nsec stored in: {result['env_path']}")
+            if result.get("status") == "candidate":
+                print("[*] status=candidate (ENABLED off until operator --approve / mint allow-list)")
+            return 0
+        return 1
+
+    if args.cmd == "propose":
+        result = propose(args.artifact, args.name, args.clause, description=args.description, goal=args.goal, steps=args.steps, source=args.source, topic=args.topic)
+        if result:
+            print(json.dumps(result, indent=2))
+        return 0 if result else 1
+
+    if args.cmd == "propose-wp":
+        result = propose_wp(args.topic, args.clause, args.problem, args.non_claims, args.acceptance, parent_proposal=args.parent_proposal)
+        if result:
+            print(json.dumps(result, indent=2))
+        return 0 if result else 1
+
+    if args.cmd in ("git-push", "git-commit", "git-merge", "git-pr-open"):
+        factory_cmd = [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "buzz_git.py"),
+        ]
+        if args.cmd == "git-push":
+            factory_cmd += ["push", args.repo, args.branch]
+        elif args.cmd == "git-commit":
+            factory_cmd += ["commit", args.repo, args.message, args.branch]
+        elif args.cmd == "git-merge":
+            factory_cmd += ["merge", args.pr_event_id]
+        elif args.cmd == "git-pr-open":
+            factory_cmd += ["pr-open", args.repo, args.title, args.body]
+
+        env = os.environ.copy()
+        env["BUZZ_CLI_PATH"] = _cli_path()
+        env["BUZZ_HELPER_PATH"] = _helper_path()
+        env["BUZZ_RELAY_HTTP"] = _raw_to_http(os.environ.get("BUZZ_RELAY_URL", "wss://qortroller.communities.buzz.xyz"))
+        try:
+            result = subprocess.run(
+                factory_cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=REPO_ROOT,
+                env=env,
+                shell=False,
+            )
+            if result.returncode == 0:
+                print(result.stdout.strip())
+                return 0
+            print(f"[!] {args.cmd} failed:\n{result.stderr.strip()[:1000]}", file=sys.stderr)
+            return 1
+        except Exception as e:
+            print(f"[!] {args.cmd} error: {e}", file=sys.stderr)
+            return 1
 
     return 1
 

@@ -1,11 +1,10 @@
-# QorTroller Concierge — Buzz Agent Pack
+# Retina — Buzz Agent Pack
 
 A gamer-facing self-service concierge for QorTroller, modeled on the QorT (Rig Steward) pack.
 
-- **Model:** `xai:grok-4.5`
-- **Provider:** `xai`
-- **Runtime:** `goose`
-- **ACP harness default for relay:** `grok-build`
+- **Model:** `z-ai/glm-5.2`
+- **Runtime:** `hermes`
+- **Respond to:** `owner-only`
 
 ## Import into Buzz
 
@@ -13,7 +12,8 @@ The simplest way is the pre-built `.agent.json` snapshot:
 
 1. Open Buzz Desktop → Settings → Agents → Import Agent.
 2. Select this file: `buzz-persona-qortroller-concierge/qortroller-concierge.agent.json`.
-3. The agent is `QorTroller Concierge` and responds to DMs and mentions.
+3. The agent is `Retina` and responds to DMs and mentions.
+4. Set Runtime / Harness to `hermes` if Buzz asks.
 
 ## Rebuild the snapshot
 
@@ -31,10 +31,10 @@ python buzz-persona-qortroller-concierge/build_agent_snapshot.py
 - `build_agent_snapshot.py` — assembles the snapshot.
 - `qortroller-concierge.agent.json` — pre-built single-file agent snapshot.
 
-## What the Concierge can do
+## What Retina can do
 
 - Answer DMs: `status`, `analytics`, `claim <token> <device>`, `help`.
-- Create Buzz artifacts: `create agent/channel/project/workflow/template`.
+- Propose/hire: `propose <...>` and `hire <name> --clause P-...`.
 - Seed brainstorms: `brainstorm <topic>`.
 - Relay safe `@EA` read/diagnose commands via `ask_ea` when the caller is an operator.
 

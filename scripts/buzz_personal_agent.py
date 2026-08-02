@@ -79,6 +79,7 @@ class AgentConfig:
     bridge_api_key: str
     bot_name: str
     bot_about: str
+    persona_pack_file: str
     private_key: str
     ioid_token: str
     device_id: str
@@ -87,6 +88,33 @@ class AgentConfig:
     dry_run: bool
     dm_ids: list[str]
     lobby_channel_id: str
+    greet_on_start: bool
+    greeting_text: str
+
+
+def _load_persona_pack(path: Optional[str]) -> tuple[str, str, str]:
+    """Load display name and about from a Buzz agent snapshot .agent.json.
+
+    Returns (name, about, pack_file_name). Defaults are used if the pack is
+    missing or unreadable so the agent can still start.
+    """
+    default_name = "Retina"
+    default_about = "Gamer self-service agent for QorTroller. I only answer your own bridge queries."
+    if path:
+        pack_path = Path(path)
+    else:
+        pack_path = REPO_ROOT / "buzz-persona-qortroller-concierge" / "qortroller-concierge.agent.json"
+    if not pack_path.exists():
+        return default_name, default_about, ""
+    try:
+        data = json.loads(pack_path.read_text(encoding="utf-8"))
+        profile = data.get("profile", {})
+        name = profile.get("displayName") or default_name
+        about = profile.get("about") or default_about
+        return name, about, pack_path.name
+    except Exception as e:
+        _log().warning("failed to load persona pack %s: %s", pack_path, e)
+        return default_name, default_about, ""
 
 
 def _load_config() -> AgentConfig:
@@ -96,16 +124,16 @@ def _load_config() -> AgentConfig:
             "BUZZ_PRIVATE_KEY is required. This is the gamer key, not an operator key. "
             "Never commit it."
         )
+    pack_path = os.environ.get("BUZZ_PERSONAL_AGENT_PERSONA_PACK", "")
+    pack_name, pack_about, pack_file = _load_persona_pack(pack_path)
     return AgentConfig(
         enabled=os.environ.get("BUZZ_PERSONAL_AGENT_ENABLED", "0") == "1",
         relay_url=os.environ.get("BUZZ_RELAY_URL", "ws://localhost:3000").rstrip("/"),
         bridge_base_url=os.environ.get("BRIDGE_BASE_URL", "http://localhost:8000").rstrip("/"),
         bridge_api_key=os.environ.get("BRIDGE_API_KEY", ""),
-        bot_name=os.environ.get("BUZZ_PERSONAL_AGENT_NAME", "QorTroller Concierge"),
-        bot_about=os.environ.get(
-            "BUZZ_PERSONAL_AGENT_ABOUT",
-            "Gamer self-service agent for QorTroller. I only answer your own bridge queries.",
-        ),
+        bot_name=os.environ.get("BUZZ_PERSONAL_AGENT_NAME") or pack_name,
+        bot_about=os.environ.get("BUZZ_PERSONAL_AGENT_ABOUT") or pack_about,
+        persona_pack_file=pack_file,
         private_key=pk,
         ioid_token=os.environ.get("PERSONAL_AGENT_IOID_TOKEN", "498"),
         device_id=os.environ.get("PERSONAL_AGENT_DEVICE_ID", "581a836c"),
@@ -122,6 +150,12 @@ def _load_config() -> AgentConfig:
             if c.strip()
         ],
         lobby_channel_id=os.environ.get("BUZZ_LOBBY_CHANNEL_ID", ""),
+        greet_on_start=os.environ.get("BUZZ_PERSONAL_AGENT_GREET_ON_START", "0") == "1",
+        greeting_text=os.environ.get(
+            "BUZZ_PERSONAL_AGENT_GREETING",
+            "Hello — I'm your Retina, running under my own agent key with the Grok 4.5 persona pack loaded. "
+            "I can answer status, analytics, claim, propose, hire, and brainstorm. DM me any time.",
+        ),
     )
 
 
@@ -201,6 +235,18 @@ class BuzzCliClient:
         return self._run(*args)
 
 
+def _send_startup_greeting(client: BuzzCliClient, cfg: AgentConfig) -> None:
+    """Send a one-time greeting to each configured DM on startup.
+
+    This is what makes the Concierge feel agentic — it reaches out first.
+    """
+    if not cfg.greet_on_start or not cfg.dm_ids:
+        return
+    for dm_id in cfg.dm_ids:
+        _log().info("sending startup greeting to DM %s", dm_id)
+        client.send_message(dm_id, cfg.greeting_text)
+
+
 def _load_state() -> dict:
     if STATE_FILE.exists():
         try:
@@ -252,18 +298,29 @@ def _fmt_self_analytics(data: Optional[dict]) -> str:
     return f"Self-analytics digest:\n```json\n{json.dumps(data, indent=2)}\n```"
 
 
-def _handle_help() -> str:
+def _handle_help(cfg: AgentConfig) -> str:
+    pack_note = ""
+    if cfg.persona_pack_file:
+        pack_note = (
+            f"\nThis relay runs from the Buzz persona pack `{cfg.persona_pack_file}`. "
+            "You can also import `buzz-persona-qortroller-concierge/qortroller-concierge.agent.json` "
+            "as a managed agent in Buzz Desktop.\n"
+        )
     return (
-        "I can answer these gamer-self questions:\n"
-        "- `status` — your current session / bridge status\n"
+        "Hey — here's what I can do for you:\n"
+        "- `status` — check your current session / bridge status\n"
         "- `analytics` — your own verified data summary\n"
         "- `claim <token> <device>` — post your ioID claim to #lobby\n"
-        "- `create <agent|channel|project|workflow|template> <name> [...]` — mint a new Buzz artifact\n"
-        "- `brainstorm <topic>` — seed a brainstorm in the community\n"
-        "- `help` — this message\n\n"
+        "- `propose <channel|project|workflow|template|brainstorm> <clause> <name> [desc...]` — propose a new Buzz artifact\n"
+        "- `hire <name> --clause P-... --resume \"competence: a,b; forbidden: x,y\"` — hire a child agent\n"
+        "- `git push <repo>` / `git commit <repo> <message>` / `git merge <pr-id>` / `git pr-open <repo> <title> <body>`\n"
+        "- `brainstorm <topic>` — seed a brainstorm (P-FRM by default)\n"
+        "- `help` — bring this list back\n\n"
         "If `BUZZ_LOBBY_CHANNEL_ID` is set, `claim` actually posts.\n"
-        "`create` and `brainstorm` call `scripts/buzz_agent_factory.py` with your key.\n"
-        "I do not run @EA commands and I never ask for a private key."
+        "`propose` and `hire` run `scripts/buzz_agent_factory.py` with your key.\n"
+        "By default I *propose*, not mint. Use `propose ... approve` only if you are the operator.\n"
+        "I don't run @EA operator commands and I never ask for a private key."
+        + pack_note
     )
 
 
@@ -330,48 +387,32 @@ def _parse_command(text: str) -> tuple[str, list[str]]:
     return parts[0], parts[1:]
 
 
-def _handle_factory(cfg: AgentConfig, cmd: str, args: list[str]) -> str:
-    """Run buzz_agent_factory.py to create an agent, channel, project, etc."""
-    if not args:
+def _handle_propose(cfg: AgentConfig, args: list[str]) -> str:
+    """Run buzz_agent_factory.py to propose a channel/project/workflow/template/brainstorm."""
+    if len(args) < 3:
         return (
-            "Usage: `create <agent|channel|project|workflow|template> <name> [args...]`\n"
+            "Usage: `propose <channel|project|workflow|template|brainstorm> <clause> <name> [desc...]`\n"
             "Examples:\n"
-            "- `create agent AlphaBot watcher`\n"
-            "- `create channel brainstorm Agent brainstorming room`\n"
-            "- `create project SAP-Portal Make SAP jobs visible`\n"
-            "- `create workflow Claim-Flow define,execute,verify`\n"
-            "- `create template Onboarding-Template`\n"
-            "- `brainstorm What if agents self-onboard via ioID?`"
+            "- `propose channel P-SOV lobby-faq Gamer FAQ room`\n"
+            "- `propose project P-FRM session-postcard Explain postcards`\n"
+            "- `propose brainstorm P-FRM self-onboard How could agents self-onboard via ioID?`"
         )
 
     artifact = args[0]
-    name = args[1] if len(args) > 1 else ""
-    rest = args[2:]
-    if not name:
-        return f"I need a name for the {artifact}."
+    clause = args[1]
+    name = args[2]
+    rest = args[3:]
+    desc = " ".join(rest) if rest else ""
 
-    if artifact not in ("agent", "channel", "project", "workflow", "template"):
-        return f"I can create agent/channel/project/workflow/template, not '{artifact}'."
+    if artifact not in ("channel", "project", "workflow", "template", "brainstorm"):
+        return f"I can propose channel/project/workflow/template/brainstorm, not '{artifact}'."
 
     if cfg.dry_run:
-        return f"[dry-run] I would create a {artifact} named '{name}'."
+        return f"[dry-run] I would propose a {artifact} '{name}' under {clause}."
 
-    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py"]
-    if artifact == "agent":
-        role = rest[0] if rest else "concierge"
-        factory_cmd += ["create-agent", "--name", name, "--role", role]
-    elif artifact == "channel":
-        desc = " ".join(rest) if rest else f"{name} channel"
-        factory_cmd += ["create-channel", "--name", name, "--description", desc]
-    elif artifact == "project":
-        goal = " ".join(rest) if rest else "expand QorTroller"
-        factory_cmd += ["create-project", "--name", name, "--goal", goal]
-    elif artifact == "workflow":
-        steps = ",".join(rest) if rest else "define,execute,verify"
-        factory_cmd += ["create-workflow", "--name", name, "--steps", steps]
-    elif artifact == "template":
-        desc = " ".join(rest) if rest else f"{name} template"
-        factory_cmd += ["create-template", "--name", name, "--description", desc]
+    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "propose", "--artifact", artifact, "--name", name, "--clause", clause]
+    if desc:
+        factory_cmd += ["--description", desc]
 
     env = os.environ.copy()
     env["BUZZ_PRIVATE_KEY"] = cfg.private_key
@@ -390,24 +431,85 @@ def _handle_factory(cfg: AgentConfig, cmd: str, args: list[str]) -> str:
             shell=False,
         )
         if result.returncode == 0:
-            return f"{artifact} '{name}' created:\n```\n{result.stdout.strip()[:1500]}\n```"
-        return f"{artifact} creation failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+            return f"Proposed {artifact} '{name}' ({clause}):\n```\n{result.stdout.strip()[:1500]}\n```"
+        return f"Proposal failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+    except Exception as e:
+        return f"factory error: {e}"
+
+
+def _handle_hire(cfg: AgentConfig, args: list[str]) -> str:
+    """Run buzz_agent_factory.py hire to create a child agent with clause and resume."""
+    if not args:
+        return (
+            "Usage: `hire <name> --clause P-... --resume \"competence: a,b; forbidden: x,y\"`\n"
+            "Example: `hire Seatwarden --clause P-VSS --resume \"competence: seat status, flag-down; forbidden: VSS OPEN, chain, shell\"`"
+        )
+
+    name = args[0]
+    # Parse --clause and --resume flags from remaining args
+    clause = ""
+    resume = ""
+    approve = False
+    i = 1
+    while i < len(args):
+        if args[i] == "--clause" and i + 1 < len(args):
+            clause = args[i + 1]
+            i += 2
+        elif args[i] == "--resume" and i + 1 < len(args):
+            resume = args[i + 1]
+            i += 2
+        elif args[i] == "--approve":
+            approve = True
+            i += 1
+        else:
+            i += 1
+
+    if not clause or not resume:
+        return "I need `--clause P-...` and `--resume \"competence: ...; forbidden: ...\"`."
+
+    if cfg.dry_run:
+        return f"[dry-run] I would hire '{name}' under {clause} with resume: {resume}"
+
+    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "hire", "--name", name, "--clause", clause, "--resume", resume]
+    if approve:
+        factory_cmd.append("--approve")
+
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return f"Hired '{name}' ({clause}):\n```\n{result.stdout.strip()[:1500]}\n```"
+        return f"Hire failed:\n```\n{result.stderr.strip()[:1000]}\n```"
     except Exception as e:
         return f"factory error: {e}"
 
 
 def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
     if not args:
-        return "Usage: `brainstorm <topic>`"
-    topic = " ".join(args)
+        return "Usage: `brainstorm <topic>` or `brainstorm <clause> <topic>`"
+    clause = args[0] if args[0].startswith("P-") else "P-FRM"
+    topic = " ".join(args[1:]) if args[0].startswith("P-") else " ".join(args)
+    if not topic:
+        return "I need a topic."
     channel_id = os.environ.get("BUZZ_BRAINSTORM_CHANNEL_ID", "")
     if not channel_id:
         return "I need `BUZZ_BRAINSTORM_CHANNEL_ID` set to post a brainstorm."
     if cfg.dry_run:
-        return f"[dry-run] I would brainstorm: {topic}"
+        return f"[dry-run] I would brainstorm '{topic}' under {clause}."
     factory_cmd = [
         sys.executable, "scripts/buzz_agent_factory.py",
-        "brainstorm", "--topic", topic, "--channel", channel_id,
+        "brainstorm", "--topic", topic, "--channel", channel_id, "--clause", clause,
     ]
     env = os.environ.copy()
     env["BUZZ_PRIVATE_KEY"] = cfg.private_key
@@ -423,10 +525,181 @@ def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
             shell=False,
         )
         if result.returncode == 0:
-            return f"Brainstorm seeded: {topic}"
+            return f"Brainstorm seeded: {topic} ({clause})"
         return f"Brainstorm failed:\n```\n{result.stderr.strip()[:1000]}\n```"
     except Exception as e:
         return f"brainstorm error: {e}"
+
+
+def _handle_git(cfg: AgentConfig, args: list[str]) -> str:
+    """Run buzz_agent_factory.py git subcommands: push, commit, merge, pr-open."""
+    if not args:
+        return (
+            "Usage:\n"
+            "- `git push <repo> [branch]`\n"
+            "- `git commit <repo> <message> [branch]`\n"
+            "- `git merge <pr-event-id>`\n"
+            "- `git pr-open <repo> <title> <body>`"
+        )
+
+    action = args[0]
+    rest = args[1:]
+
+    if action == "push":
+        if not rest:
+            return "Usage: `git push <repo> [branch]`"
+        repo, *branch = rest
+        branch = branch[0] if branch else "main"
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-push", "--repo", repo, "--branch", branch]
+    elif action == "commit":
+        if len(rest) < 2:
+            return "Usage: `git commit <repo> <message> [branch]`"
+        repo = rest[0]
+        message = rest[1]
+        branch = rest[2] if len(rest) > 2 else "main"
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-commit", "--repo", repo, "--message", message, "--branch", branch]
+    elif action == "merge":
+        if not rest:
+            return "Usage: `git merge <pr-event-id>`"
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-merge", "--pr-event-id", rest[0]]
+    elif action == "pr-open":
+        if len(rest) < 3:
+            return "Usage: `git pr-open <repo> <title> <body>`"
+        repo, title, body = rest[0], rest[1], " ".join(rest[2:])
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-pr-open", "--repo", repo, "--title", title, "--body", body]
+    else:
+        return f"Unknown git action: `{action}`. Try push, commit, merge, or pr-open."
+
+    if cfg.dry_run:
+        return f"[dry-run] I would run: {' '.join(factory_cmd)}"
+
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_OWNER_PRIVATE_KEY"] = os.environ.get("BUZZ_OWNER_PRIVATE_KEY", "")
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+    env["BUZZ_AUTH_TAG"] = os.environ.get("BUZZ_AUTH_TAG", "")
+    env["BUZZ_CLI_PATH"] = str(cfg.cli_path)
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()[:1500]
+        return f"Git command failed:\n```\n{result.stderr.strip()[:1500]}\n```"
+    except Exception as e:
+        return f"git error: {e}"
+
+
+def _handle_chat(text: str, cfg: AgentConfig) -> Optional[str]:
+    """Friendly natural-language responses for small talk and QorTroller explainers.
+
+    Returns None if the message should fall through to the unknown fallback.
+    """
+    lowered = text.lower()
+
+    # Greetings
+    if any(lowered.startswith(w) for w in ("hello", "hi", "hey", "yo", "sup")):
+        return (
+            f"Hey — I'm {cfg.bot_name}. Ask me about `status`, `analytics`, "
+            "`claim`, `create`, or `brainstorm`, or just ask what QorTroller is."
+        )
+
+    # Farewells
+    if any(w in lowered for w in ("bye", "goodbye", "see ya", "later")):
+        return "Catch you later."
+
+    # Thanks
+    if any(w in lowered for w in ("thank", "thx", "thanks")):
+        return "You're welcome."
+
+    # How the agent feels about QorTroller
+    if any(p in lowered for p in (
+        "how do you feel",
+        "what do you think",
+        "what is your opinion",
+        "do you like qortroller",
+        "do you love qortroller",
+    )):
+        return (
+            "I think QorTroller is the real deal. Gamers and their controllers as the "
+            "cryptographic agency-holders of their own data, with cheating made "
+            "cryptographically inexpressible — that's the V.A.P.I. thesis in action. "
+            "What part do you want to dig into?"
+        )
+
+    # QorTroller explainer
+    if any(p in lowered for p in (
+        "what is qortroller",
+        "what's qortroller",
+        "tell me about qortroller",
+        "explain qortroller",
+    )):
+        return (
+            "QorTroller is the reference V.A.P.I. implementation — a DePIN protocol where "
+            "the gamer and their controller are also the cryptographic owners of the data "
+            "they generate. It runs on IoTeX, uses the certified Sony DualShock Edge, and "
+            "produces 228-byte Proof of Autonomous Cognition records per cognition cycle. "
+            "The big idea: honest gamers reach `isFullyEligible()` on-chain without needing "
+            "to be punished for cheating, because cheating becomes cryptographically "
+            "inexpressible."
+        )
+
+    # ioID explainer
+    if any(p in lowered for p in (
+        "what is ioid",
+        "what's ioid",
+        "explain ioid",
+        "tell me about ioid",
+    )):
+        return (
+            "ioID is the IoTeX decentralized identity layer. In QorTroller, your "
+            "controller (the certified Edge, device id `581a836c`) is bound to an ioID "
+            "token and an ERC-6551 token-bound account, so the device is owned by your "
+            "DID, not the other way around. It lets the gamer prove device provenance "
+            "without revealing raw biometrics."
+        )
+
+    # PoAC explainer
+    if any(p in lowered for p in (
+        "what is poac",
+        "what's poac",
+        "proof of autonomous cognition",
+    )):
+        return (
+            "PoAC — Proof of Autonomous Cognition — is the 228-byte attestation record "
+            "QorTroller produces each cognition cycle. It binds controller input, session "
+            "context, and a cryptographic commitment so the gamer can prove their "
+            "gameplay is genuine without leaking the raw HID/IMU substrate."
+        )
+
+    # PoEP explainer
+    if any(p in lowered for p in (
+        "what is poep",
+        "what's poep",
+        "proof of embodied play",
+    )):
+        return (
+            "PoEP — Proof of Embodied Play — is the controller-side liveness check. It "
+            "proves a real human is at the controls using reflex/IMU signals from the "
+            "DualShock Edge, not just a script replaying inputs."
+        )
+
+    return None
+
+
+def _handle_unknown(cfg: AgentConfig) -> str:
+    return (
+        "I didn't catch that as a command I can run right now. "
+        "I do `status`, `analytics`, `claim`, `propose`, `hire`, and `brainstorm`. "
+        "You can also ask me about QorTroller, ioID, PoAC, or PoEP. "
+        "For operator stuff like @EA, hit up #rig-ops."
+    )
 
 
 def _process_message(message: dict, cfg: AgentConfig) -> str:
@@ -447,14 +720,27 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
     if cmd in ("claim", "ioid"):
         return _handle_claim(cfg, args)
 
+    if cmd in ("propose", "prop"):
+        return _handle_propose(cfg, args)
+
+    if cmd in ("hire",):
+        return _handle_hire(cfg, args)
+
     if cmd in ("create", "mint"):
-        return _handle_factory(cfg, cmd, args)
+        return (
+            "`create` is now `propose` (or `hire` for agents). "
+            "Try: `propose channel P-SOV my-channel description` or "
+            "`hire my-agent --clause P-... --resume \"competence: ...\"`"
+        )
 
     if cmd in ("brainstorm", "bs"):
         return _handle_brainstorm(cfg, args)
 
+    if cmd in ("git",):
+        return _handle_git(cfg, args)
+
     if cmd in ("help", "?", "h"):
-        return _handle_help()
+        return _handle_help(cfg)
 
     # Reject anything that looks like an operator command.
     if text.startswith("@ea") or text.startswith("devin @ea") or text.startswith("run "):
@@ -463,10 +749,11 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
             "For operator commands like @EA, use #rig-ops with an operator key."
         )
 
-    return (
-        "I didn't understand that. Send `help` for what I can do. "
-        "I only handle gamer-self bridge queries."
-    )
+    chat_reply = _handle_chat(text, cfg)
+    if chat_reply:
+        return chat_reply
+
+    return _handle_unknown(cfg)
 
 
 def _is_from_self(message: dict, my_pubkey: str) -> bool:
@@ -562,6 +849,10 @@ def main() -> int:
         cfg.bot_name, my_npub or my_pk, cfg.relay_url, cfg.dry_run
     )
     _log().info("DM me at %s to trigger status/analytics/claim/help", my_npub or my_pk)
+    if cfg.persona_pack_file:
+        _log().info("loaded persona pack: %s", cfg.persona_pack_file)
+
+    _send_startup_greeting(client, cfg)
 
     try:
         while True:

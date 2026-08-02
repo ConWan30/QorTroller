@@ -1,7 +1,7 @@
 {
   "$schema": "https://open-plugin-spec.org/schema/v1/plugin.json",
   "id": "com.qortroller.concierge",
-  "name": "QorTroller Concierge",
+  "name": "Retina",
   "version": "0.1.0",
   "description": "Gamer-facing self-service and agentic creation for QorTroller — status, analytics, ioID claims, and Buzz artifact creation without holding keys.",
   "author": "QorTroller Engineering",
@@ -17,7 +17,7 @@
   "pack_instructions": "instructions.md",
   "mcp_config": ".mcp.json",
   "defaults": {
-    "model": "xai:grok-4.5",
+    "model": "z-ai/glm-5.2",
     "temperature": 0.3,
     "max_context_tokens": 128000,
     "triggers": {

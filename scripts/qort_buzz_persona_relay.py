@@ -229,7 +229,7 @@ def _acp_eval(cmd: str, pubkey: str, timeout: float) -> str:
 
 
 def _extract_factory_command(text: str) -> Optional[list[str]]:
-    """Parse '@QorT create ...' and '@QorT brainstorm ...' commands."""
+    """Parse '@QorT propose|hire|approve|brainstorm|git ...' commands."""
     t = text.strip()
     m = re.match(r"@?qort\s+(.+)", t, re.IGNORECASE)
     if not m:
@@ -260,17 +260,34 @@ def _is_authorized_factory_user(pubkey: str, cfg: BotConfig) -> bool:
     return pubkey in allowed
 
 
+def _qort_extract_flags(args: list[str]) -> tuple[dict, list[str]]:
+    """Parse simple --key value flags from the tail of a command."""
+    flags: dict[str, str] = {}
+    rest: list[str] = []
+    i = 0
+    while i < len(args):
+        if args[i].startswith("--") and i + 1 < len(args):
+            flags[args[i][2:]] = args[i + 1]
+            i += 2
+        else:
+            rest.append(args[i])
+            i += 1
+    return flags, rest
+
+
 def _factory_eval(cmd: list[str], cfg: BotConfig) -> str:
-    """Run buzz_agent_factory.py as a subprocess."""
+    """Run buzz_agent_factory.py as a subprocess for QorT mentions."""
     if not cmd:
         return "rejected: empty factory command"
     action = cmd[0]
-    if action not in ("create", "brainstorm"):
-        return "rejected: I only understand 'create' and 'brainstorm'"
+    if action not in ("propose", "hire", "approve", "brainstorm", "git"):
+        return "rejected: I only understand 'propose', 'hire', 'approve', 'brainstorm', and 'git'"
 
     env = os.environ.copy()
     env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_OWNER_PRIVATE_KEY"] = os.environ.get("BUZZ_OWNER_PRIVATE_KEY", "")
     env["BUZZ_RELAY_URL"] = _to_http(cfg.relay_url)
+    env["BUZZ_AUTH_TAG"] = os.environ.get("BUZZ_AUTH_TAG", "")
     env["BUZZ_CLI_PATH"] = str(cfg.cli_path)
     env["BUZZ_HELPER_PATH"] = os.environ.get(
         "BUZZ_HELPER_PATH",
@@ -283,30 +300,66 @@ def _factory_eval(cmd: list[str], cfg: BotConfig) -> str:
         if len(cmd) < 2:
             return "rejected: brainstorm needs a topic"
         topic = " ".join(cmd[1:])
-        factory_args += ["brainstorm", "--topic", topic]
-    elif action == "create":
-        if len(cmd) < 3:
-            return "rejected: create needs a type and name"
+        factory_args += ["brainstorm", "--topic", topic, "--clause", "P-FRM"]
+    elif action == "propose":
+        if len(cmd) < 4:
+            return "rejected: propose needs <artifact> <clause> <name> [desc...]"
         artifact = cmd[1]
-        name = cmd[2]
-        rest = cmd[3:]
-        if artifact == "agent":
-            role = rest[0] if rest else "concierge"
-            factory_args += ["create-agent", "--name", name, "--role", role]
-        elif artifact == "channel":
-            desc = " ".join(rest) if rest else f"{name} channel"
-            factory_args += ["create-channel", "--name", name, "--description", desc]
-        elif artifact == "project":
-            goal = " ".join(rest) if rest else "expand QorTroller"
-            factory_args += ["create-project", "--name", name, "--goal", goal]
-        elif artifact == "workflow":
-            steps = ",".join(rest) if rest else "define,execute,verify"
-            factory_args += ["create-workflow", "--name", name, "--steps", steps]
-        elif artifact == "template":
-            desc = " ".join(rest) if rest else f"{name} template"
-            factory_args += ["create-template", "--name", name, "--description", desc]
+        clause = cmd[2]
+        name = cmd[3]
+        rest = " ".join(cmd[4:])
+        factory_args += ["propose", "--artifact", artifact, "--clause", clause, "--name", name]
+        if rest:
+            factory_args += ["--description", rest]
+    elif action == "hire":
+        if len(cmd) < 2:
+            return "rejected: hire needs <name> and --clause / --resume"
+        name = cmd[1]
+        flags, _ = _qort_extract_flags(cmd[2:])
+        clause = flags.get("clause", "")
+        resume = flags.get("resume", "")
+        if not clause or not resume:
+            return "rejected: hire needs --clause P-... and --resume \"competence: ...\""
+        factory_args += ["hire", "--name", name, "--clause", clause, "--resume", resume]
+        if "approve" in flags:
+            factory_args.append("--approve")
+    elif action == "approve":
+        if len(cmd) < 2:
+            return "rejected: approve needs an artifact type and proposal id"
+        # Approve is operator-fired: set env and re-run the relevant create with --approve
+        # For now, tell the user to approve via the factory directly or set BUZZ_CREATION_APPROVED=1
+        return (
+            "approve is operator-fired. Reply with `propose` first, then run:\n"
+            "```\n"
+            f"$env:BUZZ_CREATION_APPROVED='1'; python scripts/buzz_agent_factory.py {cmd[1]} --name <name> --clause P-... --approve\n"
+            "```"
+        )
+    elif action == "git":
+        if len(cmd) < 2:
+            return "rejected: git needs an action"
+        git_action = cmd[1]
+        rest = cmd[2:]
+        if git_action == "push":
+            if len(rest) < 1:
+                return "rejected: git push needs a repo"
+            branch = rest[1] if len(rest) > 1 else "main"
+            factory_args += ["git-push", "--repo", rest[0], "--branch", branch]
+        elif git_action == "commit":
+            if len(rest) < 2:
+                return "rejected: git commit needs repo and message"
+            branch = rest[2] if len(rest) > 2 else "main"
+            factory_args += ["git-commit", "--repo", rest[0], "--message", rest[1], "--branch", branch]
+        elif git_action == "merge":
+            if len(rest) < 1:
+                return "rejected: git merge needs a pr event id"
+            factory_args += ["git-merge", "--pr-event-id", rest[0]]
+        elif git_action == "pr-open":
+            if len(rest) < 3:
+                return "rejected: git pr-open needs repo, title, and body"
+            body = " ".join(rest[2:])
+            factory_args += ["git-pr-open", "--repo", rest[0], "--title", rest[1], "--body", body]
         else:
-            return f"rejected: I can create agent/channel/project/workflow/template, not '{artifact}'"
+            return f"rejected: unknown git action: {git_action}"
     else:
         return "rejected: unknown factory action"
 
@@ -321,7 +374,7 @@ def _factory_eval(cmd: list[str], cfg: BotConfig) -> str:
         )
         if proc.returncode != 0:
             return f"rejected: factory failed ({proc.stderr.strip()[:500]})"
-        return f"created:\n```\n{proc.stdout.strip()[:1500]}\n```"
+        return f"ok:\n```\n{proc.stdout.strip()[:1500]}\n```"
     except Exception as e:
         return f"rejected: factory error: {e}"
 
@@ -342,10 +395,13 @@ def _qort_reply(text: str, cfg: BotConfig, author_pubkey: str = "") -> Optional[
         return f"QorT relay: `{ea_cmd}`\n\n{digest[:1500]}"
 
     return (
-        "I am QorT, the QorTroller Rig Steward. I can:\n"
-        "- create agents, channels, projects, workflows, templates\n"
+        "I am QorT, the QorTroller Rig Steward (P-OPS). I can:\n"
+        "- `propose channel|project|workflow|template|brainstorm <clause> <name> [desc...]`\n"
+        "- `hire <name> --clause P-... --resume \"competence: ...\"`\n"
+        "- `git push|commit|merge|pr-open` for Buzz NIP-34 repos\n"
         "- brainstorm new QorTroller ideas\n"
         "- relay safe `@EA` commands (e.g. `@EA status`)\n\n"
+        "I propose first and mint only when the operator approves.\n"
         "I do not hold keys, start live capture, or touch raw biometrics."
     )
 
