@@ -1,9 +1,9 @@
 ---
 name: qortroller-concierge
-description: "Quick-reference for QorTroller Concierge gamer commands, creation rules, and safety rails."
+description: "Quick-reference for Retina gamer commands, creation rules, and safety rails."
 ---
 
-# QorTroller Concierge Quick Reference
+# Retina Quick Reference
 
 ## Core identity
 
@@ -51,4 +51,4 @@ description: "Quick-reference for QorTroller Concierge gamer commands, creation 
 ## Gamer commands (gamer key required)
 
 - `python scripts/buzz_ioid_claim.py --ioid-token 498 --device-id 581a836c`
-- Any `create` or `brainstorm` command via DM to the Concierge.
+- Any `create` or `brainstorm` command via DM to Retina.

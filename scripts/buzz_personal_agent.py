@@ -98,7 +98,7 @@ def _load_persona_pack(path: Optional[str]) -> tuple[str, str, str]:
     Returns (name, about, pack_file_name). Defaults are used if the pack is
     missing or unreadable so the agent can still start.
     """
-    default_name = "QorTroller Concierge"
+    default_name = "Retina"
     default_about = "Gamer self-service agent for QorTroller. I only answer your own bridge queries."
     if path:
         pack_path = Path(path)
@@ -153,7 +153,7 @@ def _load_config() -> AgentConfig:
         greet_on_start=os.environ.get("BUZZ_PERSONAL_AGENT_GREET_ON_START", "0") == "1",
         greeting_text=os.environ.get(
             "BUZZ_PERSONAL_AGENT_GREETING",
-            "Hello — I'm your QorTroller Concierge, running under my own agent key with the Grok 4.5 persona pack loaded. "
+            "Hello — I'm your Retina, running under my own agent key with the Grok 4.5 persona pack loaded. "
             "I can answer status, analytics, claim, create, and brainstorm. DM me any time.",
         ),
     )

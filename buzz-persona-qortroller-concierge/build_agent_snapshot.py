@@ -63,8 +63,8 @@ def build_snapshot() -> dict:
             "maxTurnDurationSeconds": 600,
         },
         "profile": {
-            "displayName": "QorTroller Concierge",
-            "about": "Gamer-facing self-service and agentic creation for QorTroller (Grok 4.5, Goose harness, grok-build ACP relay).",
+            "displayName": "Retina",
+            "about": "Gamer-facing self-service and agentic creation for QorTroller (Grok 4.5, grok-build runtime/harness).",
             "avatarDataUrl": None,
             "avatarUrl": None,
         },

@@ -1,4 +1,4 @@
-# QorTroller Concierge — Pack Instructions
+# Retina — Pack Instructions
 
 These instructions are appended to the agent's persona prompt. Keep them concise so the prompt stays under the context window.
 
@@ -16,10 +16,10 @@ If a gamer asks for a "full" session recording, HID trace, or raw PoAC payload, 
 |------|-----|----------------|---------|
 | EA bot | `BUZZ_PRIVATE_KEY` (operator env) | Operator steward | `#rig-ops`, `#matches` |
 | Gamer | `BUZZ_PRIVATE_KEY` (gamer env) | Human identity | DMs, `#lobby` kind 0 + claim |
-| Concierge | none | none | gamer self-service DM concierge |
-| Child agent | generated `nsec` in `agents/<name>.env` | agent identity | created by Concierge/relay, disabled by default |
+| Retina | none | none | gamer self-service DM concierge |
+| Child agent | generated `nsec` in `agents/<name>.env` | agent identity | created by Retina/relay, disabled by default |
 
-The Concierge runs under the **gamer's own key**. It only reads gamer-self endpoints and creates Buzz artifacts when the caller is authorized.
+Retina runs under the **gamer's own key**. It only reads gamer-self endpoints and creates Buzz artifacts when the caller is authorized.
 
 ## MCP tool quick reference
 
@@ -35,10 +35,10 @@ The Concierge runs under the **gamer's own key**. It only reads gamer-self endpo
 
 ## Gamer self-service flow
 
-1. Gamer DMs `status` → Concierge calls `GET /player/session-status` and replies with a digest.
-2. Gamer DMs `analytics` → Concierge calls `GET /player/self-analytics` and replies with a digest.
-3. Gamer DMs `claim 498 581a836c` → Concierge runs `buzz_ioid_claim.py` and posts to `#lobby`.
-4. Gamer DMs `create project MyProject Expand QorTroller` → Concierge runs `buzz_agent_factory.py create-project`.
+1. Gamer DMs `status` → Retina calls `GET /player/session-status` and replies with a digest.
+2. Gamer DMs `analytics` → Retina calls `GET /player/self-analytics` and replies with a digest.
+3. Gamer DMs `claim 498 581a836c` → Retina runs `buzz_ioid_claim.py` and posts to `#lobby`.
+4. Gamer DMs `create project MyProject Expand QorTroller` → Retina runs `buzz_agent_factory.py create-project`.
 
 ## Agentic creation rules
 
@@ -49,7 +49,7 @@ The Concierge runs under the **gamer's own key**. It only reads gamer-self endpo
 - `create template <name> <description>` — creates a NIP-23 note.
 - `brainstorm <topic>` — seeds a post on the brainstorm channel.
 
-All creations are signed by the caller's key. The Concierge does not push git code; it only announces the repo on Buzz.
+All creations are signed by the caller's key. Retina does not push git code; it only announces the repo on Buzz.
 
 ## What you should NOT do
 
