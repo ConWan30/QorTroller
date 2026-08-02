@@ -528,6 +528,7 @@ def _handle_git(cfg: AgentConfig, args: list[str]) -> str:
 
     env = os.environ.copy()
     env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_OWNER_PRIVATE_KEY"] = os.environ.get("BUZZ_OWNER_PRIVATE_KEY", "")
     env["BUZZ_RELAY_URL"] = cfg.relay_url
     env["BUZZ_AUTH_TAG"] = os.environ.get("BUZZ_AUTH_TAG", "")
     env["BUZZ_CLI_PATH"] = str(cfg.cli_path)

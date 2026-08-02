@@ -23,15 +23,18 @@ DEFAULT_RELAY_HTTP = "https://qortroller.communities.buzz.xyz"
 
 
 def _buzz_env() -> dict:
-    """Build an env dict with NOSTR_PRIVATE_KEY mapped from BUZZ_PRIVATE_KEY."""
+    """Build an env dict with NOSTR_PRIVATE_KEY mapped from BUZZ_PRIVATE_KEY.
+
+    For repo-owner operations (merge, push to admin branch), set
+    `BUZZ_OWNER_PRIVATE_KEY`. It overrides `BUZZ_PRIVATE_KEY`.
+    """
     env = os.environ.copy()
-    pk = env.get("BUZZ_PRIVATE_KEY", "")
+    pk = env.get("BUZZ_OWNER_PRIVATE_KEY") or env.get("BUZZ_PRIVATE_KEY", "")
     if pk:
         env["NOSTR_PRIVATE_KEY"] = pk
-    if not env.get("BUZZ_AUTH_TAG"):
-        raise RuntimeError("BUZZ_AUTH_TAG is required for Buzz git auth")
+        env["BUZZ_PRIVATE_KEY"] = pk
     if not env.get("NOSTR_PRIVATE_KEY"):
-        raise RuntimeError("BUZZ_PRIVATE_KEY is required for Buzz git auth")
+        raise RuntimeError("BUZZ_PRIVATE_KEY or BUZZ_OWNER_PRIVATE_KEY is required for Buzz git auth")
     return env
 
 
@@ -144,7 +147,7 @@ def _pubkey_hex(private_key: str) -> str:
 
 def _ensure_remote(cwd: Path, repo_name: str, owner_hex: str | None = None) -> str:
     """Ensure the 'buzz' remote exists and points at the Buzz repo."""
-    env = _git_env()
+    env = _buzz_env()
     if owner_hex is None:
         owner_hex = os.environ.get("BUZZ_REPO_OWNER_HEX", "")
     if not owner_hex:
@@ -227,7 +230,7 @@ def buzz_merge_pr(pr_event_id: str) -> str:
     env = _buzz_env()
     cli = env.get("BUZZ_CLI_PATH", str(REPO_ROOT / "buzz" / "target" / "debug" / "buzz.exe"))
     result = subprocess.run(
-        [cli, "pr", "status", pr_event_id, "--status", "merged"],
+        [cli, "pr", "status", "--status", "merged", "--pr", pr_event_id],
         env=env,
         capture_output=True,
         text=True,
