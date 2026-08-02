@@ -1,6 +1,6 @@
 # Buzz Gamer Personal Agent — Runbook
 
-A gamer-facing DM concierge that runs under the **gamer's own `BUZZ_PRIVATE_KEY`**. It is **not** the operator `@EA` bot. You can set your own `BUZZ_PERSONAL_AGENT_NAME` and `BUZZ_PERSONAL_AGENT_ABOUT` so the agent has its own Buzz profile and is easy to DM.
+A gamer-facing DM concierge that runs under the **gamer's own `BUZZ_PRIVATE_KEY`**. It is **not** the operator `@EA` bot. `BUZZ_PERSONAL_AGENT_NAME` is used only in log messages and replies — it does **not** overwrite your personal Buzz profile.
 
 ## What it does
 
@@ -34,9 +34,8 @@ Anything starting with `@EA`, `devin @EA`, `run `, etc. is rejected.
    - `BUZZ_PRIVATE_KEY` — **your gamer key** (the agent signs posts with it)
    - `BUZZ_RELAY_URL` — e.g. `wss://qortroller.communities.buzz.xyz`
    - `BUZZ_LOBBY_CHANNEL_ID` — `#lobby` channel UUID
-   - `BUZZ_PERSONAL_AGENT_NAME` — your chosen display name
-   - `BUZZ_PERSONAL_AGENT_ABOUT` — your bio
-   - `BUZZ_PERSONAL_AGENT_SETUP_PROFILE=1` — publish your profile on startup
+   - `BUZZ_PERSONAL_AGENT_NAME` — agent display name for logs/replies (does NOT change your profile)
+   - `BUZZ_PERSONAL_AGENT_ABOUT` — agent bio for logs/replies (does NOT change your profile)
    - `BUZZ_PERSONAL_AGENT_DM_IDS` — DM UUID(s) to poll (optional but recommended)
    - `BRIDGE_BASE_URL` — e.g. `http://localhost:8000`
    - `BRIDGE_API_KEY` (if bridge requires it)

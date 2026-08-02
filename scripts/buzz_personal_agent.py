@@ -87,7 +87,6 @@ class AgentConfig:
     dry_run: bool
     dm_ids: list[str]
     lobby_channel_id: str
-    setup_profile: bool
 
 
 def _load_config() -> AgentConfig:
@@ -123,7 +122,6 @@ def _load_config() -> AgentConfig:
             if c.strip()
         ],
         lobby_channel_id=os.environ.get("BUZZ_LOBBY_CHANNEL_ID", ""),
-        setup_profile=os.environ.get("BUZZ_PERSONAL_AGENT_SETUP_PROFILE", "0") == "1",
     )
 
 
@@ -135,36 +133,6 @@ def _my_npub(private_key: str) -> str:
     except Exception as e:
         _log().warning("could not derive npub: %s", e)
         return ""
-
-
-def _setup_profile(cfg: AgentConfig) -> None:
-    """Set the agent's kind 0 profile so people can DM it by name."""
-    if not cfg.setup_profile or cfg.dry_run:
-        return
-    env = os.environ.copy()
-    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
-    env["BUZZ_RELAY_URL"] = cfg.relay_url
-    try:
-        result = subprocess.run(
-            [
-                str(cfg.cli_path),
-                "users", "set-profile",
-                "--name", cfg.bot_name,
-                "--about", cfg.bot_about,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=REPO_ROOT,
-            env=env,
-            shell=False,
-        )
-        if result.returncode == 0:
-            _log().info("kind 0 profile set: name=%s", cfg.bot_name)
-        else:
-            _log().warning("profile setup failed: %s", result.stderr.strip())
-    except Exception as e:
-        _log().warning("profile setup error: %s", e)
 
 
 def _to_http(url: str) -> str:
@@ -594,8 +562,6 @@ def main() -> int:
         cfg.bot_name, my_npub or my_pk, cfg.relay_url, cfg.dry_run
     )
     _log().info("DM me at %s to trigger status/analytics/claim/help", my_npub or my_pk)
-
-    _setup_profile(cfg)
 
     try:
         while True:
