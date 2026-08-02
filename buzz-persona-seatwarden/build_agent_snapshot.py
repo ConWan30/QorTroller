@@ -44,14 +44,25 @@ def build_snapshot() -> dict:
             "name": "seatwarden",
             "sourceIsBuiltin": False,
             "systemPrompt": system_prompt,
+            # Harness: match working Retina/GLM hermes agents.
+            # Desktop must use runtime=hermes + empty agent_command;
+            # never set agent_command_override=grok with hermes runtime.
             "runtime": "hermes",
             "model": "z-ai/glm-5.2",
             "parallelism": 5,
-            "respondTo": "anyone",
+            "respondTo": "owner-only",
             "respondToAllowlist": [],
             "namePool": [],
             "idleTimeoutSeconds": 300,
             "maxTurnDurationSeconds": 600,
+        },
+        "harness_notes": {
+            "acp_command": "buzz-acp",
+            "agent_command": "",
+            "agent_command_override": None,
+            "agent_args": [],
+            "mcp_command": "",
+            "do_not_use": ["hermes-acp mixed with grok override", "agent args for buzz-agent on hermes"],
         },
         "profile": {
             "displayName": "Seatwarden",

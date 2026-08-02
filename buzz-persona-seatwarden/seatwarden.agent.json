@@ -8,11 +8,22 @@
     "runtime": "hermes",
     "model": "z-ai/glm-5.2",
     "parallelism": 5,
-    "respondTo": "anyone",
+    "respondTo": "owner-only",
     "respondToAllowlist": [],
     "namePool": [],
     "idleTimeoutSeconds": 300,
     "maxTurnDurationSeconds": 600
+  },
+  "harness_notes": {
+    "acp_command": "buzz-acp",
+    "agent_command": "",
+    "agent_command_override": null,
+    "agent_args": [],
+    "mcp_command": "",
+    "do_not_use": [
+      "hermes-acp mixed with grok override",
+      "agent args for buzz-agent on hermes"
+    ]
   },
   "profile": {
     "displayName": "Seatwarden",
