@@ -143,8 +143,9 @@ Allowed (G0-style): “process observed high motion on capture device N,” “z
 
 ## 10. Follow-ons
 
+- **OBS dual-path live sync** → `docs/design/trio-retina-obs-sync-v0.md` (shared clock, dual UVC, session marker, presence-sync activity; still observation-only)  
 - Attach killfeed / Visual Oracle as optional event producers  
-- VSS seat bind: only OPEN while `activity=high` + eligibility (compose)  
+- VSS seat bind: only OPEN while eligibility + gamer key (compose; never optical-only OPEN)  
 - Trio-Lumen match spans from `activity` / future `match_state`  
 - Game-tuned detectors under separate WP with model license discipline  
 
