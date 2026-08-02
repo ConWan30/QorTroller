@@ -44,16 +44,20 @@ Wire format: one JSON object per line (JSONL) and the same object over WebSocket
 {
   "v": 0,
   "domain": "QORTROLLER-STREAMER-PERCEPTION-v0",
-  "ts_ns": 0,
+  "ts_ns": 0,                  // wall-clock event time
+  "clock_ns": 0,               // monotonic clock (WP-S4)
+  "session_head_ns": 0,        // monotonic session start (WP-S4)
   "session_id": null,          // optional bind to QorTroller session
   "source": {
-    "device": 0,               // UVC index or "obs-virtual"
+    "device": 0,               // UVC index or "synthetic"
+    "kind": "uvc_card|obs_virtual|unknown|synthetic",
     "backend": "msmf|dshow|auto",
     "width": 1280,
     "height": 720,
-    "fps_target": 30
+    "fps_target": 30,
+    "opened": true
   },
-  "type": "session_start | frame_stats | activity | zone | heartbeat | session_end",
+  "type": "session_start | frame_stats | activity | zone | session_marker | source_secondary_failed | heartbeat | session_end",
   "payload": { }
 }
 ```
@@ -62,10 +66,12 @@ Wire format: one JSON object per line (JSONL) and the same object over WebSocket
 
 | type | Meaning | payload (principal fields) |
 |------|---------|----------------------------|
-| `session_start` | Observer started | `out_path`, `ws_port` |
-| `frame_stats` | Periodic rate/quality | `n`, `fps_meas`, `mean_luma`, `motion` |
-| `activity` | Scene activity crossed threshold | `level`: `idle`\|`low`\|`high`, `motion` |
-| `zone` | Named ROI changed vs baseline | `zone_id`, `delta`, `state`: `quiet`\|`active` |
+| `session_start` | Observer started | `jsonl`, `ws`, `advisory`, optional `marker_text` |
+| `frame_stats` | Periodic rate/quality | `n`, `fps_meas`, `mean_luma`, `motion`, `presence_sync_ok` |
+| `activity` | Scene activity crossed threshold | `level`: `idle`\|`low`\|`high`, `motion`, `presence_sync_ok`, `last_controller_s_ago` |
+| `zone` | Named ROI changed vs baseline | `zone_id`, `delta`, `state`: `quiet`\|`active`, `presence_sync_ok` |
+| `session_marker` | Advisory marker decode result | `method`, `decoded`, `match`, `expected` |
+| `source_secondary_failed` | Secondary UVC failed to open | `error`, `device`, `name` |
 | `heartbeat` | Liveness for OBS clients | `uptime_s` |
 | `session_end` | Observer stopped | `frames`, `events`, `elapsed_s` |
 

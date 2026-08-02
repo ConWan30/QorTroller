@@ -32,6 +32,25 @@ python scripts/streamer_retina_events.py --device 0 --source-kind uvc_card
 # Match bridge session id if set
 $env:VSS_SESSION_ID = "grind_phase235_v1"
 python scripts/streamer_retina_events.py --device 0
+
+# WP-S2: dual open (capture card + OBS Virtual Camera)
+python scripts/streamer_retina_events.py `
+  --device 0 --device-name "Elgato 4K60" `
+  --secondary-device 1 --secondary-device-name "OBS Virtual Camera" `
+  --fps 15
+
+# WP-S3: text session marker (overlay shows session_id + digest; Retina tries to read it back)
+$env:RETINA_SESSION_MARKER = "text"
+python scripts/streamer_retina_events.py --device 1 --session-id grind_235_v1
+
+# WP-S3: QR marker (writes logs/session_marker_<session_id>.png; add as Image source in OBS)
+# Requires `pip install qrcode[pil]`
+python scripts/streamer_retina_events.py --device 1 --session-id grind_235_v1 --session-marker qr
+
+# WP-S5: presence-sync activity (bridge touches this file on recent controller input)
+# Your bridge/tool must update the mtime of this file when the gamer acts
+$env:RETINA_PRESENCE_TOUCH_FILE = "C:/Users/Contr/vapi-pebble-prototype/logs/streamer_presence.touch"
+python scripts/streamer_retina_events.py --device 0
 ```
 
 Events include `source.kind` ∈ `uvc_card` | `obs_virtual` | `unknown` | `synthetic`.  
@@ -55,7 +74,9 @@ Overlay shows activity, motion, FPS, zones — **advisory only**.
 
 ## Event types (v0)
 
-`session_start` · `frame_stats` · `activity` · `zone` · `heartbeat` · `session_end`
+`session_start` · `frame_stats` · `activity` · `zone` · `session_marker` · `source_secondary_failed` · `heartbeat` · `session_end`
+
+Every event carries `clock_ns` (monotonic) and `session_head_ns` for shared-clock correlation. `activity`, `zone`, and `frame_stats` carry `presence_sync_ok` (false unless recent controller input is observed).
 
 ## Non-claims
 

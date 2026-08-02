@@ -30,13 +30,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bridge"))
 
 from vapi_bridge.streamer_perception import (  # noqa: E402
+    DualStreamerRuntime,
     EventBus,
     PerceptionConfig,
     StreamerPerceptionRuntime,
+    TouchFilePresenceProvider,
     WsFanout,
     build_source_dict,
+    clock_ns,
     default_zones,
+    generate_qr_file,
     make_event,
+    make_marker_digest,
+    render_marker_text,
     run_ws_server,
 )
 
@@ -61,6 +67,7 @@ def _run_synthetic(cfg: PerceptionConfig, bus: EventBus) -> dict:
 
     rt = StreamerPerceptionRuntime(cfg, bus)
     rt.t0 = time.time()
+    rt.session_head_ns = clock_ns()
     src = build_source_dict(cfg, synthetic=True)
     rt._source_cache = src
     bus.emit(
@@ -126,12 +133,17 @@ def main() -> int:
         "--secondary-device",
         type=int,
         default=None,
-        help="WP-S2 groundwork: reserve secondary UVC index (not dual-opened yet)",
+        help="WP-S2: secondary UVC device index to open alongside primary",
     )
     ap.add_argument(
         "--secondary-device-name",
         default=None,
         help="Friendly name for secondary source kind sniff",
+    )
+    ap.add_argument(
+        "--secondary-source-kind",
+        default=None,
+        help="Override source.kind for secondary: uvc_card|obs_virtual|unknown",
     )
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=720)
@@ -146,18 +158,42 @@ def main() -> int:
     ap.add_argument("--synthetic", action="store_true", help="No camera; synthetic motion")
     ap.add_argument("--no-zones", action="store_true")
     ap.add_argument("--snapshot", default="", help="Save first full-res frame to this PNG path for eye-check")
+    ap.add_argument(
+        "--session-marker",
+        default=os.environ.get("RETINA_SESSION_MARKER", "off"),
+        choices=["off", "qr", "text"],
+        help="WP-S3: show session marker in overlay (text or QR); decode is advisory",
+    )
+    ap.add_argument(
+        "--presence-touch-file",
+        default=os.environ.get("RETINA_PRESENCE_TOUCH_FILE") or None,
+        help="WP-S5: path touched by the bridge on recent controller input",
+    )
+    ap.add_argument(
+        "--presence-timeout",
+        type=float,
+        default=float(os.environ.get("RETINA_PRESENCE_TIMEOUT", "5.0")),
+        help="WP-S5: seconds since last controller input for presence_sync_ok",
+    )
     args = ap.parse_args()
 
     out = Path(args.out) if args.out else (
         ROOT / "logs" / f"streamer_perception_{int(time.time())}.jsonl"
     )
     session_id = args.session_id or _session_id_from_env()
+    session_marker = args.session_marker or "off"
+    session_head_ns = None
+    if session_marker != "off" and session_id:
+        # stable monotonic session head for marker generation + runtime
+        session_head_ns = clock_ns()
+
     cfg = PerceptionConfig(
         device=args.device,
         device_name=args.device_name or None,
         source_kind=args.source_kind or None,
         secondary_device=args.secondary_device,
         secondary_device_name=args.secondary_device_name,
+        secondary_source_kind=args.secondary_source_kind,
         width=args.width,
         height=args.height,
         fps_target=args.fps,
@@ -169,7 +205,30 @@ def main() -> int:
         enable_ws=not args.no_ws and not args.synthetic,
         max_frames=args.max_frames,
         snapshot=Path(args.snapshot) if args.snapshot else None,
+        session_marker=session_marker,
+        session_head_ns=session_head_ns if session_head_ns else None,
+        presence_touch_file=Path(args.presence_touch_file) if args.presence_touch_file else None,
+        presence_timeout_s=args.presence_timeout,
     )
+
+    # WP-S5 presence provider from touch-file (bridge or operator tool updates it)
+    presence_provider = None
+    if cfg.presence_touch_file:
+        presence_provider = TouchFilePresenceProvider(
+            cfg.presence_touch_file, timeout=cfg.presence_timeout_s
+        )
+
+    # WP-S3: pre-generate QR marker image if requested and qrcode is installed
+    qr_path: Optional[Path] = None
+    if cfg.session_marker == "qr" and cfg.session_id:
+        marker_text = render_marker_text(cfg.session_id, cfg.session_head_ns or clock_ns())
+        qr_path = ROOT / "logs" / f"session_marker_{cfg.session_id}.png"
+        if generate_qr_file(marker_text, qr_path):
+            cfg.session_marker_qr_path = qr_path
+        else:
+            print(f"[streamer-perception] qrcode package not installed; falling back to text marker", file=sys.stderr)
+            cfg.session_marker = "text"
+            qr_path = None
 
     bus = EventBus(cfg.jsonl_path)
     fanout = WsFanout()
@@ -202,6 +261,11 @@ def main() -> int:
         print(f"[streamer-perception] source.name={src_preview.get('name')}")
     if src_preview.get("secondary"):
         print(f"[streamer-perception] secondary reserved (not opened): {src_preview['secondary']}")
+    if session_marker != "off" and session_id:
+        marker_text = render_marker_text(session_id, cfg.session_head_ns or clock_ns())
+        print(f"[streamer-perception] session marker ({session_marker}): {marker_text[:64]}...")
+        if qr_path and qr_path.exists():
+            print(f"[streamer-perception] QR marker -> {qr_path}")
     print("[streamer-perception] advisory only - not humanity/tournament proof")
     print("[streamer-perception] EYE-CHECK: confirm feed is GAME not webcam (kind tag is not proof)")
 
@@ -213,7 +277,10 @@ def main() -> int:
         summary = _run_synthetic(cfg, bus)
     else:
         try:
-            rt = StreamerPerceptionRuntime(cfg, bus)
+            if cfg.secondary_device is not None:
+                rt = DualStreamerRuntime(cfg, bus, presence_provider=presence_provider)
+            else:
+                rt = StreamerPerceptionRuntime(cfg, bus, presence_provider=presence_provider)
             if args.duration > 0:
                 # hard stop thread via max_frames already set
                 pass

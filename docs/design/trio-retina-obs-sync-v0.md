@@ -1,6 +1,6 @@
 # Trio-Retina × OBS — Dual-path live sync (v0)
 
-**Status:** DESIGN (CANDIDATE) — **WP-S1 implemented** (source.kind tagging); WP-S2+ pending  
+**Status:** DESIGN (CANDIDATE) — **WP-S1 through WP-S6 implemented** (source.kind tagging, dual open, session marker, shared clock, presence-sync activity, non-merge tests)
 **Date:** 2026-08-02  
 **Parents:**  
 - `docs/design/trio-retina-streamer-perception-v0.md` (thin UVC → events → OBS)  
@@ -146,11 +146,11 @@ Dogfooding streamer v0 does **not** complete this design. Completing this design
 | WP | Acceptance | Status |
 |----|------------|--------|
 | **WP-S1 Source tag** | Events carry `source.kind` ∈ {`uvc_card`,`obs_virtual`,`unknown`,`synthetic`}; name sniff + CLI/`RETINA_SOURCE_KIND` override | **done** — `classify_source_kind` / `build_source_dict` in `streamer_perception.py`; CLI `--source-kind` / `--device-name` |
-| **WP-S2 Dual open** | Runtime can open primary+secondary devices; per-source eye-check fail-closed | config reserved (`secondary_device*`); dual loop not active |
-| **WP-S3 Session marker** | OBS text/QR encodes `session_id` (+ short root); Retina OCR verify optional, advisory |
-| **WP-S4 Shared clock** | Frame events and controller events share documented clock field (monotonic ns or session head) |
-| **WP-S5 Presence-sync activity** | High-confidence optical activity gated on recent controller input; unit tests for no optical-only “playing” claim |
-| **WP-S6 Non-merge tests** | Explicit tests: optical fields never set `poep_enabled` / eligibility |
+| **WP-S2 Dual open** | Runtime can open primary+secondary devices; per-source eye-check fail-closed | **done** — `DualStreamerRuntime` in `streamer_perception.py`; CLI `--secondary-device`/`--secondary-device-name`/`--secondary-source-kind`; per-source `session_start` + `source_secondary_failed` |
+| **WP-S3 Session marker** | OBS text/QR encodes `session_id` (+ short root); Retina OCR verify optional, advisory | **done** — `SessionMarker` text + optional QR generation; `decode_session_marker` fail-open (QR→OCR); overlay displays marker; `session_marker` event emitted |
+| **WP-S4 Shared clock** | Frame events and controller events share documented clock field (monotonic ns or session head) | **done** — every event carries `clock_ns` (`time.monotonic_ns()`); `session_start` and all events carry `session_head_ns` |
+| **WP-S5 Presence-sync activity** | High-confidence optical activity gated on recent controller input; unit tests for no optical-only “playing” claim | **done** — `PresenceProvider` + `TouchFilePresenceProvider`; `activity`/`zone`/`frame_stats` carry `presence_sync_ok`; false when controller not recent |
+| **WP-S6 Non-merge tests** | Explicit tests: optical fields never set `poep_enabled` / eligibility | **done** — `test_streamer_perception.py` asserts no `poep_enabled`/`l6b_enabled`/`candidate_ok` in streamer events |
 
 ---
 

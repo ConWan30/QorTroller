@@ -11,8 +11,22 @@
       font-family: ui-monospace, Consolas, monospace;
       color: #e8e8e8;
     }
+    #marker {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      padding: 6px 10px;
+      background: rgba(0, 0, 0, 0.85);
+      border: 1px solid rgba(255, 120, 40, 0.9);
+      border-radius: 4px;
+      font-size: 12px;
+      color: #fff;
+      max-width: 420px;
+      word-break: break-all;
+    }
+    #marker .label { color: #ff7828; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
     #panel {
-      margin: 12px;
+      margin: 60px 12px 12px 12px;
       padding: 12px 16px;
       min-width: 320px;
       max-width: 520px;
@@ -43,13 +57,19 @@
   </style>
 </head>
 <body>
+  <div id="marker">
+    <div class="label">Session Marker</div>
+    <div id="marker_text">—</div>
+    <div id="marker_status" class="muted">—</div>
+  </div>
   <div id="panel">
     <h1>Streamer Perception</h1>
     <div class="row">WS: <span id="ws">connecting…</span></div>
+    <div class="row">Source: <span id="source">—</span></div>
     <div class="row">Activity: <span id="activity">—</span></div>
     <div class="row">Motion: <span id="motion">—</span> · FPS: <span id="fps">—</span></div>
     <div class="row">Zones: <span id="zones">—</span></div>
-    <div class="row">Session: <span id="session">—</span></div>
+    <div class="row">Presence: <span id="presence">—</span></div>
     <div id="log"></div>
     <div class="muted">Advisory only — not humanity / tournament proof · eye-check game feed</div>
   </div>
@@ -61,7 +81,10 @@
     const motionEl = document.getElementById("motion");
     const fpsEl = document.getElementById("fps");
     const zonesEl = document.getElementById("zones");
-    const sessionEl = document.getElementById("session");
+    const sourceEl = document.getElementById("source");
+    const presenceEl = document.getElementById("presence");
+    const markerTextEl = document.getElementById("marker_text");
+    const markerStatusEl = document.getElementById("marker_status");
     const logEl = document.getElementById("log");
     const zoneMap = {};
 
@@ -71,6 +94,8 @@
       logEl.prepend(d);
       while (logEl.childNodes.length > 8) logEl.removeChild(logEl.lastChild);
     }
+
+    function setClass(el, className) { el.className = className; }
 
     function connect() {
       const ws = new WebSocket(wsUrl);
@@ -89,28 +114,46 @@
       ws.onmessage = (ev) => {
         let msg;
         try { msg = JSON.parse(ev.data); } catch { return; }
-        if (msg.session_id) sessionEl.textContent = msg.session_id;
         const t = msg.type;
         const p = msg.payload || {};
+        const src = msg.source || {};
+
+        if (msg.session_id) {
+          markerTextEl.textContent = msg.session_id;
+        }
+        if (p.marker_text) {
+          markerTextEl.textContent = p.marker_text;
+        }
+        if (src && (src.device !== undefined || src.kind)) {
+          sourceEl.textContent = (src.kind || "?") + " / " + (src.device !== undefined ? src.device : "?");
+        }
+
         if (t === "activity") {
           activityEl.textContent = p.level || "—";
           activityEl.className = p.level === "high" ? "ok" : (p.level === "idle" ? "muted" : "warn");
           motionEl.textContent = p.motion != null ? p.motion : motionEl.textContent;
-          pushLog("activity → " + p.level);
+          presenceEl.textContent = (p.presence_sync_ok === true) ? "sync" : (p.presence_sync_ok === false ? "optical-only" : "—");
+          pushLog("activity → " + p.level + (p.presence_sync_ok ? " (sync)" : ""));
         } else if (t === "frame_stats") {
           if (p.motion != null) motionEl.textContent = p.motion;
           if (p.fps_meas != null) fpsEl.textContent = p.fps_meas;
           if (p.activity) activityEl.textContent = p.activity;
+          if (p.presence_sync_ok != null) presenceEl.textContent = p.presence_sync_ok ? "sync" : "optical-only";
         } else if (t === "zone") {
           zoneMap[p.zone_id] = p.state;
           zonesEl.textContent = Object.entries(zoneMap).map(([k,v]) => k + ":" + v).join(" · ") || "—";
           pushLog("zone " + p.zone_id + " → " + p.state);
+        } else if (t === "session_marker") {
+          markerStatusEl.textContent = (p.match === true) ? "match (" + p.method + ")" : (p.match === false ? "mismatch (" + p.method + ")" : "no decode");
+          markerStatusEl.className = (p.match === true) ? "ok" : (p.match === false ? "bad" : "warn");
         } else if (t === "heartbeat") {
           /* quiet */
         } else if (t === "session_start") {
           pushLog("session start");
         } else if (t === "session_end") {
           pushLog("session end frames=" + (p.frames || "?"));
+        } else if (t === "source_secondary_failed") {
+          pushLog("secondary failed: " + (p.error || ""));
         }
       };
     }

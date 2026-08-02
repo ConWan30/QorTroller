@@ -10,12 +10,14 @@ See docs/design/trio-retina-streamer-perception-v0.md
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Protocol, Tuple
 
 DOMAIN = "QORTROLLER-STREAMER-PERCEPTION-v0"
 SCHEMA_V = 0
@@ -42,6 +44,11 @@ _OBS_NAME_MARKERS = (
 
 def now_ns() -> int:
     return time.time_ns()
+
+
+def clock_ns() -> int:
+    """Shared monotonic clock field for cross-plane correlation (WP-S4)."""
+    return time.monotonic_ns()
 
 
 def classify_source_kind(
@@ -96,11 +103,15 @@ def make_event(
     session_id: Optional[str] = None,
     source: Optional[Dict[str, Any]] = None,
     ts_ns: Optional[int] = None,
+    session_head_ns: Optional[int] = None,
 ) -> Dict[str, Any]:
+    """Build one event; ts_ns defaults to wall time, clock_ns to monotonic."""
     return {
         "v": SCHEMA_V,
         "domain": DOMAIN,
         "ts_ns": ts_ns if ts_ns is not None else now_ns(),
+        "clock_ns": clock_ns(),
+        "session_head_ns": session_head_ns,
         "session_id": session_id,
         "source": source or {},
         "type": etype,
@@ -148,6 +159,17 @@ class PerceptionConfig:
     enable_ws: bool = True
     max_frames: int = 0  # 0 = unlimited
     snapshot: Optional[Path] = None  # save first full-res frame for eye-check
+    # WP-S3 session marker (off|qr|text)
+    session_marker: str = "off"
+    session_marker_qr_path: Optional[Path] = None
+    # WP-S4 shared session clock head (set by runtime; None until start)
+    session_head_ns: Optional[int] = None
+    # WP-S5 presence-sync activity
+    presence_touch_file: Optional[Path] = None
+    presence_timeout_s: float = 5.0
+    presence_poll_url: Optional[str] = None
+    # Marker decode cadence
+    marker_check_every_s: float = 5.0
 
 
 def default_zones() -> List[ZoneSpec]:
@@ -159,28 +181,34 @@ def default_zones() -> List[ZoneSpec]:
 
 
 class EventBus:
-    """JSONL + optional in-process subscribers; WebSocket fanout is external."""
+    """JSONL + optional in-process subscribers; WebSocket fanout is external.
+
+    Thread-safe for multi-source capture (WP-S2).
+    """
 
     def __init__(self, jsonl_path: Optional[Path] = None):
         self.jsonl_path = jsonl_path
         self._subs: List[Callable[[Dict[str, Any]], None]] = []
+        self._lock = threading.Lock()
         self.events_emitted = 0
         if jsonl_path is not None:
             jsonl_path.parent.mkdir(parents=True, exist_ok=True)
 
     def subscribe(self, fn: Callable[[Dict[str, Any]], None]) -> None:
-        self._subs.append(fn)
+        with self._lock:
+            self._subs.append(fn)
 
     def emit(self, event: Dict[str, Any]) -> None:
-        self.events_emitted += 1
-        if self.jsonl_path is not None:
-            with self.jsonl_path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(event, separators=(",", ":")) + "\n")
-        for fn in self._subs:
-            try:
-                fn(event)
-            except Exception:
-                pass
+        with self._lock:
+            self.events_emitted += 1
+            if self.jsonl_path is not None:
+                with self.jsonl_path.open("a", encoding="utf-8") as f:
+                    f.write(json.dumps(event, separators=(",", ":")) + "\n")
+            for fn in list(self._subs):
+                try:
+                    fn(event)
+                except Exception:
+                    pass
 
 
 def frame_mean_luma(gray) -> float:
@@ -248,28 +276,46 @@ def open_capture(device: int, width: int, height: int, fps: float, backend: str)
     raise RuntimeError(f"could not open capture device {device}: {last_err}")
 
 
+def _build_single_source(
+    cfg: PerceptionConfig,
+    *,
+    backend: Optional[str] = None,
+    synthetic: bool = False,
+    opened: bool = False,
+    device: Optional[int] = None,
+    device_name: Optional[str] = None,
+    source_kind: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build a source dict for a single device."""
+    kind = classify_source_kind(
+        device_name if device_name is not None else cfg.device_name,
+        override=source_kind if source_kind is not None else cfg.source_kind,
+        synthetic=synthetic,
+    )
+    dev = "synthetic" if synthetic else (device if device is not None else cfg.device)
+    out: Dict[str, Any] = {
+        "kind": kind,
+        "device": dev,
+        "backend": backend if backend is not None else cfg.backend,
+        "width": cfg.width,
+        "height": cfg.height,
+        "fps_target": cfg.fps_target,
+        "opened": opened,
+    }
+    name = device_name if device_name is not None else cfg.device_name
+    if name:
+        out["name"] = name
+    return out
+
+
 def build_source_dict(
     cfg: PerceptionConfig,
     *,
     backend: Optional[str] = None,
     synthetic: bool = False,
 ) -> Dict[str, Any]:
-    """Build the event `source` object (WP-S1)."""
-    kind = classify_source_kind(
-        cfg.device_name,
-        override=cfg.source_kind,
-        synthetic=synthetic,
-    )
-    out: Dict[str, Any] = {
-        "kind": kind,
-        "device": "synthetic" if synthetic else cfg.device,
-        "backend": backend if backend is not None else cfg.backend,
-        "width": cfg.width,
-        "height": cfg.height,
-        "fps_target": cfg.fps_target,
-    }
-    if cfg.device_name:
-        out["name"] = cfg.device_name
+    """Build the event `source` object (WP-S1); primary source + secondary reserve."""
+    out = _build_single_source(cfg, backend=backend, synthetic=synthetic)
     # Dual-path groundwork: announce secondary if configured (not opened yet)
     if cfg.secondary_device is not None:
         sk = classify_source_kind(
@@ -281,15 +327,161 @@ def build_source_dict(
             "device": cfg.secondary_device,
             "name": cfg.secondary_device_name,
             "opened": False,
-            "note": "WP-S2 dual-open not yet active; secondary is reserved/config-only",
+            "note": "WP-S2 dual-open; secondary is reserved/config-only until opened",
         }
     return out
+
+
+def make_marker_digest(session_id: Optional[str], session_head_ns: Optional[int]) -> str:
+    """Short advisory digest for session marker overlay (WP-S3)."""
+    body = f"{session_id or ''}:{session_head_ns or 0}"
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
+def render_marker_text(session_id: Optional[str], session_head_ns: Optional[int]) -> str:
+    """Text the overlay should display and the decoder should look for."""
+    return f"{session_id or ''}|{make_marker_digest(session_id, session_head_ns)}"
+
+
+def generate_qr_file(text: str, path: Path) -> bool:
+    """Generate a QR image if the qrcode package is installed (WP-S3, fail-open)."""
+    try:
+        import qrcode
+
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=4,
+            border=2,
+        )
+        qr.add_data(text)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        img.save(str(path))
+        return True
+    except Exception:
+        return False
+
+
+def _try_decode_qr(gray) -> Optional[str]:
+    """Fail-open QR decode using OpenCV QRCodeDetector."""
+    try:
+        import cv2
+
+        det = cv2.QRCodeDetector()
+        data, _bbox, _ = det.detectAndDecode(gray)
+        if data:
+            return str(data)
+    except Exception:
+        pass
+    return None
+
+
+def _try_decode_text(gray) -> Optional[str]:
+    """Fail-open text OCR from the top-left marker region (WP-S3).
+
+    Prefers rapidocr, falls back to pytesseract. Returns None if neither is installed.
+    """
+    h, w = gray.shape[:2]
+    # Marker overlay is expected in the top-left region
+    crop = gray[0 : max(1, h // 4), 0 : max(1, w // 3)]
+    if crop.size == 0:
+        return None
+    try:
+        from rapidocr import RapidOCR
+
+        ocr = RapidOCR()
+        result, _ = ocr(crop)
+        if result:
+            return str(result[0][1]).strip()
+    except Exception:
+        pass
+    try:
+        import pytesseract  # type: ignore[import-untyped]
+
+        text = pytesseract.image_to_string(crop, config="--psm 6").strip()
+        return text if text else None
+    except Exception:
+        pass
+    return None
+
+
+def decode_session_marker(
+    gray,
+    expected_marker: Optional[str],
+    *,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Attempt to read the session marker from a frame (WP-S3).
+
+    Returns an advisory result: method, decoded string, and match status.
+    Never raises. No deps => method='none'.
+    """
+    if not expected_marker:
+        return {"method": "none", "decoded": None, "match": None, "note": "no marker configured"}
+    decoded = _try_decode_qr(gray)
+    method = "qr" if decoded is not None else "none"
+    if decoded is None:
+        decoded = _try_decode_text(gray)
+        method = "text" if decoded is not None else "none"
+    match = None
+    if decoded is not None:
+        # Accept either the full marker text or just the session_id portion
+        match = decoded == expected_marker or (
+            session_id is not None and decoded == session_id
+        )
+    return {
+        "method": method,
+        "decoded": decoded,
+        "match": match,
+        "expected_prefix": session_id,
+    }
+
+
+class PresenceProvider(Protocol):
+    """WP-S5: supplies the wall-clock timestamp of the most recent certified controller input."""
+
+    def last_input_ts(self) -> Optional[float]: ...
+
+
+class TouchFilePresenceProvider:
+    """Presence from a touch-file mtime updated by the bridge or a companion process."""
+
+    def __init__(self, path: Path, timeout_s: float = 5.0):
+        self.path = Path(path)
+        self.timeout_s = timeout_s
+
+    def last_input_ts(self) -> Optional[float]:
+        try:
+            if not self.path.exists():
+                return None
+            return self.path.stat().st_mtime
+        except Exception:
+            return None
+
+
+class StaticPresenceProvider:
+    """Test/bridge hook: a fixed timestamp."""
+
+    def __init__(self, last_input_ts: Optional[float]):
+        self._ts = last_input_ts
+
+    def last_input_ts(self) -> Optional[float]:
+        return self._ts
 
 
 class StreamerPerceptionRuntime:
     """Main loop: grab frames → metrics → events."""
 
-    def __init__(self, cfg: PerceptionConfig, bus: EventBus):
+    def __init__(
+        self,
+        cfg: PerceptionConfig,
+        bus: EventBus,
+        *,
+        source: Optional[Dict[str, Any]] = None,
+        presence_provider: Optional[PresenceProvider] = None,
+    ):
         self.cfg = cfg
         self.bus = bus
         self._activity = "idle"
@@ -298,12 +490,26 @@ class StreamerPerceptionRuntime:
         self._zone_ema: Dict[str, float] = {}
         self.frames = 0
         self.t0 = 0.0
-        self._source_cache: Optional[Dict[str, Any]] = None
+        self._source_cache: Optional[Dict[str, Any]] = source
+        self._cap: Optional[Any] = None
+        self.session_head_ns = 0
+        self._marker_text: Optional[str] = None
+        self._marker_digest: Optional[str] = None
+        self._last_marker_check = 0.0
+        self.presence_provider = presence_provider
 
     def _source(self) -> Dict[str, Any]:
         if self._source_cache is not None:
             return dict(self._source_cache)
-        return build_source_dict(self.cfg)
+        return _build_single_source(self.cfg)
+
+    def _compute_marker(self) -> None:
+        if self.cfg.session_marker == "off":
+            return
+        if self.session_head_ns == 0:
+            return
+        self._marker_digest = make_marker_digest(self.cfg.session_id, self.session_head_ns)
+        self._marker_text = render_marker_text(self.cfg.session_id, self.session_head_ns)
 
     def emit(self, etype: str, payload: Dict[str, Any]) -> None:
         self.bus.emit(
@@ -312,8 +518,23 @@ class StreamerPerceptionRuntime:
                 payload,
                 session_id=self.cfg.session_id,
                 source=self._source(),
+                session_head_ns=self.session_head_ns or None,
             )
         )
+
+    def _presence_status(self, now: float) -> Tuple[bool, Optional[float]]:
+        """Return (sync_ok, seconds_since_last_input) for the current wall time.
+
+        If no presence provider is configured, optical activity cannot claim
+        controller-backed confidence (fail-closed).
+        """
+        if self.presence_provider is None:
+            return False, None
+        last = self.presence_provider.last_input_ts()
+        if last is None:
+            return False, None
+        ago = now - last
+        return ago <= self.cfg.presence_timeout_s, ago
 
     def process_gray(self, gray, now: float) -> Tuple[float, float]:
         """Pure metrics path (testable without camera). Returns (motion, luma)."""
@@ -346,6 +567,7 @@ class StreamerPerceptionRuntime:
         ):
             prev = self._activity
             self._activity = self._pending_activity
+            presence_sync_ok, last_ago = self._presence_status(now)
             self.emit(
                 "activity",
                 {
@@ -353,6 +575,8 @@ class StreamerPerceptionRuntime:
                     "prev": prev,
                     "motion": round(motion, 3),
                     "mean_luma": round(luma, 2),
+                    "presence_sync_ok": presence_sync_ok,
+                    "last_controller_s_ago": round(last_ago, 3) if last_ago is not None else None,
                 },
             )
 
@@ -374,6 +598,7 @@ class StreamerPerceptionRuntime:
             prev = self._zone_state.get(z.zone_id, "quiet")
             if state != prev:
                 self._zone_state[z.zone_id] = state
+                presence_sync_ok, last_ago = self._presence_status(now)
                 self.emit(
                     "zone",
                     {
@@ -382,26 +607,28 @@ class StreamerPerceptionRuntime:
                         "prev": prev,
                         "delta": round(delta, 3),
                         "luma": round(z_luma, 2),
+                        "presence_sync_ok": presence_sync_ok,
+                        "last_controller_s_ago": round(last_ago, 3) if last_ago is not None else None,
                     },
                 )
 
         return motion, luma
 
-    def run(self) -> Dict[str, Any]:
+    def open(self) -> Tuple[Any, str]:
+        """Open the capture, run per-source eye-check, emit session_start.
+
+        Returns (cap, backend_name). Raises on primary open failure.
+        """
         import cv2
 
+        if self.cfg.session_head_ns is not None:
+            self.session_head_ns = self.cfg.session_head_ns
+        else:
+            self.session_head_ns = clock_ns()
+            self.cfg.session_head_ns = self.session_head_ns
+
         self.t0 = time.time()
-        self.emit(
-            "session_start",
-            {
-                "jsonl": str(self.cfg.jsonl_path) if self.cfg.jsonl_path else None,
-                "ws": f"ws://{self.cfg.ws_host}:{self.cfg.ws_port}"
-                if self.cfg.enable_ws
-                else None,
-                "advisory": True,
-                "note": "optical events are not humanity or tournament proof",
-            },
-        )
+        self._compute_marker()
 
         cap, backend_name, first = open_capture(
             self.cfg.device,
@@ -412,37 +639,82 @@ class StreamerPerceptionRuntime:
         )
         self.cfg.backend = backend_name
         # Resolve source.kind after open (WP-S1); name may come from CLI/env only
-        self._source_cache = build_source_dict(self.cfg, backend=backend_name)
+        self._source_cache = _build_single_source(self.cfg, backend=backend_name, opened=True)
+        self._cap = cap
+
+        # Session start carries the source that is actually opened
+        session_payload: Dict[str, Any] = {
+            "jsonl": str(self.cfg.jsonl_path) if self.cfg.jsonl_path else None,
+            "ws": f"ws://{self.cfg.ws_host}:{self.cfg.ws_port}"
+            if self.cfg.enable_ws
+            else None,
+            "advisory": True,
+            "note": "optical events are not humanity or tournament proof",
+        }
+        if self._marker_text:
+            session_payload["marker_text"] = self._marker_text
+            session_payload["marker_kind"] = self.cfg.session_marker
+        if self.presence_provider is not None:
+            session_payload["presence_sync_enabled"] = True
+            session_payload["presence_timeout_s"] = self.cfg.presence_timeout_s
+        self.emit("session_start", session_payload)
+
         # Eye-check hint — still mandatory; kind tag is not proof of clean game
         h0, w0 = first.shape[:2]
+        first_mean_luma = round(
+            frame_mean_luma(cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)), 2
+        )
+        eye_check: Dict[str, Any] = {
+            "n": 0,
+            "eye_check": "operator must verify first frames are GAME not webcam",
+            "first_shape": [int(h0), int(w0)],
+            "mean_luma": first_mean_luma,
+        }
         if self.cfg.snapshot is not None:
             self.cfg.snapshot.parent.mkdir(parents=True, exist_ok=True)
             cv2.imwrite(str(self.cfg.snapshot), first)
-            self.emit(
-                "frame_stats",
-                {
-                    "n": 0,
-                    "eye_check": f"operator must verify first frames are GAME not webcam; snapshot saved to {self.cfg.snapshot}",
-                    "first_shape": [int(h0), int(w0)],
-                    "mean_luma": round(frame_mean_luma(cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)), 2),
-                    "snapshot": str(self.cfg.snapshot),
-                },
-            )
-        else:
-            self.emit(
-                "frame_stats",
-                {
-                    "n": 0,
-                    "eye_check": "operator must verify first frames are GAME not webcam",
-                    "first_shape": [int(h0), int(w0)],
-                    "mean_luma": round(frame_mean_luma(cv2.cvtColor(first, cv2.COLOR_BGR2GRAY)), 2),
-                },
-            )
+            eye_check["snapshot"] = str(self.cfg.snapshot)
+            eye_check[
+                "eye_check"
+            ] = f"operator must verify first frames are GAME not webcam; snapshot saved to {self.cfg.snapshot}"
+        self.emit("frame_stats", eye_check)
+
+        return cap, backend_name
+
+    def _check_marker(self, gray, now: float) -> None:
+        if self.cfg.session_marker == "off":
+            return
+        if not self._marker_text:
+            return
+        if now - self._last_marker_check < self.cfg.marker_check_every_s:
+            return
+        self._last_marker_check = now
+        result = decode_session_marker(gray, self._marker_text, session_id=self.cfg.session_id)
+        self.emit(
+            "session_marker",
+            {
+                "expected": self._marker_text,
+                "session_id": self.cfg.session_id,
+                "decoded": result.get("decoded"),
+                "match": result.get("match"),
+                "method": result.get("method"),
+            },
+        )
+
+    def run_loop(self, cap: Optional[Any] = None) -> Dict[str, Any]:
+        """Process frames from an already-opened capture (or self._cap)."""
+        import cv2
+
+        if cap is None:
+            cap = self._cap
+        if cap is None:
+            raise RuntimeError("run_loop called with no open capture")
 
         period = 1.0 / max(self.cfg.fps_target, 1.0)
         last_stats = 0.0
         last_hb = 0.0
         n = 0
+        summary: Dict[str, Any] = {}
         try:
             while True:
                 loop_t0 = time.time()
@@ -464,8 +736,13 @@ class StreamerPerceptionRuntime:
                 now = time.time()
                 motion, luma = self.process_gray(gray, now)
 
+                # WP-S3: optional session marker decode
+                if n % 5 == 0:
+                    self._check_marker(gray, now)
+
                 if now - last_stats >= self.cfg.stats_every_s:
                     elapsed = max(now - self.t0, 1e-6)
+                    presence_sync_ok, last_ago = self._presence_status(now)
                     self.emit(
                         "frame_stats",
                         {
@@ -474,6 +751,8 @@ class StreamerPerceptionRuntime:
                             "mean_luma": round(luma, 2),
                             "motion": round(motion, 3),
                             "activity": self._activity,
+                            "presence_sync_ok": presence_sync_ok,
+                            "last_controller_s_ago": round(last_ago, 3) if last_ago is not None else None,
                         },
                     )
                     last_stats = now
@@ -496,7 +775,10 @@ class StreamerPerceptionRuntime:
         except KeyboardInterrupt:
             pass
         finally:
-            cap.release()
+            try:
+                cap.release()
+            except Exception:
+                pass
             elapsed = max(time.time() - self.t0, 1e-6)
             summary = {
                 "frames": n,
@@ -506,6 +788,138 @@ class StreamerPerceptionRuntime:
             }
             self.emit("session_end", summary)
             return summary
+
+    def run(self) -> Dict[str, Any]:
+        """Open + run a single source."""
+        self.open()
+        return self.run_loop()
+
+
+class DualStreamerRuntime:
+    """WP-S2: open and run primary + optional secondary UVC sources concurrently."""
+
+    def __init__(
+        self,
+        cfg: PerceptionConfig,
+        bus: EventBus,
+        *,
+        presence_provider: Optional[PresenceProvider] = None,
+    ):
+        self.cfg = cfg
+        self.bus = bus
+        self.presence_provider = presence_provider
+        self.primary_rt: Optional[StreamerPerceptionRuntime] = None
+        self.secondary_rt: Optional[StreamerPerceptionRuntime] = None
+        self.primary_cap: Optional[Any] = None
+        self.secondary_cap: Optional[Any] = None
+        self.threads: List[threading.Thread] = []
+        self.results: List[Dict[str, Any]] = []
+        self._lock = threading.Lock()
+
+    def _secondary_cfg(self) -> PerceptionConfig:
+        """Make a secondary source config from the primary."""
+        import copy
+
+        cfg2 = copy.copy(self.cfg)
+        cfg2.device = self.cfg.secondary_device
+        cfg2.device_name = self.cfg.secondary_device_name
+        cfg2.source_kind = self.cfg.secondary_source_kind
+        cfg2.secondary_device = None
+        cfg2.secondary_device_name = None
+        cfg2.secondary_source_kind = None
+        cfg2.snapshot = None  # avoid overwriting primary snapshot
+        return cfg2
+
+    def open_sources(self) -> None:
+        """Open primary; try secondary and fail-closed if it cannot open."""
+        # Mint one shared session clock head (WP-S4); reuse if already set by CLI/marker
+        head = self.cfg.session_head_ns or clock_ns()
+        self.cfg.session_head_ns = head
+
+        self.primary_rt = StreamerPerceptionRuntime(
+            self.cfg, self.bus, presence_provider=self.presence_provider
+        )
+        self.primary_cap, _ = self.primary_rt.open()
+
+        if self.cfg.secondary_device is not None:
+            cfg2 = self._secondary_cfg()
+            cfg2.session_head_ns = head
+            self.secondary_rt = StreamerPerceptionRuntime(
+                cfg2, self.bus, presence_provider=self.presence_provider
+            )
+            try:
+                self.secondary_cap, _ = self.secondary_rt.open()
+            except Exception as exc:
+                sec_source = _build_single_source(cfg2, opened=False)
+                self.bus.emit(
+                    make_event(
+                        "source_secondary_failed",
+                        {"error": str(exc), "device": cfg2.device, "name": cfg2.device_name},
+                        session_id=self.cfg.session_id,
+                        source=sec_source,
+                        session_head_ns=head,
+                    )
+                )
+                self.secondary_rt = None
+                self.secondary_cap = None
+
+    def _run_source(self, rt: StreamerPerceptionRuntime, cap: Any) -> None:
+        try:
+            summary = rt.run_loop(cap)
+            with self._lock:
+                self.results.append(summary)
+        except Exception as exc:
+            # Emit a source-level failure so the session does not silently die
+            self.bus.emit(
+                make_event(
+                    "source_failed",
+                    {"error": str(exc)},
+                    session_id=rt.cfg.session_id,
+                    source=rt._source(),
+                    session_head_ns=rt.session_head_ns or self.cfg.session_head_ns,
+                )
+            )
+
+    def run(self) -> Dict[str, Any]:
+        self.open_sources()
+
+        t1 = threading.Thread(
+            target=self._run_source,
+            args=(self.primary_rt, self.primary_cap),
+            name="perception-primary",
+        )
+        t1.start()
+        self.threads.append(t1)
+
+        if self.secondary_rt is not None and self.secondary_cap is not None:
+            t2 = threading.Thread(
+                target=self._run_source,
+                args=(self.secondary_rt, self.secondary_cap),
+                name="perception-secondary",
+            )
+            t2.start()
+            self.threads.append(t2)
+
+        for t in self.threads:
+            t.join()
+
+        primary = self.results[0] if self.results else {"frames": 0, "events": 0}
+        secondary = self.results[1] if len(self.results) > 1 else None
+        total_frames = primary.get("frames", 0) + (
+            secondary.get("frames", 0) if secondary else 0
+        )
+        total_events = primary.get("events", 0) + (
+            secondary.get("events", 0) if secondary else 0
+        )
+        summary = {
+            "frames": total_frames,
+            "events": total_events,
+            "sources_opened": 1 + (1 if secondary else 0),
+            "primary": primary,
+            "secondary": secondary,
+        }
+        # One combined session_end is enough; each source already emitted its own
+        return summary
 
 
 # --- WebSocket server (optional dependency: websockets) ---------------------
