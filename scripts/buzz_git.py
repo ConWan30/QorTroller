@@ -175,14 +175,23 @@ def git_push(cwd: Path, repo_name: str, owner_hex: str | None = None, branch: st
     return f"pushed to buzz/{branch}"
 
 
+def _has_staged_changes(cwd: Path, env: dict) -> bool:
+    """Return True if there are staged changes ready to commit."""
+    proc = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        cwd=cwd,
+        env=env,
+    )
+    return proc.returncode != 0
+
+
 def git_commit_and_push(cwd: Path, repo_name: str, message: str, owner_hex: str | None = None, branch: str = "main") -> str:
     """Stage tracked changes, commit, and push to Buzz or GitHub."""
     if _is_github(repo_name):
         branch = branch if branch and branch != "main" else _github_branch()
-        # Only look at tracked changes (untracked files are ignored).
-        status = _github_cmd(cwd, "status", "--porcelain", "--untracked-files=no")
-        if status:
-            _github_cmd(cwd, "add", "-u")
+        _github_cmd(cwd, "add", "-u")
+        env = _github_env()
+        if _has_staged_changes(cwd, env):
             _github_cmd(cwd, "commit", "-m", message)
             _github_cmd(cwd, "push", "origin", branch)
             return f"committed and pushed to GitHub origin/{branch}"
@@ -190,9 +199,9 @@ def git_commit_and_push(cwd: Path, repo_name: str, message: str, owner_hex: str 
         return f"no changes to commit; pushed to GitHub origin/{branch}"
 
     _ensure_remote(cwd, repo_name, owner_hex)
-    status = _git_cmd(cwd, "status", "--porcelain", "--untracked-files=no")
-    if status:
-        _git_cmd(cwd, "add", "-u")
+    _git_cmd(cwd, "add", "-u")
+    env = _buzz_env()
+    if _has_staged_changes(cwd, env):
         _git_cmd(cwd, "commit", "-m", message)
         _git_cmd(cwd, "push", "buzz", branch)
         return f"committed and pushed to buzz/{branch}"
