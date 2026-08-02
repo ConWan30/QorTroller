@@ -48,28 +48,30 @@ def _is_github(repo_name: str) -> bool:
 
 
 def _github_env() -> dict:
-    """Env for GitHub: make sure git does not hang, and prefer gh's credential helper."""
+    """Env for GitHub: make sure git does not hang and GCM does not popup."""
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    # gh auth setup-git writes credential.https://github.com.helper = !gh auth git-credential
-    # Make sure that helper is configured in this repo before any push.
-    subprocess.run(
-        ["gh", "auth", "setup-git"],
-        cwd=REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        shell=False,
-    )
+    env["GCM_INTERACTIVE"] = "never"
     return env
 
 
 def _github_cmd(cwd: Path, *args: str, extra_env: dict | None = None) -> str:
+    """Run a git command for github.com using `gh` as the credential helper.
+
+    Disables the global Git Credential Manager (`credential.helper=`) and sets
+    a per-URL `gh auth git-credential` helper, so no GUI prompt appears.
+    """
     env = _github_env()
     if extra_env:
         env.update(extra_env)
+    cmd = [
+        "git",
+        "-c", "credential.helper=",
+        "-c", "credential.https://github.com.helper=!gh auth git-credential",
+        *args,
+    ]
     proc = subprocess.run(
-        ["git", *args],
+        cmd,
         cwd=cwd,
         env=env,
         capture_output=True,
@@ -174,12 +176,13 @@ def git_push(cwd: Path, repo_name: str, owner_hex: str | None = None, branch: st
 
 
 def git_commit_and_push(cwd: Path, repo_name: str, message: str, owner_hex: str | None = None, branch: str = "main") -> str:
-    """Stage all changes, commit, and push to Buzz or GitHub."""
+    """Stage tracked changes, commit, and push to Buzz or GitHub."""
     if _is_github(repo_name):
-        _github_cmd(cwd, "add", "-A")
-        status = _github_cmd(cwd, "status", "--porcelain")
         branch = branch if branch and branch != "main" else _github_branch()
+        # Only look at tracked changes (untracked files are ignored).
+        status = _github_cmd(cwd, "status", "--porcelain", "--untracked-files=no")
         if status:
+            _github_cmd(cwd, "add", "-u")
             _github_cmd(cwd, "commit", "-m", message)
             _github_cmd(cwd, "push", "origin", branch)
             return f"committed and pushed to GitHub origin/{branch}"
@@ -187,9 +190,9 @@ def git_commit_and_push(cwd: Path, repo_name: str, message: str, owner_hex: str 
         return f"no changes to commit; pushed to GitHub origin/{branch}"
 
     _ensure_remote(cwd, repo_name, owner_hex)
-    _git_cmd(cwd, "add", "-A")
-    status = _git_cmd(cwd, "status", "--porcelain")
+    status = _git_cmd(cwd, "status", "--porcelain", "--untracked-files=no")
     if status:
+        _git_cmd(cwd, "add", "-u")
         _git_cmd(cwd, "commit", "-m", message)
         _git_cmd(cwd, "push", "buzz", branch)
         return f"committed and pushed to buzz/{branch}"
