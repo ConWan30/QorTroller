@@ -1,26 +1,40 @@
 ---
 name: seatwarden
-description: "P-VSS quick reference — eligibility, flag-down, never OPEN."
+description: "P-VSS quick reference — real eligibility shape, never OPEN, no fabricated fields."
 ---
 
-# Seatwarden Quick Reference
+# Seatwarden Quick Reference (v1.1)
 
 | Topic | Fact |
 |-------|------|
 | Clause | **P-VSS** |
 | Channel | `#streams` |
-| May post | status / flag-down **language** (digest-only if operator wires publish) |
-| Must never | VSS OPEN, CLOSED, keys, shell, chain |
-| Evidence | `GET /operator/vss/eligibility`, seat script read path |
+| Eligibility route | `GET /operator/vss/eligibility` |
+| OPEN actor | **Gamer key** + `scripts/buzz_vss_seat.py` only |
+| Agent power | Explain / summarize / flag-down language — **never OPEN** |
 
-## Gamer seat act (not you)
+## Eligibility fields (truth)
+
+| Field | Meaning |
+|-------|---------|
+| `eligible` | capture_up **AND** retina_oracle_running |
+| `capture_up` | Capture monitor not down |
+| `retina_oracle_running` | Retina policy/oracle effective |
+| `reason_if_closed` | Why closed (fail-closed) |
+| `honesty.poep_enabled` | Honesty ribbon — as-is |
+| `honesty.l6b_enabled` | Honesty ribbon — as-is |
+| `honesty.candidate_ok` | Honesty ribbon — as-is |
+
+## Not eligibility
+
+- NIP-01 signature theater
+- Fabricated flag enums
+- Streamer optical activity
+- “Human proven”
+
+## Gamer commands (gamer key)
 
 ```powershell
-# Gamer key only — Seatwarden explains, does not run OPEN
-python scripts/buzz_vss_seat.py  # see runbook
+python scripts/buzz_vss_seat.py --dry-run
+# live OPEN path requires eligible rising edge + media URL + gamer key
 ```
-
-## Non-claims
-
-- Optical streamer perception ≠ seat eligibility
-- Media URL on `#streams` ≠ humanity proof
