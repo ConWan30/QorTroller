@@ -4,7 +4,7 @@ A gamer-facing self-service concierge for QorTroller, modeled on the QorT (Rig S
 
 - **Model:** `xai:grok-4.5`
 - **Provider:** `xai`
-- **Runtime:** `goose`
+- **Runtime:** `grok-build`
 - **ACP harness default for relay:** `grok-build`
 
 ## Import into Buzz
@@ -14,6 +14,7 @@ The simplest way is the pre-built `.agent.json` snapshot:
 1. Open Buzz Desktop → Settings → Agents → Import Agent.
 2. Select this file: `buzz-persona-qortroller-concierge/qortroller-concierge.agent.json`.
 3. The agent is `QorTroller Concierge` and responds to DMs and mentions.
+4. Set Runtime / Harness to `grok-build` if Buzz asks.
 
 ## Rebuild the snapshot
 

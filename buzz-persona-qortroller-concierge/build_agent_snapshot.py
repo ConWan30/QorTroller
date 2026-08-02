@@ -52,7 +52,7 @@ def build_snapshot() -> dict:
             "name": "qortroller-concierge",
             "sourceIsBuiltin": False,
             "systemPrompt": system_prompt,
-            "runtime": "goose",
+            "runtime": "grok-build",
             "model": "grok-4.5",
             "provider": "xai",
             "parallelism": 1,
