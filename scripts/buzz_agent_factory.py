@@ -1,24 +1,32 @@
 #!/usr/bin/env python3
 """
-buzz_agent_factory.py — Agentic creation for the QorTroller Buzz plane.
+buzz_agent_factory.py — Purpose-bound agentic factory (Agentic Charter v1).
 
-This script lets an authorized parent agent create:
-  1. New channels (`create-channel`).
-  2. New child agents (`create-agent`) — fresh nsec, kind 0 profile, `.env` file.
-  3. New projects (`create-project`) — Buzz channel + NIP-34 git repo.
-  4. New workflows (`create-workflow`) — Buzz channel + executable workflow.
-  5. New templates (`create-template`) — NIP-23 long-form note.
-  6. Brainstorm seeds (`brainstorm`) — post to a brainstorm channel.
+Charter: docs/design/qortroller-agentic-charter-v1.md
 
-Authority model:
-  - Parent provides `BUZZ_PRIVATE_KEY` (its own key).
-  - Optional `BUZZ_LOBBY_CHANNEL_ID` / `BUZZ_AUDIT_CHANNEL_ID` / `BUZZ_BRAINSTORM_CHANNEL_ID`.
-  - No limit on children unless the caller imposes one.
+Primary power is clause + resume, not free-form mint:
+  hire          — child agent with P-* clause + engineering resume (candidate unless --approve)
+  propose       — channel/project/workflow/template/brainstorm proposal
+  propose-wp    — Frameworks WP skeleton (problem + non-claims + acceptance)
+  create-*      — propose-first by default; mint only with --approve or mint env
+
+Deprecated:
+  create-agent  — use hire --clause --resume [--approve]
+
+Authority model (v1):
+  - Parent provides BUZZ_PRIVATE_KEY (its own key).
+  - No clause → no hire, no channel mint.
+  - Recursive child hire gated by BUZZ_AGENT_MINTERS (operator allow-list).
+  - Mint override: --approve or BUZZ_CREATION_APPROVED=1 / BUZZ_AGENT_MINTERS=1
+  - Channel IDs: BUZZ_FRAMEWORKS_CHANNEL_ID, BUZZ_AGENT_ROSTER_CHANNEL_ID,
+    BUZZ_LOBBY_CHANNEL_ID, BUZZ_AUDIT_CHANNEL_ID, BUZZ_BRAINSTORM_CHANNEL_ID
 
 Usage:
   $env:BUZZ_PRIVATE_KEY = "nsec1..."
   $env:BUZZ_RELAY_URL = "wss://qortroller.communities.buzz.xyz"
-  python scripts/buzz_agent_factory.py create-project --name "MyProject" --description "Expand QorTroller"
+  python scripts/buzz_agent_factory.py hire --name Seatwarden --clause P-VSS \\
+    --resume "competence: flag-down; forbidden: VSS OPEN,keys"
+  python scripts/buzz_agent_factory.py propose --artifact channel --name verify-lab --clause P-WMP
 """
 from __future__ import annotations
 
@@ -654,7 +662,15 @@ def propose_wp(
 
 
 def _creation_approved() -> bool:
-    return os.environ.get("BUZZ_CREATION_APPROVED", "") == "1" or os.environ.get("BUZZ_MINTERS") == "1"
+    """Operator mint override (charter v1: propose-first unless approved)."""
+    if os.environ.get("BUZZ_CREATION_APPROVED", "") == "1":
+        return True
+    # Prefer BUZZ_AGENT_MINTERS; keep BUZZ_MINTERS as legacy alias.
+    for key in ("BUZZ_AGENT_MINTERS", "BUZZ_MINTERS"):
+        val = os.environ.get(key, "").strip()
+        if val == "1" or val.lower() == "true":
+            return True
+    return False
 
 
 def _add_clause_and_approve(parser):
@@ -825,10 +841,27 @@ def main() -> int:
         return 0 if ok else 1
 
     if args.cmd == "create-agent":
-        print("[!] create-agent is deprecated; use `hire --name <n> --clause P-... --resume ...`", file=sys.stderr)
+        print(
+            "[!] create-agent is deprecated; use "
+            "`hire --name <n> --clause P-... --resume ... [--approve]`",
+            file=sys.stderr,
+        )
         if not args.clause or not args.resume:
+            print("[!] create-agent requires --clause and --resume (charter v1 hire bar)", file=sys.stderr)
             return 1
-        result = hire_agent(args.name, args.clause, args.resume, supervisor="operator", about=args.about, post_birth=not args.no_birth_post, approved=True)
+        # Never auto-approve: same bar as hire (candidate unless mint override).
+        approved = _creation_approved()
+        if approved:
+            print("[*] mint override active — hiring as approved", file=sys.stderr)
+        result = hire_agent(
+            args.name,
+            args.clause,
+            args.resume,
+            supervisor="operator",
+            about=args.about,
+            post_birth=not args.no_birth_post,
+            approved=approved,
+        )
         if result:
             print(json.dumps({k: v for k, v in result.items() if k != "nsec"}, indent=2))
             print(f"[*] child nsec stored in: {result['env_path']}")
@@ -836,10 +869,21 @@ def main() -> int:
         return 1
 
     if args.cmd == "hire":
-        result = hire_agent(args.name, args.clause, args.resume, supervisor=args.supervisor, about=args.about, post_birth=not args.no_roster_post, approved=args.approve)
+        approved = bool(args.approve) or _creation_approved()
+        result = hire_agent(
+            args.name,
+            args.clause,
+            args.resume,
+            supervisor=args.supervisor,
+            about=args.about,
+            post_birth=not args.no_roster_post,
+            approved=approved,
+        )
         if result:
             print(json.dumps({k: v for k, v in result.items() if k != "nsec"}, indent=2))
             print(f"[*] child nsec stored in: {result['env_path']}")
+            if result.get("status") == "candidate":
+                print("[*] status=candidate (ENABLED off until operator --approve / mint allow-list)")
             return 0
         return 1
 
