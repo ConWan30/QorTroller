@@ -108,11 +108,15 @@ def cmd_start(a) -> int:
     # U1 (design doc §2.6): mint the shared session identifier ONCE here — the same {label}_{stamp} string
     # that names the log/corpus/archive — and thread it to the bridge child so PITL co-capture meta carries
     # the join key the KAS record + archive manifest also carry. Internal wiring only; no default change.
+    sid = None
+    sdisplay = None
     try:
         from l9_presence.session_identity import (ENV_SESSION_DISPLAY, ENV_SESSION_ID,
                                                   derive_session_id, session_display)
-        env[ENV_SESSION_ID] = derive_session_id(a.label, stamp)
-        env[ENV_SESSION_DISPLAY] = session_display(a.label, stamp)
+        sid = derive_session_id(a.label, stamp)
+        sdisplay = session_display(a.label, stamp)
+        env[ENV_SESSION_ID] = sid
+        env[ENV_SESSION_DISPLAY] = sdisplay
     except Exception:  # noqa: BLE001 — the join key is additive; its absence never blocks capture
         pass
     if getattr(a, "uvc_index", None) is not None:        # OA-RP-1: direct-HDMI UVC capture card source
@@ -169,10 +173,58 @@ def cmd_start(a) -> int:
         print("[daemon] FAIL: bridge not healthy in time; killing")
         _kill_tree(proc.pid)
         return 1
-    _STATE.write_text(json.dumps({
+    state = {
         "pid": proc.pid, "port": port, "log": log_path.name, "label": a.label,
         "monitor": a.monitor, "diag_every": a.diag_every, "started_at": stamp,
-    }, indent=2), encoding="utf-8")
+    }
+    if getattr(a, "streamer", False):
+        streamer_device = a.streamer_device if a.streamer_device is not None else (
+            a.uvc_index if a.uvc_index is not None else 0
+        )
+        streamer_log = _REPO / f"logs/streamer_perception_{a.label}_{stamp}.log"
+        streamer_jsonl = _REPO / f"logs/streamer_perception_{a.label}_{stamp}.jsonl"
+        (_REPO / "logs").mkdir(exist_ok=True)
+        sp_env = dict(env)
+        _sid = sid or f"{a.label}_{stamp}"
+        sp_env["GRIND_SESSION_ID"] = _sid
+        sp_env["VSS_SESSION_ID"] = _sid
+        streamer_args = [
+            sys.executable, str(_REPO / "scripts" / "streamer_retina_events.py"),
+            "--device", str(streamer_device),
+            "--session-id", _sid,
+            "--out", str(streamer_jsonl),
+            "--fps", str(a.streamer_fps),
+            "--ws-port", str(a.streamer_ws_port),
+        ]
+        if a.streamer_no_ws:
+            streamer_args.append("--no-ws")
+        if a.streamer_no_zones:
+            streamer_args.append("--no-zones")
+        if a.streamer_max_frames:
+            streamer_args.extend(["--max-frames", str(a.streamer_max_frames)])
+        if a.streamer_duration:
+            streamer_args.extend(["--duration", str(a.streamer_duration)])
+        if a.uvc_index is not None and streamer_device == a.uvc_index:
+            print(f"[daemon] WARN: streamer and bridge both configured for UVC {streamer_device}; "
+                  "the streamer may fail to open the device if it is exclusive. "
+                  "Use --streamer-device for the OBS Virtual Camera.")
+        sf = open(streamer_log, "w", encoding="utf-8")
+        if sys.platform == "win32":
+            sp_flags = 0x00000200 | _NO_WINDOW
+            sp_proc = subprocess.Popen(streamer_args, cwd=str(_REPO), env=sp_env,
+                                       stdout=sf, stderr=subprocess.STDOUT,
+                                       creationflags=sp_flags, close_fds=True)
+        else:
+            sp_proc = subprocess.Popen(streamer_args, cwd=str(_REPO), env=sp_env,
+                                       stdout=sf, stderr=subprocess.STDOUT,
+                                       start_new_session=True, close_fds=True)
+        state["streamer_pid"] = sp_proc.pid
+        state["streamer_log"] = streamer_log.name
+        state["streamer_jsonl"] = streamer_jsonl.name
+        state["streamer_device"] = streamer_device
+        print(f"[daemon] streamer perception starting (pid={sp_proc.pid}, device={streamer_device}) "
+              f"-> {streamer_log.name}; WS ws://127.0.0.1:{a.streamer_ws_port}")
+    _STATE.write_text(json.dumps(state, indent=2), encoding="utf-8")
     print(f"[daemon] CAPTURE LIVE — pid={proc.pid} port={port} monitor={a.monitor} "
           f"diag_every={a.diag_every} log={log_path.name}")
     print("[daemon] Play as long as you want (your link to me can drop — capture stays up). "
@@ -621,6 +673,10 @@ def cmd_stop(a) -> int:
     st = _read_state()
     if st is None:
         return 1
+    streamer_pid = st.get("streamer_pid")
+    if streamer_pid:
+        _kill_tree(int(streamer_pid))
+        print(f"[daemon] streamer perception stopped (pid={streamer_pid})")
     import capture_latency_calibration as cap
     from l9_presence.cross_channel_latency import assess_latency_agreement
     log = _REPO / st["log"]
@@ -733,6 +789,18 @@ def main() -> int:
     s.add_argument("--uvc-index", type=int, default=None,
                    help="OA-RP-1: capture from a UVC HDMI capture card (device index, usually 0) instead "
                         "of WGC window/monitor grab — direct PS5 HDMI, no Remote Play encode")
+    s.add_argument("--streamer", action="store_true",
+                   help="auto-start the v0 streamer perception pipeline on a UVC/OBS-virtual source")
+    s.add_argument("--streamer-device", type=int, default=None,
+                   help="UVC device for the streamer pipeline (default: --uvc-index if set, else 0). "
+                        "Use the OBS Virtual Camera or a second card to avoid conflict with the bridge.")
+    s.add_argument("--streamer-fps", type=float, default=20.0)
+    s.add_argument("--streamer-ws-port", type=int, default=8765)
+    s.add_argument("--streamer-no-ws", action="store_true")
+    s.add_argument("--streamer-no-zones", action="store_true")
+    s.add_argument("--streamer-max-frames", type=int, default=0)
+    s.add_argument("--streamer-duration", type=float, default=0.0,
+                   help="stop streamer after N seconds (0=until stop)")
     s.add_argument("--label", default="genuine"); s.add_argument("--monitor", type=int, default=0,
                    help="0=window-name capture ('Remote Play' — default; immune to monitor layout); >=1=full monitor")
     s.add_argument("--diag-every", type=int, default=4, help="emit RGC diag every N records (dense=lower)")
