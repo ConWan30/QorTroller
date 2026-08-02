@@ -28,6 +28,27 @@ dual-connection setup by unpairing.
 PS Remote Play during a grind is **not** recommended — its USB audio/HID traffic
 perturbs poll rate into `CONTESTED`. Normal BT gameplay does not.
 
+## Default dual-path start (this operator rig — 2026-08-02)
+
+**Read first every session:** `docs/runbook/NEXT_SESSION_FIRST.md`
+
+| Index | Device | Role |
+|------:|--------|------|
+| 0 | `720p HD Camera` | House webcam — **never** |
+| 1 | capture card path | Bridge `--uvc-index 1` |
+| 2 | `OBS Virtual Camera` | Streamer `--streamer-device 2` + `dshow` |
+
+```powershell
+.\scripts\start_ncaa27_dual_path.ps1
+# same as:
+# python scripts/retina_capture_daemon.py start --label ncaa27 `
+#   --uvc-index 1 --streamer --streamer-device 2 --streamer-fps 15
+python scripts/retina_capture_daemon.py stop
+```
+
+Daemon passes OBS streamer defaults (`dshow`, device-name, `obs_virtual`, eye-check snapshot).
+Streamer is observation-only — never merge into `poep_enabled`.
+
 ## The eye check — do this before trusting any frame
 
 **Content-verify the first ring crop before queueing anything downstream.**
@@ -36,6 +57,7 @@ This is not paranoia. A persisted `uvc_index=0` once pointed the capture at the
 operator's webcam instead of the capture card, and *two full sessions* recorded
 the room before anyone noticed. Frames were purged from both copies. A session
 that looks healthy by every metric can still be watching the wrong thing.
+On this rig, index **0 is still the house webcam** — always prefer the locked map above.
 
 Related: crops must come from the **full-resolution** buffer, not the governor's
 downscaled optical-flow buffer. Reading OCR off a 5x-downscaled panel shrinks a
@@ -67,6 +89,9 @@ a topology fact, not a scoring failure to be worked around.
 
 ## Related
 
+- `docs/runbook/NEXT_SESSION_FIRST.md` — **first doc every live session**
+- `docs/runbook/streamer-retina-perception-v0.md` — streamer perception ops
+- `scripts/start_ncaa27_dual_path.ps1` — one-command dual-path start
 - `biometric-calibration` skill — what the layers measure
 - `docs/a2a/poep/` — the PoEP round history
 - `bridge/vapi_bridge/capture_continuity.py` — PCC state machine

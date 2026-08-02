@@ -4,6 +4,30 @@ Local operational memory for agents working in this repo. Prefer project
 skills (`.claude/skills/`) for protocol discipline; this file records the
 commands that actually keep the system functioning after multi-agent days.
 
+## FIRST STEP on a live-rig session (do this before other work)
+
+**Doc:** `docs/runbook/NEXT_SESSION_FIRST.md`  
+**Shortcut:** `scripts/start_ncaa27_dual_path.ps1` (or `.bat`)
+
+Operator rig map locked 2026-08-02 (do **not** rediscover by guessing indices):
+
+| Index | Device | Role |
+|------:|--------|------|
+| 0 | `720p HD Camera` | House webcam — never for grind |
+| 1 | capture card path | Bridge `--uvc-index 1` |
+| 2 | `OBS Virtual Camera` | Streamer `--streamer-device 2` (`dshow`) |
+
+```powershell
+cd C:\Users\Contr\vapi-pebble-prototype
+# Confirm operator ready (capture-rig skill), then:
+.\scripts\start_ncaa27_dual_path.ps1
+# Eye-check logs/eye_check_streamer_*.png (must be GAME not desk)
+# Stop:
+python scripts/retina_capture_daemon.py stop
+```
+
+Streamer remains advisory — never OR-merge optical activity into `poep_enabled`.
+
 ## Baseline health commands (run before merge/push)
 
 ```powershell

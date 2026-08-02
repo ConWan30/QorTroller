@@ -188,13 +188,26 @@ def cmd_start(a) -> int:
         _sid = sid or f"{a.label}_{stamp}"
         sp_env["GRIND_SESSION_ID"] = _sid
         sp_env["VSS_SESSION_ID"] = _sid
+        # Defaults proven 2026-08-02 on operator rig (OBS Virtual Camera over dshow).
+        streamer_backend = getattr(a, "streamer_backend", None) or "dshow"
+        streamer_device_name = getattr(a, "streamer_device_name", None) or "OBS Virtual Camera"
+        streamer_source_kind = getattr(a, "streamer_source_kind", None) or "obs_virtual"
+        _snap_arg = (getattr(a, "streamer_snapshot", None) or "").strip()
+        streamer_snapshot = (
+            Path(_snap_arg) if _snap_arg
+            else (_REPO / "logs" / f"eye_check_streamer_{a.label}_{stamp}.png")
+        )
         streamer_args = [
             sys.executable, str(_REPO / "scripts" / "streamer_retina_events.py"),
             "--device", str(streamer_device),
+            "--backend", str(streamer_backend),
+            "--device-name", str(streamer_device_name),
+            "--source-kind", str(streamer_source_kind),
             "--session-id", _sid,
             "--out", str(streamer_jsonl),
             "--fps", str(a.streamer_fps),
             "--ws-port", str(a.streamer_ws_port),
+            "--snapshot", str(streamer_snapshot),
         ]
         if a.streamer_no_ws:
             streamer_args.append("--no-ws")
@@ -204,6 +217,9 @@ def cmd_start(a) -> int:
             streamer_args.extend(["--max-frames", str(a.streamer_max_frames)])
         if a.streamer_duration:
             streamer_args.extend(["--duration", str(a.streamer_duration)])
+        presence_touch = (getattr(a, "streamer_presence_touch", None) or "").strip()
+        if presence_touch:
+            streamer_args.extend(["--presence-touch-file", presence_touch])
         if a.uvc_index is not None and streamer_device == a.uvc_index:
             print(f"[daemon] WARN: streamer and bridge both configured for UVC {streamer_device}; "
                   "the streamer may fail to open the device if it is exclusive. "
@@ -793,14 +809,26 @@ def main() -> int:
                    help="auto-start the v0 streamer perception pipeline on a UVC/OBS-virtual source")
     s.add_argument("--streamer-device", type=int, default=None,
                    help="UVC device for the streamer pipeline (default: --uvc-index if set, else 0). "
-                        "Use the OBS Virtual Camera or a second card to avoid conflict with the bridge.")
-    s.add_argument("--streamer-fps", type=float, default=20.0)
+                        "Operator rig map (2026-08-02): bridge --uvc-index 1, streamer --streamer-device 2 "
+                        "(OBS Virtual Camera). Never use 0 (house webcam).")
+    s.add_argument("--streamer-fps", type=float, default=15.0,
+                   help="streamer fps target (default 15; matches dogfood recipe)")
     s.add_argument("--streamer-ws-port", type=int, default=8765)
     s.add_argument("--streamer-no-ws", action="store_true")
     s.add_argument("--streamer-no-zones", action="store_true")
     s.add_argument("--streamer-max-frames", type=int, default=0)
     s.add_argument("--streamer-duration", type=float, default=0.0,
                    help="stop streamer after N seconds (0=until stop)")
+    s.add_argument("--streamer-backend", default="dshow",
+                   help="OpenCV backend for streamer (default dshow — required for OBS Virtual Camera on this rig)")
+    s.add_argument("--streamer-device-name", default="OBS Virtual Camera",
+                   help="Friendly name used for source.kind sniff / tags")
+    s.add_argument("--streamer-source-kind", default="obs_virtual",
+                   help="Override source.kind: uvc_card|obs_virtual|unknown|synthetic")
+    s.add_argument("--streamer-snapshot", default="",
+                   help="Path for first-frame eye-check PNG (default logs/eye_check_streamer_<label>_<stamp>.png)")
+    s.add_argument("--streamer-presence-touch", default="",
+                   help="Optional presence touch-file path for WP-S5 presence_sync_ok")
     s.add_argument("--label", default="genuine"); s.add_argument("--monitor", type=int, default=0,
                    help="0=window-name capture ('Remote Play' — default; immune to monitor layout); >=1=full monitor")
     s.add_argument("--diag-every", type=int, default=4, help="emit RGC diag every N records (dense=lower)")
