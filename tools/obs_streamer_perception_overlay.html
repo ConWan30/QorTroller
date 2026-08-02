@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>QorTroller Streamer Perception</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      background: rgba(0,0,0,0);
+      overflow: hidden;
+      font-family: ui-monospace, Consolas, monospace;
+      color: #e8e8e8;
+    }
+    #panel {
+      margin: 12px;
+      padding: 12px 16px;
+      min-width: 320px;
+      max-width: 520px;
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 120, 40, 0.7);
+      border-radius: 8px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.4);
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      letter-spacing: 0.08em;
+      color: #ff7828;
+      text-transform: uppercase;
+    }
+    .row { font-size: 13px; line-height: 1.45; }
+    .muted { color: #9aa0a6; font-size: 11px; margin-top: 8px; }
+    .ok { color: #5dfea5; }
+    .warn { color: #ffd166; }
+    .bad { color: #ff6b6b; }
+    #log {
+      margin-top: 8px;
+      max-height: 120px;
+      overflow: hidden;
+      font-size: 11px;
+      color: #c5c8ce;
+    }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <h1>Streamer Perception</h1>
+    <div class="row">WS: <span id="ws">connecting…</span></div>
+    <div class="row">Activity: <span id="activity">—</span></div>
+    <div class="row">Motion: <span id="motion">—</span> · FPS: <span id="fps">—</span></div>
+    <div class="row">Zones: <span id="zones">—</span></div>
+    <div class="row">Session: <span id="session">—</span></div>
+    <div id="log"></div>
+    <div class="muted">Advisory only — not humanity / tournament proof · eye-check game feed</div>
+  </div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const wsUrl = params.get("ws") || "ws://127.0.0.1:8765";
+    const wsEl = document.getElementById("ws");
+    const activityEl = document.getElementById("activity");
+    const motionEl = document.getElementById("motion");
+    const fpsEl = document.getElementById("fps");
+    const zonesEl = document.getElementById("zones");
+    const sessionEl = document.getElementById("session");
+    const logEl = document.getElementById("log");
+    const zoneMap = {};
+
+    function pushLog(line) {
+      const d = document.createElement("div");
+      d.textContent = line;
+      logEl.prepend(d);
+      while (logEl.childNodes.length > 8) logEl.removeChild(logEl.lastChild);
+    }
+
+    function connect() {
+      const ws = new WebSocket(wsUrl);
+      wsEl.textContent = wsUrl + " …";
+      wsEl.className = "warn";
+      ws.onopen = () => {
+        wsEl.textContent = "connected";
+        wsEl.className = "ok";
+      };
+      ws.onclose = () => {
+        wsEl.textContent = "disconnected — retry";
+        wsEl.className = "bad";
+        setTimeout(connect, 1500);
+      };
+      ws.onerror = () => { wsEl.className = "bad"; };
+      ws.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (msg.session_id) sessionEl.textContent = msg.session_id;
+        const t = msg.type;
+        const p = msg.payload || {};
+        if (t === "activity") {
+          activityEl.textContent = p.level || "—";
+          activityEl.className = p.level === "high" ? "ok" : (p.level === "idle" ? "muted" : "warn");
+          motionEl.textContent = p.motion != null ? p.motion : motionEl.textContent;
+          pushLog("activity → " + p.level);
+        } else if (t === "frame_stats") {
+          if (p.motion != null) motionEl.textContent = p.motion;
+          if (p.fps_meas != null) fpsEl.textContent = p.fps_meas;
+          if (p.activity) activityEl.textContent = p.activity;
+        } else if (t === "zone") {
+          zoneMap[p.zone_id] = p.state;
+          zonesEl.textContent = Object.entries(zoneMap).map(([k,v]) => k + ":" + v).join(" · ") || "—";
+          pushLog("zone " + p.zone_id + " → " + p.state);
+        } else if (t === "heartbeat") {
+          /* quiet */
+        } else if (t === "session_start") {
+          pushLog("session start");
+        } else if (t === "session_end") {
+          pushLog("session end frames=" + (p.frames || "?"));
+        }
+      };
+    }
+    connect();
+  </script>
+</body>
+</html>
