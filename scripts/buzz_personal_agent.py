@@ -154,7 +154,7 @@ def _load_config() -> AgentConfig:
         greeting_text=os.environ.get(
             "BUZZ_PERSONAL_AGENT_GREETING",
             "Hello — I'm your Retina, running under my own agent key with the Grok 4.5 persona pack loaded. "
-            "I can answer status, analytics, claim, create, and brainstorm. DM me any time.",
+            "I can answer status, analytics, claim, propose, hire, and brainstorm. DM me any time.",
         ),
     )
 
@@ -311,12 +311,14 @@ def _handle_help(cfg: AgentConfig) -> str:
         "- `status` — check your current session / bridge status\n"
         "- `analytics` — your own verified data summary\n"
         "- `claim <token> <device>` — post your ioID claim to #lobby\n"
-        "- `create <agent|channel|project|workflow|template> <name> [...]` — create a new Buzz artifact\n"
+        "- `propose <channel|project|workflow|template|brainstorm> <clause> <name> [desc...]` — propose a new Buzz artifact\n"
+        "- `hire <name> --clause P-... --resume \"competence: a,b; forbidden: x,y\"` — hire a child agent\n"
         "- `git push <repo>` / `git commit <repo> <message>` / `git merge <pr-id>` / `git pr-open <repo> <title> <body>`\n"
-        "- `brainstorm <topic>` — seed a brainstorm in the community\n"
+        "- `brainstorm <topic>` — seed a brainstorm (P-FRM by default)\n"
         "- `help` — bring this list back\n\n"
         "If `BUZZ_LOBBY_CHANNEL_ID` is set, `claim` actually posts.\n"
-        "`create` and `brainstorm` run `scripts/buzz_agent_factory.py` with your key.\n"
+        "`propose` and `hire` run `scripts/buzz_agent_factory.py` with your key.\n"
+        "By default I *propose*, not mint. Use `propose ... approve` only if you are the operator.\n"
         "I don't run @EA operator commands and I never ask for a private key."
         + pack_note
     )
@@ -385,48 +387,32 @@ def _parse_command(text: str) -> tuple[str, list[str]]:
     return parts[0], parts[1:]
 
 
-def _handle_factory(cfg: AgentConfig, cmd: str, args: list[str]) -> str:
-    """Run buzz_agent_factory.py to create an agent, channel, project, etc."""
-    if not args:
+def _handle_propose(cfg: AgentConfig, args: list[str]) -> str:
+    """Run buzz_agent_factory.py to propose a channel/project/workflow/template/brainstorm."""
+    if len(args) < 3:
         return (
-            "Usage: `create <agent|channel|project|workflow|template> <name> [args...]`\n"
+            "Usage: `propose <channel|project|workflow|template|brainstorm> <clause> <name> [desc...]`\n"
             "Examples:\n"
-            "- `create agent AlphaBot watcher`\n"
-            "- `create channel brainstorm Agent brainstorming room`\n"
-            "- `create project SAP-Portal Make SAP jobs visible`\n"
-            "- `create workflow Claim-Flow define,execute,verify`\n"
-            "- `create template Onboarding-Template`\n"
-            "- `brainstorm What if agents self-onboard via ioID?`"
+            "- `propose channel P-SOV lobby-faq Gamer FAQ room`\n"
+            "- `propose project P-FRM session-postcard Explain postcards`\n"
+            "- `propose brainstorm P-FRM self-onboard How could agents self-onboard via ioID?`"
         )
 
     artifact = args[0]
-    name = args[1] if len(args) > 1 else ""
-    rest = args[2:]
-    if not name:
-        return f"I need a name for the {artifact}."
+    clause = args[1]
+    name = args[2]
+    rest = args[3:]
+    desc = " ".join(rest) if rest else ""
 
-    if artifact not in ("agent", "channel", "project", "workflow", "template"):
-        return f"I can create agent/channel/project/workflow/template, not '{artifact}'."
+    if artifact not in ("channel", "project", "workflow", "template", "brainstorm"):
+        return f"I can propose channel/project/workflow/template/brainstorm, not '{artifact}'."
 
     if cfg.dry_run:
-        return f"[dry-run] I would create a {artifact} named '{name}'."
+        return f"[dry-run] I would propose a {artifact} '{name}' under {clause}."
 
-    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py"]
-    if artifact == "agent":
-        role = rest[0] if rest else "concierge"
-        factory_cmd += ["create-agent", "--name", name, "--role", role]
-    elif artifact == "channel":
-        desc = " ".join(rest) if rest else f"{name} channel"
-        factory_cmd += ["create-channel", "--name", name, "--description", desc]
-    elif artifact == "project":
-        goal = " ".join(rest) if rest else "expand QorTroller"
-        factory_cmd += ["create-project", "--name", name, "--goal", goal]
-    elif artifact == "workflow":
-        steps = ",".join(rest) if rest else "define,execute,verify"
-        factory_cmd += ["create-workflow", "--name", name, "--steps", steps]
-    elif artifact == "template":
-        desc = " ".join(rest) if rest else f"{name} template"
-        factory_cmd += ["create-template", "--name", name, "--description", desc]
+    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "propose", "--artifact", artifact, "--name", name, "--clause", clause]
+    if desc:
+        factory_cmd += ["--description", desc]
 
     env = os.environ.copy()
     env["BUZZ_PRIVATE_KEY"] = cfg.private_key
@@ -445,24 +431,85 @@ def _handle_factory(cfg: AgentConfig, cmd: str, args: list[str]) -> str:
             shell=False,
         )
         if result.returncode == 0:
-            return f"{artifact} '{name}' created:\n```\n{result.stdout.strip()[:1500]}\n```"
-        return f"{artifact} creation failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+            return f"Proposed {artifact} '{name}' ({clause}):\n```\n{result.stdout.strip()[:1500]}\n```"
+        return f"Proposal failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+    except Exception as e:
+        return f"factory error: {e}"
+
+
+def _handle_hire(cfg: AgentConfig, args: list[str]) -> str:
+    """Run buzz_agent_factory.py hire to create a child agent with clause and resume."""
+    if not args:
+        return (
+            "Usage: `hire <name> --clause P-... --resume \"competence: a,b; forbidden: x,y\"`\n"
+            "Example: `hire Seatwarden --clause P-VSS --resume \"competence: seat status, flag-down; forbidden: VSS OPEN, chain, shell\"`"
+        )
+
+    name = args[0]
+    # Parse --clause and --resume flags from remaining args
+    clause = ""
+    resume = ""
+    approve = False
+    i = 1
+    while i < len(args):
+        if args[i] == "--clause" and i + 1 < len(args):
+            clause = args[i + 1]
+            i += 2
+        elif args[i] == "--resume" and i + 1 < len(args):
+            resume = args[i + 1]
+            i += 2
+        elif args[i] == "--approve":
+            approve = True
+            i += 1
+        else:
+            i += 1
+
+    if not clause or not resume:
+        return "I need `--clause P-...` and `--resume \"competence: ...; forbidden: ...\"`."
+
+    if cfg.dry_run:
+        return f"[dry-run] I would hire '{name}' under {clause} with resume: {resume}"
+
+    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "hire", "--name", name, "--clause", clause, "--resume", resume]
+    if approve:
+        factory_cmd.append("--approve")
+
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return f"Hired '{name}' ({clause}):\n```\n{result.stdout.strip()[:1500]}\n```"
+        return f"Hire failed:\n```\n{result.stderr.strip()[:1000]}\n```"
     except Exception as e:
         return f"factory error: {e}"
 
 
 def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
     if not args:
-        return "Usage: `brainstorm <topic>`"
-    topic = " ".join(args)
+        return "Usage: `brainstorm <topic>` or `brainstorm <clause> <topic>`"
+    clause = args[0] if args[0].startswith("P-") else "P-FRM"
+    topic = " ".join(args[1:]) if args[0].startswith("P-") else " ".join(args)
+    if not topic:
+        return "I need a topic."
     channel_id = os.environ.get("BUZZ_BRAINSTORM_CHANNEL_ID", "")
     if not channel_id:
         return "I need `BUZZ_BRAINSTORM_CHANNEL_ID` set to post a brainstorm."
     if cfg.dry_run:
-        return f"[dry-run] I would brainstorm: {topic}"
+        return f"[dry-run] I would brainstorm '{topic}' under {clause}."
     factory_cmd = [
         sys.executable, "scripts/buzz_agent_factory.py",
-        "brainstorm", "--topic", topic, "--channel", channel_id,
+        "brainstorm", "--topic", topic, "--channel", channel_id, "--clause", clause,
     ]
     env = os.environ.copy()
     env["BUZZ_PRIVATE_KEY"] = cfg.private_key
@@ -478,7 +525,7 @@ def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
             shell=False,
         )
         if result.returncode == 0:
-            return f"Brainstorm seeded: {topic}"
+            return f"Brainstorm seeded: {topic} ({clause})"
         return f"Brainstorm failed:\n```\n{result.stderr.strip()[:1000]}\n```"
     except Exception as e:
         return f"brainstorm error: {e}"
@@ -649,7 +696,7 @@ def _handle_chat(text: str, cfg: AgentConfig) -> Optional[str]:
 def _handle_unknown(cfg: AgentConfig) -> str:
     return (
         "I didn't catch that as a command I can run right now. "
-        "I do `status`, `analytics`, `claim`, `create`, and `brainstorm`. "
+        "I do `status`, `analytics`, `claim`, `propose`, `hire`, and `brainstorm`. "
         "You can also ask me about QorTroller, ioID, PoAC, or PoEP. "
         "For operator stuff like @EA, hit up #rig-ops."
     )
@@ -673,8 +720,18 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
     if cmd in ("claim", "ioid"):
         return _handle_claim(cfg, args)
 
+    if cmd in ("propose", "prop"):
+        return _handle_propose(cfg, args)
+
+    if cmd in ("hire",):
+        return _handle_hire(cfg, args)
+
     if cmd in ("create", "mint"):
-        return _handle_factory(cfg, cmd, args)
+        return (
+            "`create` is now `propose` (or `hire` for agents). "
+            "Try: `propose channel P-SOV my-channel description` or "
+            "`hire my-agent --clause P-... --resume \"competence: ...\"`"
+        )
 
     if cmd in ("brainstorm", "bs"):
         return _handle_brainstorm(cfg, args)
