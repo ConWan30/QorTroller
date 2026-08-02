@@ -302,21 +302,21 @@ def _handle_help(cfg: AgentConfig) -> str:
     pack_note = ""
     if cfg.persona_pack_file:
         pack_note = (
-            f"\nThis relay uses the Buzz persona pack `{cfg.persona_pack_file}`. "
+            f"\nThis relay runs from the Buzz persona pack `{cfg.persona_pack_file}`. "
             "You can also import `buzz-persona-qortroller-concierge/qortroller-concierge.agent.json` "
             "as a managed agent in Buzz Desktop.\n"
         )
     return (
-        "I can answer these gamer-self questions:\n"
-        "- `status` — your current session / bridge status\n"
+        "Hey — here's what I can do for you:\n"
+        "- `status` — check your current session / bridge status\n"
         "- `analytics` — your own verified data summary\n"
         "- `claim <token> <device>` — post your ioID claim to #lobby\n"
-        "- `create <agent|channel|project|workflow|template> <name> [...]` — mint a new Buzz artifact\n"
+        "- `create <agent|channel|project|workflow|template> <name> [...]` — create a new Buzz artifact\n"
         "- `brainstorm <topic>` — seed a brainstorm in the community\n"
-        "- `help` — this message\n\n"
+        "- `help` — bring this list back\n\n"
         "If `BUZZ_LOBBY_CHANNEL_ID` is set, `claim` actually posts.\n"
-        "`create` and `brainstorm` call `scripts/buzz_agent_factory.py` with your key.\n"
-        "I do not run @EA commands and I never ask for a private key."
+        "`create` and `brainstorm` run `scripts/buzz_agent_factory.py` with your key.\n"
+        "I don't run @EA operator commands and I never ask for a private key."
         + pack_note
     )
 
@@ -483,6 +483,112 @@ def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
         return f"brainstorm error: {e}"
 
 
+def _handle_chat(text: str, cfg: AgentConfig) -> Optional[str]:
+    """Friendly natural-language responses for small talk and QorTroller explainers.
+
+    Returns None if the message should fall through to the unknown fallback.
+    """
+    lowered = text.lower()
+
+    # Greetings
+    if any(lowered.startswith(w) for w in ("hello", "hi", "hey", "yo", "sup")):
+        return (
+            f"Hey — I'm {cfg.bot_name}. Ask me about `status`, `analytics`, "
+            "`claim`, `create`, or `brainstorm`, or just ask what QorTroller is."
+        )
+
+    # Farewells
+    if any(w in lowered for w in ("bye", "goodbye", "see ya", "later")):
+        return "Catch you later."
+
+    # Thanks
+    if any(w in lowered for w in ("thank", "thx", "thanks")):
+        return "You're welcome."
+
+    # How the agent feels about QorTroller
+    if any(p in lowered for p in (
+        "how do you feel",
+        "what do you think",
+        "what is your opinion",
+        "do you like qortroller",
+        "do you love qortroller",
+    )):
+        return (
+            "I think QorTroller is the real deal. Gamers and their controllers as the "
+            "cryptographic agency-holders of their own data, with cheating made "
+            "cryptographically inexpressible — that's the V.A.P.I. thesis in action. "
+            "What part do you want to dig into?"
+        )
+
+    # QorTroller explainer
+    if any(p in lowered for p in (
+        "what is qortroller",
+        "what's qortroller",
+        "tell me about qortroller",
+        "explain qortroller",
+    )):
+        return (
+            "QorTroller is the reference V.A.P.I. implementation — a DePIN protocol where "
+            "the gamer and their controller are also the cryptographic owners of the data "
+            "they generate. It runs on IoTeX, uses the certified Sony DualShock Edge, and "
+            "produces 228-byte Proof of Autonomous Cognition records per cognition cycle. "
+            "The big idea: honest gamers reach `isFullyEligible()` on-chain without needing "
+            "to be punished for cheating, because cheating becomes cryptographically "
+            "inexpressible."
+        )
+
+    # ioID explainer
+    if any(p in lowered for p in (
+        "what is ioid",
+        "what's ioid",
+        "explain ioid",
+        "tell me about ioid",
+    )):
+        return (
+            "ioID is the IoTeX decentralized identity layer. In QorTroller, your "
+            "controller (the certified Edge, device id `581a836c`) is bound to an ioID "
+            "token and an ERC-6551 token-bound account, so the device is owned by your "
+            "DID, not the other way around. It lets the gamer prove device provenance "
+            "without revealing raw biometrics."
+        )
+
+    # PoAC explainer
+    if any(p in lowered for p in (
+        "what is poac",
+        "what's poac",
+        "proof of autonomous cognition",
+    )):
+        return (
+            "PoAC — Proof of Autonomous Cognition — is the 228-byte attestation record "
+            "QorTroller produces each cognition cycle. It binds controller input, session "
+            "context, and a cryptographic commitment so the gamer can prove their "
+            "gameplay is genuine without leaking the raw HID/IMU substrate."
+        )
+
+    # PoEP explainer
+    if any(p in lowered for p in (
+        "what is poep",
+        "what's poep",
+        "proof of embodied play",
+    )):
+        return (
+            "PoEP — Proof of Embodied Play — is the controller-side liveness check. It "
+            "proves a real human is at the controls using reflex/IMU signals from the "
+            "DualShock Edge, not just a script replaying inputs."
+        )
+
+    return None
+
+
+def _handle_unknown(cfg: AgentConfig) -> str:
+    return (
+        "I didn't catch that as a command I can run right now. "
+        "I do `status`, `analytics`, `claim`, `create`, and `brainstorm`. "
+        "You can also ask me about QorTroller, ioID, PoAC, or PoEP. "
+        "For operator stuff like @EA, hit up #rig-ops."
+    )
+
+
 def _process_message(message: dict, cfg: AgentConfig) -> str:
     text = message.get("content", "").strip()
     if not text:
@@ -517,10 +623,11 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
             "For operator commands like @EA, use #rig-ops with an operator key."
         )
 
-    return (
-        "I didn't understand that. Send `help` for what I can do. "
-        "I only handle gamer-self bridge queries."
-    )
+    chat_reply = _handle_chat(text, cfg)
+    if chat_reply:
+        return chat_reply
+
+    return _handle_unknown(cfg)
 
 
 def _is_from_self(message: dict, my_pubkey: str) -> bool:
