@@ -79,6 +79,7 @@ class AgentConfig:
     bridge_api_key: str
     bot_name: str
     bot_about: str
+    persona_pack_file: str
     private_key: str
     ioid_token: str
     device_id: str
@@ -89,6 +90,31 @@ class AgentConfig:
     lobby_channel_id: str
 
 
+def _load_persona_pack(path: Optional[str]) -> tuple[str, str, str]:
+    """Load display name and about from a Buzz agent snapshot .agent.json.
+
+    Returns (name, about, pack_file_name). Defaults are used if the pack is
+    missing or unreadable so the agent can still start.
+    """
+    default_name = "QorTroller Concierge"
+    default_about = "Gamer self-service agent for QorTroller. I only answer your own bridge queries."
+    if path:
+        pack_path = Path(path)
+    else:
+        pack_path = REPO_ROOT / "buzz-persona-qortroller-concierge" / "qortroller-concierge.agent.json"
+    if not pack_path.exists():
+        return default_name, default_about, ""
+    try:
+        data = json.loads(pack_path.read_text(encoding="utf-8"))
+        profile = data.get("profile", {})
+        name = profile.get("displayName") or default_name
+        about = profile.get("about") or default_about
+        return name, about, pack_path.name
+    except Exception as e:
+        _log().warning("failed to load persona pack %s: %s", pack_path, e)
+        return default_name, default_about, ""
+
+
 def _load_config() -> AgentConfig:
     pk = os.environ.get("BUZZ_PRIVATE_KEY", "")
     if not pk:
@@ -96,16 +122,16 @@ def _load_config() -> AgentConfig:
             "BUZZ_PRIVATE_KEY is required. This is the gamer key, not an operator key. "
             "Never commit it."
         )
+    pack_path = os.environ.get("BUZZ_PERSONAL_AGENT_PERSONA_PACK", "")
+    pack_name, pack_about, pack_file = _load_persona_pack(pack_path)
     return AgentConfig(
         enabled=os.environ.get("BUZZ_PERSONAL_AGENT_ENABLED", "0") == "1",
         relay_url=os.environ.get("BUZZ_RELAY_URL", "ws://localhost:3000").rstrip("/"),
         bridge_base_url=os.environ.get("BRIDGE_BASE_URL", "http://localhost:8000").rstrip("/"),
         bridge_api_key=os.environ.get("BRIDGE_API_KEY", ""),
-        bot_name=os.environ.get("BUZZ_PERSONAL_AGENT_NAME", "QorTroller Concierge"),
-        bot_about=os.environ.get(
-            "BUZZ_PERSONAL_AGENT_ABOUT",
-            "Gamer self-service agent for QorTroller. I only answer your own bridge queries.",
-        ),
+        bot_name=os.environ.get("BUZZ_PERSONAL_AGENT_NAME") or pack_name,
+        bot_about=os.environ.get("BUZZ_PERSONAL_AGENT_ABOUT") or pack_about,
+        persona_pack_file=pack_file,
         private_key=pk,
         ioid_token=os.environ.get("PERSONAL_AGENT_IOID_TOKEN", "498"),
         device_id=os.environ.get("PERSONAL_AGENT_DEVICE_ID", "581a836c"),
@@ -252,7 +278,14 @@ def _fmt_self_analytics(data: Optional[dict]) -> str:
     return f"Self-analytics digest:\n```json\n{json.dumps(data, indent=2)}\n```"
 
 
-def _handle_help() -> str:
+def _handle_help(cfg: AgentConfig) -> str:
+    pack_note = ""
+    if cfg.persona_pack_file:
+        pack_note = (
+            f"\nThis relay uses the Buzz persona pack `{cfg.persona_pack_file}`. "
+            "You can also import `buzz-persona-qortroller-concierge/qortroller-concierge.agent.json` "
+            "as a managed agent in Buzz Desktop.\n"
+        )
     return (
         "I can answer these gamer-self questions:\n"
         "- `status` — your current session / bridge status\n"
@@ -264,6 +297,7 @@ def _handle_help() -> str:
         "If `BUZZ_LOBBY_CHANNEL_ID` is set, `claim` actually posts.\n"
         "`create` and `brainstorm` call `scripts/buzz_agent_factory.py` with your key.\n"
         "I do not run @EA commands and I never ask for a private key."
+        + pack_note
     )
 
 
@@ -454,7 +488,7 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
         return _handle_brainstorm(cfg, args)
 
     if cmd in ("help", "?", "h"):
-        return _handle_help()
+        return _handle_help(cfg)
 
     # Reject anything that looks like an operator command.
     if text.startswith("@ea") or text.startswith("devin @ea") or text.startswith("run "):
@@ -562,6 +596,8 @@ def main() -> int:
         cfg.bot_name, my_npub or my_pk, cfg.relay_url, cfg.dry_run
     )
     _log().info("DM me at %s to trigger status/analytics/claim/help", my_npub or my_pk)
+    if cfg.persona_pack_file:
+        _log().info("loaded persona pack: %s", cfg.persona_pack_file)
 
     try:
         while True:
