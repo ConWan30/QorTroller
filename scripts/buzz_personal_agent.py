@@ -88,6 +88,8 @@ class AgentConfig:
     dry_run: bool
     dm_ids: list[str]
     lobby_channel_id: str
+    greet_on_start: bool
+    greeting_text: str
 
 
 def _load_persona_pack(path: Optional[str]) -> tuple[str, str, str]:
@@ -148,6 +150,12 @@ def _load_config() -> AgentConfig:
             if c.strip()
         ],
         lobby_channel_id=os.environ.get("BUZZ_LOBBY_CHANNEL_ID", ""),
+        greet_on_start=os.environ.get("BUZZ_PERSONAL_AGENT_GREET_ON_START", "0") == "1",
+        greeting_text=os.environ.get(
+            "BUZZ_PERSONAL_AGENT_GREETING",
+            "Hello — I'm your QorTroller Concierge, running under my own agent key with the Grok 4.5 persona pack loaded. "
+            "I can answer status, analytics, claim, create, and brainstorm. DM me any time.",
+        ),
     )
 
 
@@ -225,6 +233,18 @@ class BuzzCliClient:
         if reply_to:
             args += ["--reply-to", reply_to]
         return self._run(*args)
+
+
+def _send_startup_greeting(client: BuzzCliClient, cfg: AgentConfig) -> None:
+    """Send a one-time greeting to each configured DM on startup.
+
+    This is what makes the Concierge feel agentic — it reaches out first.
+    """
+    if not cfg.greet_on_start or not cfg.dm_ids:
+        return
+    for dm_id in cfg.dm_ids:
+        _log().info("sending startup greeting to DM %s", dm_id)
+        client.send_message(dm_id, cfg.greeting_text)
 
 
 def _load_state() -> dict:
@@ -598,6 +618,8 @@ def main() -> int:
     _log().info("DM me at %s to trigger status/analytics/claim/help", my_npub or my_pk)
     if cfg.persona_pack_file:
         _log().info("loaded persona pack: %s", cfg.persona_pack_file)
+
+    _send_startup_greeting(client, cfg)
 
     try:
         while True:
