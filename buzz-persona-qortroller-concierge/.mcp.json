@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "qortroller-acp": {
+      "command": "python",
+      "args": [
+        "mcp/qortroller_concierge_acp_stdio.py"
+      ],
+      "env": {}
+    }
+  }
+}

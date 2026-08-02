@@ -1,30 +1,33 @@
+#!/usr/bin/env python3
 """
 buzz_ioid_claim.py — Gamer-side ioID claim flow for Buzz.
 
-Phase 3 gamer sovereignty: the gamer posts their OWN kind 0 profile with
-an ioid_token tag, linking their Buzz npub to their QorTroller ioID.
-The operator never holds the gamer's private key — the gamer runs this
-script themselves with their own BUZZ_PRIVATE_KEY.
+Phase 3 gamer sovereignty: the gamer posts their OWN kind 0 profile and a
+#lobby claim message linking their Buzz npub to their QorTroller ioID.
+The operator never holds the gamer private key — the gamer runs this script
+(or their personal agent runs it with their key) from their own machine.
 
-The claim is a self-asserted pointer: "I am npub X and I claim ioID
-tokenId 498." The proof still lives in QorTroller (the ioID registry
-on IoTeX). A future version could add relay-side ioID verification
-(read-only RPC call to the ioID registry contract).
+The claim is a self-asserted pointer: "I am npub X and I claim ioID tokenId 498."
+The cryptographic proof still lives in QorTroller (the ioID registry on IoTeX).
+A future version can add relay-side ioID verification.
 
 Usage:
   python scripts/buzz_ioid_claim.py --ioid-token 498 --device-id 581a836c
-  python scripts/buzz_ioid_claim.py --ioid-token 498 --gamer-name "Con"
+  python scripts/buzz_ioid_claim.py --ioid-token 498 --gamer-name "Con" --dry-run
 
 Requirements:
-  - BUZZ_PRIVATE_KEY (the GAMER's key, NOT the bot's key)
-  - BUZZ_RELAY_URL
+  - BUZZ_PRIVATE_KEY (the GAMER's key, NOT the bot/operator key)
+  - BUZZ_LOBBY_CHANNEL_ID (preferred) or first entry in BUZZ_CHANNEL_IDS
+  - BUZZ_RELAY_URL (default ws://localhost:3000 for the qortroller-buzz helper)
+  - BUZZ_HTTP_RELAY_URL (default http://localhost:3000 for the buzz CLI)
   - buzz CLI binary (BUZZ_CLI_PATH or auto-detected)
+  - qortroller-buzz helper (BUZZ_HELPER_PATH or auto-detected)
 
 The script:
-  1. Reads the gamer's current kind 0 profile from the relay
-  2. Merges the ioid_token + device_id tags into the profile
-  3. Publishes the updated kind 0 via `buzz users set-profile`
-  4. Posts a kind 9 claim message to #lobby announcing the link
+  1. Sets the gamer kind 0 profile with --name and an about line that mentions
+     the ioID token and device id.
+  2. Posts a kind 9 claim message to #lobby with custom tags (npub, ioid_claim,
+     device_id, qortroller).
 
 Never touches the operator's key. Never posts raw biometrics.
 """
@@ -36,33 +39,71 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
-# --- .env loading ------------------------------------------------------------
-try:
-    from dotenv import load_dotenv
-    _env_path = Path(__file__).resolve().parent / ".env"
-    if _env_path.exists():
-        load_dotenv(_env_path, encoding="utf-8")
-except ImportError:
-    pass
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-RELAY_URL = os.environ.get("BUZZ_RELAY_URL", "ws://localhost:3000")
-CLI_PATH = os.environ.get(
-    "BUZZ_CLI_PATH",
-    os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "buzz", "target", "debug", "buzz.exe",
-    ),
-)
+
+def _to_ws(url: str) -> str:
+    if url.startswith("http://"):
+        return "ws://" + url[len("http://"):]
+    if url.startswith("https://"):
+        return "wss://" + url[len("https://"):]
+    return url
+
+
+def _to_http(url: str) -> str:
+    if url.startswith("ws://"):
+        return "http://" + url[len("ws://"):]
+    if url.startswith("wss://"):
+        return "https://" + url[len("wss://"):]
+    return url
+
+
+_raw_relay = os.environ.get("BUZZ_RELAY_URL", "ws://localhost:3000")
+RELAY_URL = _to_ws(_raw_relay)
+HTTP_RELAY_URL = os.environ.get("BUZZ_HTTP_RELAY_URL") or _to_http(_raw_relay) or "http://localhost:3000"
+
+
+def _default_cli_path() -> str:
+    return str(REPO_ROOT / "buzz" / "target" / "debug" / "buzz.exe")
+
+
+def _default_helper_path() -> str:
+    return str(REPO_ROOT / "buzz" / "target" / "debug" / "qortroller-buzz.exe")
+
+
+def _cli_path() -> str:
+    env = os.environ.get("BUZZ_CLI_PATH", "")
+    if env and os.path.isfile(env):
+        return env
+    default = _default_cli_path()
+    if os.path.isfile(default):
+        return default
+    return env or default
+
+
+def _helper_path() -> str:
+    env = os.environ.get("BUZZ_HELPER_PATH", "")
+    if env and os.path.isfile(env):
+        return env
+    default = _default_helper_path()
+    if os.path.isfile(default):
+        return default
+    return env or default
 
 
 def _buzz_cli(args: list[str]) -> tuple[int, str, str]:
     """Run a buzz CLI command. Returns (exit_code, stdout, stderr)."""
     env = os.environ.copy()
-    env["BUZZ_RELAY_URL"] = RELAY_URL
+    env["BUZZ_RELAY_URL"] = HTTP_RELAY_URL
+    # Gamer self-claims do not use owner attestation (NIP-OA). A stale or
+    # mismatched BUZZ_AUTH_TAG will cause the relay to reject the event.
+    env.pop("BUZZ_AUTH_TAG", None)
+    cli = _cli_path()
     try:
         result = subprocess.run(
-            [CLI_PATH] + args,
+            [cli] + args,
             capture_output=True,
             text=True,
             timeout=30,
@@ -74,21 +115,38 @@ def _buzz_cli(args: list[str]) -> tuple[int, str, str]:
         return 1, "", str(e)
 
 
-def _whoami() -> str:
-    """Get the gamer's pubkey hex from the qortroller-buzz helper."""
-    helper_path = os.environ.get(
-        "BUZZ_HELPER_PATH",
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "buzz", "target", "debug", "qortroller-buzz.exe",
-        ),
-    )
-    if not os.path.isfile(helper_path):
+def _whoami_bech32() -> Optional[str]:
+    """Return the bech32 npub for BUZZ_PRIVATE_KEY, or None."""
+    pk = os.environ.get("BUZZ_PRIVATE_KEY", "")
+    if not pk:
+        return None
+    try:
+        from nostr_sdk import Keys
+        keys = Keys.parse(pk)
+        return keys.public_key().to_bech32()
+    except Exception:
+        # Try the qortroller-buzz helper and convert hex to bech32
+        hex_pk = _whoami_hex()
+        if not hex_pk:
+            return None
+        try:
+            from nostr_sdk import PublicKey
+            return PublicKey.from_hex(hex_pk).to_bech32()
+        except Exception:
+            return None
+
+
+def _whoami_hex() -> str:
+    """Get the gamer pubkey hex from the qortroller-buzz helper."""
+    helper = _helper_path()
+    if not os.path.isfile(helper):
         return ""
     env = os.environ.copy()
+    env["BUZZ_RELAY_URL"] = RELAY_URL
+    env.pop("BUZZ_AUTH_TAG", None)
     try:
         result = subprocess.run(
-            [helper_path, "whoami"],
+            [helper, "whoami"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -102,98 +160,101 @@ def _whoami() -> str:
     return ""
 
 
-def _get_profile() -> dict | None:
-    """Read the current kind 0 profile for the gamer's key."""
-    npub = _whoami()
-    if not npub:
-        return None
+def _get_profile(npub: str) -> Optional[dict]:
+    """Read the current kind 0 profile for the given bech32 npub."""
     rc, stdout, _ = _buzz_cli(["users", "get", "--pubkey", npub])
     if rc != 0 or not stdout:
         return None
     try:
-        return json.loads(stdout)
+        data = json.loads(stdout)
+        if isinstance(data, list) and data:
+            return data[0]
+        return data
     except json.JSONDecodeError:
         return None
 
 
-def _set_profile(name: str, about: str, tags: list[list[str]]) -> bool:
-    """Set the gamer's kind 0 profile with custom tags.
+def _set_profile(name: str, about: str, dry_run: bool) -> bool:
+    """Set the gamer kind 0 profile via the buzz CLI.
 
-    Uses the qortroller-buzz helper's `publish-profile` subcommand, which
-    publishes a kind 0 (NIP-01 Metadata) event with custom tags. The buzz
-    CLI's `users set-profile` doesn't support custom tags, so the helper
-    is the primary path.
+    The buzz CLI `users set-profile` does not support custom tags, so the
+    ioID token and device id are placed in the `about` field. This is a
+    self-asserted pointer; the proof lives in QorTroller.
     """
-    helper_path = os.environ.get(
-        "BUZZ_HELPER_PATH",
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "buzz", "target", "debug", "qortroller-buzz.exe",
-        ),
-    )
-    if not os.path.isfile(helper_path):
-        print(f"[!] helper not found: {helper_path}", file=sys.stderr)
+    if dry_run:
+        print(f"[dry-run] would set kind 0 profile: name={name!r} about={about!r}")
+        return True
+
+    if not name:
+        # Try to keep existing name
+        npub = _whoami_bech32()
+        existing = _get_profile(npub) if npub else None
+        name = (existing or {}).get("display_name") or (existing or {}).get("name") or ""
+
+    args = ["users", "set-profile", "--about", about]
+    if name:
+        args += ["--name", name]
+
+    rc, _, stderr = _buzz_cli(args)
+    if rc != 0:
+        print(f"[!] profile update failed: {stderr}", file=sys.stderr)
+        return False
+    return True
+
+
+def _lobby_channel_id(args_lobby: str) -> str:
+    if args_lobby:
+        return args_lobby
+    env_lobby = os.environ.get("BUZZ_LOBBY_CHANNEL_ID", "").strip()
+    if env_lobby:
+        return env_lobby
+    channels = os.environ.get("BUZZ_CHANNEL_IDS", "")
+    first = [c.strip() for c in channels.split(",") if c.strip()]
+    if first:
+        return first[0]
+    return ""
+
+
+def _post_claim_message(
+    channel_id: str, npub: str, ioid_token: str, device_id: str, dry_run: bool
+) -> bool:
+    """Post a kind 9 claim message to #lobby with NIP-29 `h` tag."""
+    helper = _helper_path()
+    if not os.path.isfile(helper):
+        print(f"[!] qortroller-buzz helper not found: {helper}", file=sys.stderr)
         return False
 
-    # Build NIP-01 metadata content (JSON object in the content field)
-    metadata = {"name": name, "about": about}
-    payload = json.dumps({
-        "content": json.dumps(metadata),
-        "tags": tags,
-    })
-
-    env = os.environ.copy()
-    env["BUZZ_RELAY_URL"] = RELAY_URL
-    try:
-        result = subprocess.run(
-            [helper_path, "publish-profile"],
-            input=payload,
-            capture_output=True,
-            text=True,
-            timeout=75,
-            env=env,
-            shell=False,
-        )
-        if result.returncode == 0:
-            return True
-        print(f"[!] publish-profile failed: {result.stderr.strip()}", file=sys.stderr)
-        return False
-    except Exception as e:
-        print(f"[!] publish-profile error: {e}", file=sys.stderr)
-        return False
-
-
-def _post_claim_message(channel_id: str, npub: str, ioid_token: str, device_id: str) -> bool:
-    """Post a kind 9 claim message to the channel announcing the ioID link."""
-    helper_path = os.environ.get(
-        "BUZZ_HELPER_PATH",
-        os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "buzz", "target", "debug", "qortroller-buzz.exe",
-        ),
-    )
-    if not os.path.isfile(helper_path):
-        return False
-
-    content = f"ioID claim: npub {npub[:16]}... links to ioID tokenId {ioid_token}"
+    content = f"ioID claim: {npub} links to ioID tokenId {ioid_token}"
     if device_id:
         content += f" (device {device_id})"
+    content += ". Proof lives in QorTroller."
+
+    tags = [
+        ["qortroller", "1"],
+        ["ioid_claim", str(ioid_token)],
+        ["npub", npub],
+    ]
+    if device_id:
+        tags.append(["device_id", device_id])
 
     payload = json.dumps({
         "channel": channel_id,
         "content": content,
-        "tags": [
-            ["qortroller", "1"],
-            ["ioid_claim", ioid_token],
-            ["claim_pubkey", npub],
-        ] + ([["device_id", device_id]] if device_id else []),
+        "tags": tags,
     })
+
+    if dry_run:
+        print(f"[dry-run] would post to #lobby channel {channel_id}:")
+        print(payload)
+        return True
 
     env = os.environ.copy()
     env["BUZZ_RELAY_URL"] = RELAY_URL
+    # Gamer self-claims do not use owner attestation (NIP-OA).
+    env.pop("BUZZ_AUTH_TAG", None)
     try:
         result = subprocess.run(
-            [helper_path, "publish"],
+            [helper, "publish"],
             input=payload,
             capture_output=True,
             text=True,
@@ -201,11 +262,13 @@ def _post_claim_message(channel_id: str, npub: str, ioid_token: str, device_id: 
             env=env,
             shell=False,
         )
-        if result.returncode == 0:
-            resp = json.loads(result.stdout.strip())
-            return resp.get("accepted", False)
-        return False
-    except Exception:
+        if result.returncode != 0:
+            print(f"[!] claim publish failed: {result.stderr.strip()}", file=sys.stderr)
+            return False
+        resp = json.loads(result.stdout.strip())
+        return resp.get("accepted", False)
+    except Exception as e:
+        print(f"[!] claim publish error: {e}", file=sys.stderr)
         return False
 
 
@@ -227,53 +290,55 @@ def main() -> int:
     )
     parser.add_argument(
         "--lobby-channel", default="",
-        help="Channel UUID to post the claim message (default: first channel in env)",
+        help="Channel UUID to post the claim message (default: BUZZ_LOBBY_CHANNEL_ID or first BUZZ_CHANNEL_IDS entry)",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Print what would be posted without signing or sending",
     )
     args = parser.parse_args()
-
-    if not os.path.isfile(CLI_PATH):
-        print(f"[!] buzz CLI not found: {CLI_PATH}", file=sys.stderr)
-        return 1
 
     privkey = os.environ.get("BUZZ_PRIVATE_KEY", "")
     if not privkey:
         print("[!] BUZZ_PRIVATE_KEY is required (the GAMER's key, not the bot's)", file=sys.stderr)
         return 1
 
-    # Get the gamer's npub
-    npub = _whoami()
+    npub = _whoami_bech32()
     if not npub:
         print("[!] could not determine your npub — check BUZZ_PRIVATE_KEY", file=sys.stderr)
         return 1
     print(f"[*] your npub: {npub}", file=sys.stderr)
 
-    # Build the profile tags
-    tags = [["ioid_token", args.ioid_token]]
-    if args.device_id:
-        tags.append(["device_id", args.device_id])
+    lobby = _lobby_channel_id(args.lobby_channel)
+    if not lobby:
+        print("[!] no lobby channel configured. Set BUZZ_LOBBY_CHANNEL_ID or BUZZ_CHANNEL_IDS.", file=sys.stderr)
+        return 1
 
-    # Set the kind 0 profile with ioID tags
     about = f"Gamer. ioID tokenId {args.ioid_token}. Proof lives in QorTroller."
+    if args.device_id:
+        about += f" Device id {args.device_id}."
+
+    ok = True
     print(f"[*] setting kind 0 profile with ioid_token={args.ioid_token}...", file=sys.stderr)
-    if _set_profile(args.gamer_name, about, tags):
+    if _set_profile(args.gamer_name, about, args.dry_run):
         print("[*] profile updated", file=sys.stderr)
     else:
-        print("[!] profile update failed (may need manual kind 0 edit)", file=sys.stderr)
+        print("[!] profile update failed", file=sys.stderr)
+        ok = False
 
-    # Post the claim message to #lobby
-    lobby = args.lobby_channel or os.environ.get("BUZZ_CHANNEL_IDS", "").split(",")[0].strip()
-    if lobby:
-        print(f"[*] posting claim to channel {lobby[:8]}...", file=sys.stderr)
-        if _post_claim_message(lobby, npub, args.ioid_token, args.device_id):
-            print(f"[*] claim posted! npub={npub[:16]}... ioID={args.ioid_token}", file=sys.stderr)
-        else:
-            print("[!] claim message failed to post", file=sys.stderr)
+    print(f"[*] posting claim to #lobby {lobby[:8]}...", file=sys.stderr)
+    if _post_claim_message(lobby, npub, args.ioid_token, args.device_id, args.dry_run):
+        print(f"[*] claim posted! npub={npub} ioID={args.ioid_token}", file=sys.stderr)
     else:
-        print("[!] no channel configured for claim message", file=sys.stderr)
+        print("[!] claim message failed to post", file=sys.stderr)
+        ok = False
 
-    print(f"[*] done. Your npub {npub[:16]}... now claims ioID tokenId {args.ioid_token}.", file=sys.stderr)
-    print(f"[*] The operator never touched your private key.", file=sys.stderr)
-    return 0
+    if ok:
+        print(f"[*] done. Your npub {npub} now claims ioID tokenId {args.ioid_token}.", file=sys.stderr)
+        print("[*] The operator never touched your private key.", file=sys.stderr)
+        return 0
+    print("[!] claim flow completed with errors.", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

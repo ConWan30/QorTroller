@@ -1,40 +1,42 @@
 # Buzz Gamer Personal Agent — Runbook
 
-A gamer-facing DM concierge that runs under the **gamer's own `BUZZ_PRIVATE_KEY`**. It is **not** the operator `@EA` bot.
+A gamer-facing DM concierge that runs under the **gamer's own `BUZZ_PRIVATE_KEY`**. It is **not** the operator `@EA` bot. `BUZZ_PERSONAL_AGENT_NAME` is used only in log messages and replies — it does **not** overwrite your personal Buzz profile.
 
 ## What it does
 
 - Polls your Buzz DMs every `BUZZ_PERSONAL_AGENT_INTERVAL_S` seconds.
 - Answers gamer-self questions by reading the QorTroller bridge.
+- Creates agents, channels, projects, workflows, templates, and brainstorms via `buzz_agent_factory.py`.
 - Replies in the same DM with digest-only answers.
 - Never touches `@EA`, operator commands, shell, chain writes, or raw biometrics.
 
 ## Supported DM commands
 
-| Command | Bridge call | Reply |
+| Command | Bridge call / action | Reply |
 |---------|-------------|-------|
 | `status` | `GET /player/session-status` | Rig/session status digest |
 | `analytics` | `GET /player/self-analytics` | Your own verified data summary |
-| `claim` | none (docs) | How to run `scripts/buzz_ioid_claim.py` |
+| `claim <token> <device>` | `scripts/buzz_ioid_claim.py` | Posts kind 0 profile + #lobby claim |
+| `create <agent\|channel\|project\|workflow\|template> <name> [...]` | `scripts/buzz_agent_factory.py` | Creates a new Buzz artifact |
+| `brainstorm <topic>` | `scripts/buzz_agent_factory.py` | Seeds a brainstorm post |
 | `help` | none | Command list |
 
 Anything starting with `@EA`, `devin @EA`, `run `, etc. is rejected.
 
 ## Activation
 
-1. Generate a **gamer key** (separate from the operator key):
+1. Generate or choose your **gamer key** (this IS your agent; keep it safe):
    ```powershell
    python -c "from nostr_sdk import Keys; k=Keys.generate(); print(k.secret_key().to_bech32())"
    ```
-2. From your gamer profile, open a DM with the agent's pubkey:
-   ```powershell
-   $env:BUZZ_PRIVATE_KEY="<gamer-nsec>"
-   buzz/target/debug/buzz.exe dms open --pubkey <agent-pubkey>
-   ```
-3. Copy `scripts/buzz_personal_agent.env.example` to a local `.env` and fill:
-   - `BUZZ_PRIVATE_KEY` — agent key (not the gamer key)
-   - `BUZZ_RELAY_URL` — e.g. `http://localhost:3000`
-   - `BUZZ_PERSONAL_AGENT_DM_IDS` — the `dm_id` from step 2
+2. Create or find the `#lobby` channel. The `claim` command posts there.
+3. Copy `scripts/buzz_personal_agent.env.example` to a local `scripts/buzz_personal_agent.env` and fill:
+   - `BUZZ_PRIVATE_KEY` — **your gamer key** (the agent signs posts with it)
+   - `BUZZ_RELAY_URL` — e.g. `wss://qortroller.communities.buzz.xyz`
+   - `BUZZ_LOBBY_CHANNEL_ID` — `#lobby` channel UUID
+   - `BUZZ_PERSONAL_AGENT_NAME` — agent display name for logs/replies (does NOT change your profile)
+   - `BUZZ_PERSONAL_AGENT_ABOUT` — agent bio for logs/replies (does NOT change your profile)
+   - `BUZZ_PERSONAL_AGENT_DM_IDS` — DM UUID(s) to poll (optional but recommended)
    - `BRIDGE_BASE_URL` — e.g. `http://localhost:8000`
    - `BRIDGE_API_KEY` (if bridge requires it)
    - `BUZZ_PERSONAL_AGENT_ENABLED=1`
@@ -42,6 +44,8 @@ Anything starting with `@EA`, `devin @EA`, `run `, etc. is rejected.
    ```powershell
    python scripts/buzz_personal_agent.py
    ```
+
+The agent will print its `npub` on startup. Add it as a DM contact in the Buzz desktop and send `help` to test.
 
 ## Stop
 

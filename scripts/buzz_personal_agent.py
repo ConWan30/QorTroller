@@ -38,6 +38,20 @@ AUDIT_DIR = Path("audits")
 STATE_FILE = AUDIT_DIR / "buzz_personal_agent_state.json"
 STOP_FILE = AUDIT_DIR / "buzz_personal_agent.STOP"
 
+# --- .env loading ------------------------------------------------------------
+# Prefer a user-specific env so the agent can be a permanent, gamer-owned
+# identity without colliding with the operator bot's scripts/.env.
+try:
+    from dotenv import load_dotenv
+    _personal_env = Path(__file__).resolve().parent / "buzz_personal_agent.env"
+    _fallback_env = Path(__file__).resolve().parent / ".env"
+    if _personal_env.exists():
+        load_dotenv(_personal_env, encoding="utf-8")
+    elif _fallback_env.exists():
+        load_dotenv(_fallback_env, encoding="utf-8")
+except ImportError:
+    pass
+
 logging = None  # lazy setup
 
 
@@ -72,6 +86,7 @@ class AgentConfig:
     interval_s: float
     dry_run: bool
     dm_ids: list[str]
+    lobby_channel_id: str
 
 
 def _load_config() -> AgentConfig:
@@ -106,7 +121,26 @@ def _load_config() -> AgentConfig:
             c.strip() for c in os.environ.get("BUZZ_PERSONAL_AGENT_DM_IDS", "").split(",")
             if c.strip()
         ],
+        lobby_channel_id=os.environ.get("BUZZ_LOBBY_CHANNEL_ID", ""),
     )
+
+
+def _my_npub(private_key: str) -> str:
+    """Return bech32 npub for the given private key."""
+    try:
+        from nostr_sdk import Keys
+        return Keys.parse(private_key).public_key().to_bech32()
+    except Exception as e:
+        _log().warning("could not derive npub: %s", e)
+        return ""
+
+
+def _to_http(url: str) -> str:
+    if url.startswith("ws://"):
+        return "http://" + url[len("ws://"):]
+    if url.startswith("wss://"):
+        return "https://" + url[len("wss://"):]
+    return url
 
 
 class BuzzCliClient:
@@ -116,7 +150,7 @@ class BuzzCliClient:
         self.cfg = cfg
         self._env = os.environ.copy()
         self._env["BUZZ_PRIVATE_KEY"] = cfg.private_key
-        self._env["BUZZ_RELAY_URL"] = cfg.relay_url
+        self._env["BUZZ_RELAY_URL"] = _to_http(cfg.relay_url)
 
     def _run(self, *args: str, timeout: float = 30) -> Optional[dict | list]:
         cmd = [str(self.cfg.cli_path), *args]
@@ -157,13 +191,14 @@ class BuzzCliClient:
             return data
         return []
 
-    def send_message(self, dm_id: str, content: str) -> Optional[dict]:
+    def send_message(self, dm_id: str, content: str, reply_to: Optional[str] = None) -> Optional[dict]:
         if self.cfg.dry_run:
             _log().info("[dry-run] would reply to %s: %s", dm_id, content[:120])
             return {"dry_run": True}
-        return self._run(
-            "messages", "send", "--channel", dm_id, "--content", content, "--reply"
-        )
+        args = ["messages", "send", "--channel", dm_id, "--content", content]
+        if reply_to:
+            args += ["--reply-to", reply_to]
+        return self._run(*args)
 
 
 def _load_state() -> dict:
@@ -222,21 +257,69 @@ def _handle_help() -> str:
         "I can answer these gamer-self questions:\n"
         "- `status` — your current session / bridge status\n"
         "- `analytics` — your own verified data summary\n"
-        "- `claim` — how to post your ioID claim to #lobby\n"
+        "- `claim <token> <device>` — post your ioID claim to #lobby\n"
+        "- `create <agent|channel|project|workflow|template> <name> [...]` — mint a new Buzz artifact\n"
+        "- `brainstorm <topic>` — seed a brainstorm in the community\n"
         "- `help` — this message\n\n"
+        "If `BUZZ_LOBBY_CHANNEL_ID` is set, `claim` actually posts.\n"
+        "`create` and `brainstorm` call `scripts/buzz_agent_factory.py` with your key.\n"
         "I do not run @EA commands and I never ask for a private key."
     )
 
 
-def _handle_claim(cfg: AgentConfig) -> str:
-    return (
-        "To claim your ioID identity, run this with your own gamer key:\n\n"
-        f"```\n"
-        f"python scripts/buzz_ioid_claim.py --ioid-token {cfg.ioid_token} --device-id {cfg.device_id}\n"
-        f"```\n\n"
-        f"That posts your kind 0 profile + a claim to #lobby. "
-        f"The actual ioID proof lives on IoTeX; the Buzz post is a self-asserted pointer."
-    )
+def _handle_claim(cfg: AgentConfig, args: list[str]) -> str:
+    token = args[0] if len(args) > 0 else cfg.ioid_token
+    device = args[1] if len(args) > 1 else cfg.device_id
+
+    if not cfg.lobby_channel_id:
+        return (
+            "I need a #lobby channel to post your claim. Set BUZZ_LOBBY_CHANNEL_ID, then:\n\n"
+            f"```\n"
+            f"python scripts/buzz_ioid_claim.py --ioid-token {token} --device-id {device} --lobby-channel <channel-uuid>\n"
+            f"```"
+        )
+
+    if cfg.dry_run:
+        return (
+            f"[dry-run] I would post an ioID claim to #lobby for token {token}, device {device}."
+        )
+
+    # Run the claim script as the gamer. This agent is assumed to be running with
+    # the gamer's own BUZZ_PRIVATE_KEY; the script signs with that key.
+    try:
+        cmd = [
+            sys.executable,
+            "scripts/buzz_ioid_claim.py",
+            "--ioid-token", str(token),
+            "--device-id", str(device),
+            "--lobby-channel", cfg.lobby_channel_id,
+        ]
+        env = os.environ.copy()
+        env["BUZZ_LOBBY_CHANNEL_ID"] = cfg.lobby_channel_id
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return (
+                f"ioID claim posted to #lobby!\n"
+                f"- token: {token}\n"
+                f"- device: {device}\n"
+                f"- channel: {cfg.lobby_channel_id[:8]}...\n\n"
+                f"The proof still lives in QorTroller; this is a self-asserted pointer."
+            )
+        return (
+            f"ioID claim failed:\n```\n{result.stderr.strip()[:500]}\n```\n\n"
+            f"You can run it manually:\n"
+            f"```\npython scripts/buzz_ioid_claim.py --ioid-token {token} --device-id {device} --lobby-channel {cfg.lobby_channel_id}\n```"
+        )
+    except Exception as e:
+        return f"ioID claim error: {e}. Run the script manually as shown in `help`."
 
 
 def _parse_command(text: str) -> tuple[str, list[str]]:
@@ -245,6 +328,105 @@ def _parse_command(text: str) -> tuple[str, list[str]]:
     if not parts:
         return "", []
     return parts[0], parts[1:]
+
+
+def _handle_factory(cfg: AgentConfig, cmd: str, args: list[str]) -> str:
+    """Run buzz_agent_factory.py to create an agent, channel, project, etc."""
+    if not args:
+        return (
+            "Usage: `create <agent|channel|project|workflow|template> <name> [args...]`\n"
+            "Examples:\n"
+            "- `create agent AlphaBot watcher`\n"
+            "- `create channel brainstorm Agent brainstorming room`\n"
+            "- `create project SAP-Portal Make SAP jobs visible`\n"
+            "- `create workflow Claim-Flow define,execute,verify`\n"
+            "- `create template Onboarding-Template`\n"
+            "- `brainstorm What if agents self-onboard via ioID?`"
+        )
+
+    artifact = args[0]
+    name = args[1] if len(args) > 1 else ""
+    rest = args[2:]
+    if not name:
+        return f"I need a name for the {artifact}."
+
+    if artifact not in ("agent", "channel", "project", "workflow", "template"):
+        return f"I can create agent/channel/project/workflow/template, not '{artifact}'."
+
+    if cfg.dry_run:
+        return f"[dry-run] I would create a {artifact} named '{name}'."
+
+    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py"]
+    if artifact == "agent":
+        role = rest[0] if rest else "concierge"
+        factory_cmd += ["create-agent", "--name", name, "--role", role]
+    elif artifact == "channel":
+        desc = " ".join(rest) if rest else f"{name} channel"
+        factory_cmd += ["create-channel", "--name", name, "--description", desc]
+    elif artifact == "project":
+        goal = " ".join(rest) if rest else "expand QorTroller"
+        factory_cmd += ["create-project", "--name", name, "--goal", goal]
+    elif artifact == "workflow":
+        steps = ",".join(rest) if rest else "define,execute,verify"
+        factory_cmd += ["create-workflow", "--name", name, "--steps", steps]
+    elif artifact == "template":
+        desc = " ".join(rest) if rest else f"{name} template"
+        factory_cmd += ["create-template", "--name", name, "--description", desc]
+
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+    if cfg.lobby_channel_id:
+        env["BUZZ_LOBBY_CHANNEL_ID"] = cfg.lobby_channel_id
+
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return f"{artifact} '{name}' created:\n```\n{result.stdout.strip()[:1500]}\n```"
+        return f"{artifact} creation failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+    except Exception as e:
+        return f"factory error: {e}"
+
+
+def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
+    if not args:
+        return "Usage: `brainstorm <topic>`"
+    topic = " ".join(args)
+    channel_id = os.environ.get("BUZZ_BRAINSTORM_CHANNEL_ID", "")
+    if not channel_id:
+        return "I need `BUZZ_BRAINSTORM_CHANNEL_ID` set to post a brainstorm."
+    if cfg.dry_run:
+        return f"[dry-run] I would brainstorm: {topic}"
+    factory_cmd = [
+        sys.executable, "scripts/buzz_agent_factory.py",
+        "brainstorm", "--topic", topic, "--channel", channel_id,
+    ]
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return f"Brainstorm seeded: {topic}"
+        return f"Brainstorm failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+    except Exception as e:
+        return f"brainstorm error: {e}"
 
 
 def _process_message(message: dict, cfg: AgentConfig) -> str:
@@ -263,7 +445,13 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
         return _fmt_self_analytics(data)
 
     if cmd in ("claim", "ioid"):
-        return _handle_claim(cfg)
+        return _handle_claim(cfg, args)
+
+    if cmd in ("create", "mint"):
+        return _handle_factory(cfg, cmd, args)
+
+    if cmd in ("brainstorm", "bs"):
+        return _handle_brainstorm(cfg, args)
 
     if cmd in ("help", "?", "h"):
         return _handle_help()
@@ -319,7 +507,8 @@ def _run_once(client: BuzzCliClient, cfg: AgentConfig, state: dict) -> dict:
 
             reply = _process_message(message, cfg)
             if reply:
-                client.send_message(dm_id, reply)
+                event_id = message.get("id")
+                client.send_message(dm_id, reply, reply_to=event_id)
                 _log().info("replied to DM %s: %s", dm_id, reply[:80].replace("\n", " "))
 
             state[dm_id] = ts
@@ -367,9 +556,12 @@ def main() -> int:
         _log().error("buzz CLI could not derive your pubkey. Check BUZZ_PRIVATE_KEY and BUZZ_RELAY_URL.")
         return 1
 
+    my_npub = _my_npub(cfg.private_key)
     _log().info(
-        "[QorTroller Concierge] starting as pubkey %s... (dry_run=%s)", my_pk, cfg.dry_run
+        "[%s] starting as npub %s (relay %s, dry_run=%s)",
+        cfg.bot_name, my_npub or my_pk, cfg.relay_url, cfg.dry_run
     )
+    _log().info("DM me at %s to trigger status/analytics/claim/help", my_npub or my_pk)
 
     try:
         while True:
