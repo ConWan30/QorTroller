@@ -141,6 +141,9 @@ contracts/artifacts/build-info/
 # This targeted rule ignores stray non-worktree content under the subtree so
 # it never lands in a commit. (Registered worktrees themselves are managed via
 # `git worktree remove`/`prune`, not gitignore — git handles those specially.)
+# Agent factory child keys
+agents/*.env
+
 # Already-tracked .claude/ files (settings.local.json, agents/*.md, etc.) are
 # unaffected — git does not un-track indexed files on a new ignore rule.
 .claude/worktrees/

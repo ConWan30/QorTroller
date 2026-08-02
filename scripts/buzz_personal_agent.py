@@ -38,6 +38,20 @@ AUDIT_DIR = Path("audits")
 STATE_FILE = AUDIT_DIR / "buzz_personal_agent_state.json"
 STOP_FILE = AUDIT_DIR / "buzz_personal_agent.STOP"
 
+# --- .env loading ------------------------------------------------------------
+# Prefer a user-specific env so the agent can be a permanent, gamer-owned
+# identity without colliding with the operator bot's scripts/.env.
+try:
+    from dotenv import load_dotenv
+    _personal_env = Path(__file__).resolve().parent / "buzz_personal_agent.env"
+    _fallback_env = Path(__file__).resolve().parent / ".env"
+    if _personal_env.exists():
+        load_dotenv(_personal_env, encoding="utf-8")
+    elif _fallback_env.exists():
+        load_dotenv(_fallback_env, encoding="utf-8")
+except ImportError:
+    pass
+
 logging = None  # lazy setup
 
 
@@ -73,6 +87,7 @@ class AgentConfig:
     dry_run: bool
     dm_ids: list[str]
     lobby_channel_id: str
+    setup_profile: bool
 
 
 def _load_config() -> AgentConfig:
@@ -108,7 +123,56 @@ def _load_config() -> AgentConfig:
             if c.strip()
         ],
         lobby_channel_id=os.environ.get("BUZZ_LOBBY_CHANNEL_ID", ""),
+        setup_profile=os.environ.get("BUZZ_PERSONAL_AGENT_SETUP_PROFILE", "0") == "1",
     )
+
+
+def _my_npub(private_key: str) -> str:
+    """Return bech32 npub for the given private key."""
+    try:
+        from nostr_sdk import Keys
+        return Keys.parse(private_key).public_key().to_bech32()
+    except Exception as e:
+        _log().warning("could not derive npub: %s", e)
+        return ""
+
+
+def _setup_profile(cfg: AgentConfig) -> None:
+    """Set the agent's kind 0 profile so people can DM it by name."""
+    if not cfg.setup_profile or cfg.dry_run:
+        return
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+    try:
+        result = subprocess.run(
+            [
+                str(cfg.cli_path),
+                "users", "set-profile",
+                "--name", cfg.bot_name,
+                "--about", cfg.bot_about,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            _log().info("kind 0 profile set: name=%s", cfg.bot_name)
+        else:
+            _log().warning("profile setup failed: %s", result.stderr.strip())
+    except Exception as e:
+        _log().warning("profile setup error: %s", e)
+
+
+def _to_http(url: str) -> str:
+    if url.startswith("ws://"):
+        return "http://" + url[len("ws://"):]
+    if url.startswith("wss://"):
+        return "https://" + url[len("wss://"):]
+    return url
 
 
 class BuzzCliClient:
@@ -118,7 +182,7 @@ class BuzzCliClient:
         self.cfg = cfg
         self._env = os.environ.copy()
         self._env["BUZZ_PRIVATE_KEY"] = cfg.private_key
-        self._env["BUZZ_RELAY_URL"] = cfg.relay_url
+        self._env["BUZZ_RELAY_URL"] = _to_http(cfg.relay_url)
 
     def _run(self, *args: str, timeout: float = 30) -> Optional[dict | list]:
         cmd = [str(self.cfg.cli_path), *args]
@@ -226,8 +290,11 @@ def _handle_help() -> str:
         "- `status` — your current session / bridge status\n"
         "- `analytics` — your own verified data summary\n"
         "- `claim <token> <device>` — post your ioID claim to #lobby\n"
+        "- `create <agent|channel|project|workflow|template> <name> [...]` — mint a new Buzz artifact\n"
+        "- `brainstorm <topic>` — seed a brainstorm in the community\n"
         "- `help` — this message\n\n"
         "If `BUZZ_LOBBY_CHANNEL_ID` is set, `claim` actually posts.\n"
+        "`create` and `brainstorm` call `scripts/buzz_agent_factory.py` with your key.\n"
         "I do not run @EA commands and I never ask for a private key."
     )
 
@@ -295,6 +362,105 @@ def _parse_command(text: str) -> tuple[str, list[str]]:
     return parts[0], parts[1:]
 
 
+def _handle_factory(cfg: AgentConfig, cmd: str, args: list[str]) -> str:
+    """Run buzz_agent_factory.py to create an agent, channel, project, etc."""
+    if not args:
+        return (
+            "Usage: `create <agent|channel|project|workflow|template> <name> [args...]`\n"
+            "Examples:\n"
+            "- `create agent AlphaBot watcher`\n"
+            "- `create channel brainstorm Agent brainstorming room`\n"
+            "- `create project SAP-Portal Make SAP jobs visible`\n"
+            "- `create workflow Claim-Flow define,execute,verify`\n"
+            "- `create template Onboarding-Template`\n"
+            "- `brainstorm What if agents self-onboard via ioID?`"
+        )
+
+    artifact = args[0]
+    name = args[1] if len(args) > 1 else ""
+    rest = args[2:]
+    if not name:
+        return f"I need a name for the {artifact}."
+
+    if artifact not in ("agent", "channel", "project", "workflow", "template"):
+        return f"I can create agent/channel/project/workflow/template, not '{artifact}'."
+
+    if cfg.dry_run:
+        return f"[dry-run] I would create a {artifact} named '{name}'."
+
+    factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py"]
+    if artifact == "agent":
+        role = rest[0] if rest else "concierge"
+        factory_cmd += ["create-agent", "--name", name, "--role", role]
+    elif artifact == "channel":
+        desc = " ".join(rest) if rest else f"{name} channel"
+        factory_cmd += ["create-channel", "--name", name, "--description", desc]
+    elif artifact == "project":
+        goal = " ".join(rest) if rest else "expand QorTroller"
+        factory_cmd += ["create-project", "--name", name, "--goal", goal]
+    elif artifact == "workflow":
+        steps = ",".join(rest) if rest else "define,execute,verify"
+        factory_cmd += ["create-workflow", "--name", name, "--steps", steps]
+    elif artifact == "template":
+        desc = " ".join(rest) if rest else f"{name} template"
+        factory_cmd += ["create-template", "--name", name, "--description", desc]
+
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+    if cfg.lobby_channel_id:
+        env["BUZZ_LOBBY_CHANNEL_ID"] = cfg.lobby_channel_id
+
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return f"{artifact} '{name}' created:\n```\n{result.stdout.strip()[:1500]}\n```"
+        return f"{artifact} creation failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+    except Exception as e:
+        return f"factory error: {e}"
+
+
+def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
+    if not args:
+        return "Usage: `brainstorm <topic>`"
+    topic = " ".join(args)
+    channel_id = os.environ.get("BUZZ_BRAINSTORM_CHANNEL_ID", "")
+    if not channel_id:
+        return "I need `BUZZ_BRAINSTORM_CHANNEL_ID` set to post a brainstorm."
+    if cfg.dry_run:
+        return f"[dry-run] I would brainstorm: {topic}"
+    factory_cmd = [
+        sys.executable, "scripts/buzz_agent_factory.py",
+        "brainstorm", "--topic", topic, "--channel", channel_id,
+    ]
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return f"Brainstorm seeded: {topic}"
+        return f"Brainstorm failed:\n```\n{result.stderr.strip()[:1000]}\n```"
+    except Exception as e:
+        return f"brainstorm error: {e}"
+
+
 def _process_message(message: dict, cfg: AgentConfig) -> str:
     text = message.get("content", "").strip()
     if not text:
@@ -312,6 +478,12 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
 
     if cmd in ("claim", "ioid"):
         return _handle_claim(cfg, args)
+
+    if cmd in ("create", "mint"):
+        return _handle_factory(cfg, cmd, args)
+
+    if cmd in ("brainstorm", "bs"):
+        return _handle_brainstorm(cfg, args)
 
     if cmd in ("help", "?", "h"):
         return _handle_help()
@@ -416,9 +588,14 @@ def main() -> int:
         _log().error("buzz CLI could not derive your pubkey. Check BUZZ_PRIVATE_KEY and BUZZ_RELAY_URL.")
         return 1
 
+    my_npub = _my_npub(cfg.private_key)
     _log().info(
-        "[QorTroller Concierge] starting as pubkey %s... (dry_run=%s)", my_pk, cfg.dry_run
+        "[%s] starting as npub %s (relay %s, dry_run=%s)",
+        cfg.bot_name, my_npub or my_pk, cfg.relay_url, cfg.dry_run
     )
+    _log().info("DM me at %s to trigger status/analytics/claim/help", my_npub or my_pk)
+
+    _setup_profile(cfg)
 
     try:
         while True:

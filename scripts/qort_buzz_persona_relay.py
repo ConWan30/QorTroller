@@ -36,6 +36,23 @@ STATE_FILE = AUDIT_DIR / "qort_buzz_persona_relay_state.json"
 STOP_FILE = AUDIT_DIR / "qort_buzz_persona_relay.STOP"
 QORT_PACK = REPO_ROOT / "buzz-persona-qortroller"
 
+# --- .env loading ------------------------------------------------------------
+try:
+    from dotenv import load_dotenv
+    _env_path = REPO_ROOT / "scripts" / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, encoding="utf-8")
+except ImportError:
+    pass
+
+
+def _to_http(url: str) -> str:
+    if url.startswith("ws://"):
+        return "http://" + url[len("ws://"):]
+    if url.startswith("wss://"):
+        return "https://" + url[len("wss://"):]
+    return url
+
 logging = None
 
 
@@ -102,7 +119,11 @@ class BuzzCliClient:
         self.cfg = cfg
         self._env = os.environ.copy()
         self._env["BUZZ_PRIVATE_KEY"] = cfg.private_key
-        self._env["BUZZ_RELAY_URL"] = cfg.relay_url
+        self._env["BUZZ_RELAY_URL"] = _to_http(cfg.relay_url)
+        self._env["BUZZ_HELPER_PATH"] = os.environ.get(
+            "BUZZ_HELPER_PATH",
+            str(REPO_ROOT / "buzz" / "target" / "debug" / "qortroller-buzz.exe"),
+        )
 
     def _run(self, *args: str, timeout: float = 30) -> Optional[dict | list]:
         cmd = [str(self.cfg.cli_path), *args]
@@ -207,9 +228,113 @@ def _acp_eval(cmd: str, pubkey: str, timeout: float) -> str:
         return f"rejected: ACP gateway error: {e}"
 
 
-def _qort_reply(text: str, cfg: BotConfig) -> Optional[str]:
+def _extract_factory_command(text: str) -> Optional[list[str]]:
+    """Parse '@QorT create ...' and '@QorT brainstorm ...' commands."""
+    t = text.strip()
+    m = re.match(r"@?qort\s+(.+)", t, re.IGNORECASE)
+    if not m:
+        return None
+    body = m.group(1).strip()
+    parts = body.split()
+    if len(parts) < 2:
+        return None
+    return [p.lower() for p in parts]
+
+
+def _my_hex(private_key: str) -> str:
+    try:
+        from nostr_sdk import Keys
+        return Keys.parse(private_key).public_key().to_hex()
+    except Exception:
+        return ""
+
+
+def _is_authorized_factory_user(pubkey: str, cfg: BotConfig) -> bool:
+    """Allow factory commands from the bot itself or configured operators."""
+    if not pubkey:
+        return False
+    my_hex = _my_hex(cfg.private_key)
+    if pubkey == my_hex:
+        return True
+    allowed = {p.strip() for p in (cfg.operator_pubkey or "").split(",") if p.strip()}
+    return pubkey in allowed
+
+
+def _factory_eval(cmd: list[str], cfg: BotConfig) -> str:
+    """Run buzz_agent_factory.py as a subprocess."""
+    if not cmd:
+        return "rejected: empty factory command"
+    action = cmd[0]
+    if action not in ("create", "brainstorm"):
+        return "rejected: I only understand 'create' and 'brainstorm'"
+
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = _to_http(cfg.relay_url)
+    env["BUZZ_CLI_PATH"] = str(cfg.cli_path)
+    env["BUZZ_HELPER_PATH"] = os.environ.get(
+        "BUZZ_HELPER_PATH",
+        str(REPO_ROOT / "buzz" / "target" / "debug" / "qortroller-buzz.exe"),
+    )
+
+    factory_args = [sys.executable, str(REPO_ROOT / "scripts" / "buzz_agent_factory.py")]
+
+    if action == "brainstorm":
+        if len(cmd) < 2:
+            return "rejected: brainstorm needs a topic"
+        topic = " ".join(cmd[1:])
+        factory_args += ["brainstorm", "--topic", topic]
+    elif action == "create":
+        if len(cmd) < 3:
+            return "rejected: create needs a type and name"
+        artifact = cmd[1]
+        name = cmd[2]
+        rest = cmd[3:]
+        if artifact == "agent":
+            role = rest[0] if rest else "concierge"
+            factory_args += ["create-agent", "--name", name, "--role", role]
+        elif artifact == "channel":
+            desc = " ".join(rest) if rest else f"{name} channel"
+            factory_args += ["create-channel", "--name", name, "--description", desc]
+        elif artifact == "project":
+            goal = " ".join(rest) if rest else "expand QorTroller"
+            factory_args += ["create-project", "--name", name, "--goal", goal]
+        elif artifact == "workflow":
+            steps = ",".join(rest) if rest else "define,execute,verify"
+            factory_args += ["create-workflow", "--name", name, "--steps", steps]
+        elif artifact == "template":
+            desc = " ".join(rest) if rest else f"{name} template"
+            factory_args += ["create-template", "--name", name, "--description", desc]
+        else:
+            return f"rejected: I can create agent/channel/project/workflow/template, not '{artifact}'"
+    else:
+        return "rejected: unknown factory action"
+
+    try:
+        proc = subprocess.run(
+            factory_args,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=REPO_ROOT,
+            timeout=120,
+        )
+        if proc.returncode != 0:
+            return f"rejected: factory failed ({proc.stderr.strip()[:500]})"
+        return f"created:\n```\n{proc.stdout.strip()[:1500]}\n```"
+    except Exception as e:
+        return f"rejected: factory error: {e}"
+
+
+def _qort_reply(text: str, cfg: BotConfig, author_pubkey: str = "") -> Optional[str]:
     if not _is_qort_trigger(text):
         return None
+
+    factory_cmd = _extract_factory_command(text)
+    if factory_cmd:
+        if not _is_authorized_factory_user(author_pubkey, cfg):
+            return "rejected: you are not authorized to mint channels/agents"
+        return _factory_eval(factory_cmd, cfg)
 
     ea_cmd = _extract_ea_command(text)
     if ea_cmd:
@@ -218,9 +343,9 @@ def _qort_reply(text: str, cfg: BotConfig) -> Optional[str]:
 
     return (
         "I am QorT, the QorTroller Rig Steward. I can:\n"
-        "- explain QorTroller / PoAC / ioID / VSS\n"
-        "- relay safe `@EA` commands (e.g. `@EA status`)\n"
-        "- diagnose via the ACP\n\n"
+        "- create agents, channels, projects, workflows, templates\n"
+        "- brainstorm new QorTroller ideas\n"
+        "- relay safe `@EA` commands (e.g. `@EA status`)\n\n"
         "I do not hold keys, start live capture, or touch raw biometrics."
     )
 
@@ -245,7 +370,8 @@ def _process_messages(client: BuzzCliClient, cfg: BotConfig, channel_id: str, st
             continue
 
         text = message.get("content", "")
-        reply = _qort_reply(text, cfg)
+        author = message.get("pubkey", "")
+        reply = _qort_reply(text, cfg, author)
         if reply:
             event_id = message.get("id")
             client.send_message(channel_id, reply, reply_to=event_id)
