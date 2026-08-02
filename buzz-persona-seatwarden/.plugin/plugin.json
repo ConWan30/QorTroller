@@ -1,0 +1,43 @@
+{
+  "$schema": "https://open-plugin-spec.org/schema/v1/plugin.json",
+  "id": "com.qortroller.seatwarden",
+  "name": "Seatwarden",
+  "version": "1.0.0",
+  "description": "QorTroller P-VSS seat status agent - eligibility and flag-down only; never OPEN.",
+  "author": "QorTroller Engineering",
+  "license": "MIT",
+  "keywords": [
+    "qortroller",
+    "vss",
+    "streams",
+    "p-vss",
+    "seatwarden"
+  ],
+  "engines": {
+    "buzz": ">=0.9.0"
+  },
+  "personas": [
+    "agents/seatwarden.persona.md"
+  ],
+  "pack_instructions": "instructions.md",
+  "defaults": {
+    "model": "z-ai/glm-5.2",
+    "temperature": 0.2,
+    "subscribe": [
+      "#streams"
+    ],
+    "triggers": {
+      "mentions": true,
+      "keywords": [
+        "VSS",
+        "seat",
+        "eligibility",
+        "OPEN",
+        "CLOSED",
+        "flag-down",
+        "streams"
+      ],
+      "all_messages": false
+    }
+  }
+}

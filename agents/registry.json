@@ -10,12 +10,32 @@
     "parent": "parent agent_id or 'operator'",
     "supervisor": "operator|EA|Concierge|QorT|Frameworks",
     "status": "hired|paused|candidate",
-    "competence": ["list", "of", "skills"],
+    "competence": [
+      "list",
+      "of",
+      "skills"
+    ],
     "evidence_bar": "what must be true before output is trusted",
-    "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-    "channels": ["#rig-ops", "#lobby"],
-    "tools": ["ask_ea", "post_digest"],
-    "output_types": ["digest", "sap_link"],
+    "forbidden": [
+      "keys",
+      "shell",
+      "chain",
+      "VSS OPEN",
+      "claim inflation",
+      "silent topology"
+    ],
+    "channels": [
+      "#rig-ops",
+      "#lobby"
+    ],
+    "tools": [
+      "ask_ea",
+      "post_digest"
+    ],
+    "output_types": [
+      "digest",
+      "sap_link"
+    ],
     "env_path": "optional local .env path",
     "created_at": "ISO timestamp",
     "sealed_by": "human event/job id"
@@ -37,10 +57,25 @@
         "fixed-argv tools only"
       ],
       "evidence_bar": "ACP allow-list + local audit JSONL",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology", "personality minting"],
-      "channels": ["#rig-ops"],
-      "tools": ["acp_gateway"],
-      "output_types": ["digest", "sap_link"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology",
+        "personality minting"
+      ],
+      "channels": [
+        "#rig-ops"
+      ],
+      "tools": [
+        "acp_gateway"
+      ],
+      "output_types": [
+        "digest",
+        "sap_link"
+      ],
       "env_path": "",
       "created_at": "2026-08-02T15:00:00Z",
       "sealed_by": "operator",
@@ -62,10 +97,28 @@
         "propose creation"
       ],
       "evidence_bar": "bridge status or operator ask_ea response",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-      "channels": ["#rig-ops", "#lobby", "#general"],
-      "tools": ["ask_ea", "propose", "hire"],
-      "output_types": ["digest", "proposal"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology"
+      ],
+      "channels": [
+        "#rig-ops",
+        "#lobby",
+        "#general"
+      ],
+      "tools": [
+        "ask_ea",
+        "propose",
+        "hire"
+      ],
+      "output_types": [
+        "digest",
+        "proposal"
+      ],
       "env_path": "scripts/.env",
       "created_at": "2026-08-02T15:00:00Z",
       "sealed_by": "operator"
@@ -86,10 +139,27 @@
         "hire with clause+resume"
       ],
       "evidence_bar": "gamer DM or bridge read endpoint",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-      "channels": ["#lobby", "#general"],
-      "tools": ["ask_ea", "propose", "hire"],
-      "output_types": ["digest", "proposal"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology"
+      ],
+      "channels": [
+        "#lobby",
+        "#general"
+      ],
+      "tools": [
+        "ask_ea",
+        "propose",
+        "hire"
+      ],
+      "output_types": [
+        "digest",
+        "proposal"
+      ],
       "env_path": "scripts/buzz_personal_agent.env",
       "created_at": "2026-08-02T15:00:00Z",
       "sealed_by": "operator"
@@ -109,37 +179,28 @@
         "never upgrade candidate to certified"
       ],
       "evidence_bar": "pinned #matches postcard or bridge session digest",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology", "candidate→certified upgrade"],
-      "channels": ["#matches"],
-      "tools": ["post_digest"],
-      "output_types": ["digest"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology",
+        "candidate→certified upgrade"
+      ],
+      "channels": [
+        "#matches"
+      ],
+      "tools": [
+        "post_digest"
+      ],
+      "output_types": [
+        "digest"
+      ],
       "env_path": "",
       "created_at": "2026-08-02T18:00:00Z",
       "sealed_by": "",
       "note": "Hire when postcard interpretation load justifies a specialist."
-    },
-    {
-      "agent_id": "seatwarden",
-      "display_name": "Seatwarden",
-      "npub": "",
-      "hex": "",
-      "clause": "P-VSS",
-      "parent": "operator",
-      "supervisor": "operator",
-      "status": "candidate",
-      "competence": [
-        "eligibility language",
-        "flag-down / seat status digests"
-      ],
-      "evidence_bar": "GET /operator/vss/eligibility or seat script read path",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-      "channels": ["#streams"],
-      "tools": ["post_digest"],
-      "output_types": ["digest"],
-      "env_path": "",
-      "created_at": "2026-08-02T18:00:00Z",
-      "sealed_by": "",
-      "note": "Never OPEN. Gamer/operator keys only for seat acts."
     },
     {
       "agent_id": "provenance",
@@ -156,10 +217,27 @@
         "pointer verify digests"
       ],
       "evidence_bar": "claim register + deferred-export flags",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology", "we are a world model"],
-      "channels": ["#wmp-announce", "#verify-lab"],
-      "tools": ["post_digest", "propose"],
-      "output_types": ["digest", "proposal"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology",
+        "we are a world model"
+      ],
+      "channels": [
+        "#wmp-announce",
+        "#verify-lab"
+      ],
+      "tools": [
+        "post_digest",
+        "propose"
+      ],
+      "output_types": [
+        "digest",
+        "proposal"
+      ],
       "env_path": "",
       "created_at": "2026-08-02T18:00:00Z",
       "sealed_by": ""
@@ -178,10 +256,25 @@
         "studio channel hygiene"
       ],
       "evidence_bar": "claim register ceilings + SDK docs",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-      "channels": ["#studio-dev"],
-      "tools": ["post_digest", "propose"],
-      "output_types": ["digest", "proposal"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology"
+      ],
+      "channels": [
+        "#studio-dev"
+      ],
+      "tools": [
+        "post_digest",
+        "propose"
+      ],
+      "output_types": [
+        "digest",
+        "proposal"
+      ],
       "env_path": "",
       "created_at": "2026-08-02T18:00:00Z",
       "sealed_by": ""
@@ -201,10 +294,25 @@
         "testable acceptance criteria"
       ],
       "evidence_bar": "propose-wp post with problem + non-claims + acceptance",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-      "channels": ["#frameworks"],
-      "tools": ["propose-wp", "propose"],
-      "output_types": ["digest", "proposal"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology"
+      ],
+      "channels": [
+        "#frameworks"
+      ],
+      "tools": [
+        "propose-wp",
+        "propose"
+      ],
+      "output_types": [
+        "digest",
+        "proposal"
+      ],
       "env_path": "",
       "created_at": "2026-08-02T18:00:00Z",
       "sealed_by": ""
@@ -224,10 +332,25 @@
         "WP skeleton drafting"
       ],
       "evidence_bar": "proposed WP in #frameworks with operator review",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-      "channels": ["#frameworks"],
-      "tools": ["propose-wp", "propose"],
-      "output_types": ["digest", "proposal"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology"
+      ],
+      "channels": [
+        "#frameworks"
+      ],
+      "tools": [
+        "propose-wp",
+        "propose"
+      ],
+      "output_types": [
+        "digest",
+        "proposal"
+      ],
       "env_path": "",
       "created_at": "2026-08-02T15:00:00Z",
       "sealed_by": "operator",
@@ -247,14 +370,63 @@
         "single implementable note for human seal"
       ],
       "evidence_bar": "one sealed note referencing clause handoffs",
-      "forbidden": ["keys", "shell", "chain", "VSS OPEN", "claim inflation", "silent topology"],
-      "channels": ["#frameworks"],
-      "tools": ["propose", "propose-wp"],
-      "output_types": ["digest", "proposal"],
+      "forbidden": [
+        "keys",
+        "shell",
+        "chain",
+        "VSS OPEN",
+        "claim inflation",
+        "silent topology"
+      ],
+      "channels": [
+        "#frameworks"
+      ],
+      "tools": [
+        "propose",
+        "propose-wp"
+      ],
+      "output_types": [
+        "digest",
+        "proposal"
+      ],
       "env_path": "",
       "created_at": "2026-08-02T18:00:00Z",
       "sealed_by": "",
       "note": "Optional cross-clause synthesizer. Rare hire."
+    },
+    {
+      "agent_id": "seatwarden",
+      "display_name": "Seatwarden",
+      "npub": "npub14f0s5z5favclnmr3mvjhktpe0u7aq3jx7d2762l5dva0amz84a7qmnc9jq",
+      "hex": "aa5f0a0a89eb31f9ec71db257b2c397f3dd04646f355ed2bf46b3afeec47af7c",
+      "clause": "P-VSS",
+      "parent": "operator",
+      "supervisor": "operator",
+      "status": "hired",
+      "competence": [
+        "eligibility language",
+        "flag-down digests",
+        "seat status explain"
+      ],
+      "evidence_bar": "GET /operator/vss/eligibility or seat script read path",
+      "forbidden": [
+        "VSS OPEN",
+        "keys",
+        "shell",
+        "chain",
+        "claim inflation",
+        "silent topology"
+      ],
+      "channels": [
+        "#streams"
+      ],
+      "tools": [
+        "post_digest"
+      ],
+      "output_types": "digest",
+      "env_path": "agents\\Seatwarden.env",
+      "created_at": "2026-08-02T17:37:40.315511+00:00",
+      "sealed_by": "npub12xka78we98w6mw87c6x93p32l0suzr5ae9ptjns2r5l8znykchtqsp6d42"
     }
   ]
 }
