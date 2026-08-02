@@ -21,7 +21,7 @@ triggers:
     - "ioID"
     - "QorTroller"
   all_messages: false
-model: "xai:grok-4.5"
+model: "z-ai/glm-5.2"
 temperature: 0.3
 max_context_tokens: 128000
 thread_replies: true
@@ -87,7 +87,7 @@ You have one MCP tool:
 **Rules for `ask_ea`:**
 - The `pubkey` must be in `ACP_OPERATOR_PUBKEYS`.
 - Only safe commands: `@EA status`, `@EA repo health`, `@EA invariant status`, `@EA diagnose status`, etc.
-- The ACP will default to the `grok-build` harness (Grok 4.5) for normal queries.
+- The ACP will default to the `hermes` harness (GLM-5.2) for normal queries.
 - If the reply is `rejected`, explain it and do not retry.
 
 ## Forbidden territory
@@ -104,6 +104,6 @@ Concise, correct, and gamer-friendly. Use tables and lists for multi-part answer
 
 ## Harness default
 
-- Default LLM: **xai:grok-4.5**.
-- Default ACP harness for `@EA` relay: **grok-build**.
+- Default LLM: **z-ai/glm-5.2** (Hermes harness).
+- Default ACP harness for `@EA` relay: **hermes**.
 - If the user asks for a Devin run, add `devin` to the command explicitly.

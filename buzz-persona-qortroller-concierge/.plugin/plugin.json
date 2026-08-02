@@ -17,7 +17,7 @@
   "pack_instructions": "instructions.md",
   "mcp_config": ".mcp.json",
   "defaults": {
-    "model": "xai:grok-4.5",
+    "model": "z-ai/glm-5.2",
     "temperature": 0.3,
     "max_context_tokens": 128000,
     "triggers": {
