@@ -312,6 +312,7 @@ def _handle_help(cfg: AgentConfig) -> str:
         "- `analytics` — your own verified data summary\n"
         "- `claim <token> <device>` — post your ioID claim to #lobby\n"
         "- `create <agent|channel|project|workflow|template> <name> [...]` — create a new Buzz artifact\n"
+        "- `git push <repo>` / `git commit <repo> <message>` / `git merge <pr-id>` / `git pr-open <repo> <title> <body>`\n"
         "- `brainstorm <topic>` — seed a brainstorm in the community\n"
         "- `help` — bring this list back\n\n"
         "If `BUZZ_LOBBY_CHANNEL_ID` is set, `claim` actually posts.\n"
@@ -483,6 +484,70 @@ def _handle_brainstorm(cfg: AgentConfig, args: list[str]) -> str:
         return f"brainstorm error: {e}"
 
 
+def _handle_git(cfg: AgentConfig, args: list[str]) -> str:
+    """Run buzz_agent_factory.py git subcommands: push, commit, merge, pr-open."""
+    if not args:
+        return (
+            "Usage:\n"
+            "- `git push <repo> [branch]`\n"
+            "- `git commit <repo> <message> [branch]`\n"
+            "- `git merge <pr-event-id>`\n"
+            "- `git pr-open <repo> <title> <body>`"
+        )
+
+    action = args[0]
+    rest = args[1:]
+
+    if action == "push":
+        if not rest:
+            return "Usage: `git push <repo> [branch]`"
+        repo, *branch = rest
+        branch = branch[0] if branch else "main"
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-push", "--repo", repo, "--branch", branch]
+    elif action == "commit":
+        if len(rest) < 2:
+            return "Usage: `git commit <repo> <message> [branch]`"
+        repo = rest[0]
+        message = rest[1]
+        branch = rest[2] if len(rest) > 2 else "main"
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-commit", "--repo", repo, "--message", message, "--branch", branch]
+    elif action == "merge":
+        if not rest:
+            return "Usage: `git merge <pr-event-id>`"
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-merge", "--pr-event-id", rest[0]]
+    elif action == "pr-open":
+        if len(rest) < 3:
+            return "Usage: `git pr-open <repo> <title> <body>`"
+        repo, title, body = rest[0], rest[1], " ".join(rest[2:])
+        factory_cmd = [sys.executable, "scripts/buzz_agent_factory.py", "git-pr-open", "--repo", repo, "--title", title, "--body", body]
+    else:
+        return f"Unknown git action: `{action}`. Try push, commit, merge, or pr-open."
+
+    if cfg.dry_run:
+        return f"[dry-run] I would run: {' '.join(factory_cmd)}"
+
+    env = os.environ.copy()
+    env["BUZZ_PRIVATE_KEY"] = cfg.private_key
+    env["BUZZ_RELAY_URL"] = cfg.relay_url
+    env["BUZZ_AUTH_TAG"] = os.environ.get("BUZZ_AUTH_TAG", "")
+    env["BUZZ_CLI_PATH"] = str(cfg.cli_path)
+    try:
+        result = subprocess.run(
+            factory_cmd,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            cwd=REPO_ROOT,
+            env=env,
+            shell=False,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()[:1500]
+        return f"Git command failed:\n```\n{result.stderr.strip()[:1500]}\n```"
+    except Exception as e:
+        return f"git error: {e}"
+
+
 def _handle_chat(text: str, cfg: AgentConfig) -> Optional[str]:
     """Friendly natural-language responses for small talk and QorTroller explainers.
 
@@ -612,6 +677,9 @@ def _process_message(message: dict, cfg: AgentConfig) -> str:
 
     if cmd in ("brainstorm", "bs"):
         return _handle_brainstorm(cfg, args)
+
+    if cmd in ("git",):
+        return _handle_git(cfg, args)
 
     if cmd in ("help", "?", "h"):
         return _handle_help(cfg)

@@ -265,12 +265,13 @@ def _factory_eval(cmd: list[str], cfg: BotConfig) -> str:
     if not cmd:
         return "rejected: empty factory command"
     action = cmd[0]
-    if action not in ("create", "brainstorm"):
-        return "rejected: I only understand 'create' and 'brainstorm'"
+    if action not in ("create", "brainstorm", "git"):
+        return "rejected: I only understand 'create', 'brainstorm', and 'git'"
 
     env = os.environ.copy()
     env["BUZZ_PRIVATE_KEY"] = cfg.private_key
     env["BUZZ_RELAY_URL"] = _to_http(cfg.relay_url)
+    env["BUZZ_AUTH_TAG"] = os.environ.get("BUZZ_AUTH_TAG", "")
     env["BUZZ_CLI_PATH"] = str(cfg.cli_path)
     env["BUZZ_HELPER_PATH"] = os.environ.get(
         "BUZZ_HELPER_PATH",
@@ -307,6 +308,32 @@ def _factory_eval(cmd: list[str], cfg: BotConfig) -> str:
             factory_args += ["create-template", "--name", name, "--description", desc]
         else:
             return f"rejected: I can create agent/channel/project/workflow/template, not '{artifact}'"
+    elif action == "git":
+        if len(cmd) < 2:
+            return "rejected: git needs an action"
+        git_action = cmd[1]
+        rest = cmd[2:]
+        if git_action == "push":
+            if len(rest) < 1:
+                return "rejected: git push needs a repo"
+            branch = rest[1] if len(rest) > 1 else "main"
+            factory_args += ["git-push", "--repo", rest[0], "--branch", branch]
+        elif git_action == "commit":
+            if len(rest) < 2:
+                return "rejected: git commit needs repo and message"
+            branch = rest[2] if len(rest) > 2 else "main"
+            factory_args += ["git-commit", "--repo", rest[0], "--message", rest[1], "--branch", branch]
+        elif git_action == "merge":
+            if len(rest) < 1:
+                return "rejected: git merge needs a pr event id"
+            factory_args += ["git-merge", "--pr-event-id", rest[0]]
+        elif git_action == "pr-open":
+            if len(rest) < 3:
+                return "rejected: git pr-open needs repo, title, and body"
+            body = " ".join(rest[2:])
+            factory_args += ["git-pr-open", "--repo", rest[0], "--title", rest[1], "--body", body]
+        else:
+            return f"rejected: unknown git action: {git_action}"
     else:
         return "rejected: unknown factory action"
 

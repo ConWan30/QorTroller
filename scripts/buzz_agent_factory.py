@@ -494,9 +494,30 @@ def main() -> int:
     br.add_argument("--topic", required=True)
     br.add_argument("--channel", default="", help="Brainstorm channel UUID (or BUZZ_BRAINSTORM_CHANNEL_ID)")
 
+    gpush = sub.add_parser("git-push", help="Push the current branch to a Buzz NIP-34 repo")
+    gpush.add_argument("--repo", required=True, help="Repository name on Buzz (e.g. MyProject)")
+    gpush.add_argument("--branch", default="main")
+    gpush.add_argument("--owner-hex", default="", help="Owner pubkey hex (defaults to caller)")
+
+    gcommit = sub.add_parser("git-commit", help="Stage, commit, and push to a Buzz NIP-34 repo")
+    gcommit.add_argument("--repo", required=True)
+    gcommit.add_argument("--message", required=True)
+    gcommit.add_argument("--branch", default="main")
+    gcommit.add_argument("--owner-hex", default="")
+
+    gmerge = sub.add_parser("git-merge", help="Mark a Buzz PR as merged")
+    gmerge.add_argument("--pr-event-id", required=True)
+
+    gpro = sub.add_parser("git-pr-open", help="Open a Buzz pull request")
+    gpro.add_argument("--repo", required=True)
+    gpro.add_argument("--title", required=True)
+    gpro.add_argument("--body", required=True)
+    gpro.add_argument("--source", default="main")
+    gpro.add_argument("--target", default="main")
+
     args = parser.parse_args()
 
-    if not os.environ.get("BUZZ_PRIVATE_KEY"):
+    if not os.environ.get("BUZZ_PRIVATE_KEY") and args.cmd not in ("git-push", "git-commit", "git-merge", "git-pr-open"):
         print("[!] BUZZ_PRIVATE_KEY (parent key) is required", file=sys.stderr)
         return 1
 
@@ -536,6 +557,43 @@ def main() -> int:
             print(f"[*] child nsec stored in: {result['env_path']}")
             return 0
         return 1
+
+    if args.cmd in ("git-push", "git-commit", "git-merge", "git-pr-open"):
+        factory_cmd = [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "buzz_git.py"),
+        ]
+        if args.cmd == "git-push":
+            factory_cmd += ["push", args.repo, args.branch]
+        elif args.cmd == "git-commit":
+            factory_cmd += ["commit", args.repo, args.message, args.branch]
+        elif args.cmd == "git-merge":
+            factory_cmd += ["merge", args.pr_event_id]
+        elif args.cmd == "git-pr-open":
+            factory_cmd += ["pr-open", args.repo, args.title, args.body]
+
+        env = os.environ.copy()
+        env["BUZZ_CLI_PATH"] = _cli_path()
+        env["BUZZ_HELPER_PATH"] = _helper_path()
+        env["BUZZ_RELAY_HTTP"] = _raw_to_http(os.environ.get("BUZZ_RELAY_URL", "wss://qortroller.communities.buzz.xyz"))
+        try:
+            result = subprocess.run(
+                factory_cmd,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=REPO_ROOT,
+                env=env,
+                shell=False,
+            )
+            if result.returncode == 0:
+                print(result.stdout.strip())
+                return 0
+            print(f"[!] {args.cmd} failed:\n{result.stderr.strip()[:1000]}", file=sys.stderr)
+            return 1
+        except Exception as e:
+            print(f"[!] {args.cmd} error: {e}", file=sys.stderr)
+            return 1
 
     return 1
 
