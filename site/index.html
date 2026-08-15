@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07080c">
+  <meta name="description" content="QorTroller is the truth plane of V.A.P.I. — a cryptographic anti-cheat and gamer-sovereignty protocol. Anyone can clone it, verify it, and use it without secrets.">
+  <title>QorTroller — Core Controllers of their gaming data</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Sora:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --night:#07080c; --panel:rgba(14,16,24,.82);
+      --chalk:#f4efe6; --mist:#9aa3b2; --dim:#6b7380;
+      --ember:#ff6a2a; --signal:#2ad4ff; --ok:#7dffb3;
+      --line:rgba(255,106,42,.16); --line-hi:rgba(42,212,255,.28);
+      --max:1180px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{
+      color:var(--chalk);
+      background:
+        radial-gradient(900px 480px at 90% -12%, rgba(255,106,42,.14), transparent 58%),
+        radial-gradient(700px 520px at -10% 18%, rgba(42,212,255,.08), transparent 55%),
+        linear-gradient(180deg, #0b0d14 0%, var(--night) 32%, #08090e 100%);
+      font-family:Sora,ui-sans-serif,system-ui,sans-serif;
+      line-height:1.55;
+    }
+    a{color:inherit}
+    .wrap{width:min(var(--max), calc(100% - 40px));margin:0 auto}
+    header.site{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--line);background:rgba(7,8,12,.8);backdrop-filter:blur(18px)}
+    .nav{min-height:74px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+    .wordmark{display:flex;align-items:center;gap:12px;text-decoration:none}
+    .mark{width:36px;height:36px;display:grid;place-items:center;border:1px solid rgba(255,106,42,.6);border-radius:8px;color:var(--ember);font:800 13px/1 Syne,sans-serif}
+    .wordmark b{display:block;font:800 15px/1 Syne,sans-serif}
+    .wordmark small{display:block;margin-top:4px;color:var(--dim);font:600 9px/1 "IBM Plex Mono",monospace;letter-spacing:.16em;text-transform:uppercase}
+    nav{display:flex;align-items:center;gap:20px}
+    nav a{color:var(--mist);font:600 11px/1 "IBM Plex Mono",monospace;letter-spacing:.1em;text-decoration:none;text-transform:uppercase}
+    nav a:hover{color:var(--ember)}
+    .cta{padding:10px 14px;border:1px solid rgba(255,106,42,.5);border-radius:999px;color:var(--ember)!important}
+    .hero{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(28px,6vw,80px);align-items:center;padding:clamp(56px,8vw,110px) 0 80px}
+    .kicker{display:inline-flex;align-items:center;gap:8px;color:var(--ember);font:700 11px/1 "IBM Plex Mono",monospace;letter-spacing:.16em;text-transform:uppercase}
+    .kicker i{width:7px;height:7px;border-radius:50%;background:var(--ember);box-shadow:0 0 0 5px rgba(255,106,42,.14)}
+    h1{margin:18px 0 18px;font:800 clamp(2.8rem,6.4vw,5.6rem)/.92 Syne,sans-serif;letter-spacing:-.05em}
+    h1 em{font-style:normal;color:var(--ember)}
+    .lede{max-width:38rem;color:var(--mist);font-size:1.05rem}
+    .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+    .button{display:inline-flex;align-items:center;min-height:46px;padding:0 16px;border:1px solid var(--line-hi);border-radius:999px;background:rgba(255,255,255,.03);color:var(--chalk);font:700 11px/1 "IBM Plex Mono",monospace;letter-spacing:.1em;text-decoration:none;text-transform:uppercase}
+    .button:hover{border-color:var(--ember)}
+    .button.primary{background:var(--ember);color:#140802;border-color:var(--ember)}
+    .note{margin-top:16px;color:var(--dim);font:500 12px/1.5 "IBM Plex Mono",monospace}
+    .card{padding:26px;border:1px solid var(--line-hi);border-radius:22px;background:linear-gradient(160deg,rgba(22,16,14,.85),rgba(7,8,12,.92))}
+    .card h3{font:800 1.2rem Syne,sans-serif;margin-bottom:10px}
+    .card p{color:var(--mist);font-size:.95rem}
+    .card + .card{margin-top:12px}
+    .section{padding:80px 0;border-top:1px solid var(--line)}
+    h2{font:800 clamp(2rem,4vw,3.4rem)/.98 Syne,sans-serif;letter-spacing:-.04em}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:28px}
+    .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:28px}
+    .tile{padding:22px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
+    .tile strong{display:block;color:var(--signal);font:700 11px/1 "IBM Plex Mono",monospace;letter-spacing:.12em;text-transform:uppercase}
+    .tile h3{margin:12px 0 8px;font:800 1.2rem Syne,sans-serif}
+    .tile p{color:var(--mist);font-size:.92rem}
+    pre{margin-top:18px;padding:18px;border:1px solid var(--line);border-radius:16px;background:#05060a;color:#d7e6ff;overflow:auto;font:500 12px/1.6 "IBM Plex Mono",monospace}
+    footer{padding:28px 0 52px;color:var(--dim);font:500 11px/1.6 "IBM Plex Mono",monospace}
+    .footer-row{display:flex;justify-content:space-between;gap:16px;padding-top:18px;border-top:1px solid var(--line)}
+    footer a{color:var(--mist);text-decoration:none}
+    footer a:hover{color:var(--ember)}
+    @media (max-width:900px){
+      .hero,.grid2,.grid3{grid-template-columns:1fr}
+      nav{display:none}
+    }
+  </style>
+</head>
+<body>
+  <header class="site">
+    <div class="wrap nav">
+      <a class="wordmark" href="#top"><span class="mark">QT</span><span><b>QorTroller</b><small>truth plane</small></span></a>
+      <nav>
+        <a href="#start">Start</a>
+        <a href="#planes">Planes</a>
+        <a href="#verify">Verify</a>
+        <a href="./install.html">Install</a>
+        <a class="cta" href="https://github.com/ConWan30/QorTroller">Source</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="wrap hero">
+      <div>
+        <div class="kicker"><i></i> Parent project · V.A.P.I. reference implementation</div>
+        <h1>Core Controllers<br><em>of their gaming data.</em></h1>
+        <p class="lede">QorTroller is the truth plane: a cryptographic anti-cheat and gamer-sovereignty protocol on IoTeX. A real human on a real attested controller produces a receipt anyone can re-check. No token, no wallet, and no GitHub PAT is required to clone, read, or verify the public surface.</p>
+        <div class="actions">
+          <a class="button primary" href="./install.html">Clone and run</a>
+          <a class="button" href="https://github.com/ConWan30/QorTroller/discussions">Discussions</a>
+          <a class="button" href="https://github.com/ConWan30/Qoresence">Qoresence (observation)</a>
+        </div>
+        <p class="note">Public repo · Apache-2.0 · IoTeX testnet · secrets stay in local .env files</p>
+      </div>
+      <div>
+        <div class="card">
+          <h3>What a stranger can do today</h3>
+          <p>Clone the repo, run the invariant gate, and re-check the published data-economy ladder. Those paths are designed to work without operator keys or live hardware.</p>
+        </div>
+        <div class="card">
+          <h3>What never ships in git</h3>
+          <p>GitHub PATs, wallet private keys, Buzz <code>nsec</code> values, <code>bridge/.env</code>, biometric dumps, and live session captures. Templates exist. Live secrets do not.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="planes">
+      <div class="wrap">
+        <div class="kicker">Compose, do not conflate</div>
+        <h2>Parent truth plane.<br>Sibling observation plane.</h2>
+        <div class="grid2">
+          <div class="tile">
+            <strong>This repo</strong>
+            <h3>QorTroller</h3>
+            <p>Cryptographic presence, PoAC receipts, on-chain consent, tournament gates, and gamer sovereignty. Claims are measured and fail-closed. This is the parent protocol.</p>
+          </div>
+          <div class="tile">
+            <strong>Sibling project</strong>
+            <h3>Qoresence</h3>
+            <p>Local HDMI + DualSense observation engine. One capture card, one clock, many glasses. It does not claim humanity or write chain by default. <a href="https://conwan30.github.io/Qoresence/">conwan30.github.io/Qoresence</a></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="start">
+      <div class="wrap">
+        <div class="kicker">No secrets required</div>
+        <h2>Start on a clean machine.</h2>
+        <pre>git clone https://github.com/ConWan30/QorTroller.git
+cd QorTroller
+python scripts/vapi_invariant_gate.py
+python scripts/verify_wmp_ladder.py</pre>
+        <div class="grid3">
+          <div class="tile"><strong>01</strong><h3>Read</h3><p>README, SECURITY, PRIVACY, and the whitepaper. The public claim surface is documented, including known limits.</p></div>
+          <div class="tile"><strong>02</strong><h3>Verify</h3><p>Invariant gate + stranger ladder. Exit 0 means the published evidence still checks. Nothing is faked as a pass.</p></div>
+          <div class="tile"><strong>03</strong><h3>Discuss</h3><p>Use Discussions for questions and ideas. Use private advisories for security. Never paste keys into issues.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="verify">
+      <div class="wrap">
+        <div class="kicker">Honest ceilings</div>
+        <h2>What this is, and is not.</h2>
+        <div class="grid2">
+          <div class="tile"><strong>Is</strong><h3>A proof layer</h3><p>It binds controller physics and match evidence into a receipt. Organizers and strangers can re-check published artifacts.</p></div>
+          <div class="tile"><strong>Is not</strong><h3>A kernel anti-cheat</h3><p>It does not ban players, identify which human is playing, or catch a real person using an aimbot. Advisory until an organizer adopts it.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-row">
+      <div>QorTroller · V.A.P.I. reference implementation · Apache-2.0</div>
+      <div>
+        <a href="https://github.com/ConWan30/QorTroller">GitHub</a> ·
+        <a href="https://github.com/ConWan30/QorTroller/discussions">Discussions</a> ·
+        <a href="./install.html">Install</a> ·
+        <a href="https://github.com/ConWan30/QorTroller/blob/main/SECURITY.md">Security</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

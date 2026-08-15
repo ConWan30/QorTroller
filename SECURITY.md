@@ -4,7 +4,11 @@
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report privately by emailing the repository owner (contact via GitHub profile) with:
+Preferred: open a private advisory at
+
+https://github.com/ConWan30/QorTroller/security/advisories/new
+
+Or email the repository owner (contact via GitHub profile) with:
 - Description of the vulnerability
 - Steps to reproduce
 - Affected VAPI component (bridge, SDK, contracts, wire format)

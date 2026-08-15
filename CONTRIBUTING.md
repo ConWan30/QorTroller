@@ -1,6 +1,23 @@
-# Contributing to VAPI
+# Contributing to QorTroller
 
-VAPI is open source under Apache 2.0. Contributions are welcome across three tracks:
+QorTroller is open source under Apache 2.0. It is the **parent / truth-plane** V.A.P.I. project.
+The sibling observation-plane product is [Qoresence](https://github.com/ConWan30/Qoresence).
+
+**Community:** [Pages](https://conwan30.github.io/QorTroller/) · [Discussions](https://github.com/ConWan30/QorTroller/discussions) · [Wiki](https://github.com/ConWan30/QorTroller/wiki)
+
+Anyone can clone over HTTPS and run the public verify path. You do **not** need a GitHub PAT,
+wallet key, or `bridge/.env` to read the protocol or re-check published artifacts.
+
+```powershell
+git clone https://github.com/ConWan30/QorTroller.git
+cd QorTroller
+python scripts/vapi_invariant_gate.py
+python scripts/verify_wmp_ladder.py
+```
+
+Never commit `.env`, PATs, `nsec` values, wallet keys, or `sessions/` captures. See `PRIVACY.md`.
+
+Contributions are welcome across three tracks:
 hardware profiles, detection research, and platform integration.
 
 ---

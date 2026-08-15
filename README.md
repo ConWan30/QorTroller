@@ -1,12 +1,43 @@
 # QorTroller — Core Controllers of their gaming data
 
+[![GitHub](https://img.shields.io/badge/github-ConWan30%2FQorTroller-181717?logo=github)](https://github.com/ConWan30/QorTroller)
+[![Website](https://img.shields.io/badge/website-GitHub%20Pages-blue)](https://conwan30.github.io/QorTroller/)
+[![Discussions](https://img.shields.io/badge/discussions-open-orange)](https://github.com/ConWan30/QorTroller/discussions)
+[![Wiki](https://img.shields.io/badge/wiki-operator%20notes-informational)](https://github.com/ConWan30/QorTroller/wiki)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169)
+
 > **The reference implementation of Verifiable Autonomous Physical Intelligence (V.A.P.I.)** — a Decentralized Physical Infrastructure (DePIN) sub-category coined to describe protocols where the physical-input source is also the cryptographic agency-holder over the data those physical interactions generate. In QorTroller's case: gamers and their controllers, producing data, owning that data.
 >
 > Built native to IoTeX's Internet of Trusted Things foundation. Anchored on IoTeX L1. Composable as a single on-chain call. Designed so cheating doesn't need to be punished — it can't exist when humanity is cryptographically proven and the gamer retains sovereignty.
 
 **V.A.P.I.** — pronounced as the acronym; styled with periods to distinguish from unrelated similarly-named projects in other categories. As a coined DePIN sub-category, V.A.P.I. is the conceptual scope; QorTroller is the project that implements it for competitive gaming.
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
+### Parent truth plane · sibling observation plane
+
+| Plane | Repo | What it is |
+|---|---|---|
+| **Truth (this repo)** | [ConWan30/QorTroller](https://github.com/ConWan30/QorTroller) | Cryptographic receipts, consent, eligibility, gamer sovereignty |
+| **Observation** | [ConWan30/Qoresence](https://github.com/ConWan30/Qoresence) | Local HDMI + DualSense glasses. No humanity / chain claims by default |
+
+Compose them. Do not merge optical activity into `poep_enabled`. Qoresence site: [conwan30.github.io/Qoresence](https://conwan30.github.io/Qoresence/). This site: [conwan30.github.io/QorTroller](https://conwan30.github.io/QorTroller/).
+
+### Start here — no secrets required
+
+Anyone else can use this repository without a GitHub PAT, wallet key, Buzz `nsec`, or `bridge/.env`. Those stay on the operator machine.
+
+```powershell
+git clone https://github.com/ConWan30/QorTroller.git
+cd QorTroller
+python scripts/vapi_invariant_gate.py          # fail-closed protocol invariants
+python scripts/verify_wmp_ladder.py            # stranger re-check of the published bundle
+```
+
+- **Read:** this README · [SECURITY.md](SECURITY.md) · [PRIVACY.md](PRIVACY.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Talk:** [Discussions](https://github.com/ConWan30/QorTroller/discussions) · [Wiki](https://github.com/ConWan30/QorTroller/wiki)
+- **Do not commit:** `.env`, PATs, wallet keys, `nsec` values, `sessions/` captures. Copy `*.env.example` locally only.
+
+Hardware capture, Buzz posting, and IoTeX writes are **opt-in operator paths**. They are documented below. They are not required for a stranger to verify the public claim surface.
 
 **Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated); Trio-Retina + CCO×PoEP Fusion + L9 coupled-retina presence BUILT (advisory, default-OFF); **PoSP synchronized presence + kill-authorship (live RP authored) + first real on-chain ZK replay proof + PORT-CERT full VERIFIED + organizer pilot package SHIPPED (2026-07); WMP data-economy Phase-2 LIVE — first certified-human action-demonstration bundle VERIFIED 5/5, the gamer's own wallet signing consent on-chain (2026-07-11); DEPIN NODE LIVE — node born from the registered controller, kill-feed recall proven ~17/17 witnessed live, first contribution ANCHORED on IoTeX block 45613440, operator-fired (2026-07-13)** — **public repo · IoTeX testnet** · **Date:** 2026-07-13
 

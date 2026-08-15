@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07080c">
+  <meta name="description" content="Install QorTroller from a public clone. No GitHub PAT, wallet key, or biometric dump is required to read or verify.">
+  <title>Install QorTroller</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Sora:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--night:#07080c;--chalk:#f4efe6;--mist:#9aa3b2;--dim:#6b7380;--ember:#ff6a2a;--signal:#2ad4ff;--line:rgba(255,106,42,.16);--max:880px}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{color:var(--chalk);background:#07080c;font-family:Sora,sans-serif;line-height:1.6}
+    a{color:var(--signal)}
+    .wrap{width:min(var(--max),calc(100% - 36px));margin:0 auto;padding:56px 0 80px}
+    h1{font:800 clamp(2.2rem,5vw,3.6rem)/1 Syne,sans-serif;letter-spacing:-.04em;margin:12px 0 16px}
+    h2{font:800 1.5rem Syne,sans-serif;margin:36px 0 10px}
+    p,li{color:var(--mist)}
+    ul{margin:10px 0 0 1.2rem}
+    pre{margin:16px 0;padding:16px;border:1px solid var(--line);border-radius:14px;background:#05060a;overflow:auto;font:500 12px/1.6 "IBM Plex Mono",monospace;color:#d7e6ff}
+    .kicker{color:var(--ember);font:700 11px/1 "IBM Plex Mono",monospace;letter-spacing:.16em;text-transform:uppercase}
+    .back{color:var(--mist);text-decoration:none;font:600 11px/1 "IBM Plex Mono",monospace;letter-spacing:.1em;text-transform:uppercase}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="./index.html">← QorTroller</a>
+    <p class="kicker" style="margin-top:28px">Public install</p>
+    <h1>Clone it. Verify it. Do not paste secrets.</h1>
+    <p>QorTroller is a public research and protocol repo. Anyone can use the read/verify path. Live capture, chain writes, and Buzz posting stay opt-in and env-only.</p>
+
+    <h2>1. Requirements</h2>
+    <ul>
+      <li>Python 3.10+ (3.11 or 3.12 preferred)</li>
+      <li>Git</li>
+      <li>Optional later: Node 18+ for Hardhat, Rust for the Wasm applet, a DualShock Edge for hardware tests</li>
+    </ul>
+
+    <h2>2. Clone</h2>
+    <pre>git clone https://github.com/ConWan30/QorTroller.git
+cd QorTroller
+pip install -r requirements.txt</pre>
+    <p>Use HTTPS. You do not need a GitHub PAT to clone or open a pull request from a fork.</p>
+
+    <h2>3. Verify without hardware or keys</h2>
+    <pre>python scripts/vapi_invariant_gate.py
+python scripts/verify_wmp_ladder.py</pre>
+    <p>The invariant gate is the fail-closed protocol check. The WMP ladder re-checks the published certified-human bundle using the standard library only. Neither command needs <code>bridge/.env</code>.</p>
+
+    <h2>4. Optional operator path</h2>
+    <p>Only if you are running a live rig or the Buzz bot:</p>
+    <ul>
+      <li>Copy <code>scripts/qortroller_buzz_bot.env.example</code> — never commit the filled file.</li>
+      <li>Keep wallet keys, PATs, and <code>nsec</code> values in local env files that <code>.gitignore</code> already blocks.</li>
+      <li>Do not enable <code>L6_CHALLENGES</code>, <code>GSR</code>, or chain submission unless you have read the hard rules in the README.</li>
+    </ul>
+
+    <h2>5. Community</h2>
+    <ul>
+      <li><a href="https://github.com/ConWan30/QorTroller/discussions">Discussions</a> for questions and ideas</li>
+      <li><a href="https://github.com/ConWan30/QorTroller/issues">Issues</a> for bugs (no secrets in screenshots)</li>
+      <li><a href="https://github.com/ConWan30/QorTroller/blob/main/SECURITY.md">SECURITY.md</a> for private vulnerability reports</li>
+      <li><a href="https://github.com/ConWan30/Qoresence">Qoresence</a> if you want the observation-plane product</li>
+    </ul>
+  </div>
+</body>
+</html>
