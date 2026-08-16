@@ -1915,6 +1915,14 @@ class DualShockTransport:
                 self._consecutive_poll_failures = 0
                 self._reconnect_attempts = 0
 
+            # Streamer perception presence-sync: touch file so TouchFilePresenceProvider sees recent HID
+            try:
+                _touch_path = Path("logs/streamer_presence.touch")
+                _touch_path.parent.mkdir(exist_ok=True)
+                _touch_path.touch()
+            except Exception:
+                pass  # fail-open; presence sync is advisory only
+
             # Phase 234.7 Layer 1 — report poll rate for PCC.
             # ATTEST-FEEDS (F-RIG27-1): extracted to _pcc_rate_feed — same counter-delta-vs-
             # len(frames) preference PLUS silent-counter stall detection/healing (the alive-but-
