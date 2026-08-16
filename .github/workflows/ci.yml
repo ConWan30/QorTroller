@@ -59,9 +59,13 @@ jobs:
           # `npx asc` cannot resolve and the test fails instead of verifying.
           (cd scripts/w3bstream && npm ci)
 
-      - name: Run 174-Invariant Gate Check
+      - name: Run PV-CI Invariant Gate (188)
         run: |
           python scripts/vapi_invariant_gate.py
+
+      - name: Run rig health battery (CI subset)
+        run: |
+          python scripts/rig_health.py --quick --skip smoke_imports,oracle
 
       - name: Compile Rust WebAssembly Applet
         run: |
