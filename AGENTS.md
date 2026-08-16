@@ -47,7 +47,7 @@ python -c "import qortroller, qortroller_daemon; print('EA OK')"
 python -c "import sys; sys.path.insert(0,'bridge'); from vapi_bridge.retina_visual_oracle import VisualOracleConfig; print('oracle', VisualOracleConfig().nim_model)"
 
 # 3. Engineering Assistant shell hardening still in place
-python -c "import inspect, qortroller; s=inspect.getsource(qortroller); assert 'shell=False' in s; print('shell-False OK')"
+python -c "import inspect, qortroller_tools, qortroller; s=inspect.getsource(qortroller_tools)+inspect.getsource(qortroller); assert 'shell=False' in s; print('shell-False OK')"
 
 # 4. Retina Visual Oracle unit tests (16)
 python bridge/vapi_bridge/retina_visual_oracle.py

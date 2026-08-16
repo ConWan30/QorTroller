@@ -43,7 +43,7 @@ HEALTH_JSON = REPO_ROOT / "logs" / "health.json"
 INVARIANT_EXPECTED = 188
 COLLECTED_MIN = 6400
 IMPORT_ERRORS_MAX = 4
-MONOLITH_BUDGET = 2360  # qortroller.py after the clients extraction (2327) + headroom
+MONOLITH_BUDGET = 1750  # qortroller.py after the ToolEngine extraction (1701) + headroom
 
 
 def _run(cmd: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -78,7 +78,10 @@ def check_oracle(results: list[dict]) -> None:
 
 
 def check_shell_false(results: list[dict]) -> None:
-    code = ("import inspect, qortroller; s = inspect.getsource(qortroller); "
+    # ToolEngine (the shell-tool home) now lives in qortroller_tools; check
+    # both so any residual subprocess use in the core is still covered.
+    code = ("import inspect, qortroller_tools, qortroller; "
+            "s = inspect.getsource(qortroller_tools) + inspect.getsource(qortroller); "
             "assert 'shell=False' in s; print('shell-False OK')")
     p = _run([sys.executable, "-c", code])
     results.append({"name": "shell_false", "status": "pass" if p.returncode == 0 else "fail",

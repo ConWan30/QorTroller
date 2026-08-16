@@ -114,5 +114,8 @@ def test_facade_identity():
         ), f"imported {qortroller.__file__}, expected repo-root qortroller.py"
         assert qortroller.MethodologyRegistry is qm.MethodologyRegistry
         assert qortroller.SessionHistory is qm.SessionHistory
+        import qortroller_tools as qt
+
+        assert qortroller.ToolEngine is qt.ToolEngine
     finally:
         sys.path[:] = saved_path
