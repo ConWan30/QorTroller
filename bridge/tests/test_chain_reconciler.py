@@ -183,6 +183,7 @@ class TestChainReconcilerCycle(unittest.TestCase):
         event = {"transactionHash": bytes.fromhex(tx_hex)}
         chain = _make_chain_mock(block_number=50, events=[event])
         reconciler = ChainReconciler(self.store, chain, poll_interval=999.0)
+        reconciler._governor = False  # bypass governor; see test_last_block_advances
         self._run(reconciler._reconcile_cycle())
         with sqlite3.connect(self.store._db_path) as conn:
             row = conn.execute(
@@ -196,6 +197,11 @@ class TestChainReconcilerCycle(unittest.TestCase):
         """After a successful cycle, _last_block should advance to current_block."""
         chain = _make_chain_mock(block_number=200, events=[])
         reconciler = ChainReconciler(self.store, chain, poll_interval=999.0)
+        # Unit-test scope: bypass ChainReadGovernor. The governor wraps the
+        # sync w3 companion; against a MagicMock its defensive non-int guard
+        # returns default block 1. False is a legal "no governor" value for
+        # _get_governor (returns it unchanged, callers treat falsy as absent).
+        reconciler._governor = False
         self._run(reconciler._reconcile_cycle())
         self.assertEqual(reconciler._last_block, 200)
 

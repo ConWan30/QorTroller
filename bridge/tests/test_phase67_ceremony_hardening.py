@@ -387,6 +387,10 @@ class TestCeremonyChainIntegration(unittest.TestCase):
         from vapi_bridge.chain import ChainClient
         cfg = MagicMock()
         cfg.ceremony_registry_address = ""
+        # _gated_submission checks chain_submission_paused FIRST; a truthy
+        # MagicMock would return "" (skip) instead of reaching the missing-
+        # address RuntimeError this test exists to verify.
+        cfg.chain_submission_paused = False
 
         # Build a minimal ChainClient without a real RPC connection
         client = ChainClient.__new__(ChainClient)

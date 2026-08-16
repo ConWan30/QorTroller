@@ -171,8 +171,15 @@ class TestDriftLogIdempotency(unittest.TestCase):
             operator_agent_anchor_sentry_id=SENTRY_ID,
             operator_agent_guardian_id="",
         )
-        detect_bundle_hash_drift(cfg=cfg, store=store)
-        detect_bundle_hash_drift(cfg=cfg, store=store)
+        # Dedup is UNIQUE(agent_id, drift_type, detected_at_bucket) at second
+        # granularity. On fast/loaded CI runners the two sweeps can straddle a
+        # second boundary (2 rows) — patch the store's clock so both land in
+        # one bucket and the dedup logic itself is what's under test.
+        from unittest.mock import patch as _patch
+
+        with _patch("vapi_bridge.store._core.time.time", return_value=1_750_000_000.0):
+            detect_bundle_hash_drift(cfg=cfg, store=store)
+            detect_bundle_hash_drift(cfg=cfg, store=store)
         rows = store.get_operator_agent_drift_log()
         self.assertEqual(len(rows), 1)
 

@@ -78,6 +78,10 @@ def _make_chain_client() -> ChainClient:
     client = ChainClient.__new__(ChainClient)
     client._cfg = MagicMock()
     client._cfg.chain_id = 4690
+    # _gated_submission kill-switch must be OFF: a bare MagicMock attr is
+    # truthy, which would skip send_raw_transaction entirely (no exception,
+    # no nonce reset) and fail this test for the wrong reason.
+    client._cfg.chain_submission_paused = False
     client._w3 = MagicMock()
     client._account = MagicMock(address="0xBridgeAddr")
     # _nonce_lock must be created inside an active event loop; we set it in _run()

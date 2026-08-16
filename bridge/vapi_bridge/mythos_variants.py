@@ -914,6 +914,22 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
     b"VAPI-RETINA-WITNESS-MARK-v1",   # RWM L0 (2026-07-24) — retina_witness_mark.py, non-cryptographic
                                       # visual locator mark domain tag; CANDIDATE per D-RWM-1 Path A,
                                       # LANE RWM PASS at r10; not FROZEN-v1, no governance seal
+    b"VAPI-RWM-DISPUTE-ESCROW-v0",    # RWM L1 (2026-07-24) — rwm_dispute_escrow.py, dispute-escrow
+                                      # commitment domain tag; CANDIDATE capability (same D-RWM-1
+                                      # Path A / LANE RWM PASS lineage as L0 above; operator-local
+                                      # ceremony artifacts in audits/rwm_escrow_LIVE*); registry
+                                      # catch-up per this module's same-PR rule — surfaced as UNKNOWN
+                                      # HIGH by Mythos after the RWM merge (issue #143)
+    b"VAPI-RWM-DISPUTE-LEAF-v0",      # RWM L1 (2026-07-24) — rwm_dispute_escrow.py, per-leaf
+                                      # commitment tag for escrow bundles; CANDIDATE, same lineage
+                                      # and catch-up as VAPI-RWM-DISPUTE-ESCROW-v0
+    b"VAPI-RWM-MERKLE-LEAF-v0",       # RWM L1 (2026-07-24) — rwm_stranger_pack.py, stranger-pack
+                                      # Merkle leaf domain tag; CANDIDATE (audits/rwm_stranger_*
+                                      # LIVE ceremony artifacts); registry catch-up, issue #143
+    b"VAPI-RWM-MERKLE-NODE-v0",       # RWM L1 (2026-07-24) — rwm_stranger_pack.py, stranger-pack
+                                      # Merkle internal-node domain tag; CANDIDATE, same catch-up
+    b"VAPI-RWM-STRANGER-MERKLE-v0",   # RWM L1 (2026-07-24) — rwm_stranger_pack.py, root-of-pack
+                                      # stranger Merkle domain tag; CANDIDATE, same catch-up
 })
 
 
@@ -1256,7 +1272,12 @@ _METHODOLOGY_REQUIRED_FILES: tuple[str, ...] = (
     "wiki/methodology/METHODOLOGY_LAYER_INTEGRATION_MAP.md",
     "wiki/methodology/bt_calibration_v1_1_architectural_revision.md",
     "wiki/methodology/sensor_stack_v2_1_architectural_revision.md",
-    "wiki/assessments/VAPI Bluetooth Calibration_ Architectural Prerequisites and Threat Model Analysis.pdf",
+    # NOTE (issue #143): the "VAPI Bluetooth Calibration ... Threat Model
+    # Analysis.pdf" entry that used to be listed here was never committed to
+    # the repo (verified: absent on disk and in git history); the tracked
+    # "DualSense Edge Sensor-Stack Characterization" PDF below carries the
+    # hardware-assessment role. Re-add the calibration PDF only if/when it
+    # is actually committed.
     "wiki/assessments/DualSense Edge Sensor-Stack Characterization for VAPI Track-1 Anti-Cheat Feature Architecture.pdf",
     "vsd-vault/eval/architect_key_attestation.json",
 )

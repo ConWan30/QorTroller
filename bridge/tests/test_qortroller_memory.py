@@ -1,14 +1,15 @@
 """Unit tests for qortroller_memory (extracted persistent-memory module).
 
 Stdlib-only on purpose so this suite runs in CI without bridge deps.
-The façade-identity test is local-only: `import qortroller` pulls in
-textual/cv2/hid which CI does not install — importorskip handles that.
+The façade-identity test imports the canonical repo-root qortroller
+explicitly (heavy deps are guarded there, so it imports on CI too).
 """
 
 from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -94,6 +95,24 @@ class TestSessionHistory:
 
 
 def test_facade_identity():
-    qortroller = pytest.importorskip("qortroller")
-    assert qortroller.MethodologyRegistry is qm.MethodologyRegistry
-    assert qortroller.SessionHistory is qm.SessionHistory
+    # Import the CANONICAL repo-root qortroller, not the lighter
+    # scripts/qortroller.py CLI variant. Earlier test modules (e.g.
+    # test_cfss_lane_drift_sweep) prepend other source dirs to sys.path,
+    # which otherwise shadows root modules by name (found via CI failure:
+    # 'module qortroller has no attribute MethodologyRegistry').
+    import importlib
+    import sys
+
+    root = str(Path(__file__).resolve().parents[2])
+    saved_path = sys.path[:]
+    sys.path.insert(0, root)
+    try:
+        sys.modules.pop("qortroller", None)
+        qortroller = importlib.import_module("qortroller")
+        assert str(Path(qortroller.__file__).resolve()) == str(
+            Path(root, "qortroller.py").resolve()
+        ), f"imported {qortroller.__file__}, expected repo-root qortroller.py"
+        assert qortroller.MethodologyRegistry is qm.MethodologyRegistry
+        assert qortroller.SessionHistory is qm.SessionHistory
+    finally:
+        sys.path[:] = saved_path

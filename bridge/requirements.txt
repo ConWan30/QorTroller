@@ -86,3 +86,9 @@ yubihsm>=3.0.0; python_version >= "3.10"
 # `pytest -n auto` cuts the full bridge suite from ~3h35m to ~1h05m
 # (verified ~3.2× speedup on a 20-module batch).
 pytest-xdist>=3.8.0
+
+# Nostr key handling for scripts/qortroller_buzz_bot.py — the bridge suite's
+# test_qortroller_buzz_bot.py exercises _whoami()/signing against a random
+# test key; without nostr-sdk, _whoami() fail-opens to "" and the test fails.
+# Same pin as the root requirements.txt (Buzz Phase 1 wiring).
+nostr-sdk==0.44.2

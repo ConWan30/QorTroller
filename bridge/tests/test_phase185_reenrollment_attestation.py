@@ -227,7 +227,12 @@ def test_t185_8_endpoint_registered():
         object.__setattr__(cfg, "operator_api_key", "test-key-185")
 
         app    = create_operator_app(cfg, store)
-        routes = {r.path for r in app.routes}
+        routes = set()
+        for r in app.routes:  # starlette>=1.0: _IncludedRouter has no .path
+            if hasattr(r, "path"):
+                routes.add(r.path)
+            else:
+                routes.update(sub.path for sub in getattr(r, "routes", []) if hasattr(sub, "path"))
         assert "/agent/reenrollment-attestation-status" in routes, \
             f"reenrollment-attestation-status not found in {routes}"
 

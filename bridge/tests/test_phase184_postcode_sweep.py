@@ -88,7 +88,12 @@ def test_t184_4_endpoints_registered():
 
         app = create_operator_app(cfg, store)
 
-        routes = {r.path for r in app.routes}
+        routes = set()
+        for r in app.routes:  # starlette>=1.0: _IncludedRouter has no .path
+            if hasattr(r, "path"):
+                routes.add(r.path)
+            else:
+                routes.update(sub.path for sub in getattr(r, "routes", []) if hasattr(sub, "path"))
         assert "/agent/persona-break-status" in routes, \
             f"persona-break-status not found in {routes}"
         assert "/agent/maturity-elevation-plan" in routes, \
