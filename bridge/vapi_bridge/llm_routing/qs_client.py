@@ -10,6 +10,13 @@ from typing import Optional
 
 log = logging.getLogger(__name__)
 
+# Fail-open module-level binding so tests can patch
+# vapi_bridge.llm_routing.qs_client.QorTrollerAI.
+try:
+    from ..vapi_llm_client import QorTrollerAI
+except Exception:
+    QorTrollerAI = None  # type: ignore[assignment]
+
 
 class QuickSilverClient:
     """Adapter for the QuickSilver API client in router orchestration."""
@@ -21,7 +28,8 @@ class QuickSilverClient:
     def _initialize_qs_client(self):
         """Initialize the QuickSilver client."""
         try:
-            from ..vapi_llm_client import QorTrollerAI
+            if QorTrollerAI is None:
+                raise ImportError("vapi_llm_client unavailable (import failed at module load)")
             self._qs_client = QorTrollerAI()
             log.info("QuickSilver client adapter initialized")
         except Exception as e:

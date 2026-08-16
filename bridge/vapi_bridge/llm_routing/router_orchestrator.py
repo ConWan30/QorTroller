@@ -15,6 +15,20 @@ from enum import Enum
 
 log = logging.getLogger(__name__)
 
+# Provider adapters, imported at MODULE level so tests can patch them here
+# (e.g. patch('vapi_bridge.llm_routing.router_orchestrator.QuickSilverClient')).
+# Both are fail-open: if their heavy deps are absent the names are None and
+# _initialize_providers marks the provider unhealthy instead of raising.
+try:
+    from .qs_client import QuickSilverClient
+except Exception:
+    QuickSilverClient = None  # type: ignore[assignment]
+
+try:
+    from .local_client import LocalLLMClient
+except Exception:
+    LocalLLMClient = None  # type: ignore[assignment]
+
 
 class LLMProvider(Enum):
     """Available LLM providers."""
@@ -98,15 +112,17 @@ class LLMRouter:
     def _initialize_providers(self):
         """Initialize LLM provider clients."""
         try:
-            from .qs_client import QuickSilverClient
+            if QuickSilverClient is None:
+                raise ImportError("qs_client unavailable (import failed at module load)")
             self._qs_client = QuickSilverClient()
             log.info("QuickSilver client initialized")
         except Exception as e:
             log.warning(f"QuickSilver client initialization failed: {e}")
             self._provider_health[LLMProvider.QUICKSILVER]["healthy"] = False
-        
+
         try:
-            from .local_client import LocalLLMClient
+            if LocalLLMClient is None:
+                raise ImportError("local_client unavailable (import failed at module load)")
             self._local_client = LocalLLMClient()
             log.info("Local NIM client initialized")
         except Exception as e:
@@ -130,19 +146,23 @@ class LLMRouter:
             call_id, provider, prompt, system_prompt, timestamp
         )
         
-        # Failover to secondary if primary failed
+        # Failover to secondary if primary failed. Auto-failover is
+        # per-CALL: any primary failure immediately retries the secondary
+        # when one is configured. max_failures_before_failover governs the
+        # provider-health marking in _record_provider_failure (future
+        # routing decisions), not this immediate retry.
         if not result.success and self._config.auto_failover_enabled:
             self._record_provider_failure(provider)
-            
-            if self._should_failover(provider):
-                secondary = self._config.secondary_provider
+
+            secondary = self._config.secondary_provider
+            if secondary is not None and secondary != provider:
                 log.warning(f"Failover from {provider.value} to {secondary.value}")
-                
+
                 result = await self._try_provider(
                     call_id, secondary, prompt, system_prompt, timestamp,
                     fallback_from=provider
                 )
-                
+
                 # If secondary succeeds, update provenance
                 if result.success:
                     result.provenance.fallback_triggered = True
@@ -348,7 +368,13 @@ class LLMRouter:
         ]
         
         if not recent_records:
-            return {"period_hours": hours, "total_calls": 0}
+            return {
+                "period_hours": hours,
+                "total_calls": 0,
+                "success_rate": 0.0,
+                "avg_latency_ms": 0.0,
+                "provider_distribution": {},
+            }
         
         provider_counts = {}
         success_count = 0
