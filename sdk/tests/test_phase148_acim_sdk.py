@@ -20,7 +20,12 @@ from sdk.vapi_sdk import (
 
 # Test 1 — SDK version is phase148
 def test_1_sdk_version_phase148():
-    assert SDK_VERSION == "3.0.0-phase166"
+    # SDK_VERSION moved past per-phase numeric suffixes (3.1.1-phase-o3-zkba-track1-g4-validator-sdk); keep the
+# monotonic-floor intent instead of pinning a dead format.
+
+    _semver = tuple(int(p) for p in SDK_VERSION.split("-")[0].split(".")[:3])
+
+    assert _semver >= (3, 1, 0), SDK_VERSION
 
 
 # Test 2 — AgentCalibrationHealthResult has 6 slots with correct defaults

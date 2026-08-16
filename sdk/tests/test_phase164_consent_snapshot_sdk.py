@@ -51,7 +51,12 @@ class TestPhase164SDK(unittest.TestCase):
 
     def test_sdk_version_is_phase164(self):
         """SDK_VERSION reflects Phase 164."""
-        self.assertEqual(SDK_VERSION, "3.0.0-phase166")
+        # SDK_VERSION moved past per-phase numeric suffixes (3.1.1-phase-o3-zkba-track1-g4-validator-sdk); keep the
+# monotonic-floor intent instead of pinning a dead format.
+
+        _semver = tuple(int(p) for p in SDK_VERSION.split("-")[0].split(".")[:3])
+
+        self.assertGreaterEqual(_semver, (3, 1, 0))
 
 
 if __name__ == "__main__":

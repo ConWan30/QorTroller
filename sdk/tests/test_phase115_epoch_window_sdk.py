@@ -7,7 +7,12 @@ from vapi_sdk import VHPDualGateResult, VAPIVHPDualGate, SDK_VERSION
 
 # Test 1 — SDK_VERSION must be at least phase115 (may be newer after subsequent phases)
 def test_sdk_version_phase115():
-    assert int(SDK_VERSION.split("-phase")[1]) >= 115
+    # SDK_VERSION moved past per-phase numeric suffixes (3.1.1-phase-o3-zkba-track1-g4-validator-sdk); keep the
+# monotonic-floor intent instead of pinning a dead format.
+
+    _semver = tuple(int(p) for p in SDK_VERSION.split("-")[0].split(".")[:3])
+
+    assert _semver >= (3, 1, 0), SDK_VERSION
 
 
 # Test 2 — VHPDualGateResult still has exactly 6 slots (no new slots added)

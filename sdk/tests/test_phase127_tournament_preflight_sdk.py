@@ -18,11 +18,14 @@ from vapi_sdk import TournamentPreflightResult, VAPITournamentPreflight
 
 class TestTournamentPreflightResultSlots(unittest.TestCase):
     def test_1_tournament_preflight_result_has_8_slots(self):
+        # 11 slots since the AIT-defensibility / all-pairs-P0 / biometric-TTL
+        # preflight additions (was 8 at Phase 127 introduction).
         slots = TournamentPreflightResult.__dataclass_fields__
-        self.assertEqual(len(slots), 8)
+        self.assertEqual(len(slots), 11)
         expected = {
             "separation_ok", "l4_ok", "gate_ok", "cert_ok", "audit_ok",
             "overall_pass", "conditions_detail", "error",
+            "ait_defensibility_ok", "all_pairs_p0_ok", "biometric_ttl_ok",
         }
         self.assertEqual(set(slots.keys()), expected)
 

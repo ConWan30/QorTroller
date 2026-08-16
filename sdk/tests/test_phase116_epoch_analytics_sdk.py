@@ -24,7 +24,12 @@ class TestEpochWindowAnalyticsSDK(unittest.TestCase):
 
     def test_1_sdk_version_is_phase116(self):
         """SDK_VERSION must be at least phase116 (may be newer after subsequent phases)."""
-        self.assertGreaterEqual(int(SDK_VERSION.split("-phase")[1]), 116)
+        # SDK_VERSION moved past per-phase numeric suffixes (3.1.1-phase-o3-zkba-track1-g4-validator-sdk); keep the
+# monotonic-floor intent instead of pinning a dead format.
+
+        _semver = tuple(int(p) for p in SDK_VERSION.split("-")[0].split(".")[:3])
+
+        self.assertGreaterEqual(_semver, (3, 1, 0))
 
     def test_2_epoch_window_analytics_result_slots(self):
         """EpochWindowAnalyticsResult has exactly 8 slots."""
