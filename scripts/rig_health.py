@@ -43,7 +43,7 @@ HEALTH_JSON = REPO_ROOT / "logs" / "health.json"
 INVARIANT_EXPECTED = 188
 COLLECTED_MIN = 6400
 IMPORT_ERRORS_MAX = 4
-MONOLITH_BUDGET = 2550  # qortroller.py after the qortroller_memory extraction (2513)
+MONOLITH_BUDGET = 2360  # qortroller.py after the clients extraction (2327) + headroom
 
 
 def _run(cmd: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
@@ -124,18 +124,26 @@ def main() -> int:
     ap.add_argument("--quick", action="store_true", help="skip pytest collection")
     ap.add_argument("--with-devices", action="store_true",
                     help="verify rig device map via ffmpeg listing")
+    ap.add_argument("--skip", default="",
+                    help="comma-separated check names to skip "
+                         "(CI uses: --skip smoke_imports,oracle — local-only deps)")
     args = ap.parse_args()
 
+    skip = {s.strip() for s in args.skip.split(",") if s.strip()}
     results: list[dict] = []
-    check_invariant_gate(results)
-    check_smoke_imports(results)
-    check_oracle(results)
-    check_shell_false(results)
-    check_monolith_budget(results)
-    check_hygiene(results)
-    if args.with_devices:
+    for name, fn in (("invariant_gate", check_invariant_gate),
+                     ("smoke_imports", check_smoke_imports),
+                     ("oracle", check_oracle),
+                     ("shell_false", check_shell_false),
+                     ("monolith_budget", check_monolith_budget),
+                     ("hygiene", check_hygiene)):
+        if name in skip:
+            results.append({"name": name, "status": "skip", "detail": "skipped via --skip"})
+            continue
+        fn(results)
+    if args.with_devices and "devices" not in skip:
         check_devices(results)
-    if not args.quick:
+    if not args.quick and "collect" not in skip:
         check_collect(results)
 
     failed = [r for r in results if r["status"] == "fail"]
