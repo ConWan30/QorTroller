@@ -878,8 +878,8 @@ HEALTH_CHECKS: tuple[tuple[str, list[str]], ...] = (
         [
             sys.executable,
             "-c",
-            "import inspect, qortroller; "
-            "assert 'shell=False' in inspect.getsource(qortroller)",
+            "import inspect, qortroller_tools, qortroller; "
+            "assert 'shell=False' in (inspect.getsource(qortroller_tools) + inspect.getsource(qortroller))",
         ],
     ),
 )
