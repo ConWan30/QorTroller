@@ -1,0 +1,31 @@
+{
+  "locked": "2026-08-02",
+  "source": "AGENTS.md operator rig map + docs/runbook/NEXT_SESSION_FIRST.md",
+  "rule": "Do not rediscover by guessing indices. scripts/verify_rig_devices.py checks this map without opening any capture device.",
+  "devices": [
+    {
+      "index": 0,
+      "name_contains": "720p HD Camera",
+      "role": "house-webcam",
+      "backend": "any",
+      "never_use_for": "grind",
+      "notes": "House webcam - never for grind"
+    },
+    {
+      "index": 1,
+      "name_contains": "USB3.0 Video",
+      "role": "bridge-capture-card",
+      "backend": "msmf",
+      "consumer": "bridge --uvc-index 1",
+      "notes": "Capture card (observed dshow name 'USB3.0 Video', vid_345f&pid_2131)"
+    },
+    {
+      "index": 2,
+      "name_contains": "OBS Virtual Camera",
+      "role": "streamer-virtual-camera",
+      "backend": "dshow",
+      "consumer": "streamer --streamer-device 2 (dshow)",
+      "notes": "Streamer perception source; advisory only - never OR-merge into poep_enabled"
+    }
+  ]
+}

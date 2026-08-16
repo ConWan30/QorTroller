@@ -334,3 +334,24 @@ audits/acp_sap_challenges.jsonl
 
 # WPR-1 local state (operator-local rate/cooldown state; same class as SAP seals).
 audits/workflow_router_state.jsonl
+
+# >>> repo-hygiene managed block (scripts/repo_hygiene.py) ---
+# Local-only runtime/scratch artifacts. Root-anchored or audits/-scoped
+# by construction; cannot shadow the BRP exceptions above.
+/logs/
+/archive/
+/.qortroller/
+/.commit_msg.txt
+/.pr_body.txt
+/.qcheck.py
+/.qnim_final.txt
+/.qtemp.txt
+/nim_commit_message.txt
+/audits/rwm_*
+/audits/vss_seat_local_state.json
+/cfb_rwm_live_*.jsonl
+/ncaa27_live*.jsonl
+/session_*.jsonl
+/retina_daemon_*_utf8.txt
+/bridge/bridge_pid.txt
+# <<< repo-hygiene managed block ---

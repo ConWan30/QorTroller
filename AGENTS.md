@@ -30,6 +30,14 @@ Streamer remains advisory — never OR-merge optical activity into `poep_enabled
 
 ## Baseline health commands (run before merge/push)
 
+One-command shortcut (runs checks 1-3 + hygiene + monolith budget + collection
+tolerances, writes `logs/health.json`; collection baseline has drifted to
+~7094 — the script enforces >= 6400 / <= 4 import errors):
+
+```powershell
+python scripts/rig_health.py              # add --with-devices on a live rig
+```
+
 ```powershell
 # 1. Protocol invariants (must stay at 188)
 python scripts/vapi_invariant_gate.py
@@ -66,6 +74,13 @@ python -m pytest bridge/tests --collect-only -q
 | QorTroller Buzz bot (Phase 1) | `scripts/qortroller_buzz_bot.py` | Buzz-native rig-status + session-digest bot; env-only keys; digest-only posts; wired read path (BridgeClient → `/player/session-status`) + Rust-helper publish (`qortroller-buzz publish` subprocess) |
 
 ## Working-tree hygiene (multi-agent)
+
+Hygiene tooling (2026-08-16): `python scripts/repo_hygiene.py` classifies
+untracked noise (report-only default); `--write-gitignore` manages the
+marked block at the end of `.gitignore` (additive rules only — never add a
+`!` negation below the BRP exception blocks); `--check-staged` is wired as
+the local `.git/hooks/pre-commit` and fails closed on secrets/biometric/RWM
+classes. Stage by explicit path, never `git add .`/`-A`.
 
 - Do not commit `QorTroller/` (duplicate tree), `_dl_ngc.py`, `_download_ngc.py` — gitignored.
 - Do not commit `.env`, wallet keys, `sessions/`, biometric dumps, `audits/rwm_*`, `cfb_rwm_live_*.jsonl`.
