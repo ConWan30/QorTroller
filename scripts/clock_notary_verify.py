@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "compose" / "clock-notary"))
 
 from clock_notary.envelope import clock_commitment  # noqa: E402
+from clock_notary.io_ledger import ledger_checks  # noqa: E402
 from clock_notary.wrap import ConsentRecord  # noqa: E402
 
 
@@ -46,6 +47,7 @@ def verify(envelope: dict, wrap: dict) -> dict:
             signed_by=str(consent.get("signed_by") or ""),
         )
         add("gamer_signed", rec.valid_for_wrap(), f"{rec.signed_by}/{rec.gamer}")
+    checks.extend(ledger_checks(envelope))
     ok = all(c["ok"] for c in checks)
     return {
         "ok": ok,
