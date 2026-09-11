@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib, json
 from dataclasses import dataclass, field
 from typing import Any
+from .io_ledger import canonicalize_out_edge
 from .sanitize import strip_truth_leaks
 
 def _canonical(obj: Any) -> bytes:
@@ -17,8 +18,12 @@ class Tick:
     hid_edge: str | None
     score_digits: str | None
     score_vlm_locked: bool = False
+    out_edge: dict | None = None
     def as_commit_triple(self) -> dict:
-        return {"clock_ns": int(self.clock_ns), "frame_seq": int(self.frame_seq), "ticket_id": self.ticket_id, "ticket_kind": self.ticket_kind, "hid_edge": self.hid_edge, "score_digits": self.score_digits if self.score_vlm_locked else None}
+        body = {"clock_ns": int(self.clock_ns), "frame_seq": int(self.frame_seq), "ticket_id": self.ticket_id, "ticket_kind": self.ticket_kind, "hid_edge": self.hid_edge, "score_digits": self.score_digits if self.score_vlm_locked else None}
+        if self.out_edge:
+            body["out_edge"] = self.out_edge
+        return body
 
 @dataclass
 class ObservationEnvelope:
@@ -61,7 +66,7 @@ def envelope_from_recap(recap: dict) -> ObservationEnvelope:
         kind = raw.get("ticket_kind")
         if kind not in ("coupling", "confirm", None):
             kind = None
-        ticks.append(Tick(int(raw.get("clock_ns") or 0), int(raw.get("frame_seq") or raw.get("seq") or 0), raw.get("ticket_id"), kind, raw.get("hid_edge") or raw.get("button"), raw.get("score_digits") or raw.get("score"), bool(raw.get("score_vlm_locked") or raw.get("board_locked"))))
+        ticks.append(Tick(int(raw.get("clock_ns") or 0), int(raw.get("frame_seq") or raw.get("seq") or 0), raw.get("ticket_id"), kind, raw.get("hid_edge") or raw.get("button"), raw.get("score_digits") or raw.get("score"), bool(raw.get("score_vlm_locked")), canonicalize_out_edge(raw.get("out_edge") or raw.get("pad_out"))))
     prehashed = {}
     for key in ("buttons", "coupling", "otel", "clip"):
         digest = recap.get(f"{key}_sha256")
